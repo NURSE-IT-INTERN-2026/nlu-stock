@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,297 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Category {
+  CONSUMABLE
+  DURABLE
+  FIXED_ASSET
+  BOOK
+}
+
+enum ItemStatus {
+  AVAILABLE
+  CHECKED_OUT
+  DAMAGED
+  UNDER_REPAIR
+  LOST
+  PENDING_MAINTENANCE
+  DISPOSED
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  INSTRUCTOR
+}
+
+enum AdjustmentReason {
+  LOST
+  DAMAGED_PENDING_REPAIR
+  COUNT_MISMATCH
+  DISPOSAL
+  OTHER
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+}
+
+enum MaintenanceResult {
+  AVAILABLE
+  NEEDS_MORE_REPAIR
+  DISPOSED
+}
+
+// --- Users ---
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(STAFF)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dispenseRecords    DispenseRecord[]
+  receiveRecords     ReceiveRecord[]
+  adjustments        StockAdjustment[]
+  maintenanceRecords MaintenanceRecord[]
+  statusChanges      ItemStatusLog[]
+
+  @@map("users")
+}
+
+// --- Categories ---
+model CategoryType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    Category
+  description String?
+  sortOrder   Int      @default(0)
+
+  items Item[]
+
+  @@map("categories")
+}
+
+// --- Subjects ---
+model Subject {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  dispenseRecords DispenseRecord[]
+
+  @@map("subjects")
+}
+
+// --- Locations ---
+model Location {
+  id      String  @id @default(cuid())
+  room    String
+  cabinet String?
+  shelf   String?
+
+  items Item[]
+
+  @@unique([room, cabinet, shelf])
+  @@map("locations")
+}
+
+// --- Items ---
+model Item {
+  id                String       @id @default(cuid())
+  code              String       @unique
+  name              String
+  nameTh            String?
+  categoryId        String
+  category          CategoryType @relation(fields: [categoryId], references: [id])
+  trackIndividually Boolean      @default(false)
+  status            ItemStatus   @default(AVAILABLE)
+  issueUnit         String
+  subUnit           String
+  conversionFactor  Int          @default(1)
+  minThreshold      Int          @default(0)
+  locationId        String?
+  location          Location?    @relation(fields: [locationId], references: [id])
+  imageUrl          String?
+  description       String?
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  // Running total
+  totalQty     Int @default(0)
+  availableQty Int @default(0)
+
+  // Fixed Asset fields (nullable, used when category = FIXED_ASSET)
+  serialNumber           String?
+  model                  String?
+  purchaseDate           DateTime?
+  purchasePrice          Float?
+  vendor                 String?
+  warrantyEndDate        DateTime?
+  maintenanceCycleMonths Int        @default(12)
+  lastMaintenanceDate    DateTime?
+  nextMaintenanceDate    DateTime?
+  manualUrl              String?
+
+  // Relations
+  subItems           SubItem[]
+  lots               Lot[]
+  dispenseRecords    DispenseRecord[]
+  receiveRecords     ReceiveRecord[]
+  adjustments        StockAdjustment[]
+  maintenanceRecords MaintenanceRecord[]
+  statusLogs         ItemStatusLog[]
+
+  @@index([categoryId, isActive])
+  @@index([locationId])
+  @@index([availableQty])
+  @@map("items")
+}
+
+// --- Sub-Items ---
+model SubItem {
+  id        String     @id @default(cuid())
+  itemId    String
+  item      Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  subCode   String
+  status    ItemStatus @default(AVAILABLE)
+  condition String?
+  notes     String?
+  imageUrl  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  dispenseRecords DispenseRecord[]
+  statusLogs      ItemStatusLog[]
+
+  @@unique([itemId, subCode])
+  @@index([itemId, status])
+  @@map("sub_items")
+}
+
+// --- Lots ---
+model Lot {
+  id           String    @id @default(cuid())
+  itemId       String
+  item         Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  lotNumber    String
+  expiryDate   DateTime?
+  quantity     Int       @default(0)
+  receivedDate DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  dispenseRecords DispenseRecord[]
+  receiveRecords  ReceiveRecord[]
+
+  @@unique([itemId, lotNumber])
+  @@index([itemId, expiryDate])
+  @@map("lots")
+}
+
+// --- Dispense ---
+model DispenseRecord {
+  id          String    @id @default(cuid())
+  itemId      String
+  item        Item      @relation(fields: [itemId], references: [id])
+  subItemId   String?
+  subItem     SubItem?  @relation(fields: [subItemId], references: [id])
+  lotId       String?
+  lot         Lot?      @relation(fields: [lotId], references: [id])
+  quantity    Int
+  quantitySub Int
+  subjectId   String?
+  subject     Subject?  @relation(fields: [subjectId], references: [id])
+  staffId     String
+  staff       User      @relation(fields: [staffId], references: [id])
+  dispensedAt DateTime  @default(now())
+  returnedAt  DateTime?
+  notes       String?
+
+  @@index([itemId, dispensedAt])
+  @@index([staffId, dispensedAt])
+  @@index([subjectId, dispensedAt])
+  @@map("dispense_records")
+}
+
+// --- Receive ---
+model ReceiveRecord {
+  id         String   @id @default(cuid())
+  itemId     String
+  item       Item     @relation(fields: [itemId], references: [id])
+  lotId      String?
+  lot        Lot?     @relation(fields: [lotId], references: [id])
+  quantity   Int
+  receivedBy String
+  receiver   User     @relation(fields: [receivedBy], references: [id])
+  receivedAt DateTime @default(now())
+  notes      String?
+
+  @@index([itemId, receivedAt])
+  @@map("receive_records")
+}
+
+// --- Stock Adjustment ---
+model StockAdjustment {
+  id            String           @id @default(cuid())
+  itemId        String
+  item          Item             @relation(fields: [itemId], references: [id])
+  previousQty   Int
+  newQty        Int
+  reason        AdjustmentReason
+  notes         String?
+  adjustedBy    String
+  adjuster      User             @relation(fields: [adjustedBy], references: [id])
+  imageEvidence String?
+  adjustedAt    DateTime         @default(now())
+
+  @@index([itemId, adjustedAt])
+  @@map("stock_adjustments")
+}
+
+// --- Maintenance ---
+model MaintenanceRecord {
+  id                String            @id @default(cuid())
+  itemId            String
+  item              Item              @relation(fields: [itemId], references: [id])
+  type              MaintenanceType
+  result            MaintenanceResult
+  performedAt       DateTime
+  performedBy       String
+  performer         User              @relation(fields: [performedBy], references: [id])
+  issue             String?
+  description       String?
+  cost              Float?
+  attachmentUrls    String[]
+  nextMaintenanceAt DateTime?
+
+  createdAt         DateTime          @default(now())
+
+  @@map("maintenance_records")
+}
+
+// --- Status Change Log ---
+model ItemStatusLog {
+  id             String     @id @default(cuid())
+  itemId         String
+  item           Item       @relation(fields: [itemId], references: [id])
+  subItemId      String?
+  subItem        SubItem?   @relation(fields: [subItemId], references: [id])
+  previousStatus ItemStatus
+  newStatus      ItemStatus
+  reason         String?
+  changedBy      String
+  changer        User       @relation(fields: [changedBy], references: [id])
+  imageUrl       String?
+  changedAt      DateTime   @default(now())
+
+  @@map("item_status_logs")
 }
