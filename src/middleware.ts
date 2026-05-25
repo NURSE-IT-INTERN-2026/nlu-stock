@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-
-const COOKIE_NAME = "session_token";
-const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
+import { COOKIE_NAME, getJwtSecret } from "@/lib/auth-config";
 
 const publicPaths = ["/login", "/api/auth/login"];
 
@@ -21,7 +19,7 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const role = payload.role as string;
 
     // Settings: admin only

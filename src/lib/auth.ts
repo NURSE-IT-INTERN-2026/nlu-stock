@@ -1,20 +1,18 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-
-const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
-const COOKIE_NAME = "session_token";
+import { COOKIE_NAME, getJwtSecret } from "./auth-config";
 
 export async function signToken(payload: { userId: string; email: string; role: string }) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("24h")
     .setIssuedAt()
-    .sign(secret);
+    .sign(getJwtSecret());
 }
 
 export async function verifyToken(token: string) {
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as { userId: string; email: string; role: string };
   } catch {
     return null;
