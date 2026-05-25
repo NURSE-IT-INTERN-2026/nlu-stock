@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Category } from "@/generated/prisma/enums";
+import { Category, AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 
 export const itemCreateSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
@@ -31,3 +31,21 @@ export const itemUpdateSchema = itemCreateSchema.partial();
 
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
 export type ItemUpdateInput = z.infer<typeof itemUpdateSchema>;
+
+export const stockAdjustSchema = z.object({
+  newQty: z.number().int().min(0, "Quantity cannot be negative"),
+  reason: z.nativeEnum(AdjustmentReason),
+  notes: z.string().max(500).optional().nullable(),
+  imageEvidence: z.string().url().optional().nullable(),
+});
+
+export type StockAdjustInput = z.infer<typeof stockAdjustSchema>;
+
+export const statusChangeSchema = z.object({
+  newStatus: z.nativeEnum(ItemStatus),
+  subItemId: z.string().optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+  imageUrl: z.string().url().optional().nullable(),
+});
+
+export type StatusChangeInput = z.infer<typeof statusChangeSchema>;
