@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect } from "react";
-import { Package, QrCode, AlertTriangle, ShoppingCart, ArrowDownToLine, Flag } from "lucide-react";
+import { Package, QrCode, AlertTriangle, ShoppingCart, ArrowDownToLine, Flag, Undo2 } from "lucide-react";
 import QRCode from "qrcode";
 
 interface SubItemRecord {
@@ -49,18 +49,40 @@ interface Props {
   userRole: string;
   onAdjust: () => void;
   onReportDamage: () => void;
+  onRefresh: () => void;
 }
 
-export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage }: Props) {
+export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onRefresh }: Props) {
   const canAct = userRole === "ADMIN" || userRole === "STAFF";
   const isLowStock = item.availableQty < item.minThreshold;
   const stockPercent = item.minThreshold > 0 ? Math.min(100, (item.availableQty / item.minThreshold) * 100) : 100;
+  const checkedOutSubs = item.subItems.filter((s) => s.status === "CHECKED_OUT");
 
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   useEffect(() => {
     QRCode.toDataURL(item.code, { width: 128, margin: 1 }).then(setQrDataUrl);
   }, [item.code]);
+
+  const handleReturn = async (subItemId: string) => {
+    const res = await fetch(`/api/items/${item.id}/return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subItemId }),
+    });
+    if (res.ok) onRefresh();
+  };
+
+  const handleReturnQty = async () => {
+    const qty = prompt("Enter quantity to return:");
+    if (!qty) return;
+    const res = await fetch(`/api/items/${item.id}/return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantity: parseInt(qty) }),
+    });
+    if (res.ok) onRefresh();
+  };
 
   const statusSummary = item.trackIndividually
     ? item.subItems.reduce((acc, s) => {
@@ -156,6 +178,34 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage }:
           </div>
         </CardContent>
       </Card>
+
+      {canAct && checkedOutSubs.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+              <Undo2 className="h-4 w-4" />Checked Out ({checkedOutSubs.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {checkedOutSubs.map((sub) => (
+                <div key={sub.id} className="flex items-center justify-between rounded-md border p-2">
+                  <span className="font-mono text-sm">{sub.subCode}</span>
+                  <Button size="sm" variant="outline" onClick={() => handleReturn(sub.id)}>
+                    <Undo2 className="h-3.5 w-3.5 mr-1" />Return
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {canAct && !item.trackIndividually && item.category.category !== "CONSUMABLE" && item.availableQty < item.totalQty && (
+        <Button variant="outline" onClick={handleReturnQty}>
+          <Undo2 className="h-4 w-4 mr-1" />Return Qty
+        </Button>
+      )}
 
       {canAct && (
         <div className="flex flex-wrap gap-2">

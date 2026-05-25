@@ -13,6 +13,7 @@ import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
 import { StockAdjustmentDialog } from "@/components/items/stock-adjustment-dialog";
 import { ReportDamageDialog } from "@/components/items/report-damage-dialog";
+import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 
 interface CategoryType { id: string; name: string; category: string }
 interface LocationType { id: string; room: string; cabinet: string | null; shelf: string | null }
@@ -64,6 +65,7 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [damageOpen, setDamageOpen] = useState(false);
+  const [maintOpen, setMaintOpen] = useState(false);
 
   const fetchItem = useCallback(async () => {
     setLoading(true);
@@ -97,6 +99,7 @@ export default function ItemDetailPage() {
   }
 
   const isFixedAsset = item.category.category === "FIXED_ASSET";
+  const canAct = user?.role === "ADMIN" || user?.role === "STAFF";
 
   return (
     <div className="space-y-4">
@@ -136,12 +139,13 @@ export default function ItemDetailPage() {
             userRole={user?.role || ""}
             onAdjust={() => setAdjustOpen(true)}
             onReportDamage={() => setDamageOpen(true)}
+            onRefresh={fetchItem}
           />
         </TabsContent>
 
         {item.trackIndividually && (
           <TabsContent value="subcodes" className="mt-4">
-            <ItemDetailSubcodes subItems={item.subItems} />
+            <ItemDetailSubcodes subItems={item.subItems} itemId={item.id} canAct={canAct} onRefresh={fetchItem} />
           </TabsContent>
         )}
 
@@ -151,7 +155,7 @@ export default function ItemDetailPage() {
 
         {isFixedAsset && (
           <TabsContent value="maintenance" className="mt-4">
-            <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} />
+            <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={canAct} onRecordMaintenance={() => setMaintOpen(true)} />
           </TabsContent>
         )}
       </Tabs>
@@ -172,6 +176,15 @@ export default function ItemDetailPage() {
         subItems={item.subItems}
         onSuccess={fetchItem}
       />
+
+      {isFixedAsset && (
+        <MaintenanceFormDialog
+          open={maintOpen}
+          onOpenChange={setMaintOpen}
+          itemId={item.id}
+          onSuccess={fetchItem}
+        />
+      )}
     </div>
   );
 }

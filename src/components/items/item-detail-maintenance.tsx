@@ -1,7 +1,9 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wrench } from "lucide-react";
 
 interface MaintenanceRecord {
   id: string;
@@ -17,6 +19,7 @@ interface MaintenanceRecord {
 
 interface Props {
   item: {
+    id: string;
     serialNumber: string | null;
     model: string | null;
     purchaseDate: string | null;
@@ -28,6 +31,8 @@ interface Props {
     nextMaintenanceDate: string | null;
   };
   maintenanceRecords: MaintenanceRecord[];
+  canAct: boolean;
+  onRecordMaintenance: () => void;
 }
 
 function getMaintenanceStatus(nextDate: string | null): { label: string; variant: "default" | "secondary" | "destructive" } {
@@ -51,7 +56,7 @@ const TYPE_LABELS: Record<string, string> = {
   CORRECTIVE: "ซ่อมแก้ไข",
 };
 
-export function ItemDetailMaintenance({ item, maintenanceRecords }: Props) {
+export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onRecordMaintenance }: Props) {
   const maintStatus = getMaintenanceStatus(item.nextMaintenanceDate);
 
   return (
@@ -93,6 +98,12 @@ export function ItemDetailMaintenance({ item, maintenanceRecords }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {canAct && (
+        <Button onClick={onRecordMaintenance}>
+          <Wrench className="h-4 w-4 mr-1" />Record Maintenance
+        </Button>
+      )}
 
       <div>
         <h4 className="text-sm font-medium mb-3">Maintenance History</h4>
