@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { Package, QrCode, AlertTriangle, ShoppingCart, ArrowDownToLine, Flag, Undo2 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
+import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 
 interface SubItemRecord {
   id: string;
@@ -60,6 +61,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   const checkedOutSubs = item.subItems.filter((s) => s.status === "CHECKED_OUT");
 
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [printOpen, setPrintOpen] = useState(false);
+
+  const printItems: QrPrintItem[] = [{ code: item.code, name: item.name }];
 
   useEffect(() => {
     QRCode.toDataURL(item.code, { width: 128, margin: 1 }).then(setQrDataUrl);
@@ -185,7 +189,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           )}
           <div className="text-sm text-muted-foreground">
             <p>Scan to find item: <span className="font-mono font-medium">{item.code}</span></p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => window.print()}>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setPrintOpen(true)}>
               <QrCode className="h-3.5 w-3.5 mr-1" />Print
             </Button>
           </div>
@@ -236,6 +240,8 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           </Button>
         </div>
       )}
+
+      <QrPrintDialog open={printOpen} onClose={() => setPrintOpen(false)} items={printItems} />
     </div>
   );
 }

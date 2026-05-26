@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShoppingCart, Plus, Search, QrCode } from "lucide-react";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { CartProvider, useCart } from "@/components/dispense/cart-context";
 import { QuantityDialog } from "@/components/dispense/quantity-dialog";
 import { CartDrawer } from "@/components/dispense/cart-drawer";
-import type { CartItem } from "@/lib/validators/dispense";
+import { QrScanner } from "@/components/shared/qr-scanner";
 
 interface SearchItem {
   id: string;
@@ -36,6 +37,7 @@ function DispenseContent() {
   const [selectedItem, setSelectedItem] = useState<SearchItem | null>(null);
   const [qtyOpen, setQtyOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const debounced = useDebounce(query, 300);
 
@@ -61,6 +63,24 @@ function DispenseContent() {
     setQtyOpen(true);
   };
 
+  const handleQrScan = async (code: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/dispense/items?q=${encodeURIComponent(code)}&limit=1`);
+      const data = await res.json();
+      const found = data.items?.[0] as SearchItem | undefined;
+      if (found && found.code === code) {
+        handleAdd(found);
+      } else {
+        toast.error(`Item "${code}" not found`);
+      }
+    } catch {
+      toast.error("Search failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const categoryColor = (cat: string) => {
     switch (cat) {
       case "CONSUMABLE": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
@@ -83,7 +103,7 @@ function DispenseContent() {
             className="pl-9"
           />
         </div>
-        <Button variant="outline" size="icon" title="Scan QR">
+        <Button variant="outline" size="icon" title="Scan QR" onClick={() => setScannerOpen(true)}>
           <QrCode className="h-4 w-4" />
         </Button>
       </div>
@@ -156,6 +176,12 @@ function DispenseContent() {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         onDone={() => setCartOpen(false)}
+      />
+
+      <QrScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleQrScan}
       />
     </div>
   );

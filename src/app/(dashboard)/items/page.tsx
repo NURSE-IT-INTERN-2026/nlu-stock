@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useSession } from "@/components/layout/auth-guard";
+import { QrScanner } from "@/components/shared/qr-scanner";
 
 interface CategoryType {
   id: string;
@@ -89,6 +90,12 @@ function ItemsContent() {
   const [filterStatus, setFilterStatus] = useState(searchParams.get("status") ?? "");
   const [filterLocation, setFilterLocation] = useState("");
   const [presetFilter, setPresetFilter] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const handleQrScan = (code: string) => {
+    setSearch(code);
+    setPage(1);
+  };
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -146,6 +153,9 @@ function ItemsContent() {
             className="pl-8"
           />
         </div>
+        <Button variant="outline" size="icon" onClick={() => setScannerOpen(true)} title="Scan QR">
+          <QrCode className="h-4 w-4" />
+        </Button>
         <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Categories" /></SelectTrigger>
           <SelectContent>
@@ -259,6 +269,12 @@ function ItemsContent() {
           </div>
         </div>
       )}
+
+      <QrScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleQrScan}
+      />
     </div>
   );
 }

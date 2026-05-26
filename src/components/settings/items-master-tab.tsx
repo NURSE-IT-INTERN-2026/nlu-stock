@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight,
-  ChevronDown, ChevronRight as ExpandIcon,
+  ChevronDown, ChevronRight as ExpandIcon, QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { SubCodesManager } from "./sub-codes-manager";
+import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 
 interface CategoryType {
   id: string;
@@ -101,6 +102,8 @@ export function ItemsMasterTab() {
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [printOpen, setPrintOpen] = useState(false);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -134,6 +137,7 @@ export function ItemsMasterTab() {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
   useEffect(() => { fetchMeta(); }, [fetchMeta]);
+  useEffect(() => { setSelectedIds(new Set()); }, [page, search, filterCategory, filterStatus]);
 
   const totalPages = Math.ceil(total / perPage);
 
@@ -228,7 +232,14 @@ export function ItemsMasterTab() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Items Master</h3>
-        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />Add Item</Button>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setPrintOpen(true)}>
+              <QrCode className="h-4 w-4 mr-1" />Print QR ({selectedIds.size})
+            </Button>
+          )}
+          <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />Add Item</Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -269,6 +280,20 @@ export function ItemsMasterTab() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <input
+                  type="checkbox"
+                  checked={items.length > 0 && items.every((i) => selectedIds.has(i.id))}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(new Set(items.map((i) => i.id)));
+                    } else {
+                      setSelectedIds(new Set());
+                    }
+                  }}
+                  className="rounded"
+                />
+              </TableHead>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
@@ -283,16 +308,28 @@ export function ItemsMasterTab() {
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 9 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : items.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No items found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No items found</TableCell></TableRow>
             ) : items.map((item) => (
               <React.Fragment key={item.id}>
                 <TableRow className={!item.isActive ? "opacity-50" : ""}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={(e) => {
+                        const next = new Set(selectedIds);
+                        e.target.checked ? next.add(item.id) : next.delete(item.id);
+                        setSelectedIds(next);
+                      }}
+                      className="rounded"
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-sm">
                     <div className="flex items-center gap-1">
                       {item.trackIndividually && (
@@ -327,7 +364,7 @@ export function ItemsMasterTab() {
                 </TableRow>
                 {expandedRow === item.id && item.trackIndividually && (
                   <TableRow key={`${item.id}-expand`}>
-                    <TableCell colSpan={8} className="bg-muted/30 p-4">
+                    <TableCell colSpan={9} className="bg-muted/30 p-4">
                       <SubCodesManager itemId={item.id} itemCode={item.code} />
                     </TableCell>
                   </TableRow>
@@ -493,6 +530,12 @@ export function ItemsMasterTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <QrPrintDialog
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        items={items.filter((i) => selectedIds.has(i.id)).map((i) => ({ code: i.code, name: i.name }))}
+      />
     </div>
   );
 }
