@@ -924,49 +924,45 @@ GET /api/reports/export?type=stock-summary&format=pdf
 
 ## Milestone 10: Alerts & Email
 
-### 10.1 Alert checking service
-- Cron job (daily at 8:00 AM): check low stock, near-expiry, overdue maintenance
-- Use `node-cron` or Next.js API route called by external scheduler
+### 10.1 Alert checking service — ✅ DONE
+- `lib/alerts.ts`: `getAlertCounts()` queries low stock, near-expiry, overdue maintenance
+- `api/alerts/route.ts`: GET endpoint returns alert counts
+- `hooks/use-alerts.tsx`: `AlertProvider` polls every 5 min, `useAlerts()` hook
 
-### 10.2 Email notifications
-- Node Mailer with configurable transport
-- Dev mode: log to console (no real email)
-- Prod mode: SMTP send
-- Templates: low stock list, near-expiry list, overdue maintenance list
-- Recipients: configurable email list from Settings
+### 10.2 Email notifications — ⏭️ SKIPPED (deferred)
+- No cron job, no NodeMailer integration yet
+- Will implement later when SMTP credentials are available
 
-### 10.3 Dashboard alerts
-- Already handled in Dashboard widgets (real-time)
+### 10.3 Dashboard alerts — ✅ DONE
+- Dashboard widgets show alerts in real-time
+- Alert counts available via context throughout the app
 - Badge count on nav items if alerts exist
 
-**Deliverable**: Cron job runs daily. Emails logged in dev. Dashboard widgets show alerts in real-time.
+**Status**: Alert querying + dashboard display done. Email/cron deferred.
 
 ---
 
 ## Milestone 11: File Uploads
 
-### 11.1 Upload API
-```
-POST /api/upload
-Content-Type: multipart/form-data
-Body: file
-Response: { url: "/uploads/abc123.jpg" }
-```
-- Multer middleware for file handling
-- Store in `./uploads/` directory (local filesystem for dev)
-- File types: images (jpg, png, webp), PDFs
-- Max size: 10MB
-- Generate unique filename (uuid + extension)
+### 11.1 Upload API — ✅ DONE
+- `POST /api/upload` — uses native `Request.formData()` (no multer needed in App Router)
+- Validates file type (jpg/png/webp/pdf) and size (10MB max)
+- Saves to `./uploads/` with UUID filename
+- Returns `{ url: "/uploads/<uuid>.ext" }`
 
-### 11.2 Usage points
-- Item image: single image upload in Settings > Items Master
-- Damage evidence: image upload in Report Damage dialog
-- Maintenance attachment: file upload in Maintenance Record form (PDF, image)
-- Item manual: PDF upload in Fixed Asset Maintenance tab
+### 11.2 Usage points — ✅ DONE
+- `FileUpload` shared component (`components/shared/file-upload.tsx`)
+- Item image: Settings > Items Master > Stock & Location tab
+- Damage evidence: Report Damage/Lost dialog
+- Stock adjustment evidence: Adjust Stock dialog
+- Maintenance attachment: Maintenance Record form (PDF, image)
+- Item image display: Item Detail > Overview tab
+- Attachment links: Maintenance history records
 
-### 11.3 File serving
-- Static file serving from `/uploads` directory
-- Next.js config: add `uploads` to static serving or use API route
+### 11.3 File serving — ✅ DONE
+- `GET /uploads/[...path]` catch-all route with MIME type detection
+- Path traversal protection
+- Cache-Control: immutable, 1 year
 
 **Deliverable**: File upload works for all usage points. Images display correctly. PDFs downloadable.
 

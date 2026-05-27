@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { FileUpload } from "@/components/shared/file-upload";
 
 interface Props {
   open: boolean;
@@ -36,6 +37,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
   const [nextMaintenanceAt, setNextMaintenanceAt] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -52,6 +54,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
           description: description || null,
           cost: cost ? parseFloat(cost) : null,
           nextMaintenanceAt: nextMaintenanceAt || null,
+          attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
         }),
       });
       if (!res.ok) {
@@ -76,6 +79,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
     setDescription("");
     setCost("");
     setNextMaintenanceAt("");
+    setAttachmentUrl(null);
     onOpenChange(false);
   };
 
@@ -137,6 +141,16 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
               <Label>Next Maintenance</Label>
               <Input type="date" value={nextMaintenanceAt} onChange={(e) => setNextMaintenanceAt(e.target.value)} />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Attachment</Label>
+            <FileUpload
+              value={attachmentUrl}
+              onChange={setAttachmentUrl}
+              accept="image/*,.pdf"
+              label="Upload Attachment"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

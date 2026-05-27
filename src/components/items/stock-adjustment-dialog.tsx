@@ -12,6 +12,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { FileUpload } from "@/components/shared/file-upload";
 
 const ADJUSTMENT_REASONS = [
   { value: "LOST", label: "Lost" },
@@ -35,6 +36,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
   const [shelfCount, setShelfCount] = useState("");
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
+  const [imageEvidence, setImageEvidence] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const parsedShelf = shelfCount !== "" ? parseInt(shelfCount) : null;
@@ -49,7 +51,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
       const res = await fetch(`/api/items/${itemId}/adjust`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shelfCount: safeParsed, reason, notes: notes || null }),
+        body: JSON.stringify({ shelfCount: safeParsed, reason, notes: notes || null, imageEvidence: imageEvidence || null }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -61,6 +63,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
       setShelfCount("");
       setReason("");
       setNotes("");
+      setImageEvidence(null);
       onSuccess();
     } catch {
       toast.error("Failed to adjust stock");
@@ -115,6 +118,15 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
           <div>
             <Label>Notes</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes..." />
+          </div>
+          <div>
+            <Label>Evidence Photo</Label>
+            <FileUpload
+              value={imageEvidence}
+              onChange={setImageEvidence}
+              accept="image/*"
+              label="Upload Photo"
+            />
           </div>
         </div>
         <DialogFooter>

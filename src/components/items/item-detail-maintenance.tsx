@@ -127,6 +127,15 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
                 <div className="text-xs text-muted-foreground mt-1">
                   by {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
                 </div>
+                {rec.attachmentUrls.length > 0 && (
+                  <div className="flex gap-2 mt-1">
+                    {rec.attachmentUrls.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                        {url.endsWith(".pdf") ? `PDF ${i + 1}` : `Photo ${i + 1}`}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

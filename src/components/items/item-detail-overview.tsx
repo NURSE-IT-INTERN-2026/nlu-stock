@@ -122,6 +122,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
             </div>
             <p className="font-medium text-lg">{item.name}</p>
             {item.nameTh && <p className="text-muted-foreground">{item.nameTh}</p>}
+            {item.imageUrl && (
+              <img src={item.imageUrl} alt={item.name} className="mt-2 h-24 w-auto rounded object-contain" />
+            )}
             {item.description && <p className="text-sm text-muted-foreground mt-2">{item.description}</p>}
             <div className="text-sm space-y-1 mt-3">
               <div className="flex justify-between">

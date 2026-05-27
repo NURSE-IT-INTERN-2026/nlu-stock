@@ -12,7 +12,7 @@ export const itemCreateSchema = z.object({
   conversionFactor: z.number().int().min(1).default(1),
   minThreshold: z.number().int().min(0).default(0),
   locationId: z.string().optional().nullable(),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
   isActive: z.boolean().default(true),
   // Fixed Asset fields
@@ -24,7 +24,7 @@ export const itemCreateSchema = z.object({
   warrantyEndDate: z.coerce.date().optional().nullable(),
   maintenanceCycleMonths: z.number().int().min(1).default(12),
   lastMaintenanceDate: z.coerce.date().optional().nullable(),
-  manualUrl: z.string().url().optional().nullable(),
+  manualUrl: z.string().optional().nullable(),
 });
 
 export const itemUpdateSchema = itemCreateSchema.partial();
@@ -36,7 +36,7 @@ export const stockAdjustSchema = z.object({
   shelfCount: z.number().int().min(0, "Shelf count cannot be negative"),
   reason: z.nativeEnum(AdjustmentReason),
   notes: z.string().max(500).optional().nullable(),
-  imageEvidence: z.string().url().optional().nullable(),
+  imageEvidence: z.string().optional().nullable(),
 });
 
 export type StockAdjustInput = z.infer<typeof stockAdjustSchema>;
@@ -45,7 +45,7 @@ export const statusChangeSchema = z.object({
   newStatus: z.nativeEnum(ItemStatus),
   subItemId: z.string().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
 });
 
 export type StatusChangeInput = z.infer<typeof statusChangeSchema>;

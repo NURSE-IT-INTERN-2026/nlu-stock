@@ -11,6 +11,7 @@ const maintenanceSchema = z.object({
   description: z.string().max(1000).optional().nullable(),
   cost: z.number().min(0).optional().nullable(),
   nextMaintenanceAt: z.coerce.date().optional().nullable(),
+  attachmentUrls: z.array(z.string()).default([]),
 });
 
 export async function POST(
@@ -40,6 +41,7 @@ export async function POST(
           issue: data.issue ?? undefined,
           description: data.description ?? undefined,
           cost: data.cost ?? undefined,
+          attachmentUrls: data.attachmentUrls,
           nextMaintenanceAt: data.nextMaintenanceAt ?? undefined,
         },
       });

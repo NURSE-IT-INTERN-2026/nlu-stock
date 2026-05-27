@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { SubCodesManager } from "./sub-codes-manager";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
+import { FileUpload } from "@/components/shared/file-upload";
 
 interface CategoryType {
   id: string;
@@ -88,6 +89,7 @@ const defaultForm = {
   code: "", name: "", nameTh: "", categoryId: "", trackIndividually: false,
   issueUnitId: "", subUnitId: "", conversionFactor: 1, minThreshold: 0,
   locationId: "", description: "", isActive: true,
+  imageUrl: null as string | null,
   serialNumber: "", model: "", purchaseDate: "", purchasePrice: "",
   vendor: "", warrantyEndDate: "", maintenanceCycleMonths: 12,
 };
@@ -172,6 +174,7 @@ export function ItemsMasterTab() {
       locationId: item.locationId || "",
       description: item.description || "",
       isActive: item.isActive,
+      imageUrl: item.imageUrl,
       serialNumber: item.serialNumber || "",
       model: item.model || "",
       purchaseDate: item.purchaseDate ? item.purchaseDate.split("T")[0] : "",
@@ -190,6 +193,7 @@ export function ItemsMasterTab() {
       nameTh: form.nameTh || null,
       locationId: form.locationId || null,
       description: form.description || null,
+      imageUrl: form.imageUrl || null,
       conversionFactor: Number(form.conversionFactor),
       minThreshold: Number(form.minThreshold),
       maintenanceCycleMonths: Number(form.maintenanceCycleMonths),
@@ -499,6 +503,15 @@ export function ItemsMasterTab() {
               <div className="flex items-center gap-3">
                 <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
                 <Label>Active</Label>
+              </div>
+              <div>
+                <Label>Image</Label>
+                <FileUpload
+                  value={form.imageUrl}
+                  onChange={(url) => setForm({ ...form, imageUrl: url })}
+                  accept="image/*"
+                  label="Upload Image"
+                />
               </div>
             </TabsContent>
 

@@ -12,6 +12,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { FileUpload } from "@/components/shared/file-upload";
 
 const STATUS_OPTIONS = [
   { value: "DAMAGED", label: "Damaged" },
@@ -39,6 +40,7 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
   const [newStatus, setNewStatus] = useState("");
   const [subItemId, setSubItemId] = useState("");
   const [notes, setNotes] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -56,6 +58,7 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
           newStatus,
           subItemId: trackIndividually ? subItemId : null,
           notes: notes || null,
+          imageUrl: imageUrl || null,
         }),
       });
       if (!res.ok) {
@@ -68,6 +71,7 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
       setNewStatus("");
       setSubItemId("");
       setNotes("");
+      setImageUrl(null);
       onSuccess();
     } catch {
       toast.error("Failed to report");
@@ -111,6 +115,15 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
           <div>
             <Label>Notes</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Describe the issue..." />
+          </div>
+          <div>
+            <Label>Evidence Photo</Label>
+            <FileUpload
+              value={imageUrl}
+              onChange={setImageUrl}
+              accept="image/*"
+              label="Upload Photo"
+            />
           </div>
         </div>
         <DialogFooter>
