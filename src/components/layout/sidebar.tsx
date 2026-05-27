@@ -11,9 +11,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SessionUser } from "@/types";
+import { useAlerts } from "@/hooks/use-alerts";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -32,6 +34,7 @@ interface SidebarProps {
 
 export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const alerts = useAlerts();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -61,6 +64,40 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
           />
         </button>
       </div>
+
+      {/* Alert bell */}
+      {alerts.total > 0 && (
+        <Link
+          href="/items?lowStock=true"
+          title={collapsed ? `${alerts.total} alerts` : undefined}
+          className={cn(
+            "flex items-center rounded-xl text-sm transition-colors",
+            collapsed ? "mx-2 justify-center p-2 relative" : "mx-3 gap-3 px-3 py-2.5",
+            "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 hover:bg-orange-100 dark:hover:bg-orange-950/60"
+          )}
+        >
+          <span className="flex items-center justify-center shrink-0 h-8 w-8 rounded-lg bg-orange-200 dark:bg-orange-900/60">
+            <Bell className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          </span>
+          {!collapsed && (
+            <>
+              <span className="flex-1 font-medium">{alerts.total} Alerts</span>
+              <span className="text-xs text-orange-500 dark:text-orange-400/70">
+                {alerts.lowStock > 0 && `${alerts.lowStock} low`}
+                {alerts.lowStock > 0 && alerts.nearExpiry > 0 && " · "}
+                {alerts.nearExpiry > 0 && `${alerts.nearExpiry} exp`}
+                {(alerts.lowStock > 0 || alerts.nearExpiry > 0) && alerts.overdueMaintenance > 0 && " · "}
+                {alerts.overdueMaintenance > 0 && `${alerts.overdueMaintenance} maint`}
+              </span>
+            </>
+          )}
+          {collapsed && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">
+              {alerts.total > 9 ? "9+" : alerts.total}
+            </span>
+          )}
+        </Link>
+      )}
 
       {/* Nav */}
       <nav className={cn("flex-1 space-y-1.5 mt-2", collapsed ? "px-2" : "px-3")}>

@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { SessionUser } from "@/types";
+import { useAlerts } from "@/hooks/use-alerts";
 
 const tabs = [
   { href: "/", label: "Home", icon: LayoutDashboard },
@@ -25,6 +26,7 @@ interface BottomTabProps {
 
 export function BottomTab({ user }: BottomTabProps) {
   const pathname = usePathname();
+  const alerts = useAlerts();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -41,12 +43,13 @@ export function BottomTab({ user }: BottomTabProps) {
       <div className="flex items-center justify-around h-14">
         {tabs.map((tab) => {
           const Icon = tab.icon;
+          const showBadge = tab.href === "/" && alerts.total > 0;
           return (
             <Link
               key={tab.href}
               href={tab.href}
               className={cn(
-                "flex flex-col items-center gap-0.5 px-2 py-1 text-xs",
+                "flex flex-col items-center gap-0.5 px-2 py-1 text-xs relative",
                 isActive(tab.href)
                   ? "text-primary"
                   : "text-muted-foreground"
@@ -54,6 +57,11 @@ export function BottomTab({ user }: BottomTabProps) {
             >
               <Icon className="h-5 w-5" />
               <span>{tab.label}</span>
+              {showBadge && (
+                <span className="absolute -top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+                  {alerts.total > 9 ? "9+" : alerts.total}
+                </span>
+              )}
             </Link>
           );
         })}

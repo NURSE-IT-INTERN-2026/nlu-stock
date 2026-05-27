@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { getAlertCounts } from "@/lib/alerts";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
 import { StatusOverviewWidget } from "@/components/dashboard/status-overview-widget";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
@@ -6,22 +6,7 @@ import { DashboardBarCharts } from "@/components/dashboard/dashboard-bar-charts"
 import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 
 export default async function DashboardPage() {
-  const now = new Date();
-  const in90Days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-
-  const [lowStockRows, nearExpiry, overdueMaint] = await Promise.all([
-    prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*) FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
-    `,
-    prisma.lot.count({
-      where: { expiryDate: { gte: now, lte: in90Days } },
-    }),
-    prisma.item.count({
-      where: { nextMaintenanceDate: { lt: now }, isActive: true },
-    }),
-  ]);
-
-  const lowStock = Number(lowStockRows[0]?.count ?? 0);
+  const { lowStock, nearExpiry, overdueMaintenance: overdueMaint } = await getAlertCounts();
 
   return (
     <div className="space-y-6">
