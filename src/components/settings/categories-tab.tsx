@@ -60,7 +60,7 @@ interface CategoryType {
 const CATEGORY_LABELS: Record<string, string> = {
   CONSUMABLE: "สิ้นเปลือง",
   DURABLE: "คงทน",
-  FIXED_ASSET: "ครุพันธุ์",
+  FIXED_ASSET: "ครุภัณฑ์",
   BOOK: "หนังสือ",
 };
 
@@ -226,7 +226,7 @@ export function CategoriesTab() {
                 <SelectContent>
                   <SelectItem value="CONSUMABLE">สิ้นเปลือง</SelectItem>
                   <SelectItem value="DURABLE">คงทน</SelectItem>
-                  <SelectItem value="FIXED_ASSET">ครุพันธุ์</SelectItem>
+                  <SelectItem value="FIXED_ASSET">ครุภัณฑ์</SelectItem>
                   <SelectItem value="BOOK">หนังสือ</SelectItem>
                 </SelectContent>
               </Select>

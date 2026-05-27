@@ -80,7 +80,7 @@ interface ItemRecord {
 const CATEGORY_LABELS: Record<string, string> = {
   CONSUMABLE: "สิ้นเปลือง",
   DURABLE: "คงทน",
-  FIXED_ASSET: "ครุพันธุ์",
+  FIXED_ASSET: "ครุภัณฑ์",
   BOOK: "หนังสือ",
 };
 
