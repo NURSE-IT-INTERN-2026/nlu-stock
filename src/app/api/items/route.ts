@@ -60,6 +60,8 @@ export async function GET(request: NextRequest) {
       include: {
         category: true,
         location: true,
+        issueUnit: true,
+        subUnit: true,
         _count: { select: { subItems: true } },
         lots: {
           where: { expiryDate: { not: null } },

@@ -28,8 +28,8 @@ interface ItemData {
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
-  issueUnit: string;
-  subUnit: string;
+  issueUnit: { id: string; name: string };
+  subUnit: { id: string; name: string };
   conversionFactor: number;
   minThreshold: number;
   location: LocationType | null;

@@ -28,8 +28,8 @@ interface ItemData {
   name: string;
   category: { name: string; category: string };
   trackIndividually: boolean;
-  issueUnit: string;
-  subUnit: string;
+  issueUnit: { id: string; name: string };
+  subUnit: { id: string; name: string };
   conversionFactor: number;
   availableQty: number;
   lots: { id: string; lotNumber: string; expiryDate: string | null; quantity: number }[];
@@ -73,8 +73,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         categoryName: item.category.name,
         categoryType,
         trackIndividually: isTracked,
-        issueUnit: item.issueUnit,
-        subUnit: item.subUnit,
+        issueUnit: item.issueUnit.name,
+        subUnit: item.subUnit.name,
         conversionFactor: item.conversionFactor,
         quantity,
         quantitySub,
@@ -92,8 +92,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
           categoryName: item.category.name,
           categoryType,
           trackIndividually: true,
-          issueUnit: item.issueUnit,
-          subUnit: item.subUnit,
+          issueUnit: item.issueUnit.name,
+          subUnit: item.subUnit.name,
           conversionFactor: item.conversionFactor,
           quantity: 1,
           quantitySub: 0,
@@ -110,8 +110,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         categoryName: item.category.name,
         categoryType,
         trackIndividually: false,
-        issueUnit: item.issueUnit,
-        subUnit: item.subUnit,
+        issueUnit: item.issueUnit.name,
+        subUnit: item.subUnit.name,
         conversionFactor: item.conversionFactor,
         quantity,
         quantitySub,
@@ -159,7 +159,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
           <div className="flex items-center gap-2">
             <Badge variant="outline">{item.category.name}</Badge>
             <span className="text-sm text-muted-foreground">
-              Available: {item.availableQty} {item.issueUnit}
+              Available: {item.availableQty} {item.issueUnit.name}
             </span>
           </div>
 
@@ -174,7 +174,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
                   <SelectContent>
                     {item.lots.map((lot) => (
                       <SelectItem key={lot.id} value={lot.id}>
-                        {lot.lotNumber} — {lot.quantity} {item.issueUnit}
+                        {lot.lotNumber} — {lot.quantity} {item.issueUnit.name}
                         {lot.expiryDate && ` (exp: ${new Date(lot.expiryDate).toLocaleDateString()})`}
                       </SelectItem>
                     ))}
@@ -183,7 +183,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>Qty ({item.issueUnit})</Label>
+                  <Label>Qty ({item.issueUnit.name})</Label>
                   <Input
                     type="number"
                     min={1}
@@ -194,7 +194,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
                 </div>
                 {item.conversionFactor > 1 && (
                   <div className="space-y-1">
-                    <Label>Sub ({item.subUnit})</Label>
+                    <Label>Sub ({item.subUnit.name})</Label>
                     <Input
                       type="number"
                       min={0}
@@ -233,7 +233,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
 
           {!isTracked && !isConsumable && (
             <div className="space-y-1">
-              <Label>Quantity ({item.issueUnit})</Label>
+              <Label>Quantity ({item.issueUnit.name})</Label>
               <Input
                 type="number"
                 min={1}

@@ -49,6 +49,14 @@ enum MaintenanceResult {
   DISPOSED
 }
 
+enum ItemCondition {
+  NEW
+  OLD
+  USABLE
+  UNUSABLE
+  DAMAGED
+}
+
 // --- Users ---
 model User {
   id        String   @id @default(cuid())
@@ -107,6 +115,17 @@ model Location {
   @@map("locations")
 }
 
+// --- Units ---
+model Unit {
+  id   String @id @default(cuid())
+  name String @unique
+
+  itemsAsIssue Item[] @relation("UnitItemIssue")
+  itemsAsSub   Item[] @relation("UnitItemSub")
+
+  @@map("units")
+}
+
 // --- Items ---
 model Item {
   id                String       @id @default(cuid())
@@ -117,8 +136,10 @@ model Item {
   category          CategoryType @relation(fields: [categoryId], references: [id])
   trackIndividually Boolean      @default(false)
   status            ItemStatus   @default(AVAILABLE)
-  issueUnit         String
-  subUnit           String
+  issueUnitId       String
+  issueUnit         Unit         @relation("UnitItemIssue", fields: [issueUnitId], references: [id])
+  subUnitId         String
+  subUnit           Unit         @relation("UnitItemSub", fields: [subUnitId], references: [id])
   conversionFactor  Int          @default(1)
   minThreshold      Int          @default(0)
   locationId        String?
@@ -167,7 +188,7 @@ model SubItem {
   item      Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
   subCode   String
   status    ItemStatus @default(AVAILABLE)
-  condition String?
+  condition ItemCondition?
   notes     String?
   imageUrl  String?
   createdAt DateTime   @default(now())

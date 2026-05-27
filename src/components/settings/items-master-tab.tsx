@@ -40,6 +40,11 @@ interface Location {
   shelf: string | null;
 }
 
+interface UnitType {
+  id: string;
+  name: string;
+}
+
 interface ItemRecord {
   id: string;
   code: string;
@@ -49,8 +54,10 @@ interface ItemRecord {
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
-  issueUnit: string;
-  subUnit: string;
+  issueUnitId: string;
+  issueUnit: UnitType;
+  subUnitId: string;
+  subUnit: UnitType;
   conversionFactor: number;
   minThreshold: number;
   locationId: string | null;
@@ -79,7 +86,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const defaultForm = {
   code: "", name: "", nameTh: "", categoryId: "", trackIndividually: false,
-  issueUnit: "ชิ้น", subUnit: "", conversionFactor: 1, minThreshold: 0,
+  issueUnitId: "", subUnitId: "", conversionFactor: 1, minThreshold: 0,
   locationId: "", description: "", isActive: true,
   serialNumber: "", model: "", purchaseDate: "", purchasePrice: "",
   vendor: "", warrantyEndDate: "", maintenanceCycleMonths: 12,
@@ -89,6 +96,7 @@ export function ItemsMasterTab() {
   const [items, setItems] = useState<ItemRecord[]>([]);
   const [categories, setCategories] = useState<CategoryType[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [units, setUnits] = useState<UnitType[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -127,12 +135,14 @@ export function ItemsMasterTab() {
   }, [page, perPage, search, filterCategory, filterStatus]);
 
   const fetchMeta = useCallback(async () => {
-    const [catRes, locRes] = await Promise.all([
+    const [catRes, locRes, unitRes] = await Promise.all([
       fetch("/api/settings/categories"),
       fetch("/api/settings/locations"),
+      fetch("/api/settings/units"),
     ]);
     setCategories(await catRes.json());
     setLocations(await locRes.json());
+    setUnits(await unitRes.json());
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
@@ -155,8 +165,8 @@ export function ItemsMasterTab() {
       nameTh: item.nameTh || "",
       categoryId: item.categoryId,
       trackIndividually: item.trackIndividually,
-      issueUnit: item.issueUnit,
-      subUnit: item.subUnit,
+      issueUnitId: item.issueUnitId,
+      subUnitId: item.subUnitId,
       conversionFactor: item.conversionFactor,
       minThreshold: item.minThreshold,
       locationId: item.locationId || "",
@@ -352,7 +362,7 @@ export function ItemsMasterTab() {
                     <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : ""}>{item.availableQty}</span>
                     <span className="text-muted-foreground"> / {item.totalQty}</span>
                   </TableCell>
-                  <TableCell className="text-sm">{item.issueUnit}</TableCell>
+                  <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
                   <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
                   <TableCell><Badge variant={item.status === "AVAILABLE" ? "default" : "secondary"}>{item.status}</Badge></TableCell>
                   <TableCell>
@@ -446,11 +456,21 @@ export function ItemsMasterTab() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Issue Unit *</Label>
-                  <Input value={form.issueUnit} onChange={(e) => setForm({ ...form, issueUnit: e.target.value })} placeholder="e.g. ชิ้น, กล่อง" />
+                  <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
+                    <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                    <SelectContent>
+                      {units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
-                  <Label>Sub Unit</Label>
-                  <Input value={form.subUnit} onChange={(e) => setForm({ ...form, subUnit: e.target.value })} placeholder="e.g. อัน" />
+                  <Label>Sub Unit *</Label>
+                  <Select value={form.subUnitId} onValueChange={(v) => setForm({ ...form, subUnitId: v ?? "" })}>
+                    <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                    <SelectContent>
+                      {units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div>
@@ -524,7 +544,7 @@ export function ItemsMasterTab() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving || !form.code || !form.name || !form.categoryId}>
+            <Button onClick={handleSave} disabled={saving || !form.code || !form.name || !form.categoryId || !form.issueUnitId || !form.subUnitId}>
               {saving ? "Saving..." : editing ? "Update" : "Create"}
             </Button>
           </DialogFooter>

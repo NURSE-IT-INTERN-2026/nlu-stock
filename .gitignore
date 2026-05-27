@@ -40,6 +40,12 @@ yarn-error.log*
 # uploads
 /uploads/
 
+# IDE
+.vscode/
+
+# plan docs
+plan-nlu-stock/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

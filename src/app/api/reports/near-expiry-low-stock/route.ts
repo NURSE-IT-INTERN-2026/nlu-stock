@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         ...itemWhere,
         availableQty: { lt: prisma.item.fields.minThreshold },
       },
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { name: true } }, issueUnit: { select: { name: true } } },
       orderBy: { minThreshold: "desc" },
     }),
     prisma.lot.findMany({
@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
           select: {
             code: true,
             name: true,
-            issueUnit: true,
             category: { select: { name: true } },
+            issueUnit: { select: { name: true } },
           },
         },
       },
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     availableQty: i.availableQty,
     minThreshold: i.minThreshold,
     totalQty: i.totalQty,
-    issueUnit: i.issueUnit,
+    issueUnit: i.issueUnit.name,
   }));
 
   const nearExpiryData = nearExpiry.map((l) => ({
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     itemCode: l.item.code,
     itemName: l.item.name,
     categoryName: l.item.category.name,
-    issueUnit: l.item.issueUnit,
+    issueUnit: l.item.issueUnit.name,
     daysUntilExpiry: Math.ceil(
       (l.expiryDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
     ),

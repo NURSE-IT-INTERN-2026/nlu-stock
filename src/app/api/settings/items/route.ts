@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
       include: {
         category: true,
         location: true,
+        issueUnit: true,
+        subUnit: true,
         _count: { select: { subItems: true } },
       },
     }),
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
 
   const item = await prisma.item.create({
     data,
-    include: { category: true, location: true },
+    include: { category: true, location: true, issueUnit: true, subUnit: true },
   });
 
   return json(item, 201);

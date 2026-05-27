@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
+import { ItemCondition } from "@/generated/prisma/enums";
 
 interface ImportRow {
   [key: string]: string;
@@ -25,6 +26,7 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = { imported: 0, errors: [] };
   const categories = await prisma.categoryType.findMany();
   const locations = await prisma.location.findMany();
+  const units = await prisma.unit.findMany();
 
   const validRows: { index: number; data: Prisma.ItemCreateInput }[] = [];
 
@@ -51,6 +53,20 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         (l.shelf ?? "") === (row.shelf ?? "")
     );
 
+    const issueUnitName = row.issueUnit || "ชิ้น";
+    const issueUnit = units.find((u) => u.name === issueUnitName);
+    if (!issueUnit) {
+      result.errors.push({ row: i + 1, message: `Unit "${issueUnitName}" not found` });
+      continue;
+    }
+
+    const subUnitName = row.subUnit || issueUnitName;
+    const subUnit = units.find((u) => u.name === subUnitName);
+    if (!subUnit) {
+      result.errors.push({ row: i + 1, message: `Unit "${subUnitName}" not found` });
+      continue;
+    }
+
     validRows.push({
       index: i,
       data: {
@@ -59,8 +75,8 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         nameTh: row.nameTh || null,
         category: { connect: { id: category.id } },
         trackIndividually: row.trackIndividually === "true",
-        issueUnit: row.issueUnit || "ชิ้น",
-        subUnit: row.subUnit || "",
+        issueUnit: { connect: { id: issueUnit.id } },
+        subUnit: { connect: { id: subUnit.id } },
         conversionFactor: parseInt(row.conversionFactor) || 1,
         minThreshold: parseInt(row.minThreshold) || 0,
         location: location ? { connect: { id: location.id } } : undefined,
@@ -178,7 +194,7 @@ async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
     validRows.push({
       item: { connect: { id: item.id } },
       subCode: row.subCode,
-      condition: row.condition || null,
+      condition: (row.condition as ItemCondition | null) || null,
       notes: row.notes || null,
     });
   }

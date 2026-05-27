@@ -29,6 +29,8 @@ interface Location {
   shelf: string | null;
 }
 
+interface UnitType { id: string; name: string }
+
 interface ItemRecord {
   id: string;
   code: string;
@@ -37,7 +39,7 @@ interface ItemRecord {
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
-  issueUnit: string;
+  issueUnit: UnitType;
   availableQty: number;
   totalQty: number;
   minThreshold: number;
@@ -92,7 +94,17 @@ function ItemsContent() {
   const [presetFilter, setPresetFilter] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  const handleQrScan = (code: string) => {
+  const handleQrScan = async (code: string) => {
+    setScannerOpen(false);
+    try {
+      const res = await fetch(`/api/items?search=${encodeURIComponent(code)}&perPage=1`);
+      const data = await res.json();
+      const match = data.items?.find((it: ItemRecord) => it.code === code);
+      if (match) {
+        router.push(`/items/${match.id}`);
+        return;
+      }
+    } catch {}
     setSearch(code);
     setPage(1);
   };
@@ -241,7 +253,7 @@ function ItemsContent() {
                   </span>
                   <span className="text-muted-foreground"> / {item.totalQty}</span>
                 </TableCell>
-                <TableCell className="text-sm">{item.issueUnit}</TableCell>
+                <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
                 <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANTS[item.status] || "secondary"}>

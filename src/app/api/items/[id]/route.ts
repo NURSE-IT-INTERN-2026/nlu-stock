@@ -13,6 +13,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     include: {
       category: true,
       location: true,
+      issueUnit: true,
+      subUnit: true,
       subItems: { orderBy: { subCode: "asc" } },
       lots: { orderBy: { expiryDate: "asc" } },
       dispenseRecords: {

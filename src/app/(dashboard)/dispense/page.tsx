@@ -19,8 +19,8 @@ interface SearchItem {
   name: string;
   nameTh: string | null;
   availableQty: number;
-  issueUnit: string;
-  subUnit: string;
+  issueUnit: { id: string; name: string };
+  subUnit: { id: string; name: string };
   conversionFactor: number;
   trackIndividually: boolean;
   category: { name: string; category: string };
@@ -134,7 +134,7 @@ function DispenseContent() {
                 <p className="text-xs text-muted-foreground">
                   Available: {item.trackIndividually
                     ? `${item.subItems.length} units`
-                    : `${item.availableQty} ${item.issueUnit}`}
+                    : `${item.availableQty} ${item.issueUnit.name}`}
                   {item.location && ` · ${item.location.room}${item.location.cabinet ? ` / ${item.location.cabinet}` : ""}`}
                 </p>
               </div>

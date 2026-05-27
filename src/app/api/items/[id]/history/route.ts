@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     queries.push(
       prisma.dispenseRecord.findMany({
         where: { itemId: id },
-        include: { staff: { select: { name: true } }, item: { select: { issueUnit: true } } },
+        include: { staff: { select: { name: true } }, item: { include: { issueUnit: { select: { name: true } } } } },
         orderBy: { dispensedAt: "desc" },
         take: 100,
       }).then((records) => {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             id: r.id,
             type: "DISPENSE",
             date: r.dispensedAt,
-            description: `Dispensed ${r.quantity} ${r.item.issueUnit}${r.returnedAt ? " (returned)" : ""}`,
+            description: `Dispensed ${r.quantity} ${r.item.issueUnit.name}${r.returnedAt ? " (returned)" : ""}`,
             user: r.staff.name,
             details: { quantity: r.quantity, subjectId: r.subjectId, returnedAt: r.returnedAt },
           });
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     queries.push(
       prisma.receiveRecord.findMany({
         where: { itemId: id },
-        include: { receiver: { select: { name: true } }, item: { select: { issueUnit: true } } },
+        include: { receiver: { select: { name: true } }, item: { include: { issueUnit: { select: { name: true } } } } },
         orderBy: { receivedAt: "desc" },
         take: 100,
       }).then((records) => {
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             id: r.id,
             type: "RECEIVE",
             date: r.receivedAt,
-            description: `Received ${r.quantity} ${r.item.issueUnit}`,
+            description: `Received ${r.quantity} ${r.item.issueUnit.name}`,
             user: r.receiver.name,
             details: { quantity: r.quantity },
           });

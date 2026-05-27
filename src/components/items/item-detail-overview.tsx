@@ -27,8 +27,8 @@ interface ItemData {
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
-  issueUnit: string;
-  subUnit: string;
+  issueUnit: { id: string; name: string };
+  subUnit: { id: string; name: string };
   conversionFactor: number;
   minThreshold: number;
   location: LocationType | null;
@@ -126,12 +126,12 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
             <div className="text-sm space-y-1 mt-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Issue Unit</span>
-                <span>{item.issueUnit}</span>
+                <span>{item.issueUnit.name}</span>
               </div>
               {item.subUnit && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Sub Unit</span>
-                  <span>{item.subUnit} (1 {item.issueUnit} = {item.conversionFactor} {item.subUnit})</span>
+                  <span>{item.subUnit.name} (1 {item.issueUnit.name} = {item.conversionFactor} {item.subUnit.name})</span>
                 </div>
               )}
               <div className="flex justify-between">
@@ -149,7 +149,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <CardContent className="space-y-3">
             <div className="flex items-end gap-2">
               <span className="text-3xl font-bold">{item.availableQty}</span>
-              <span className="text-muted-foreground text-lg mb-1">/ {item.totalQty} {item.issueUnit}</span>
+              <span className="text-muted-foreground text-lg mb-1">/ {item.totalQty} {item.issueUnit.name}</span>
             </div>
             {isLowStock && (
               <div className="flex items-center gap-1 text-destructive text-sm">

@@ -23,6 +23,11 @@ export async function POST(request: NextRequest) {
   if (parseErr) return parseErr;
   if (!data) return error("No data");
 
+  if (!data.sortOrder) {
+    const max = await prisma.categoryType.aggregate({ _max: { sortOrder: true } });
+    data.sortOrder = (max._max.sortOrder ?? 0) + 1;
+  }
+
   const category = await prisma.categoryType.create({ data });
 
   return json(category, 201);

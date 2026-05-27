@@ -16,6 +16,7 @@ async function main() {
   await prisma.location.deleteMany();
   await prisma.subject.deleteMany();
   await prisma.categoryType.deleteMany();
+  await prisma.unit.deleteMany();
   await prisma.user.deleteMany();
 
   // Users
@@ -29,19 +30,35 @@ async function main() {
     data: { email: "instructor@dev", name: "Instructor User", role: "INSTRUCTOR" },
   });
 
-  // Categories
-  const catConsumable = await prisma.categoryType.create({
-    data: { name: "วัสดุสิ้นเปลือง", category: "CONSUMABLE", sortOrder: 1 },
-  });
-  const catDurable = await prisma.categoryType.create({
-    data: { name: "วัสดุคงทน", category: "DURABLE", sortOrder: 2 },
-  });
-  const catFixedAsset = await prisma.categoryType.create({
-    data: { name: "ครุภันธุ์", category: "FIXED_ASSET", sortOrder: 3 },
-  });
-  const catBook = await prisma.categoryType.create({
-    data: { name: "หนังสือ", category: "BOOK", sortOrder: 4 },
-  });
+  // Units
+  const unitNames = ["กล่อง", "ถุง", "ชิ้น", "set", "ชุด", "ห่อ", "เครื่อง", "อัน", "แผง", "กระปุก", "กรัม", "เม็ด", "ซีซี", "ใบ", "แผ่น", "เส้น", "ขวด", "คู่", "เล่ม"];
+  const unitMap = new Map<string, string>();
+  for (const name of unitNames) {
+    const u = await prisma.unit.create({ data: { name } });
+    unitMap.set(name, u.id);
+  }
+  const unitId = (name: string) => unitMap.get(name)!;
+
+  // Categories (from CSV — 12 หมวด mapped to Category enum)
+  const cats = await Promise.all([
+    prisma.categoryType.create({ data: { name: "หุ่นสำหรับตรวจร่างกาย", category: "FIXED_ASSET", sortOrder: 1 } }),
+    prisma.categoryType.create({ data: { name: "หุ่นทางสูติศาสตร์และนรีเวช", category: "FIXED_ASSET", sortOrder: 2 } }),
+    prisma.categoryType.create({ data: { name: "ครุภัณฑ์ทางการแพทย์", category: "FIXED_ASSET", sortOrder: 3 } }),
+    prisma.categoryType.create({ data: { name: "เครื่องมือทางอาชีวอนามัย", category: "DURABLE", sortOrder: 4 } }),
+    prisma.categoryType.create({ data: { name: "หุ่นทางศัลยศาสตร์", category: "FIXED_ASSET", sortOrder: 5 } }),
+    prisma.categoryType.create({ data: { name: "อุปกรณ์ทางออร์โธปิดิกส์", category: "FIXED_ASSET", sortOrder: 6 } }),
+    prisma.categoryType.create({ data: { name: "หุ่นฝึกทักษะการทำหัตถการเฉพาะทาง", category: "FIXED_ASSET", sortOrder: 7 } }),
+    prisma.categoryType.create({ data: { name: "หุ่นจำลองสถานการณ์ทางการพยาบาลขั้นสูง", category: "FIXED_ASSET", sortOrder: 8 } }),
+    prisma.categoryType.create({ data: { name: "หุ่นจำลองสถานการณ์", category: "FIXED_ASSET", sortOrder: 9 } }),
+    prisma.categoryType.create({ data: { name: "หุ่นฝึกช่วยฟื้นคืนชีพ", category: "FIXED_ASSET", sortOrder: 10 } }),
+    prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", category: "DURABLE", sortOrder: 11 } }),
+    prisma.categoryType.create({ data: { name: "โสตทัศนูปกรณ์", category: "DURABLE", sortOrder: 12 } }),
+  ]);
+  // Shorthand aliases for seed items
+  const catFixedAsset = cats[0]; // หุ่นสำหรับตรวจร่างกาย
+  const catDurable = cats[10];   // อุปกรณ์อิเล็กทรอนิกส์
+  const catConsumable = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CONSUMABLE", sortOrder: 13 } });
+  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", category: "BOOK", sortOrder: 14 } });
 
   // Subjects
   await prisma.subject.create({ data: { code: "PHY", name: "ฟิสิกส์" } });
@@ -66,7 +83,7 @@ async function main() {
   const itemBeaker = await prisma.item.create({
     data: {
       code: "CON-001", name: "Beaker 250ml", nameTh: "บีกเกอร์ 250ml",
-      categoryId: catConsumable.id, issueUnit: "ใบ", subUnit: "ใบ",
+      categoryId: catConsumable.id, issueUnitId: unitId("ใบ"), subUnitId: unitId("ใบ"),
       conversionFactor: 1, minThreshold: 10, locationId: locations[0].id,
       totalQty: 100, availableQty: 100,
     },
@@ -74,7 +91,7 @@ async function main() {
   const itemTestTube = await prisma.item.create({
     data: {
       code: "CON-002", name: "Test Tube", nameTh: "หลอดทดลอง",
-      categoryId: catConsumable.id, issueUnit: "อัน", subUnit: "อัน",
+      categoryId: catConsumable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
       conversionFactor: 1, minThreshold: 20, locationId: locations[0].id,
       totalQty: 200, availableQty: 200,
     },
@@ -82,7 +99,7 @@ async function main() {
   const itemFilterPaper = await prisma.item.create({
     data: {
       code: "CON-003", name: "Filter Paper", nameTh: "กระดาษกรอง",
-      categoryId: catConsumable.id, issueUnit: "แผ่น", subUnit: "แผ่น",
+      categoryId: catConsumable.id, issueUnitId: unitId("แผ่น"), subUnitId: unitId("แผ่น"),
       conversionFactor: 1, minThreshold: 50, locationId: locations[1].id,
       totalQty: 500, availableQty: 500,
     },
@@ -90,7 +107,7 @@ async function main() {
   await prisma.item.create({
     data: {
       code: "CON-004", name: "Copper Wire 1m", nameTh: "ลวดทองแดง 1 เมตร",
-      categoryId: catConsumable.id, issueUnit: "เส้น", subUnit: "เส้น",
+      categoryId: catConsumable.id, issueUnitId: unitId("เส้น"), subUnitId: unitId("เส้น"),
       conversionFactor: 1, minThreshold: 5, locationId: locations[2].id,
       totalQty: 30, availableQty: 30,
     },
@@ -100,7 +117,7 @@ async function main() {
   await prisma.item.create({
     data: {
       code: "DUR-001", name: "Magnifying Glass", nameTh: "แว่นขยาย",
-      categoryId: catDurable.id, issueUnit: "อัน", subUnit: "อัน",
+      categoryId: catDurable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
       conversionFactor: 1, minThreshold: 2, locationId: locations[3].id,
       totalQty: 15, availableQty: 15,
     },
@@ -111,7 +128,7 @@ async function main() {
     data: {
       code: "DUR-002", name: "Microscope", nameTh: "กล้องจุลทรรศน์",
       categoryId: catDurable.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[4].id,
       totalQty: 5, availableQty: 5,
     },
@@ -121,7 +138,7 @@ async function main() {
       data: {
         itemId: itemMicroscope.id,
         subCode: `DUR-002-${String(i).padStart(3, "0")}`,
-        status: "AVAILABLE", condition: "ดี",
+        status: "AVAILABLE", condition: "USABLE",
       },
     });
   }
@@ -131,7 +148,7 @@ async function main() {
     data: {
       code: "FIX-001", name: "LCD Projector", nameTh: "โปรเจกเตอร์",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[5].id,
       totalQty: 3, availableQty: 3,
       serialNumber: "SN-PROJ-001", model: "Epson EB-X51",
@@ -145,7 +162,7 @@ async function main() {
       data: {
         itemId: itemProjector.id,
         subCode: `FIX-001-${String(i).padStart(3, "0")}`,
-        status: "AVAILABLE", condition: "ดี",
+        status: "AVAILABLE", condition: "USABLE",
       },
     });
   }
@@ -154,7 +171,7 @@ async function main() {
     data: {
       code: "FIX-002", name: "Centrifuge", nameTh: "เครื่องหมุนเหวี่ยง",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[6].id,
       totalQty: 2, availableQty: 2,
       serialNumber: "SN-CENT-001", model: "Hettich EBA 20",
@@ -170,7 +187,7 @@ async function main() {
       data: {
         itemId: itemCentrifuge.id,
         subCode: `FIX-002-${String(i).padStart(3, "0")}`,
-        status: "AVAILABLE", condition: "ดี",
+        status: "AVAILABLE", condition: "USABLE",
       },
     });
   }
@@ -179,7 +196,7 @@ async function main() {
   await prisma.item.create({
     data: {
       code: "BOOK-001", name: "Physics Textbook Vol.1", nameTh: "หนังสือเรียนฟิสิกส์ เล่ม 1",
-      categoryId: catBook.id, issueUnit: "เล่ม", subUnit: "เล่ม",
+      categoryId: catBook.id, issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"),
       conversionFactor: 1, minThreshold: 5, locationId: locations[7].id,
       totalQty: 30, availableQty: 30,
     },
@@ -190,7 +207,7 @@ async function main() {
     data: {
       code: "DUR-003", name: "Digital Multimeter", nameTh: "มัลติมิเตอร์ดิจิทัล",
       categoryId: catDurable.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[0].id,
       totalQty: 4, availableQty: 0, status: "CHECKED_OUT",
     },
@@ -200,7 +217,7 @@ async function main() {
       data: {
         itemId: itemCheckedOut.id,
         subCode: `DUR-003-${String(i).padStart(3, "0")}`,
-        status: "CHECKED_OUT", condition: "ดี",
+        status: "CHECKED_OUT", condition: "USABLE",
       },
     });
   }
@@ -208,7 +225,7 @@ async function main() {
   await prisma.item.create({
     data: {
       code: "CON-005", name: "Broken Thermometer", nameTh: "เทอร์โมมิเตอร์เสีย",
-      categoryId: catConsumable.id, issueUnit: "อัน", subUnit: "อัน",
+      categoryId: catConsumable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
       conversionFactor: 1, minThreshold: 0, locationId: locations[1].id,
       totalQty: 3, availableQty: 0, status: "DAMAGED",
     },
@@ -218,7 +235,7 @@ async function main() {
     data: {
       code: "FIX-003", name: "Spectrum Analyzer", nameTh: "เครื่องวิเคราะห์สเปกตรัม",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[2].id,
       totalQty: 2, availableQty: 0, status: "UNDER_REPAIR",
       serialNumber: "SN-SA-001", model: "Keysight N9320B",
@@ -230,7 +247,7 @@ async function main() {
       data: {
         itemId: itemUnderRepair.id,
         subCode: `FIX-003-${String(i).padStart(3, "0")}`,
-        status: "UNDER_REPAIR", condition: "ซ่อม",
+        status: "UNDER_REPAIR", condition: "DAMAGED",
       },
     });
   }
@@ -238,7 +255,7 @@ async function main() {
   await prisma.item.create({
     data: {
       code: "DUR-004", name: "Missing Ruler Set", nameTh: "ไม้บรรทัดหาย",
-      categoryId: catDurable.id, issueUnit: "ชุด", subUnit: "ชุด",
+      categoryId: catDurable.id, issueUnitId: unitId("ชุด"), subUnitId: unitId("ชุด"),
       conversionFactor: 1, minThreshold: 0, locationId: locations[3].id,
       totalQty: 2, availableQty: 0, status: "LOST",
     },
@@ -248,7 +265,7 @@ async function main() {
     data: {
       code: "FIX-004", name: "Oscilloscope", nameTh: "ออสซิลโลสโคป",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[4].id,
       totalQty: 1, availableQty: 0, status: "PENDING_MAINTENANCE",
       serialNumber: "SN-OSC-001", model: "Tektronix TBS1052B",
@@ -262,7 +279,7 @@ async function main() {
   await prisma.item.create({
     data: {
       code: "CON-006", name: "Expired Reagent", nameTh: "รีเอเจนต์หมดอายุ",
-      categoryId: catConsumable.id, issueUnit: "ขวด", subUnit: "ขวด",
+      categoryId: catConsumable.id, issueUnitId: unitId("ขวด"), subUnitId: unitId("ขวด"),
       conversionFactor: 1, minThreshold: 0, locationId: locations[5].id,
       totalQty: 5, availableQty: 0, status: "DISPOSED",
     },
@@ -328,7 +345,7 @@ async function main() {
   const itemGloves = await prisma.item.create({
     data: {
       code: "CON-007", name: "Latex Gloves", nameTh: "ถุงมือยาง",
-      categoryId: catConsumable.id, issueUnit: "คู่", subUnit: "คู่",
+      categoryId: catConsumable.id, issueUnitId: unitId("คู่"), subUnitId: unitId("คู่"),
       conversionFactor: 1, minThreshold: 50, locationId: locations[3].id,
       totalQty: 8, availableQty: 8,
     },
@@ -336,7 +353,7 @@ async function main() {
   const itemAlcohol = await prisma.item.create({
     data: {
       code: "CON-008", name: "Alcohol 70%", nameTh: "แอลกอฮอล์ 70%",
-      categoryId: catConsumable.id, issueUnit: "ขวด", subUnit: "ขวด",
+      categoryId: catConsumable.id, issueUnitId: unitId("ขวด"), subUnitId: unitId("ขวด"),
       conversionFactor: 1, minThreshold: 10, locationId: locations[2].id,
       totalQty: 3, availableQty: 3,
     },
@@ -429,7 +446,7 @@ async function main() {
     data: {
       code: "FIX-005", name: "Analytical Balance", nameTh: "เครื่องชั่งวิเคราะห์",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[6].id,
       totalQty: 1, availableQty: 1,
       serialNumber: "SN-BA-001", model: "Mettler Toledo ME204",
@@ -439,14 +456,14 @@ async function main() {
     },
   });
   await prisma.subItem.create({
-    data: { itemId: itemBalance.id, subCode: "FIX-005-001", status: "AVAILABLE", condition: "ดี" },
+    data: { itemId: itemBalance.id, subCode: "FIX-005-001", status: "AVAILABLE", condition: "USABLE" },
   });
 
   const itemPhMeter = await prisma.item.create({
     data: {
       code: "FIX-006", name: "pH Meter", nameTh: "เครื่องวัด pH",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[7].id,
       totalQty: 2, availableQty: 2,
       serialNumber: "SN-PH-001", model: "Hanna HI5222",
@@ -457,7 +474,7 @@ async function main() {
   });
   for (let i = 1; i <= 2; i++) {
     await prisma.subItem.create({
-      data: { itemId: itemPhMeter.id, subCode: `FIX-006-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "ดี" },
+      data: { itemId: itemPhMeter.id, subCode: `FIX-006-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
     });
   }
 
@@ -465,7 +482,7 @@ async function main() {
     data: {
       code: "FIX-007", name: "Hot Plate Stirrer", nameTh: "เตาไฟฟ้าผสมแม่เหล็ก",
       categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnit: "เครื่อง", subUnit: "เครื่อง",
+      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
       conversionFactor: 1, minThreshold: 1, locationId: locations[0].id,
       totalQty: 3, availableQty: 3,
       serialNumber: "SN-HP-001", model: "IKA C-Mag HS7",
@@ -476,7 +493,7 @@ async function main() {
   });
   for (let i = 1; i <= 3; i++) {
     await prisma.subItem.create({
-      data: { itemId: itemHotplate.id, subCode: `FIX-007-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "ดี" },
+      data: { itemId: itemHotplate.id, subCode: `FIX-007-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
     });
   }
 

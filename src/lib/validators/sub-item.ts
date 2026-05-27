@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { ItemStatus } from "@/generated/prisma/enums";
+import { ItemStatus, ItemCondition } from "@/generated/prisma/enums";
 
 export const subItemCreateSchema = z.object({
   subCode: z.string().min(1, "Sub-code is required").max(50),
   status: z.nativeEnum(ItemStatus).default("AVAILABLE"),
-  condition: z.string().max(200).optional().nullable(),
+  condition: z.nativeEnum(ItemCondition).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   imageUrl: z.string().url().optional().nullable(),
 });

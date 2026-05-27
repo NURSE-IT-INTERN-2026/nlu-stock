@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         category: { select: { name: true, category: true } },
+        issueUnit: { select: { id: true, name: true } },
+        subUnit: { select: { id: true, name: true } },
         lots: {
           where: { quantity: { gt: 0 } },
           orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }],

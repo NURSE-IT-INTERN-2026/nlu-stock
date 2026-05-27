@@ -23,8 +23,8 @@ interface SearchItem {
   code: string;
   name: string;
   nameTh: string | null;
-  issueUnit: string;
-  subUnit: string;
+  issueUnit: { id: string; name: string };
+  subUnit: { id: string; name: string };
   conversionFactor: number;
   trackIndividually: boolean;
   category: { name: string; category: string };
@@ -238,7 +238,7 @@ export default function ReceivePage() {
                   {/* Quantity */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Quantity ({row.item.issueUnit})</Label>
+                      <Label className="text-xs">Quantity ({row.item.issueUnit.name})</Label>
                       <Input
                         type="number"
                         min={1}

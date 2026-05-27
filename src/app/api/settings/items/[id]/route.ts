@@ -14,6 +14,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     include: {
       category: true,
       location: true,
+      issueUnit: true,
+      subUnit: true,
       subItems: { orderBy: { subCode: "asc" } },
       lots: { orderBy: { expiryDate: "asc" } },
     },
@@ -42,7 +44,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const item = await prisma.item.update({
       where: { id },
       data,
-      include: { category: true, location: true },
+      include: { category: true, location: true, issueUnit: true, subUnit: true },
     });
     return json(item);
   } catch {
