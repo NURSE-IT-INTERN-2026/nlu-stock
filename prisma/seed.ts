@@ -1,10 +1,63 @@
 import "dotenv/config";
+import { parse } from "csv-parse/sync";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+const CSV_DIR = join(process.cwd(), "CSV");
+
+function readCsv(filename: string) {
+  const raw = readFileSync(join(CSV_DIR, filename), "utf-8");
+  return parse(raw, {
+    relax_column_count: true,
+    relax_quotes: true,
+    skip_empty_lines: true,
+    bom: true,
+  }) as string[][];
+}
+
+// Map Thai condition to ItemCondition enum
+function mapCondition(th: string): string {
+  const t = (th || "").trim();
+  if (t === "ปกติ") return "NEW";
+  if (t === "ปานกลาง") return "USABLE";
+  if (t === "เก่า") return "OLD";
+  if (t === "ชำรุด") return "DAMAGED";
+  return "USABLE";
+}
+
+// Map Thai condition to ItemStatus enum
+function mapStatus(th: string): string {
+  const t = (th || "").trim();
+  if (t === "ปกติ") return "AVAILABLE";
+  if (t === "ปานกลาง") return "AVAILABLE";
+  if (t === "เก่า") return "AVAILABLE";
+  if (t === "ชำรุด") return "DAMAGED";
+  return "AVAILABLE";
+}
+
+// Parse "อาคาร 2 ชั้น 5" → { building: "อาคาร 2", floor: "ชั้น 5" }
+function parseBuildingFloor(raw: string): { building: string; floor: string } {
+  const t = (raw || "").trim();
+  const bMatch = t.match(/อาคาร\s*\d+/);
+  const fMatch = t.match(/ชั้น\s*\d+/);
+  return {
+    building: bMatch ? bMatch[0] : "อาคาร 2",
+    floor: fMatch ? fMatch[0] : "ชั้น 4",
+  };
+}
+
+// Parse Thai price "60,000.00" → number
+function parsePrice(raw: string): number | null {
+  if (!raw || !raw.trim()) return null;
+  const cleaned = raw.replace(/,/g, "").replace(/[^\d.]/g, "");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
 
 async function main() {
-  // Dynamic import to resolve ESM + adapter from lib singleton
   const { prisma } = await import("../src/lib/prisma");
 
-  // Clean
+  // Clean all tables
   await prisma.itemStatusLog.deleteMany();
   await prisma.maintenanceRecord.deleteMany();
   await prisma.stockAdjustment.deleteMany();
@@ -14,774 +67,566 @@ async function main() {
   await prisma.subItem.deleteMany();
   await prisma.item.deleteMany();
   await prisma.location.deleteMany();
-  await prisma.subject.deleteMany();
   await prisma.categoryType.deleteMany();
   await prisma.unit.deleteMany();
   await prisma.user.deleteMany();
 
+  // ============================================================
   // Users
-  const admin = await prisma.user.create({
-    data: { email: "admin@dev", name: "Admin User", role: "ADMIN" },
-  });
-  const staff = await prisma.user.create({
-    data: { email: "staff@dev", name: "Staff User", role: "STAFF" },
-  });
-  const instructor = await prisma.user.create({
-    data: { email: "instructor@dev", name: "Instructor User", role: "INSTRUCTOR" },
-  });
+  // ============================================================
+  const admin = await prisma.user.create({ data: { email: "admin@dev", name: "Admin User", role: "ADMIN" } });
+  const staff = await prisma.user.create({ data: { email: "staff@dev", name: "Staff User", role: "STAFF" } });
+  const instructor = await prisma.user.create({ data: { email: "instructor@dev", name: "Instructor User", role: "INSTRUCTOR" } });
 
-  // Units
-  const unitNames = ["กล่อง", "ถุง", "ชิ้น", "set", "ชุด", "ห่อ", "เครื่อง", "อัน", "แผง", "กระปุก", "กรัม", "เม็ด", "ซีซี", "ใบ", "แผ่น", "เส้น", "ขวด", "คู่", "เล่ม", "ม้วน"];
+  // ============================================================
+  // Units — collect all unique units from CSVs
+  // ============================================================
+  const unitNames = ["กล่อง", "ถุง", "ชิ้น", "set", "ชุด", "ห่อ", "เครื่อง", "อัน", "แผง", "กระปุก", "กรัม", "เม็ด", "ซีซี", "ใบ", "แผ่น", "เส้น", "ขวด", "คู่", "เล่ม", "ม้วน", "ตัว", "ผืน", "ก้อน", "หลอด", "ท่อน", "มิลลิลิตร", "เส้นยาว", "ครึ่ง"];
   const unitMap = new Map<string, string>();
   for (const name of unitNames) {
     const u = await prisma.unit.create({ data: { name } });
     unitMap.set(name, u.id);
   }
-  const unitId = (name: string) => unitMap.get(name)!;
+  const unitId = (name: string) => unitMap.get(name) || unitMap.get("ชิ้น")!;
 
-  // Categories (from CSV — 12 หมวด mapped to Category enum)
-  const cats = await Promise.all([
-    prisma.categoryType.create({ data: { name: "หุ่นสำหรับตรวจร่างกาย", category: "FIXED_ASSET", sortOrder: 1 } }),
-    prisma.categoryType.create({ data: { name: "หุ่นทางสูติศาสตร์และนรีเวช", category: "FIXED_ASSET", sortOrder: 2 } }),
-    prisma.categoryType.create({ data: { name: "ครุภัณฑ์ทางการแพทย์", category: "FIXED_ASSET", sortOrder: 3 } }),
-    prisma.categoryType.create({ data: { name: "เครื่องมือทางอาชีวอนามัย", category: "DURABLE", sortOrder: 4 } }),
-    prisma.categoryType.create({ data: { name: "หุ่นทางศัลยศาสตร์", category: "FIXED_ASSET", sortOrder: 5 } }),
-    prisma.categoryType.create({ data: { name: "อุปกรณ์ทางออร์โธปิดิกส์", category: "FIXED_ASSET", sortOrder: 6 } }),
-    prisma.categoryType.create({ data: { name: "หุ่นฝึกทักษะการทำหัตถการเฉพาะทาง", category: "FIXED_ASSET", sortOrder: 7 } }),
-    prisma.categoryType.create({ data: { name: "หุ่นจำลองสถานการณ์ทางการพยาบาลขั้นสูง", category: "FIXED_ASSET", sortOrder: 8 } }),
-    prisma.categoryType.create({ data: { name: "หุ่นจำลองสถานการณ์", category: "FIXED_ASSET", sortOrder: 9 } }),
-    prisma.categoryType.create({ data: { name: "หุ่นฝึกช่วยฟื้นคืนชีพ", category: "FIXED_ASSET", sortOrder: 10 } }),
-    prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", category: "DURABLE", sortOrder: 11 } }),
-    prisma.categoryType.create({ data: { name: "โสตทัศนูปกรณ์", category: "DURABLE", sortOrder: 12 } }),
-  ]);
-  // Shorthand aliases for seed items
-  const catFixedAsset = cats[0]; // หุ่นสำหรับตรวจร่างกาย
-  const catDurable = cats[10];   // อุปกรณ์อิเล็กทรอนิกส์
-  const catConsumable = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CONSUMABLE", sortOrder: 13 } });
-  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", category: "BOOK", sortOrder: 14 } });
-
-  // Subjects
-  await prisma.subject.create({ data: { code: "PHY", name: "ฟิสิกส์" } });
-  await prisma.subject.create({ data: { code: "CHEM", name: "เคมี" } });
-  await prisma.subject.create({ data: { code: "BIO", name: "ชีววิทยา" } });
-  await prisma.subject.create({ data: { code: "NUR", name: "การพยาบาล" } });
-  await prisma.subject.create({ data: { code: "MED", name: "แพทย์" } });
-
-  const subjects = await prisma.subject.findMany();
-  const phy = subjects.find((s) => s.code === "PHY")!;
-  const chem = subjects.find((s) => s.code === "CHEM")!;
-  const bio = subjects.find((s) => s.code === "BIO")!;
-  const nur = subjects.find((s) => s.code === "NUR")!;
-  const med = subjects.find((s) => s.code === "MED")!;
-
-  // Locations: 2 rooms, 4 cabinets, 8 shelves
-  const locations = await Promise.all([
-    prisma.location.create({ data: { room: "ห้อง A", cabinet: "ตู้ 1", shelf: "ชั้น 1" } }),
-    prisma.location.create({ data: { room: "ห้อง A", cabinet: "ตู้ 1", shelf: "ชั้น 2" } }),
-    prisma.location.create({ data: { room: "ห้อง A", cabinet: "ตู้ 2", shelf: "ชั้น 1" } }),
-    prisma.location.create({ data: { room: "ห้อง A", cabinet: "ตู้ 2", shelf: "ชั้น 2" } }),
-    prisma.location.create({ data: { room: "ห้อง B", cabinet: "ตู้ 1", shelf: "ชั้น 1" } }),
-    prisma.location.create({ data: { room: "ห้อง B", cabinet: "ตู้ 1", shelf: "ชั้น 2" } }),
-    prisma.location.create({ data: { room: "ห้อง B", cabinet: "ตู้ 2", shelf: "ชั้น 1" } }),
-    prisma.location.create({ data: { room: "ห้อง B", cabinet: "ตู้ 2", shelf: "ชั้น 2" } }),
-  ]);
-
-  // --- Items ---
-
-  // Consumables
-  const itemBeaker = await prisma.item.create({
-    data: {
-      code: "CON-001", name: "Beaker 250ml", nameTh: "บีกเกอร์ 250ml",
-      categoryId: catConsumable.id, issueUnitId: unitId("ใบ"), subUnitId: unitId("ใบ"),
-      conversionFactor: 1, minThreshold: 10, locationId: locations[0].id,
-      totalQty: 100, availableQty: 100,
-    },
-  });
-  const itemTestTube = await prisma.item.create({
-    data: {
-      code: "CON-002", name: "Test Tube", nameTh: "หลอดทดลอง",
-      categoryId: catConsumable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
-      conversionFactor: 1, minThreshold: 20, locationId: locations[0].id,
-      totalQty: 200, availableQty: 200,
-    },
-  });
-  const itemFilterPaper = await prisma.item.create({
-    data: {
-      code: "CON-003", name: "Filter Paper", nameTh: "กระดาษกรอง",
-      categoryId: catConsumable.id, issueUnitId: unitId("แผ่น"), subUnitId: unitId("แผ่น"),
-      conversionFactor: 1, minThreshold: 50, locationId: locations[1].id,
-      totalQty: 500, availableQty: 500,
-    },
-  });
-  await prisma.item.create({
-    data: {
-      code: "CON-004", name: "Copper Wire 1m", nameTh: "ลวดทองแดง 1 เมตร",
-      categoryId: catConsumable.id, issueUnitId: unitId("เส้น"), subUnitId: unitId("เส้น"),
-      conversionFactor: 1, minThreshold: 5, locationId: locations[2].id,
-      totalQty: 30, availableQty: 30,
-    },
-  });
-
-  // Durables (not tracked individually)
-  await prisma.item.create({
-    data: {
-      code: "DUR-001", name: "Magnifying Glass", nameTh: "แว่นขยาย",
-      categoryId: catDurable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
-      conversionFactor: 1, minThreshold: 2, locationId: locations[3].id,
-      totalQty: 15, availableQty: 15,
-    },
-  });
-
-  // Durables (tracked individually)
-  const itemMicroscope = await prisma.item.create({
-    data: {
-      code: "DUR-002", name: "Microscope", nameTh: "กล้องจุลทรรศน์",
-      categoryId: catDurable.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[4].id,
-      totalQty: 5, availableQty: 5,
-    },
-  });
-  for (let i = 1; i <= 5; i++) {
-    await prisma.subItem.create({
-      data: {
-        itemId: itemMicroscope.id,
-        subCode: `DUR-002-${String(i).padStart(3, "0")}`,
-        status: "AVAILABLE", condition: "USABLE",
-      },
-    });
+  // Parse unit from Thai string like "ใบ/อัน" → first unit
+  function parseUnit(raw: string): string {
+    const t = (raw || "").trim().split("/")[0].trim();
+    return unitMap.get(t) ? t : "ชิ้น";
   }
 
-  // Fixed Assets
-  const itemProjector = await prisma.item.create({
-    data: {
-      code: "FIX-001", name: "LCD Projector", nameTh: "โปรเจกเตอร์",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[5].id,
-      totalQty: 3, availableQty: 3,
-      serialNumber: "SN-PROJ-001", model: "Epson EB-X51",
-      purchaseDate: new Date("2024-01-15"), purchasePrice: 25000,
-      vendor: "Thai Tech Co.", warrantyEndDate: new Date("2027-01-15"),
-      maintenanceCycleMonths: 6,
-    },
-  });
-  for (let i = 1; i <= 3; i++) {
-    await prisma.subItem.create({
-      data: {
-        itemId: itemProjector.id,
-        subCode: `FIX-001-${String(i).padStart(3, "0")}`,
-        status: "AVAILABLE", condition: "USABLE",
-      },
+  // ============================================================
+  // CategoryTypes — 8 simplified categories
+  // ============================================================
+  // FIXED_ASSET (1)
+  const catKru = await prisma.categoryType.create({ data: { name: "ครุภัณฑ์", category: "FIXED_ASSET", sortOrder: 1 } });
+
+  // DURABLE (4)
+  const catDurable = await prisma.categoryType.create({ data: { name: "วัสดุคงทน", category: "DURABLE", sortOrder: 2 } });
+  const catElec = await prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", category: "DURABLE", sortOrder: 3 } });
+  const catToys = await prisma.categoryType.create({ data: { name: "ของเล่น", category: "DURABLE", sortOrder: 4 } });
+  const catSubjectKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", category: "DURABLE", sortOrder: 5 } });
+
+  // CONSUMABLE (2)
+  const catConsumable = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CONSUMABLE", sortOrder: 6 } });
+  const catMedicine = await prisma.categoryType.create({ data: { name: "ยา", category: "CONSUMABLE", sortOrder: 7 } });
+
+  // BOOK (1)
+  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", category: "BOOK", sortOrder: 8 } });
+
+  // ============================================================
+  // Locations — extracted from CSV data
+  // ============================================================
+  const locCache = new Map<string, string>();
+
+  async function getOrCreateLocation(building: string, floor: string, room: string, detail?: string | null) {
+    const key = `${building}|${floor}|${room}|${detail || ""}`;
+    if (locCache.has(key)) return locCache.get(key)!;
+    const loc = await prisma.location.create({
+      data: { building, floor, room, detail: detail || null },
     });
+    locCache.set(key, loc.id);
+    return loc.id;
   }
 
-  const itemCentrifuge = await prisma.item.create({
-    data: {
-      code: "FIX-002", name: "Centrifuge", nameTh: "เครื่องหมุนเหวี่ยง",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[6].id,
-      totalQty: 2, availableQty: 2,
-      serialNumber: "SN-CENT-001", model: "Hettich EBA 20",
-      purchaseDate: new Date("2023-06-01"), purchasePrice: 45000,
-      vendor: "Lab Supply Co.", warrantyEndDate: new Date("2026-06-01"),
-      maintenanceCycleMonths: 12,
-      lastMaintenanceDate: new Date("2025-06-01"),
-      nextMaintenanceDate: new Date("2026-06-01"),
-    },
-  });
-  for (let i = 1; i <= 2; i++) {
-    await prisma.subItem.create({
-      data: {
-        itemId: itemCentrifuge.id,
-        subCode: `FIX-002-${String(i).padStart(3, "0")}`,
-        status: "AVAILABLE", condition: "USABLE",
-      },
-    });
+  // Pre-create known locations from CSV data
+  const knownLocations = [
+    { building: "อาคาร 2", floor: "ชั้น 3", rooms: ["SimBaby", "Simmom2", "Simman 1", "Simman 2"] },
+    { building: "อาคาร 2", floor: "ชั้น 4", rooms: ["401", "402", "406"] },
+    { building: "อาคาร 2", floor: "ชั้น 5", rooms: ["501", "502", "503", "504"] },
+  ];
+  for (const b of knownLocations) {
+    for (const room of b.rooms) {
+      await getOrCreateLocation(b.building, b.floor, room);
+    }
   }
 
-  // Books
-  await prisma.item.create({
-    data: {
-      code: "BOOK-001", name: "Physics Textbook Vol.1", nameTh: "หนังสือเรียนฟิสิกส์ เล่ม 1",
-      categoryId: catBook.id, issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"),
-      conversionFactor: 1, minThreshold: 5, locationId: locations[7].id,
-      totalQty: 30, availableQty: 30,
-    },
-  });
+  const defaultLocId = await getOrCreateLocation("อาคาร 2", "ชั้น 4", "402");
 
-  // Items with different statuses for dashboard chart testing
-  const itemCheckedOut = await prisma.item.create({
-    data: {
-      code: "DUR-003", name: "Digital Multimeter", nameTh: "มัลติมิเตอร์ดิจิทัล",
-      categoryId: catDurable.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[0].id,
-      totalQty: 4, availableQty: 0, status: "CHECKED_OUT",
-    },
-  });
-  for (let i = 1; i <= 4; i++) {
-    await prisma.subItem.create({
-      data: {
-        itemId: itemCheckedOut.id,
-        subCode: `DUR-003-${String(i).padStart(3, "0")}`,
-        status: "CHECKED_OUT", condition: "USABLE",
-      },
-    });
+  // ============================================================
+  // Helper: strip trailing number from name for grouping
+  // "Syringe Pump 1" → "Syringe Pump", "ชุดอุปกรณ์สอนดูแลเด็กทารกหลังคลอด 1" → "ชุดอุปกรณ์สอนดูแลเด็กทารกหลังคลอด"
+  // ============================================================
+  function stripTrailingNumber(name: string): string {
+    return name.replace(/\s+\d+\s*$/, "").trim();
   }
 
-  await prisma.item.create({
-    data: {
-      code: "CON-005", name: "Broken Thermometer", nameTh: "เทอร์โมมิเตอร์เสีย",
-      categoryId: catConsumable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
-      conversionFactor: 1, minThreshold: 0, locationId: locations[1].id,
-      totalQty: 3, availableQty: 0, status: "DAMAGED",
-    },
-  });
+  // Helper: group rows and create Items with SubItems
+  type ParsedRow = {
+    nameTh: string;
+    nameEn: string;
+    catId: string;
+    brandModel: string;
+    buildingFloor: string;
+    room: string;
+    condition: string;
+    serialNo: string;
+    warrantyStr: string;
+    company: string;
+    contact: string;
+    phone: string;
+    priceStr: string;
+    notes: string;
+    nluCode: string;
+  };
 
-  const itemUnderRepair = await prisma.item.create({
-    data: {
-      code: "FIX-003", name: "Spectrum Analyzer", nameTh: "เครื่องวิเคราะห์สเปกตรัม",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[2].id,
-      totalQty: 2, availableQty: 0, status: "UNDER_REPAIR",
-      serialNumber: "SN-SA-001", model: "Keysight N9320B",
-      purchaseDate: new Date("2022-03-01"), purchasePrice: 120000,
-    },
-  });
-  for (let i = 1; i <= 2; i++) {
-    await prisma.subItem.create({
-      data: {
-        itemId: itemUnderRepair.id,
-        subCode: `FIX-003-${String(i).padStart(3, "0")}`,
-        status: "UNDER_REPAIR", condition: "DAMAGED",
-      },
-    });
+  async function importGrouped(rows: ParsedRow[], codePrefix: string) {
+    // Group by (stripped name + categoryId)
+    const groups = new Map<string, ParsedRow[]>();
+    for (const row of rows) {
+      const baseName = stripTrailingNumber(row.nameTh);
+      const key = `${baseName}|${row.catId}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+
+    let itemCount = 0;
+    let subCount = 0;
+    for (const [, group] of groups) {
+      const first = group[0];
+      const baseName = stripTrailingNumber(first.nameTh);
+      const baseNameEn = stripTrailingNumber(first.nameEn || first.nameTh);
+
+      const catId = first.catId;
+      const { building, floor } = parseBuildingFloor(first.buildingFloor);
+      const locId = first.room ? await getOrCreateLocation(building, floor, first.room) : defaultLocId;
+
+      // Use first non-empty model/vendor/price across group
+      const model = group.find(r => r.brandModel)?.brandModel || null;
+      const vendorCompany = group.find(r => r.company)?.company || null;
+      const vendorContact = group.find(r => r.contact)?.contact || null;
+      const vendorPhone = group.find(r => r.phone)?.phone || null;
+      const price = group.reduce<number | null>((best, r) => best ?? parsePrice(r.priceStr), null);
+      const warrantyMatch = group.find(r => r.warrantyStr)?.warrantyStr?.match(/(\d+)/);
+      const warrantyMonths = warrantyMatch ? parseInt(warrantyMatch[1]) * 12 : 0;
+
+      const code = `NLU-${codePrefix}-${String(itemCount + 1).padStart(3, "0")}`;
+      const unit = unitId("เครื่อง");
+
+      // Count available sub-items for totals
+      const availableCount = group.filter(r => mapStatus(r.condition) === "AVAILABLE").length;
+
+      const item = await prisma.item.create({
+        data: {
+          code, name: baseName, nameEn: baseNameEn !== baseName ? baseNameEn : null,
+          categoryId: catId, trackIndividually: true,
+          issueUnitId: unit, subUnitId: unit, conversionFactor: 1,
+          minThreshold: 1, locationId: locId,
+          totalQty: group.length, availableQty: availableCount,
+          status: "AVAILABLE" as any,
+          model,
+          purchasePrice: price,
+          vendorCompany, vendorContact, vendorPhone,
+          warrantyMonths,
+        },
+      });
+
+      // Create SubItems for each row in the group
+      for (let j = 0; j < group.length; j++) {
+        const row = group[j];
+        const status = mapStatus(row.condition);
+        const cond = mapCondition(row.condition);
+        const subCode = `NLU-${codePrefix}-${String(itemCount + 1).padStart(3, "0")}-${String(j + 1).padStart(3, "0")}`;
+
+        await prisma.subItem.create({
+          data: {
+            itemId: item.id,
+            subCode,
+            status: status as any,
+            condition: cond as any,
+            serialNumber: row.serialNo && row.serialNo !== "N/A" && row.serialNo !== "รอเลขจากพัสดุ" ? row.serialNo : null,
+            notes: row.notes || null,
+          },
+        });
+        subCount++;
+      }
+      itemCount++;
+    }
+    return { itemCount, subCount };
   }
 
-  await prisma.item.create({
-    data: {
-      code: "DUR-004", name: "Missing Ruler Set", nameTh: "ไม้บรรทัดหาย",
-      categoryId: catDurable.id, issueUnitId: unitId("ชุด"), subUnitId: unitId("ชุด"),
-      conversionFactor: 1, minThreshold: 0, locationId: locations[3].id,
-      totalQty: 2, availableQty: 0, status: "LOST",
-    },
-  });
+  // ============================================================
+  // 1. Import ครุภัณฑ์ (FIXED_ASSET) — grouped
+  // ============================================================
+  console.log("Importing ครุภัณฑ์...");
+  const kruRows = readCsv("ข้อมูลทรัพย์สิน NLU - ครุภัณฑ์.csv");
+  const kruParsed: ParsedRow[] = [];
+  for (let i = 2; i < kruRows.length; i++) {
+    const row = kruRows[i];
+    if (!row || row.length < 10) continue;
+    const nameTh = (row[3] || "").trim();
+    if (!nameTh) continue;
+    kruParsed.push({
+      nameTh,
+      nameEn: (row[4] || "").trim(),
+      catId: catKru.id,
+      brandModel: (row[6] || "").trim(),
+      buildingFloor: (row[7] || "").trim(),
+      room: (row[8] || "").trim(),
+      condition: (row[9] || "").trim(),
+      serialNo: (row[2] || "").trim(),
+      warrantyStr: (row[11] || "").trim(),
+      company: (row[12] || "").trim(),
+      contact: (row[13] || "").trim(),
+      phone: (row[14] || "").trim(),
+      priceStr: (row[16] || "").trim(),
+      notes: (row[17] || "").trim(),
+      nluCode: (row[1] || "").trim(),
+    });
+  }
+  const kruResult = await importGrouped(kruParsed, "KRU");
+  console.log(`  Imported ${kruResult.itemCount} items, ${kruResult.subCount} sub-items`);
 
-  await prisma.item.create({
-    data: {
-      code: "FIX-004", name: "Oscilloscope", nameTh: "ออสซิลโลสโคป",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[4].id,
-      totalQty: 1, availableQty: 0, status: "PENDING_MAINTENANCE",
-      serialNumber: "SN-OSC-001", model: "Tektronix TBS1052B",
-      purchaseDate: new Date("2021-08-15"), purchasePrice: 35000,
-      maintenanceCycleMonths: 6,
-      lastMaintenanceDate: new Date("2025-11-15"),
-      nextMaintenanceDate: new Date("2026-05-15"),
-    },
-  });
+  // ============================================================
+  // 2. Import อุปกรณ์อิเล็กทรอนิกส์ (FIXED_ASSET) — grouped
+  // ============================================================
+  console.log("Importing อุปกรณ์อิเล็กทรอนิกส์...");
+  const elecRows = readCsv("ข้อมูลทรัพย์สิน NLU - วัสดุอุปกรณ์อิเล็กทรอนิกส์.csv");
+  const elecParsed: ParsedRow[] = [];
+  for (let i = 2; i < elecRows.length; i++) {
+    const row = elecRows[i];
+    if (!row || row.length < 12) continue;
+    const nameTh = (row[3] || "").trim();
+    if (!nameTh) continue;
+    elecParsed.push({
+      nameTh,
+      nameEn: "",
+      catId: catElec.id,
+      brandModel: (row[5] || "").trim(),
+      buildingFloor: (row[9] || "").trim(),
+      room: (row[10] || "").trim(),
+      condition: (row[11] || "").trim(),
+      serialNo: (row[2] || "").trim(),
+      warrantyStr: (row[13] || "").trim(),
+      company: (row[15] || "").trim(),
+      contact: (row[16] || "").trim(),
+      phone: (row[17] || "").trim(),
+      priceStr: (row[19] || "").trim(),
+      notes: (row[20] || "").trim(),
+      nluCode: (row[1] || "").trim(),
+    });
+  }
+  const elecResult = await importGrouped(elecParsed, "ELE");
+  console.log(`  Imported ${elecResult.itemCount} items, ${elecResult.subCount} sub-items`);
 
-  await prisma.item.create({
-    data: {
-      code: "CON-006", name: "Expired Reagent", nameTh: "รีเอเจนต์หมดอายุ",
-      categoryId: catConsumable.id, issueUnitId: unitId("ขวด"), subUnitId: unitId("ขวด"),
-      conversionFactor: 1, minThreshold: 0, locationId: locations[5].id,
-      totalQty: 5, availableQty: 0, status: "DISPOSED",
-    },
-  });
+  // ============================================================
+  // 3. Import บัญชีวัสดุคงทน (DURABLE — quantity only)
+  // ============================================================
+  console.log("Importing บัญชีวัสดุคงทน...");
+  const durRows = readCsv("ข้อมูลทรัพย์สิน NLU - บัญชีวัสดุคงทน.csv");
+  let durCount = 0;
+  for (let i = 2; i < durRows.length; i++) {
+    const row = durRows[i];
+    if (!row || row.length < 5) continue;
+    const nameRaw = (row[2] || "").trim();
+    const qtyStr = (row[3] || "").trim();
+    const unitRaw = (row[4] || "").trim();
+    const notes = (row[7] || "").trim();
 
-  // Lots for consumables
-  const lotB01 = await prisma.lot.create({
-    data: {
-      itemId: itemBeaker.id, lotNumber: "LOT-B01", quantity: 50,
-      expiryDate: new Date("2027-12-31"), receivedDate: new Date("2025-01-10"),
-    },
-  });
-  const lotB02 = await prisma.lot.create({
-    data: {
-      itemId: itemBeaker.id, lotNumber: "LOT-B02", quantity: 50,
-      expiryDate: new Date("2026-08-15"), receivedDate: new Date("2025-05-01"),
-    },
-  });
-  const lotT01 = await prisma.lot.create({
-    data: {
-      itemId: itemTestTube.id, lotNumber: "LOT-T01", quantity: 200,
-      expiryDate: new Date("2028-06-30"), receivedDate: new Date("2025-02-15"),
-    },
-  });
+    if (!nameRaw) continue;
 
-  // --- Receive Records ---
+    const code = `NLU-DUR-${String(durCount + 1).padStart(3, "0")}`;
+
+    // Parse name — "ถาด (Tray)" → name="ถาด", nameEn="Tray"
+    const parenMatch = nameRaw.match(/^(.+?)\s*\((.+?)\)\s*$/);
+    const name = parenMatch ? parenMatch[1].trim() : nameRaw;
+    const nameEn = parenMatch ? parenMatch[2].trim() : null;
+    const qty = parseInt(qtyStr) || 0;
+    const unitName = parseUnit(unitRaw);
+
+    await prisma.item.create({
+      data: {
+        code, name, nameEn,
+        categoryId: catDurable.id,
+        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        minThreshold: 0, locationId: defaultLocId,
+        totalQty: qty, availableQty: qty,
+        description: notes || null,
+      },
+    });
+
+    durCount++;
+  }
+  console.log(`  Imported ${durCount} วัสดุคงทน items`);
+
+  // ============================================================
+  // 4. Import วัสดุสิ้นเปลือง (CONSUMABLE)
+  // ============================================================
+  console.log("Importing วัสดุสิ้นเปลือง...");
+  const conRows = readCsv("ข้อมูลทรัพย์สิน NLU - วัสดุสิ้นเปลือง.csv");
+  let conCount = 0;
+  for (let i = 3; i < conRows.length; i++) {
+    const row = conRows[i];
+    if (!row || row.length < 4) continue;
+    const nameRaw = (row[1] || "").trim();
+    const room = (row[2] || "").trim();
+    const qtyStr = (row[3] || "").trim();
+    const unitRaw = (row[4] || "").trim();
+
+    if (!nameRaw) continue;
+
+    const code = `NLU-CON-${String(conCount + 1).padStart(3, "0")}`;
+    const parenMatch = nameRaw.match(/^(.+?)\s*\((.+?)\)\s*$/);
+    const name = parenMatch ? parenMatch[1].trim() : nameRaw;
+    const nameEn = parenMatch ? parenMatch[2].trim() : null;
+    const qty = parseInt(qtyStr) || 0;
+    const unitName = parseUnit(unitRaw);
+
+    const { building, floor } = parseBuildingFloor("");
+    const locId = room ? await getOrCreateLocation("อาคาร 2", "ชั้น 5", room) : defaultLocId;
+
+    await prisma.item.create({
+      data: {
+        code, name, nameEn,
+        categoryId: catConsumable.id,
+        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        minThreshold: 0, locationId: locId,
+        totalQty: qty, availableQty: qty,
+      },
+    });
+
+    conCount++;
+  }
+  console.log(`  Imported ${conCount} วัสดุสิ้นเปลือง items`);
+
+  // ============================================================
+  // 5. Import หนังสือ (BOOK — trackIndividually, grouped by copy)
+  // ============================================================
+  console.log("Importing หนังสือ...");
+  const bookRaw = readFileSync(join(CSV_DIR, "ข้อมูลทรัพย์สิน NLU - หนังสือ.csv"), "utf-8");
+  const bookRecords = parse(bookRaw, {
+    relax_column_count: true, skip_empty_lines: true, bom: true,
+    columns: false, ltrim: true, rtrim: true,
+  }) as string[][];
+
+  // Group books by base code (strip -c1, -c2 suffix)
+  const bookGroups = new Map<string, { code: string; bookName: string; room: string; copies: string[] }>();
+  for (let i = 3; i < bookRecords.length; i++) {
+    const row = bookRecords[i];
+    if (!row || row.length < 4) continue;
+    const code = (row[1] || "").trim();
+    const bookName = (row[3] || "").trim();
+    const room = (row[4] || "").trim();
+    if (!bookName || !code) continue;
+
+    // Strip -c1, -c2 suffix to get base code
+    const baseCode = code.replace(/-c\d+$/, "");
+    const copySuffix = code.match(/-c(\d+)$/);
+
+    if (!bookGroups.has(baseCode)) {
+      bookGroups.set(baseCode, { code: baseCode, bookName, room, copies: [] });
+    }
+    const group = bookGroups.get(baseCode)!;
+    group.copies.push(copySuffix ? code : `${code}-c${group.copies.length + 1}`);
+  }
+
+  let bookItemCount = 0, bookSubCount = 0;
+  for (const [, group] of bookGroups) {
+    const { building, floor } = parseBuildingFloor("");
+    const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
+    const hasMultiple = group.copies.length > 1;
+
+    const item = await prisma.item.create({
+      data: {
+        code: `NLU-BOOK-${String(bookItemCount + 1).padStart(3, "0")}`,
+        name: group.bookName, nameEn: null,
+        categoryId: catBook.id, trackIndividually: hasMultiple,
+        issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"), conversionFactor: 1,
+        minThreshold: 1, locationId: locId,
+        totalQty: group.copies.length, availableQty: group.copies.length,
+      },
+    });
+
+    if (hasMultiple) {
+      for (let ci = 0; ci < group.copies.length; ci++) {
+        await prisma.subItem.create({
+          data: { itemId: item.id, subCode: `NLU-BOOK-${String(bookItemCount + 1).padStart(3, "0")}-${String(ci + 1).padStart(3, "0")}`, status: "AVAILABLE" },
+        });
+        bookSubCount++;
+      }
+    }
+    bookItemCount++;
+  }
+  console.log(`  Imported ${bookItemCount} หนังสือ items, ${bookSubCount} sub-items`);
+
+  // ============================================================
+  // 6. Import ของเล่น (DURABLE — trackIndividually, grouped by copy)
+  // ============================================================
+  console.log("Importing ของเล่น...");
+  const toyRaw = readFileSync(join(CSV_DIR, "ข้อมูลทรัพย์สิน NLU - ของเล่น.csv"), "utf-8");
+  const toyRecords = parse(toyRaw, {
+    relax_column_count: true, skip_empty_lines: true, bom: true,
+    columns: false, ltrim: true, rtrim: true,
+  }) as string[][];
+
+  // Group toys by base code (strip -c1, -c2 suffix)
+  const toyGroups = new Map<string, { toyName: string; room: string; copies: string[] }>();
+  for (let i = 3; i < toyRecords.length; i++) {
+    const row = toyRecords[i];
+    if (!row || row.length < 4) continue;
+    const code = (row[1] || "").trim();
+    const toyName = (row[3] || "").trim();
+    const room = (row[4] || "").trim();
+    if (!toyName || !code) continue;
+
+    const baseCode = code.replace(/-c\d+$/, "");
+    const copySuffix = code.match(/-c(\d+)$/);
+
+    if (!toyGroups.has(baseCode)) {
+      toyGroups.set(baseCode, { toyName, room, copies: [] });
+    }
+    const group = toyGroups.get(baseCode)!;
+    group.copies.push(copySuffix ? code : `${code}-c${group.copies.length + 1}`);
+  }
+
+  let toyItemCount = 0, toySubCount = 0;
+  for (const [, group] of toyGroups) {
+    const { building, floor } = parseBuildingFloor("");
+    const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
+    const hasMultiple = group.copies.length > 1;
+
+    const item = await prisma.item.create({
+      data: {
+        code: `NLU-TOY-${String(toyItemCount + 1).padStart(3, "0")}`,
+        name: group.toyName, nameEn: null,
+        categoryId: catToys.id, trackIndividually: hasMultiple,
+        issueUnitId: unitId("ชิ้น"), subUnitId: unitId("ชิ้น"), conversionFactor: 1,
+        minThreshold: 0, locationId: locId,
+        totalQty: group.copies.length, availableQty: group.copies.length,
+      },
+    });
+
+    if (hasMultiple) {
+      for (let ci = 0; ci < group.copies.length; ci++) {
+        await prisma.subItem.create({
+          data: { itemId: item.id, subCode: `NLU-TOY-${String(toyItemCount + 1).padStart(3, "0")}-${String(ci + 1).padStart(3, "0")}`, status: "AVAILABLE" },
+        });
+        toySubCount++;
+      }
+    }
+    toyItemCount++;
+  }
+  console.log(`  Imported ${toyItemCount} ของเล่น items, ${toySubCount} sub-items`);
+
+  // ============================================================
+  // 7. Import อุปกรณ์นักศึกษายืมประกอบวิชา (DURABLE — kits)
+  // ============================================================
+  console.log("Importing อุปกรณ์ประกอบวิชา...");
+  const kitRows = readCsv("ข้อมูลทรัพย์สิน NLU - อุปกรณ์นักศึกษายืมประกอบวิชา.csv");
+  let kitCount = 0;
+  for (let i = 2; i < kitRows.length; i++) {
+    const row = kitRows[i];
+    if (!row || row.length < 4) continue;
+    const seq = (row[0] || "").trim();
+    const nameRaw = (row[1] || "").trim();
+    const qtyStr = (row[2] || "").trim();
+    const unitRaw = (row[3] || "").trim();
+
+    if (!seq || !nameRaw) continue; // skip component sub-rows
+
+    const code = `NLU-KIT-${String(kitCount + 1).padStart(3, "0")}`;
+    const qty = parseInt(qtyStr) || 1;
+    const unitName = parseUnit(unitRaw);
+
+    await prisma.item.create({
+      data: {
+        code, name: nameRaw, nameEn: null,
+        categoryId: catSubjectKit.id,
+        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        minThreshold: 0, locationId: defaultLocId,
+        totalQty: qty, availableQty: qty,
+      },
+    });
+
+    kitCount++;
+  }
+  console.log(`  Imported ${kitCount} อุปกรณ์ประกอบวิชา items`);
+
+  // ============================================================
+  // Demo transactions for dashboard testing
+  // ============================================================
+  console.log("Creating demo transactions...");
   const now = new Date();
   const day = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
 
-  await prisma.receiveRecord.createMany({
-    data: [
-      { itemId: itemBeaker.id, lotId: lotB01.id, quantity: 50, receivedBy: admin.id, receivedAt: day(30), notes: "Initial stock" },
-      { itemId: itemBeaker.id, lotId: lotB02.id, quantity: 50, receivedBy: staff.id, receivedAt: day(20), notes: "Restock" },
-      { itemId: itemTestTube.id, lotId: lotT01.id, quantity: 200, receivedBy: staff.id, receivedAt: day(25) },
-      { itemId: itemFilterPaper.id, quantity: 500, receivedBy: admin.id, receivedAt: day(28) },
-      { itemId: itemMicroscope.id, quantity: 5, receivedBy: admin.id, receivedAt: day(60) },
-      { itemId: itemProjector.id, quantity: 3, receivedBy: admin.id, receivedAt: day(90) },
-    ],
+  // Get some consumable items for demo dispense records
+  const demoConsumables = await prisma.item.findMany({
+    where: { category: { category: "CONSUMABLE" } },
+    take: 5,
   });
 
-  // --- Dispense Records ---
-
-  await prisma.dispenseRecord.createMany({
-    data: [
-      { itemId: itemBeaker.id, lotId: lotB02.id, quantity: 10, quantitySub: 0, subjectId: phy.id, staffId: staff.id, dispensedAt: day(15), notes: "Physics lab" },
-      { itemId: itemBeaker.id, lotId: lotB01.id, quantity: 5, quantitySub: 0, subjectId: chem.id, staffId: staff.id, dispensedAt: day(10), notes: "Chemistry lab" },
-      { itemId: itemTestTube.id, lotId: lotT01.id, quantity: 20, quantitySub: 0, subjectId: chem.id, staffId: staff.id, dispensedAt: day(8) },
-      { itemId: itemTestTube.id, lotId: lotT01.id, quantity: 15, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(5) },
-      { itemId: itemTestTube.id, lotId: lotT01.id, quantity: 10, quantitySub: 0, subjectId: phy.id, staffId: staff.id, dispensedAt: day(3) },
-      { itemId: itemFilterPaper.id, quantity: 30, quantitySub: 0, subjectId: chem.id, staffId: admin.id, dispensedAt: day(12) },
-      { itemId: itemFilterPaper.id, quantity: 25, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(7) },
-      { itemId: itemBeaker.id, lotId: lotB02.id, quantity: 8, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(2) },
-      { itemId: itemTestTube.id, lotId: lotT01.id, quantity: 12, quantitySub: 0, staffId: staff.id, dispensedAt: day(1) },
-      { itemId: itemBeaker.id, lotId: lotB01.id, quantity: 3, quantitySub: 0, subjectId: phy.id, staffId: admin.id, dispensedAt: day(0) },
-    ],
-  });
-
-  // --- Low stock items ---
-  const itemGloves = await prisma.item.create({
-    data: {
-      code: "CON-007", name: "Latex Gloves", nameTh: "ถุงมือยาง",
-      categoryId: catConsumable.id, issueUnitId: unitId("คู่"), subUnitId: unitId("คู่"),
-      conversionFactor: 1, minThreshold: 50, locationId: locations[3].id,
-      totalQty: 8, availableQty: 8,
-    },
-  });
-  const itemAlcohol = await prisma.item.create({
-    data: {
-      code: "CON-008", name: "Alcohol 70%", nameTh: "แอลกอฮอล์ 70%",
-      categoryId: catConsumable.id, issueUnitId: unitId("ขวด"), subUnitId: unitId("ขวด"),
-      conversionFactor: 1, minThreshold: 10, locationId: locations[2].id,
-      totalQty: 3, availableQty: 3,
-    },
-  });
-
-  // --- Near-expiry lots (within 90 days) ---
-  await prisma.lot.create({
-    data: {
-      itemId: itemGloves.id, lotNumber: "LOT-G01", quantity: 8,
-      expiryDate: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000), // 15 days
-      receivedDate: day(180),
-    },
-  });
-  await prisma.lot.create({
-    data: {
-      itemId: itemAlcohol.id, lotNumber: "LOT-A01", quantity: 3,
-      expiryDate: new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000), // 45 days
-      receivedDate: day(120),
-    },
-  });
-  await prisma.lot.create({
-    data: {
-      itemId: itemFilterPaper.id, lotNumber: "LOT-F01", quantity: 30,
-      expiryDate: new Date(now.getTime() + 75 * 24 * 60 * 60 * 1000), // 75 days
-      receivedDate: day(90),
-    },
-  });
-
-  // --- Maintenance Records ---
-  await prisma.maintenanceRecord.createMany({
-    data: [
-      {
-        itemId: itemCentrifuge.id, type: "PREVENTIVE", result: "AVAILABLE",
-        performedAt: day(60), performedBy: admin.id,
-        description: "Annual preventive maintenance — cleaned and calibrated",
-        cost: 2500,
-        nextMaintenanceAt: new Date("2026-06-01"),
+  // Create lots and dispense records for dashboard
+  for (const item of demoConsumables) {
+    const lot = await prisma.lot.create({
+      data: {
+        itemId: item.id, lotNumber: `LOT-${item.code}`,
+        quantity: item.totalQty,
+        expiryDate: new Date(now.getTime() + (Math.random() * 365 + 30) * 24 * 60 * 60 * 1000),
+        receivedDate: day(60),
       },
-      {
-        itemId: itemProjector.id, type: "PREVENTIVE", result: "AVAILABLE",
-        performedAt: day(90), performedBy: staff.id,
-        description: "Lamp replacement and lens cleaning",
-        cost: 4500,
-      },
-      {
-        itemId: itemUnderRepair.id, type: "CORRECTIVE", result: "NEEDS_MORE_REPAIR",
-        performedAt: day(20), performedBy: admin.id,
-        issue: "Power supply failure", description: "Replaced PSU, still unstable",
-        cost: 8000,
-      },
-      {
-        itemId: itemUnderRepair.id, type: "CORRECTIVE", result: "NEEDS_MORE_REPAIR",
-        performedAt: day(5), performedBy: admin.id,
-        issue: "Calibration drift", description: "Recalibrated, testing in progress",
-        cost: 3500,
-      },
-      {
-        itemId: itemCentrifuge.id, type: "PREVENTIVE", result: "AVAILABLE",
-        performedAt: new Date("2025-01-15"), performedBy: admin.id,
-        description: "Mid-year checkup",
-        cost: 1500,
-      },
-      {
-        itemId: itemProjector.id, type: "CORRECTIVE", result: "AVAILABLE",
-        performedAt: new Date("2025-08-10"), performedBy: staff.id,
-        issue: "Overheating", description: "Cleaned fan, replaced thermal paste",
-        cost: 1200,
-      },
-    ],
-  });
+    });
 
-  // --- Status Change Logs ---
-  await prisma.itemStatusLog.createMany({
-    data: [
-      { itemId: itemUnderRepair.id, previousStatus: "AVAILABLE", newStatus: "UNDER_REPAIR", reason: "Power supply failure", changedBy: admin.id, changedAt: day(22) },
-      { itemId: itemUnderRepair.id, previousStatus: "UNDER_REPAIR", newStatus: "UNDER_REPAIR", reason: "Still needs repair after first attempt", changedBy: admin.id, changedAt: day(20) },
-    ],
-  });
+    // Create receive record
+    await prisma.receiveRecord.create({
+      data: { itemId: item.id, lotId: lot.id, quantity: item.totalQty, receivedBy: admin.id, receivedAt: day(60) },
+    });
 
-  // --- More receives for annual cost report ---
-  await prisma.receiveRecord.createMany({
-    data: [
-      { itemId: itemGloves.id, quantity: 100, receivedBy: staff.id, receivedAt: day(100), notes: "Bulk order" },
-      { itemId: itemAlcohol.id, quantity: 50, receivedBy: staff.id, receivedAt: day(80) },
-    ],
-  });
+    // Create some dispense records
+    const dispenseCount = Math.floor(Math.random() * 3) + 1;
+    for (let j = 0; j < dispenseCount; j++) {
+      const qty = Math.floor(Math.random() * 10) + 1;
+      await prisma.dispenseRecord.create({
+        data: {
+          itemId: item.id, lotId: lot.id,
+          quantity: qty, quantitySub: 0,
+          usageType: ["COURSE", "ACTIVITY", "OTHER"][j % 3] as any,
+          staffId: staff.id, dispensedAt: day(j * 3 + 1),
+        },
+      });
+    }
+  }
 
-  // --- 2026 Purchases (for Annual Cost report) ---
-  const itemBalance = await prisma.item.create({
-    data: {
-      code: "FIX-005", name: "Analytical Balance", nameTh: "เครื่องชั่งวิเคราะห์",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[6].id,
-      totalQty: 1, availableQty: 1,
-      serialNumber: "SN-BA-001", model: "Mettler Toledo ME204",
-      purchaseDate: new Date("2026-02-10"), purchasePrice: 65000,
-      vendor: "Science Instruments Co.", warrantyEndDate: new Date("2029-02-10"),
-      maintenanceCycleMonths: 12,
-    },
-  });
-  await prisma.subItem.create({
-    data: { itemId: itemBalance.id, subCode: "FIX-005-001", status: "AVAILABLE", condition: "USABLE" },
-  });
-
-  const itemPhMeter = await prisma.item.create({
-    data: {
-      code: "FIX-006", name: "pH Meter", nameTh: "เครื่องวัด pH",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[7].id,
-      totalQty: 2, availableQty: 2,
-      serialNumber: "SN-PH-001", model: "Hanna HI5222",
-      purchaseDate: new Date("2026-03-05"), purchasePrice: 28000,
-      vendor: "Lab Supply Co.", warrantyEndDate: new Date("2029-03-05"),
-      maintenanceCycleMonths: 6,
-    },
-  });
-  for (let i = 1; i <= 2; i++) {
-    await prisma.subItem.create({
-      data: { itemId: itemPhMeter.id, subCode: `FIX-006-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
+  // Create a near-expiry lot for alert testing
+  const nearExpiryItem = demoConsumables[0];
+  if (nearExpiryItem) {
+    await prisma.lot.create({
+      data: {
+        itemId: nearExpiryItem.id, lotNumber: `LOT-EXPIRE`,
+        quantity: 5,
+        expiryDate: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000), // 15 days
+        receivedDate: day(120),
+      },
     });
   }
 
-  const itemHotplate = await prisma.item.create({
-    data: {
-      code: "FIX-007", name: "Hot Plate Stirrer", nameTh: "เตาไฟฟ้าผสมแม่เหล็ก",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[0].id,
-      totalQty: 3, availableQty: 3,
-      serialNumber: "SN-HP-001", model: "IKA C-Mag HS7",
-      purchaseDate: new Date("2026-04-20"), purchasePrice: 18500,
-      vendor: "Thai Tech Co.", warrantyEndDate: new Date("2028-04-20"),
-      maintenanceCycleMonths: 12,
-    },
+  // Create a low-stock item
+  const lowStockItem = await prisma.item.findFirst({
+    where: { category: { category: "CONSUMABLE" }, totalQty: { gt: 0 } },
+    orderBy: { totalQty: "asc" },
   });
-  for (let i = 1; i <= 3; i++) {
-    await prisma.subItem.create({
-      data: { itemId: itemHotplate.id, subCode: `FIX-007-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
+  if (lowStockItem) {
+    await prisma.item.update({
+      where: { id: lowStockItem.id },
+      data: { minThreshold: lowStockItem.totalQty + 10 },
     });
   }
 
-  // --- Additional Items (20 more) ---
+  // Stats
+  const totalItems = await prisma.item.count();
+  const totalSubItems = await prisma.subItem.count();
+  const totalCategories = await prisma.categoryType.count();
+  const totalLocations = await prisma.location.count();
+  const totalDispenses = await prisma.dispenseRecord.count();
 
-  // More consumables
-  const itemPetriDish = await prisma.item.create({
-    data: {
-      code: "CON-009", name: "Petri Dish", nameTh: "จานเพาะเชื้อ",
-      categoryId: catConsumable.id, issueUnitId: unitId("ใบ"), subUnitId: unitId("ใบ"),
-      conversionFactor: 1, minThreshold: 30, locationId: locations[0].id,
-      totalQty: 100, availableQty: 100,
-    },
+  console.log("\nSeed completed!");
+  console.log({
+    users: 3,
+    categories: totalCategories,
+    locations: totalLocations,
+    items: totalItems,
+    subItems: totalSubItems,
+    dispenses: totalDispenses,
   });
-
-  const itemSyringe = await prisma.item.create({
-    data: {
-      code: "CON-010", name: "Syringe 10ml", nameTh: "กระบอกฉีดยา 10ml",
-      categoryId: catConsumable.id, issueUnitId: unitId("อัน"), subUnitId: unitId("อัน"),
-      conversionFactor: 1, minThreshold: 20, locationId: locations[1].id,
-      totalQty: 80, availableQty: 80,
-    },
-  });
-
-  const itemCotton = await prisma.item.create({
-    data: {
-      code: "CON-011", name: "Cotton Balls", nameTh: "สำลี",
-      categoryId: catConsumable.id, issueUnitId: unitId("ถุง"), subUnitId: unitId("ถุง"),
-      conversionFactor: 1, minThreshold: 10, locationId: locations[2].id,
-      totalQty: 25, availableQty: 25,
-    },
-  });
-
-  const itemBandage = await prisma.item.create({
-    data: {
-      code: "CON-012", name: "Elastic Bandage", nameTh: "ผ้าพันแผลยืด",
-      categoryId: catConsumable.id, issueUnitId: unitId("ม้วน"), subUnitId: unitId("ม้วน"),
-      conversionFactor: 1, minThreshold: 15, locationId: locations[3].id,
-      totalQty: 40, availableQty: 40,
-    },
-  });
-
-  const itemDisinfectant = await prisma.item.create({
-    data: {
-      code: "CON-013", name: "Disinfectant Spray", nameTh: "น้ำยาฆ่าเชื้อ",
-      categoryId: catConsumable.id, issueUnitId: unitId("ขวด"), subUnitId: unitId("ขวด"),
-      conversionFactor: 1, minThreshold: 5, locationId: locations[4].id,
-      totalQty: 12, availableQty: 12,
-    },
-  });
-
-  const itemSlide = await prisma.item.create({
-    data: {
-      code: "CON-014", name: "Microscope Slide", nameTh: "สไลด์กล้องจุลทรรศน์",
-      categoryId: catConsumable.id, issueUnitId: unitId("แผ่น"), subUnitId: unitId("แผ่น"),
-      conversionFactor: 1, minThreshold: 50, locationId: locations[5].id,
-      totalQty: 200, availableQty: 200,
-    },
-  });
-
-  // More durables
-  const itemStethoscope = await prisma.item.create({
-    data: {
-      code: "DUR-005", name: "Stethoscope", nameTh: "เครื่องฟังเสียงหัวใจ",
-      categoryId: catDurable.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 2, locationId: locations[6].id,
-      totalQty: 8, availableQty: 8,
-    },
-  });
-  for (let i = 1; i <= 8; i++) {
-    await prisma.subItem.create({
-      data: { itemId: itemStethoscope.id, subCode: `DUR-005-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
-    });
-  }
-
-  const itemSphygmomanometer = await prisma.item.create({
-    data: {
-      code: "DUR-006", name: "Sphygmomanometer", nameTh: "เครื่องวัดความดันโลหิต",
-      categoryId: catDurable.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 2, locationId: locations[7].id,
-      totalQty: 6, availableQty: 6,
-    },
-  });
-  for (let i = 1; i <= 6; i++) {
-    await prisma.subItem.create({
-      data: { itemId: itemSphygmomanometer.id, subCode: `DUR-006-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
-    });
-  }
-
-  const itemThermometer = await prisma.item.create({
-    data: {
-      code: "DUR-007", name: "Digital Thermometer", nameTh: "เทอร์โมมิเตอร์ดิจิทัล",
-      categoryId: catDurable.id, issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 5, locationId: locations[0].id,
-      totalQty: 20, availableQty: 20,
-    },
-  });
-
-  // More fixed assets
-  const itemBloodPressure = await prisma.item.create({
-    data: {
-      code: "FIX-008", name: "Blood Pressure Monitor", nameTh: "เครื่องตรวจวัดความดันอัตโนมัติ",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[1].id,
-      totalQty: 2, availableQty: 2,
-      serialNumber: "SN-BP-001", model: "Omron HEM-7320",
-      purchaseDate: new Date("2025-06-15"), purchasePrice: 8500,
-      vendor: "Med Supply Co.", warrantyEndDate: new Date("2027-06-15"),
-      maintenanceCycleMonths: 12,
-    },
-  });
-  for (let i = 1; i <= 2; i++) {
-    await prisma.subItem.create({
-      data: { itemId: itemBloodPressure.id, subCode: `FIX-008-${String(i).padStart(3, "0")}`, status: "AVAILABLE", condition: "USABLE" },
-    });
-  }
-
-  const itemEcg = await prisma.item.create({
-    data: {
-      code: "FIX-009", name: "ECG Machine", nameTh: "เครื่อง ECG",
-      categoryId: catFixedAsset.id, trackIndividually: true,
-      issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"),
-      conversionFactor: 1, minThreshold: 1, locationId: locations[2].id,
-      totalQty: 1, availableQty: 1,
-      serialNumber: "SN-ECG-001", model: "GE MAC 2000",
-      purchaseDate: new Date("2024-09-01"), purchasePrice: 150000,
-      vendor: "Med Supply Co.", warrantyEndDate: new Date("2027-09-01"),
-      maintenanceCycleMonths: 6,
-      lastMaintenanceDate: new Date("2025-12-01"),
-      nextMaintenanceDate: new Date("2026-06-01"),
-    },
-  });
-  await prisma.subItem.create({
-    data: { itemId: itemEcg.id, subCode: "FIX-009-001", status: "AVAILABLE", condition: "USABLE" },
-  });
-
-  // More books
-  await prisma.item.create({
-    data: {
-      code: "BOOK-002", name: "Anatomy Atlas", nameTh: "แอนะตอมมี่ แอตลาส",
-      categoryId: catBook.id, issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"),
-      conversionFactor: 1, minThreshold: 3, locationId: locations[3].id,
-      totalQty: 10, availableQty: 10,
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      code: "BOOK-003", name: "Chemistry Lab Manual", nameTh: "คู่มือปฏิบัติการเคมี",
-      categoryId: catBook.id, issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"),
-      conversionFactor: 1, minThreshold: 5, locationId: locations[4].id,
-      totalQty: 25, availableQty: 25,
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      code: "BOOK-004", name: "Nursing Procedures Guide", nameTh: "คู่มือการพยาบาล",
-      categoryId: catBook.id, issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"),
-      conversionFactor: 1, minThreshold: 5, locationId: locations[5].id,
-      totalQty: 15, availableQty: 15,
-    },
-  });
-
-  // Additional consumable with conversion factor
-  const itemGauze = await prisma.item.create({
-    data: {
-      code: "CON-015", name: "Gauze Pad", nameTh: "ผ้าก๊อซ",
-      categoryId: catConsumable.id, issueUnitId: unitId("แผง"), subUnitId: unitId("แผ่น"),
-      conversionFactor: 10, minThreshold: 20, locationId: locations[6].id,
-      totalQty: 60, availableQty: 60,
-    },
-  });
-
-  const itemMask = await prisma.item.create({
-    data: {
-      code: "CON-016", name: "Surgical Mask", nameTh: "หน้ากากอนามัย",
-      categoryId: catConsumable.id, issueUnitId: unitId("กล่อง"), subUnitId: unitId("อัน"),
-      conversionFactor: 50, minThreshold: 5, locationId: locations[7].id,
-      totalQty: 20, availableQty: 20,
-    },
-  });
-
-  // Additional lots for new consumables
-  const lotP01 = await prisma.lot.create({
-    data: {
-      itemId: itemPetriDish.id, lotNumber: "LOT-P01", quantity: 100,
-      expiryDate: new Date("2027-06-30"), receivedDate: day(45),
-    },
-  });
-  const lotS01 = await prisma.lot.create({
-    data: {
-      itemId: itemSyringe.id, lotNumber: "LOT-S01", quantity: 80,
-      expiryDate: new Date("2028-01-31"), receivedDate: day(30),
-    },
-  });
-  const lotCt01 = await prisma.lot.create({
-    data: {
-      itemId: itemCotton.id, lotNumber: "LOT-CT01", quantity: 25,
-      expiryDate: new Date("2027-03-15"), receivedDate: day(60),
-    },
-  });
-  const lotGz01 = await prisma.lot.create({
-    data: {
-      itemId: itemGauze.id, lotNumber: "LOT-GZ01", quantity: 60,
-      expiryDate: new Date("2027-09-30"), receivedDate: day(40),
-    },
-  });
-
-  // --- Additional Receive Records (7 more) ---
-  await prisma.receiveRecord.createMany({
-    data: [
-      { itemId: itemPetriDish.id, lotId: lotP01.id, quantity: 100, receivedBy: staff.id, receivedAt: day(45), notes: "New stock" },
-      { itemId: itemSyringe.id, lotId: lotS01.id, quantity: 80, receivedBy: staff.id, receivedAt: day(30) },
-      { itemId: itemCotton.id, lotId: lotCt01.id, quantity: 25, receivedBy: admin.id, receivedAt: day(60) },
-      { itemId: itemGauze.id, lotId: lotGz01.id, quantity: 60, receivedBy: staff.id, receivedAt: day(40) },
-      { itemId: itemStethoscope.id, quantity: 8, receivedBy: admin.id, receivedAt: day(50), notes: "New purchase" },
-      { itemId: itemSphygmomanometer.id, quantity: 6, receivedBy: admin.id, receivedAt: day(55) },
-      { itemId: itemEcg.id, quantity: 1, receivedBy: admin.id, receivedAt: day(120), notes: "Major equipment" },
-    ],
-  });
-
-  // --- Additional Dispense Records (20 more) ---
-  await prisma.dispenseRecord.createMany({
-    data: [
-      { itemId: itemPetriDish.id, lotId: lotP01.id, quantity: 15, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(25), notes: "Bacteria culture lab" },
-      { itemId: itemPetriDish.id, lotId: lotP01.id, quantity: 10, quantitySub: 0, subjectId: med.id, staffId: staff.id, dispensedAt: day(18) },
-      { itemId: itemSyringe.id, lotId: lotS01.id, quantity: 12, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(22), notes: "Injection practice" },
-      { itemId: itemSyringe.id, lotId: lotS01.id, quantity: 8, quantitySub: 0, subjectId: med.id, staffId: admin.id, dispensedAt: day(14) },
-      { itemId: itemCotton.id, lotId: lotCt01.id, quantity: 5, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(16) },
-      { itemId: itemCotton.id, lotId: lotCt01.id, quantity: 3, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(9) },
-      { itemId: itemGauze.id, lotId: lotGz01.id, quantity: 8, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(11) },
-      { itemId: itemGauze.id, lotId: lotGz01.id, quantity: 5, quantitySub: 0, subjectId: med.id, staffId: admin.id, dispensedAt: day(6) },
-      { itemId: itemSlide.id, quantity: 30, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(20) },
-      { itemId: itemSlide.id, quantity: 20, quantitySub: 0, subjectId: chem.id, staffId: staff.id, dispensedAt: day(13) },
-      { itemId: itemThermometer.id, quantity: 5, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(17) },
-      { itemId: itemThermometer.id, quantity: 3, quantitySub: 0, subjectId: phy.id, staffId: staff.id, dispensedAt: day(4) },
-      { itemId: itemMask.id, quantity: 3, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(19) },
-      { itemId: itemMask.id, quantity: 2, quantitySub: 0, subjectId: med.id, staffId: admin.id, dispensedAt: day(10) },
-      { itemId: itemDisinfectant.id, quantity: 2, quantitySub: 0, subjectId: bio.id, staffId: staff.id, dispensedAt: day(15) },
-      { itemId: itemDisinfectant.id, quantity: 1, quantitySub: 0, subjectId: chem.id, staffId: staff.id, dispensedAt: day(7) },
-      { itemId: itemBeaker.id, lotId: lotB01.id, quantity: 6, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(1) },
-      { itemId: itemTestTube.id, lotId: lotT01.id, quantity: 8, quantitySub: 0, subjectId: med.id, staffId: admin.id, dispensedAt: day(0) },
-      { itemId: itemFilterPaper.id, quantity: 15, quantitySub: 0, subjectId: phy.id, staffId: staff.id, dispensedAt: day(3) },
-      { itemId: itemPetriDish.id, lotId: lotP01.id, quantity: 20, quantitySub: 0, subjectId: nur.id, staffId: staff.id, dispensedAt: day(2) },
-    ],
-  });
-
-  // --- Additional Maintenance Records (4 more) ---
-  await prisma.maintenanceRecord.createMany({
-    data: [
-      {
-        itemId: itemEcg.id, type: "PREVENTIVE", result: "AVAILABLE",
-        performedAt: day(70), performedBy: admin.id,
-        description: "Biannual calibration check",
-        cost: 5000,
-      },
-      {
-        itemId: itemCentrifuge.id, type: "CORRECTIVE", result: "AVAILABLE",
-        performedAt: day(35), performedBy: staff.id,
-        issue: "Rotor vibration", description: "Replaced rotor bearings",
-        cost: 6500,
-      },
-      {
-        itemId: itemBloodPressure.id, type: "PREVENTIVE", result: "AVAILABLE",
-        performedAt: day(45), performedBy: admin.id,
-        description: "Annual accuracy check",
-        cost: 800,
-      },
-      {
-        itemId: itemPhMeter.id, type: "PREVENTIVE", result: "AVAILABLE",
-        performedAt: day(25), performedBy: staff.id,
-        description: "Initial setup calibration",
-        cost: 1200,
-      },
-    ],
-  });
-
-  console.log("Seed completed!");
-  console.log({ users: 3, categories: 16, subjects: 5, locations: 8, items: 35, subItems: 47, lots: 10, receives: 15, dispenses: 30, maintenanceRecords: 10, statusLogs: 2 });
 
   await prisma.$disconnect();
 }
