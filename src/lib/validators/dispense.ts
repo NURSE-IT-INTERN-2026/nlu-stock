@@ -5,7 +5,7 @@ export const cartItemSchema = z.object({
   itemCode: z.string(),
   itemName: z.string(),
   categoryName: z.string(),
-  categoryType: z.enum(["CONSUMABLE", "DURABLE", "FIXED_ASSET", "BOOK"]),
+  categoryType: z.enum(["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "MED", "KIT"]),
   trackIndividually: z.boolean(),
   issueUnit: z.string(),
   subUnit: z.string(),
@@ -29,7 +29,8 @@ export const dispenseRequestSchema = z.object({
     quantity: z.number().int().min(1),
     quantitySub: z.number().int().min(0),
   })).min(1, "At least one item required"),
-  subjectId: z.string().optional().nullable(),
+  usageType: z.enum(["COURSE", "ACTIVITY", "OTHER"]).optional().nullable(),
+  usageNote: z.string().max(500).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
 });
 

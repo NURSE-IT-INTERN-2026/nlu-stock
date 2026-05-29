@@ -36,9 +36,10 @@ interface CategoryType {
 
 interface Location {
   id: string;
+  building: string;
+  floor: string;
   room: string;
-  cabinet: string | null;
-  shelf: string | null;
+  detail: string | null;
 }
 
 interface UnitType {
@@ -50,7 +51,7 @@ interface ItemRecord {
   id: string;
   code: string;
   name: string;
-  nameTh: string | null;
+  nameEn: string | null;
   categoryId: string;
   category: CategoryType;
   trackIndividually: boolean;
@@ -69,29 +70,37 @@ interface ItemRecord {
   totalQty: number;
   availableQty: number;
   _count: { subItems: number };
-  serialNumber: string | null;
   model: string | null;
   purchaseDate: string | null;
   purchasePrice: number | null;
-  vendor: string | null;
-  warrantyEndDate: string | null;
+  vendorCompany: string | null;
+  vendorContact: string | null;
+  vendorPhone: string | null;
+  warrantyMonths: number;
   maintenanceCycleMonths: number;
+  storageRequirements: string | null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  CONSUMABLE: "สิ้นเปลือง",
-  DURABLE: "คงทน",
-  FIXED_ASSET: "ครุภัณฑ์",
+  KRU: "ครุภัณฑ์",
+  ELE: "ครุภัณฑ์อิเล็กทรอนิกส์",
   BOOK: "หนังสือ",
+  TOY: "ของเล่น/อุปกรณ์การศึกษา",
+  DUR: "คงทน",
+  CON: "สิ้นเปลือง",
+  MED: "เวชภัณฑ์",
+  KIT: "ชุดวัสดุ",
 };
 
 const defaultForm = {
-  code: "", name: "", nameTh: "", categoryId: "", trackIndividually: false,
+  code: "", name: "", nameEn: "", categoryId: "", trackIndividually: false,
   issueUnitId: "", subUnitId: "", conversionFactor: 1, minThreshold: 0,
   locationId: "", description: "", isActive: true,
   imageUrl: null as string | null,
-  serialNumber: "", model: "", purchaseDate: "", purchasePrice: "",
-  vendor: "", warrantyEndDate: "", maintenanceCycleMonths: 12,
+  model: "", purchaseDate: "", purchasePrice: "",
+  vendorCompany: "", vendorContact: "", vendorPhone: "",
+  warrantyMonths: 0, maintenanceCycleMonths: 12,
+  storageRequirements: "",
 };
 
 export function ItemsMasterTab() {
@@ -164,7 +173,7 @@ export function ItemsMasterTab() {
     setForm({
       code: item.code,
       name: item.name,
-      nameTh: item.nameTh || "",
+      nameEn: item.nameEn || "",
       categoryId: item.categoryId,
       trackIndividually: item.trackIndividually,
       issueUnitId: item.issueUnitId,
@@ -175,13 +184,15 @@ export function ItemsMasterTab() {
       description: item.description || "",
       isActive: item.isActive,
       imageUrl: item.imageUrl,
-      serialNumber: item.serialNumber || "",
       model: item.model || "",
       purchaseDate: item.purchaseDate ? item.purchaseDate.split("T")[0] : "",
       purchasePrice: item.purchasePrice != null ? String(item.purchasePrice) : "",
-      vendor: item.vendor || "",
-      warrantyEndDate: item.warrantyEndDate ? item.warrantyEndDate.split("T")[0] : "",
+      vendorCompany: item.vendorCompany || "",
+      vendorContact: item.vendorContact || "",
+      vendorPhone: item.vendorPhone || "",
+      warrantyMonths: item.warrantyMonths ?? 0,
       maintenanceCycleMonths: item.maintenanceCycleMonths,
+      storageRequirements: item.storageRequirements || "",
     });
     setDialogOpen(true);
   }
@@ -190,19 +201,21 @@ export function ItemsMasterTab() {
     setSaving(true);
     const payload = {
       ...form,
-      nameTh: form.nameTh || null,
+      nameEn: form.nameEn || null,
       locationId: form.locationId || null,
       description: form.description || null,
       imageUrl: form.imageUrl || null,
       conversionFactor: Number(form.conversionFactor),
       minThreshold: Number(form.minThreshold),
       maintenanceCycleMonths: Number(form.maintenanceCycleMonths),
+      warrantyMonths: Number(form.warrantyMonths),
       purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
       purchaseDate: form.purchaseDate || null,
-      warrantyEndDate: form.warrantyEndDate || null,
-      serialNumber: form.serialNumber || null,
       model: form.model || null,
-      vendor: form.vendor || null,
+      vendorCompany: form.vendorCompany || null,
+      vendorContact: form.vendorContact || null,
+      vendorPhone: form.vendorPhone || null,
+      storageRequirements: form.storageRequirements || null,
     };
 
     try {
@@ -236,10 +249,17 @@ export function ItemsMasterTab() {
   }
 
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
-  const isFixedAsset = selectedCategory?.category === "FIXED_ASSET";
+  const isFixedAsset = selectedCategory?.category === "KRU" || selectedCategory?.category === "ELE";
+  const isConsumable = selectedCategory?.category === "CON" || selectedCategory?.category === "MED";
+  const isBook = selectedCategory?.category === "BOOK";
+  const trackForced = selectedCategory ? (
+    ["KRU", "ELE", "BOOK", "TOY"].includes(selectedCategory.category) ? true
+    : ["CON", "MED"].includes(selectedCategory.category) ? false
+    : undefined
+  ) : undefined;
 
   function locationLabel(loc: Location) {
-    return [loc.room, loc.cabinet, loc.shelf].filter(Boolean).join(" / ");
+    return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
   }
 
   return (
@@ -267,15 +287,30 @@ export function ItemsMasterTab() {
             className="pl-8"
           />
         </div>
-        <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Categories" /></SelectTrigger>
+        <Select value={filterCategory || "__all__"} onValueChange={(v) => { setFilterCategory(!v || v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="All Categories">
+              {(value: string | null) => {
+                if (!value || value === "__all__") return "All Categories";
+                const cat = categories.find((c) => c.id === value);
+                return cat?.name ?? "All Categories";
+              }}
+            </SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All Categories</SelectItem>
             {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+        <Select value={filterStatus || "__all__"} onValueChange={(v) => { setFilterStatus(!v || v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="All Status">
+              {(value: string | null) => {
+                if (!value || value === "__all__") return "All Status";
+                return value.replace(/_/g, " ");
+              }}
+            </SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All Status</SelectItem>
             <SelectItem value="AVAILABLE">Available</SelectItem>
@@ -357,9 +392,9 @@ export function ItemsMasterTab() {
                   <TableCell>
                     <div>
                       <span className="font-medium">{item.name}</span>
-                      {item.nameTh && <span className="text-muted-foreground ml-1">({item.nameTh})</span>}
+                      {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
                     </div>
-                    {item.trackIndividually && <Badge variant="secondary" className="text-xs mt-0.5">Tracked ({item._count.subItems})</Badge>}
+                    {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="text-xs mt-0.5">Tracked ({item._count.subItems})</Badge>}
                   </TableCell>
                   <TableCell><Badge variant="outline">{CATEGORY_LABELS[item.category.category] || item.category.name}</Badge></TableCell>
                   <TableCell className="text-right">
@@ -429,7 +464,15 @@ export function ItemsMasterTab() {
                 </div>
                 <div>
                   <Label>Category *</Label>
-                  <Select value={form.categoryId} onValueChange={(v) => setForm({ ...form, categoryId: v ?? "" })}>
+                  <Select value={form.categoryId} onValueChange={(v) => {
+                    const cat = categories.find((c) => c.id === v);
+                    const forced = cat ? (
+                      ["KRU", "ELE", "BOOK", "TOY"].includes(cat.category) ? true
+                      : ["CON", "MED"].includes(cat.category) ? false
+                      : undefined
+                    ) : undefined;
+                    setForm({ ...form, categoryId: v ?? "", ...(forced !== undefined ? { trackIndividually: forced } : {}) });
+                  }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -442,8 +485,8 @@ export function ItemsMasterTab() {
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
               <div>
-                <Label>Name (Thai)</Label>
-                <Input value={form.nameTh} onChange={(e) => setForm({ ...form, nameTh: e.target.value })} />
+                <Label>ชื่อ (EN)</Label>
+                <Input value={form.nameEn} onChange={(e) => setForm({ ...form, nameEn: e.target.value })} />
               </div>
               <div>
                 <Label>Description</Label>
@@ -453,8 +496,16 @@ export function ItemsMasterTab() {
 
             <TabsContent value="tracking" className="space-y-4 mt-4">
               <div className="flex items-center gap-3">
-                <Switch checked={form.trackIndividually} onCheckedChange={(v) => setForm({ ...form, trackIndividually: v })} />
-                <Label>Track individually (sub-codes)</Label>
+                <Switch
+                  checked={trackForced !== undefined ? trackForced : form.trackIndividually}
+                  onCheckedChange={trackForced !== undefined ? undefined : (v) => setForm({ ...form, trackIndividually: v })}
+                  disabled={trackForced !== undefined}
+                />
+                <Label>
+                  Track individually (sub-codes)
+                  {trackForced === true && <span className="text-muted-foreground text-xs ml-1">(required for this category)</span>}
+                  {trackForced === false && <span className="text-muted-foreground text-xs ml-1">(not applicable for this category)</span>}
+                </Label>
               </div>
               <Separator />
               <div className="grid grid-cols-2 gap-4">
@@ -500,6 +551,12 @@ export function ItemsMasterTab() {
                   </SelectContent>
                 </Select>
               </div>
+              {isConsumable && (
+                <div>
+                  <Label>Storage Requirements</Label>
+                  <Textarea value={form.storageRequirements} onChange={(e) => setForm({ ...form, storageRequirements: e.target.value })} placeholder="e.g. เก็บในตู้เย็น ไม่เกิน 30°C" />
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
                 <Label>Active</Label>
@@ -517,15 +574,9 @@ export function ItemsMasterTab() {
 
             {isFixedAsset && (
               <TabsContent value="asset" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Serial Number</Label>
-                    <Input value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
-                  </div>
-                  <div>
-                    <Label>Model</Label>
-                    <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-                  </div>
+                <div>
+                  <Label>Model</Label>
+                  <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -537,14 +588,24 @@ export function ItemsMasterTab() {
                     <Input type="number" step="0.01" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
                   </div>
                 </div>
-                <div>
-                  <Label>Vendor</Label>
-                  <Input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>บริษัท</Label>
+                    <Input value={form.vendorCompany} onChange={(e) => setForm({ ...form, vendorCompany: e.target.value })} placeholder="Company name" />
+                  </div>
+                  <div>
+                    <Label>ตัวแทน</Label>
+                    <Input value={form.vendorContact} onChange={(e) => setForm({ ...form, vendorContact: e.target.value })} placeholder="Contact person" />
+                  </div>
+                  <div>
+                    <Label>เบอร์โทร</Label>
+                    <Input value={form.vendorPhone} onChange={(e) => setForm({ ...form, vendorPhone: e.target.value })} placeholder="Phone number" />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Warranty End Date</Label>
-                    <Input type="date" value={form.warrantyEndDate} onChange={(e) => setForm({ ...form, warrantyEndDate: e.target.value })} />
+                    <Label>รับประกัน (เดือน)</Label>
+                    <Input type="number" value={form.warrantyMonths} onChange={(e) => setForm({ ...form, warrantyMonths: parseInt(e.target.value) || 0 })} />
                   </div>
                   <div>
                     <Label>Maintenance Cycle (months)</Label>

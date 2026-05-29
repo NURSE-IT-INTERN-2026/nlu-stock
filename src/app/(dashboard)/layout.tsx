@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { BottomTab } from "@/components/layout/bottom-tab";
@@ -29,6 +29,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
 
+  const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), []);
+
   if (loading) {
     return (
       <div className="flex min-h-screen">
@@ -48,15 +50,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <AlertProvider>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar
           user={user}
           collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onToggle={toggleSidebar}
         />
         <div className="flex flex-1 flex-col min-w-0">
           <Header title={getTitle(pathname)} user={user} />
-          <main className="flex-1 overflow-auto p-6 pb-20 md:pb-6">
+          <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
             {children}
           </main>
         </div>

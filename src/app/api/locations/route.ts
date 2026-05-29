@@ -7,13 +7,13 @@ export async function GET(request: NextRequest) {
   if (auth.denied) return auth.denied;
 
   const locations = await prisma.location.findMany({
-    orderBy: [{ room: "asc" }, { cabinet: "asc" }, { shelf: "asc" }],
-    select: { id: true, room: true, cabinet: true, shelf: true },
+    orderBy: [{ building: "asc" }, { floor: "asc" }, { room: "asc" }, { detail: "asc" }],
+    select: { id: true, building: true, floor: true, room: true, detail: true },
   });
 
   const data = locations.map((l) => ({
     id: l.id,
-    name: [l.room, l.cabinet, l.shelf].filter(Boolean).join(" / "),
+    name: [l.building, l.floor, l.room, l.detail].filter(Boolean).join(" / "),
   }));
 
   return json(data);

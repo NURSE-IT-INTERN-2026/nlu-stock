@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,12 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "./cart-context";
 import { X, ShoppingCart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-interface Subject {
-  id: string;
-  code: string;
-  name: string;
-}
+import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
 
 interface Props {
   open: boolean;
@@ -39,19 +35,10 @@ interface Props {
 
 export function CartDrawer({ open, onClose, onDone }: Props) {
   const { items, removeItem, clearCart } = useCart();
-  const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [usageType, setUsageType] = useState<string>("");
+  const [usageNote, setUsageNote] = useState("");
   const [notes, setNotes] = useState("");
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      fetch("/api/settings/subjects")
-        .then((r) => r.json())
-        .then(setSubjects)
-        .catch(() => {});
-    }
-  }, [open]);
 
   const handleConfirm = async () => {
     if (items.length === 0) return;
@@ -68,7 +55,8 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
             quantity: i.quantity,
             quantitySub: i.quantitySub,
           })),
-          subjectId,
+          usageType: usageType || null,
+          usageNote: usageType === "OTHER" ? usageNote || null : null,
           notes: notes || null,
         }),
       });
@@ -81,7 +69,8 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
       const data = await res.json();
       toast.success(`Dispensed ${data.count} item(s) successfully`);
       clearCart();
-      setSubjectId(null);
+      setUsageType("");
+      setUsageNote("");
       setNotes("");
       onDone();
     } catch (err) {
@@ -145,20 +134,31 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
 
         <div className="space-y-3 pt-4 border-t">
           <div className="space-y-1.5">
-            <Label>Subject / Activity</Label>
-            <Select value={subjectId ?? ""} onValueChange={setSubjectId}>
+            <Label>ใช้ใน (Usage Type)</Label>
+            <Select value={usageType} onValueChange={(v) => v !== null && setUsageType(v)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select subject (optional)" />
+                <SelectValue placeholder="เลือกประเภทการใช้ (optional)" />
               </SelectTrigger>
               <SelectContent>
-                {subjects.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.code} — {s.name}
+                {USAGE_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {usageType === "OTHER" && (
+            <div className="space-y-1.5">
+              <Label>ระบุ (Note)</Label>
+              <Input
+                placeholder="เช่น ประชุมคณะ, โครงการพิเศษ..."
+                value={usageNote}
+                onChange={(e) => setUsageNote(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Notes</Label>

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         category: { select: { name: true } },
-        location: { select: { room: true, cabinet: true, shelf: true } },
+        location: { select: { building: true, floor: true, room: true, detail: true } },
       },
       orderBy: { nextMaintenanceDate: "asc" },
       skip,
@@ -52,10 +52,9 @@ export async function GET(request: NextRequest) {
       id: i.id,
       code: i.code,
       name: i.name,
-      serialNumber: i.serialNumber ?? "",
       model: i.model ?? "",
       categoryName: i.category.name,
-      location: [i.location?.room, i.location?.cabinet, i.location?.shelf]
+      location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail]
         .filter(Boolean)
         .join(" / "),
       lastMaintenanceDate: i.lastMaintenanceDate?.toISOString() ?? "",

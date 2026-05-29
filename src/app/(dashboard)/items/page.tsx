@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, Fragment } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, ChevronLeft, ChevronRight, QrCode } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ChevronDown, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,18 +24,27 @@ interface CategoryType {
 
 interface Location {
   id: string;
+  building: string;
+  floor: string;
   room: string;
-  cabinet: string | null;
-  shelf: string | null;
+  detail: string | null;
 }
 
 interface UnitType { id: string; name: string }
+
+interface SubItemRecord {
+  id: string;
+  subCode: string;
+  status: string;
+  condition: string | null;
+  notes: string | null;
+}
 
 interface ItemRecord {
   id: string;
   code: string;
   name: string;
-  nameTh: string | null;
+  nameEn: string | null;
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
@@ -48,10 +57,14 @@ interface ItemRecord {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  CONSUMABLE: "สิ้นเปลือง",
-  DURABLE: "คงทน",
-  FIXED_ASSET: "ครุภัณฑ์",
+  KRU: "ครุภัณฑ์",
+  ELE: "อิเล็กทรอนิกส์",
   BOOK: "หนังสือ",
+  TOY: "ของเล่น",
+  DUR: "วัสดุคงทน",
+  CON: "วัสดุสิ้นเปลือง",
+  MED: "ยา",
+  KIT: "อุปกรณ์ประกอบวิชา",
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -65,7 +78,7 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
 };
 
 function locationLabel(loc: Location) {
-  return [loc.room, loc.cabinet, loc.shelf].filter(Boolean).join(" / ");
+  return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
 }
 
 export default function ItemsPage() {
@@ -88,11 +101,13 @@ function ItemsContent() {
   const [page, setPage] = useState(1);
   const [perPage] = useState(20);
   const [search, setSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
+  const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
   const [filterStatus, setFilterStatus] = useState(searchParams.get("status") ?? "");
   const [filterLocation, setFilterLocation] = useState("");
   const [presetFilter, setPresetFilter] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [subItemsMap, setSubItemsMap] = useState<Record<string, SubItemRecord[]>>({});
 
   const handleQrScan = async (code: string) => {
     setScannerOpen(false);
@@ -107,6 +122,20 @@ function ItemsContent() {
     } catch {}
     setSearch(code);
     setPage(1);
+  };
+
+  const toggleExpand = async (itemId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) { next.delete(itemId); return next; }
+      next.add(itemId);
+      return next;
+    });
+    if (!subItemsMap[itemId]) {
+      const res = await fetch(`/api/settings/items/${itemId}/sub-items`);
+      const data = await res.json();
+      setSubItemsMap((prev) => ({ ...prev, [itemId]: data }));
+    }
   };
 
   const fetchItems = useCallback(async () => {
@@ -168,15 +197,30 @@ function ItemsContent() {
         <Button variant="outline" size="icon" onClick={() => setScannerOpen(true)} title="Scan QR">
           <QrCode className="h-4 w-4" />
         </Button>
-        <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Categories" /></SelectTrigger>
+        <Select value={filterCategory || "__all__"} onValueChange={(v) => { setFilterCategory(!v || v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="All Categories">
+              {(value: string | null) => {
+                if (!value) return "All Categories";
+                const cat = categories.find((c) => c.id === value);
+                return cat?.name ?? "All Categories";
+              }}
+            </SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All Categories</SelectItem>
             {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+        <Select value={filterStatus || "__all__"} onValueChange={(v) => { setFilterStatus(!v || v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="All Status">
+              {(value: string | null) => {
+                if (!value) return "All Status";
+                return value.replace(/_/g, " ");
+              }}
+            </SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All Status</SelectItem>
             <SelectItem value="AVAILABLE">Available</SelectItem>
@@ -187,8 +231,16 @@ function ItemsContent() {
             <SelectItem value="DISPOSED">Disposed</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={filterLocation} onValueChange={(v) => { setFilterLocation(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Locations" /></SelectTrigger>
+        <Select value={filterLocation || "__all__"} onValueChange={(v) => { setFilterLocation(!v || v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All Locations">
+              {(value: string | null) => {
+                if (!value) return "All Locations";
+                const loc = locations.find((l) => l.id === value);
+                return loc ? locationLabel(loc) : "All Locations";
+              }}
+            </SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All Locations</SelectItem>
             {locations.map((loc) => (
@@ -202,6 +254,7 @@ function ItemsContent() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10"></TableHead>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
@@ -215,53 +268,93 @@ function ItemsContent() {
             {loading ? (
               Array.from({ length: 10 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: 8 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   No items found
                 </TableCell>
               </TableRow>
-            ) : items.map((item) => (
-              <TableRow
-                key={item.id}
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => router.push(`/items/${item.id}`)}
-              >
-                <TableCell className="font-mono text-sm">{item.code}</TableCell>
-                <TableCell>
-                  <div>
-                    <span className="font-medium">{item.name}</span>
-                    {item.nameTh && <span className="text-muted-foreground ml-1">({item.nameTh})</span>}
-                  </div>
-                  {item.trackIndividually && (
-                    <Badge variant="secondary" className="text-xs mt-0.5">
-                      Tracked ({item._count.subItems})
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">{CATEGORY_LABELS[item.category.category] || item.category.name}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : ""}>
-                    {item.availableQty}
-                  </span>
-                  <span className="text-muted-foreground"> / {item.totalQty}</span>
-                </TableCell>
-                <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
-                <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
-                <TableCell>
-                  <Badge variant={STATUS_VARIANTS[item.status] || "secondary"}>
-                    {item.status.replace(/_/g, " ")}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            ) : items.map((item) => {
+              const expanded = expandedIds.has(item.id);
+              const subs = subItemsMap[item.id];
+              const hasSubItems = item.trackIndividually && item._count.subItems > 0;
+              return (
+                <Fragment key={item.id}>
+                  <TableRow
+                    className={`cursor-pointer hover:bg-muted/50 ${expanded ? "bg-muted/20" : ""}`}
+                    onClick={() => {
+                      if (!hasSubItems) router.push(`/items/${item.id}`);
+                    }}
+                  >
+                    <TableCell>
+                      {hasSubItems && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
+                        >
+                          <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{item.code}</TableCell>
+                    <TableCell>
+                      <div>
+                        <span className="font-medium">{item.name}</span>
+                        {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                      </div>
+                      {item.trackIndividually && item._count.subItems > 1 && (
+                        <Badge variant="secondary" className="text-xs mt-0.5">
+                          Tracked ({item._count.subItems})
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{CATEGORY_LABELS[item.category.category] || item.category.name}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : ""}>
+                        {item.availableQty}
+                      </span>
+                      <span className="text-muted-foreground"> / {item.totalQty}</span>
+                    </TableCell>
+                    <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
+                    <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANTS[item.status] || "secondary"}>
+                        {item.status.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                  {expanded && subs?.map((sub) => (
+                    <TableRow
+                      key={sub.id}
+                      className="bg-muted/30 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => router.push(`/items/${item.id}`)}
+                    >
+                      <TableCell></TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground pl-8">{sub.subCode}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{sub.notes || "-"}</TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANTS[sub.status] || "secondary"} className="text-xs">
+                          {sub.status.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

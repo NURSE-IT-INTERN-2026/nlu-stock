@@ -60,8 +60,10 @@ export function QuantityDialog({ item, open, onClose }: Props) {
   if (!item) return null;
 
   const categoryType = item.category.category as CartItem["categoryType"];
-  const isConsumable = categoryType === "CONSUMABLE";
-  const isTracked = item.trackIndividually;
+  const isConsumable = categoryType === "CON" || categoryType === "MED";
+  const isTracked = item.trackIndividually && item.subItems.length > 1;
+
+  const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;
 
   const handleAdd = () => {
     if (isConsumable) {
@@ -115,6 +117,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         conversionFactor: item.conversionFactor,
         quantity,
         quantitySub,
+        subItemId: hasSingleSubItem ? item.subItems[0].id : null,
+        subCode: hasSingleSubItem ? item.subItems[0].subCode : null,
         availableQty: item.availableQty,
       });
     }

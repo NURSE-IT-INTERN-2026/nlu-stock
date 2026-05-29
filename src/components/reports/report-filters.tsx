@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
+import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
 
 export interface FilterValues {
   dateFrom?: string;
@@ -18,7 +19,7 @@ export interface FilterValues {
   categoryId?: string;
   locationId?: string;
   staffId?: string;
-  subjectId?: string;
+  usageType?: string;
   itemId?: string;
   status?: string;
   year?: string;
@@ -30,7 +31,7 @@ export interface FilterConfig {
   categories?: boolean;
   locations?: boolean;
   staff?: boolean;
-  subjects?: boolean;
+  usageTypes?: boolean;
   statusOptions?: { value: string; label: string }[];
   year?: boolean;
   maintenanceType?: boolean;
@@ -52,7 +53,7 @@ export function ReportFilters({ config, values, onChange }: ReportFiltersProps) 
   const [categories, setCategories] = useState<Option[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [staff, setStaff] = useState<Option[]>([]);
-  const [subjects, setSubjects] = useState<Option[]>([]);
+  const [subjects, setSubjects] = useState<Option[]>([]); // kept for compat but unused
 
   useEffect(() => {
     if (config.categories) {
@@ -73,13 +74,8 @@ export function ReportFilters({ config, values, onChange }: ReportFiltersProps) 
         .then((data) => setStaff(data))
         .catch(() => {});
     }
-    if (config.subjects) {
-      fetch("/api/settings/subjects")
-        .then((r) => r.json())
-        .then((data) => setSubjects(data))
-        .catch(() => {});
-    }
-  }, [config.categories, config.locations, config.staff, config.subjects]);
+    // usageTypes is static, no fetch needed
+  }, [config.categories, config.locations, config.staff]);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
@@ -181,23 +177,23 @@ export function ReportFilters({ config, values, onChange }: ReportFiltersProps) 
         </div>
       )}
 
-      {config.subjects && (
+      {config.usageTypes && (
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Subject</label>
+          <label className="text-xs text-muted-foreground">Usage Type</label>
           <Select
-            value={values.subjectId ?? "all"}
+            value={values.usageType ?? "all"}
             onValueChange={(v) =>
-              onChange({ ...values, subjectId: v === "all" ? undefined : String(v) })
+              onChange({ ...values, usageType: v === "all" ? undefined : String(v) })
             }
           >
             <SelectTrigger className="h-9 w-40">
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Subjects</SelectItem>
-              {subjects.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.code} - {s.name}
+              <SelectItem value="all">All Types</SelectItem>
+              {USAGE_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>

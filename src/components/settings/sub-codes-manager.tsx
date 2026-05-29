@@ -23,6 +23,7 @@ interface SubItemRecord {
   subCode: string;
   status: string;
   condition: string | null;
+  serialNumber: string | null;
   notes: string | null;
 }
 
@@ -37,7 +38,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SubItemRecord | null>(null);
-  const [editForm, setEditForm] = useState({ subCode: "", status: "AVAILABLE", condition: "", notes: "" });
+  const [editForm, setEditForm] = useState({ subCode: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
   const [batchForm, setBatchForm] = useState({ prefix: `${itemCode}-`, startNumber: 1, endNumber: 10 });
 
   const fetchSubItems = useCallback(async () => {
@@ -52,13 +53,13 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
 
   function openCreate() {
     setEditing(null);
-    setEditForm({ subCode: "", status: "AVAILABLE", condition: "", notes: "" });
+    setEditForm({ subCode: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
     setEditDialogOpen(true);
   }
 
   function openEdit(sub: SubItemRecord) {
     setEditing(sub);
-    setEditForm({ subCode: sub.subCode, status: sub.status, condition: sub.condition || "", notes: sub.notes || "" });
+    setEditForm({ subCode: sub.subCode, status: sub.status, condition: sub.condition || "", serialNumber: sub.serialNumber || "", notes: sub.notes || "" });
     setEditDialogOpen(true);
   }
 
@@ -70,6 +71,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
         body: JSON.stringify({
           status: editForm.status,
           condition: editForm.condition || null,
+          serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
         }),
       });
@@ -83,6 +85,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           subCode: editForm.subCode,
           status: editForm.status,
           condition: editForm.condition || null,
+          serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
         }),
       });
@@ -137,13 +140,14 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               <TableHead>Sub-code</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Condition</TableHead>
+              <TableHead>Serial No.</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {subItems.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
             ) : subItems.map((sub) => (
               <TableRow key={sub.id}>
                 <TableCell className="font-mono text-sm">{sub.subCode}</TableCell>
@@ -153,6 +157,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm">{sub.condition || "-"}</TableCell>
+                <TableCell className="font-mono text-xs">{sub.serialNumber || "-"}</TableCell>
                 <TableCell className="text-sm max-w-[200px] truncate">{sub.notes || "-"}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
@@ -196,6 +201,10 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
             <div>
               <Label>Condition</Label>
               <Input value={editForm.condition} onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })} />
+            </div>
+            <div>
+              <Label>Serial Number</Label>
+              <Input value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} placeholder="e.g. 12-6515-020-0001" />
             </div>
             <div>
               <Label>Notes</Label>

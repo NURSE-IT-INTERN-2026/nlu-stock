@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 export const locationCreateSchema = z.object({
+  building: z.string().min(1, "Building is required").max(100),
+  floor: z.string().min(1, "Floor is required").max(100),
   room: z.string().min(1, "Room is required").max(100),
-  cabinet: z.string().max(100).optional().nullable(),
-  shelf: z.string().max(100).optional().nullable(),
+  detail: z.string().max(100).optional().nullable(),
 });
 
 export const locationUpdateSchema = locationCreateSchema.partial();

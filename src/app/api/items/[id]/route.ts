@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       dispenseRecords: {
         take: 5,
         orderBy: { dispensedAt: "desc" },
-        include: { staff: { select: { name: true } }, subject: true },
+        include: { staff: { select: { name: true } } },
       },
       receiveRecords: {
         take: 5,

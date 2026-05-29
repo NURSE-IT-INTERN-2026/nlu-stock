@@ -20,12 +20,13 @@ interface MaintenanceRecord {
 interface Props {
   item: {
     id: string;
-    serialNumber: string | null;
     model: string | null;
     purchaseDate: string | null;
     purchasePrice: number | null;
-    vendor: string | null;
-    warrantyEndDate: string | null;
+    vendorCompany: string | null;
+    vendorContact: string | null;
+    vendorPhone: string | null;
+    warrantyMonths: number;
     maintenanceCycleMonths: number;
     lastMaintenanceDate: string | null;
     nextMaintenanceDate: string | null;
@@ -70,9 +71,6 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-            {item.serialNumber && (
-              <div><span className="text-muted-foreground">Serial:</span> <span className="font-mono">{item.serialNumber}</span></div>
-            )}
             {item.model && (
               <div><span className="text-muted-foreground">Model:</span> {item.model}</div>
             )}
@@ -82,11 +80,17 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
             {item.purchasePrice != null && (
               <div><span className="text-muted-foreground">Price:</span> ฿{item.purchasePrice.toLocaleString()}</div>
             )}
-            {item.vendor && (
-              <div><span className="text-muted-foreground">Vendor:</span> {item.vendor}</div>
+            {item.vendorCompany && (
+              <div><span className="text-muted-foreground">บริษัท:</span> {item.vendorCompany}</div>
             )}
-            {item.warrantyEndDate && (
-              <div><span className="text-muted-foreground">Warranty End:</span> {new Date(item.warrantyEndDate).toLocaleDateString("th-TH")}</div>
+            {item.vendorContact && (
+              <div><span className="text-muted-foreground">ตัวแทน:</span> {item.vendorContact}</div>
+            )}
+            {item.vendorPhone && (
+              <div><span className="text-muted-foreground">เบอร์โทร:</span> {item.vendorPhone}</div>
+            )}
+            {item.warrantyMonths > 0 && (
+              <div><span className="text-muted-foreground">รับประกัน:</span> {item.warrantyMonths} เดือน</div>
             )}
             <div><span className="text-muted-foreground">Cycle:</span> {item.maintenanceCycleMonths} months</div>
             {item.lastMaintenanceDate && (

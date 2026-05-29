@@ -3,6 +3,7 @@ import { requireAdmin, json, error } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { ItemCondition } from "@/generated/prisma/enums";
+import { forcedTrackIndividually } from "@/lib/validators/item";
 
 interface ImportRow {
   [key: string]: string;
@@ -48,9 +49,10 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
 
     const location = locations.find(
       (l) =>
+        (l.building ?? "") === (row.building ?? "") &&
+        (l.floor ?? "") === (row.floor ?? "") &&
         l.room === row.room &&
-        (l.cabinet ?? "") === (row.cabinet ?? "") &&
-        (l.shelf ?? "") === (row.shelf ?? "")
+        (l.detail ?? "") === (row.detail ?? "")
     );
 
     const issueUnitName = row.issueUnit || "ชิ้น";
@@ -72,9 +74,13 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
       data: {
         code: row.code,
         name: row.name,
-        nameTh: row.nameTh || null,
+        nameEn: row.nameEn || null,
         category: { connect: { id: category.id } },
-        trackIndividually: row.trackIndividually === "true",
+        trackIndividually: (() => {
+          const forced = forcedTrackIndividually(category.category);
+          if (forced !== undefined) return forced;
+          return row.trackIndividually === "true";
+        })(),
         issueUnit: { connect: { id: issueUnit.id } },
         subUnit: { connect: { id: subUnit.id } },
         conversionFactor: parseInt(row.conversionFactor) || 1,
@@ -97,7 +103,7 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
 
 async function importCategories(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = { imported: 0, errors: [] };
-  const validCategories = ["CONSUMABLE", "DURABLE", "FIXED_ASSET", "BOOK"];
+  const validCategories = ["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "MED", "KIT"];
 
   const validRows: Prisma.CategoryTypeCreateInput[] = [];
 
@@ -115,7 +121,7 @@ async function importCategories(rows: ImportRow[]): Promise<ImportResult> {
 
     validRows.push({
       name: row.name,
-      category: row.category as "CONSUMABLE" | "DURABLE" | "FIXED_ASSET" | "BOOK",
+      category: row.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "MED" | "KIT",
       description: row.description || null,
       sortOrder: parseInt(row.sortOrder) || 0,
     });
@@ -139,15 +145,16 @@ async function importLocations(rows: ImportRow[]): Promise<ImportResult> {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
 
-    if (!row.room) {
-      result.errors.push({ row: i + 1, message: "Room is required" });
+    if (!row.building || !row.floor || !row.room) {
+      result.errors.push({ row: i + 1, message: "Building, floor, and room are required" });
       continue;
     }
 
     validRows.push({
+      building: row.building,
+      floor: row.floor,
       room: row.room,
-      cabinet: row.cabinet || null,
-      shelf: row.shelf || null,
+      detail: row.detail || null,
     });
   }
 
@@ -247,16 +254,16 @@ export async function POST(request: NextRequest) {
 
 const TEMPLATES: Record<string, { headers: string[]; example: string[] }> = {
   items: {
-    headers: ["code", "name", "nameTh", "category", "trackIndividually", "issueUnit", "subUnit", "conversionFactor", "minThreshold", "room", "cabinet", "shelf", "description"],
-    example: ["ITM001", "Pen", "ปากกา", "CONSUMABLE", "false", "ชิ้น", "", "1", "10", "ห้อง A", "ตู้ 1", "ชั้น 1", ""],
+    headers: ["code", "name", "nameEn", "category", "trackIndividually", "issueUnit", "subUnit", "conversionFactor", "minThreshold", "building", "floor", "room", "detail", "description"],
+    example: ["NLU-CON-001", "Pen", "Ballpoint Pen", "CON", "false", "ชิ้น", "", "1", "10", "อาคาร A", "ชั้น 1", "ห้อง 101", "ตู้ 1", ""],
   },
   categories: {
     headers: ["name", "category", "description", "sortOrder"],
-    example: ["วัสดุสิ้นเปลือง", "CONSUMABLE", "", "1"],
+    example: ["วัสดุสิ้นเปลือง", "CON", "", "1"],
   },
   locations: {
-    headers: ["room", "cabinet", "shelf"],
-    example: ["ห้อง A", "ตู้ 1", "ชั้น 1"],
+    headers: ["building", "floor", "room", "detail"],
+    example: ["อาคาร A", "ชั้น 1", "ห้อง 101", "ตู้ 1"],
   },
   "sub-items": {
     headers: ["itemCode", "subCode", "condition", "notes"],

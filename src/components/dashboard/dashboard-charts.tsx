@@ -12,7 +12,8 @@ interface DispenseRecord {
   id: string; dispensedAt: string; quantity: number;
   item: { id: string; code: string; name: string };
   staff: { name: string };
-  subject: { name: string; code: string } | null;
+  usageType: string | null;
+  usageNote: string | null;
 }
 interface ReceiveRecord {
   id: string; receivedAt: string; quantity: number;
@@ -20,7 +21,7 @@ interface ReceiveRecord {
   receiver: { name: string };
 }
 interface TopDispenseData { code: string; name: string; totalQuantity: number }
-interface UsageSubjectData { subjectCode: string; subjectName: string; totalQuantity: number }
+interface UsageSubjectData { usageType: string | null; label: string; totalQuantity: number }
 
 export function DashboardCharts() {
   const [dispenseData, setDispenseData] = useState<DispenseRecord[]>([]);

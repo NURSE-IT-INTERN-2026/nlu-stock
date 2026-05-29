@@ -16,15 +16,15 @@ import { ReportDamageDialog } from "@/components/items/report-damage-dialog";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 
 interface CategoryType { id: string; name: string; category: string }
-interface LocationType { id: string; room: string; cabinet: string | null; shelf: string | null }
-interface SubItemType { id: string; subCode: string; status: string; condition: string | null; notes: string | null }
+interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
+interface SubItemType { id: string; subCode: string; status: string; condition: string | null; serialNumber: string | null; notes: string | null }
 interface LotType { id: string; lotNumber: string; expiryDate: string | null; quantity: number }
 
 interface ItemData {
   id: string;
   code: string;
   name: string;
-  nameTh: string | null;
+  nameEn: string | null;
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
@@ -39,15 +39,17 @@ interface ItemData {
   totalQty: number;
   subItems: SubItemType[];
   lots: LotType[];
-  serialNumber: string | null;
   model: string | null;
   purchaseDate: string | null;
   purchasePrice: number | null;
-  vendor: string | null;
-  warrantyEndDate: string | null;
+  vendorCompany: string | null;
+  vendorContact: string | null;
+  vendorPhone: string | null;
+  warrantyMonths: number;
   maintenanceCycleMonths: number;
   lastMaintenanceDate: string | null;
   nextMaintenanceDate: string | null;
+  storageRequirements: string | null;
   dispenseRecords: unknown[];
   receiveRecords: unknown[];
   maintenanceRecords: { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }[];
@@ -98,7 +100,7 @@ export default function ItemDetailPage() {
     );
   }
 
-  const isFixedAsset = item.category.category === "FIXED_ASSET";
+  const isFixedAsset = item.category.category === "KRU" || item.category.category === "ELE";
   const canAct = user?.role === "ADMIN" || user?.role === "STAFF";
 
   return (
@@ -118,7 +120,7 @@ export default function ItemDetailPage() {
           <TabsTrigger value="overview" className="gap-1.5">
             <Info className="h-3.5 w-3.5" />Overview
           </TabsTrigger>
-          {item.trackIndividually && (
+          {item.trackIndividually && item.subItems.length > 1 && (
             <TabsTrigger value="subcodes" className="gap-1.5">
               <Hash className="h-3.5 w-3.5" />Sub-codes ({item.subItems.length})
             </TabsTrigger>
@@ -143,7 +145,7 @@ export default function ItemDetailPage() {
           />
         </TabsContent>
 
-        {item.trackIndividually && (
+        {item.trackIndividually && item.subItems.length > 1 && (
           <TabsContent value="subcodes" className="mt-4">
             <ItemDetailSubcodes subItems={item.subItems} itemId={item.id} canAct={canAct} onRefresh={fetchItem} />
           </TabsContent>

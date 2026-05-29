@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             date: r.dispensedAt,
             description: `Dispensed ${r.quantity} ${r.item.issueUnit.name}${r.returnedAt ? " (returned)" : ""}`,
             user: r.staff.name,
-            details: { quantity: r.quantity, subjectId: r.subjectId, returnedAt: r.returnedAt },
+            details: { quantity: r.quantity, usageType: r.usageType, returnedAt: r.returnedAt },
           });
         }
       })

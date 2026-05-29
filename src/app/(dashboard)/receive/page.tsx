@@ -22,13 +22,13 @@ interface SearchItem {
   id: string;
   code: string;
   name: string;
-  nameTh: string | null;
+  nameEn: string | null;
   issueUnit: { id: string; name: string };
   subUnit: { id: string; name: string };
   conversionFactor: number;
   trackIndividually: boolean;
   category: { name: string; category: string };
-  location: { room: string; cabinet: string | null; shelf: string | null } | null;
+  location: { building: string; floor: string; room: string; detail: string | null } | null;
 }
 
 interface ReceiveRow {
@@ -113,10 +113,14 @@ export default function ReceivePage() {
 
   const categoryColor = (cat: string) => {
     switch (cat) {
-      case "CONSUMABLE": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case "DURABLE": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "FIXED_ASSET": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+      case "CON": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "DUR": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      case "KRU": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
       case "BOOK": return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
+      case "ELE": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200";
+      case "TOY": return "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200";
+      case "MED": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+      case "KIT": return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
       default: return "";
     }
   };
@@ -133,7 +137,7 @@ export default function ReceivePage() {
         toast.error(`Invalid quantity for ${row.item.code}`);
         return;
       }
-      const isConsumable = row.item.category.category === "CONSUMABLE";
+      const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
       if (isConsumable && !row.lotNumber.trim()) {
         toast.error(`Lot number required for consumable: ${row.item.code}`);
         return;
@@ -146,7 +150,7 @@ export default function ReceivePage() {
         items: rows.map((r) => ({
           itemId: r.item.id,
           quantity: r.quantity,
-          lotNumber: r.item.category.category === "CONSUMABLE" ? r.lotNumber || null : null,
+          lotNumber: (r.item.category.category === "CON" || r.item.category.category === "MED") ? r.lotNumber || null : null,
           expiryDate: r.expiryDate || null,
           subCodes: r.item.trackIndividually && r.subCodes.length > 0 ? r.subCodes : null,
         })),
@@ -196,7 +200,7 @@ export default function ReceivePage() {
       ) : (
         <div className="space-y-3">
           {rows.map((row, idx) => {
-            const isConsumable = row.item.category.category === "CONSUMABLE";
+            const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
             return (
               <Card key={row.id}>
                 <CardContent className="space-y-3">
@@ -384,7 +388,7 @@ export default function ReceivePage() {
                       <p className="text-sm font-medium">{item.name}</p>
                       {item.location && (
                         <p className="text-xs text-muted-foreground">
-                          {item.location.room}{item.location.cabinet ? ` / ${item.location.cabinet}` : ""}
+                          {[item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")}
                         </p>
                       )}
                     </button>

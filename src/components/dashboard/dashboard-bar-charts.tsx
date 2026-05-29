@@ -5,7 +5,7 @@ import { TopDispenseChart } from "./top-dispense-chart";
 import { UsageBySubjectChart } from "./usage-by-subject-chart";
 
 interface TopDispenseData { code: string; name: string; totalQuantity: number }
-interface UsageSubjectData { subjectCode: string; subjectName: string; totalQuantity: number }
+interface UsageSubjectData { usageType: string | null; label: string; totalQuantity: number }
 
 export function DashboardBarCharts() {
   const [topDispense, setTopDispense] = useState<TopDispenseData[]>([]);

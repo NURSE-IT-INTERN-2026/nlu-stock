@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const parsed = dispenseRequestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { items, subjectId, notes } = parsed.data;
+  const { items, usageType, usageNote, notes } = parsed.data;
 
   // Dedup check: no duplicate itemId+lotId+subItemId
   const keys = items.map((i) => `${i.itemId}-${i.lotId ?? ""}-${i.subItemId ?? ""}`);
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
         const item = await tx.item.findUnique({
           where: { id: di.itemId },
           include: {
+            category: true,
             lots: { where: { id: di.lotId ?? undefined } },
             subItems: { where: { id: di.subItemId ?? undefined } },
             issueUnit: true,
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
             lotId: di.lotId ?? undefined,
             quantity: di.quantity,
             quantitySub: di.quantitySub,
-            subjectId: subjectId ?? undefined,
+            usageType: usageType ?? undefined,
+            usageNote: usageNote ?? undefined,
             staffId: session.userId,
             notes: notes ?? undefined,
           },
@@ -99,11 +101,29 @@ export async function POST(req: NextRequest) {
             data: { availableQty: { decrement: di.quantity } },
           });
         } else {
-          // Non-tracked durable: deduct item availableQty only
+          // Non-tracked item: deduct item availableQty only
           await tx.item.update({
             where: { id: di.itemId },
             data: { availableQty: { decrement: di.quantity } },
           });
+        }
+
+        // KIT: deduct stock from linked component items
+        if (item.category.category === "KIT") {
+          const components = await tx.kitComponent.findMany({
+            where: { kitId: item.id, isStockItem: true, itemId: { not: null } },
+          });
+          for (const comp of components) {
+            if (comp.itemId) {
+              const stockItem = await tx.item.findUnique({ where: { id: comp.itemId } });
+              if (stockItem && stockItem.availableQty >= comp.quantity * di.quantity) {
+                await tx.item.update({
+                  where: { id: comp.itemId },
+                  data: { availableQty: { decrement: comp.quantity * di.quantity } },
+                });
+              }
+            }
+          }
         }
       }
 

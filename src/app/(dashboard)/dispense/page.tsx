@@ -17,7 +17,7 @@ interface SearchItem {
   id: string;
   code: string;
   name: string;
-  nameTh: string | null;
+  nameEn: string | null;
   availableQty: number;
   issueUnit: { id: string; name: string };
   subUnit: { id: string; name: string };
@@ -26,7 +26,7 @@ interface SearchItem {
   category: { name: string; category: string };
   lots: { id: string; lotNumber: string; expiryDate: string | null; quantity: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
-  location: { room: string; cabinet: string | null; shelf: string | null } | null;
+  location: { building: string; floor: string; room: string; detail: string | null } | null;
 }
 
 function DispenseContent() {
@@ -83,10 +83,14 @@ function DispenseContent() {
 
   const categoryColor = (cat: string) => {
     switch (cat) {
-      case "CONSUMABLE": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case "DURABLE": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "FIXED_ASSET": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+      case "CON": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "DUR": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      case "KRU": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
       case "BOOK": return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
+      case "ELE": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200";
+      case "TOY": return "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200";
+      case "MED": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+      case "KIT": return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
       default: return "";
     }
   };
@@ -135,7 +139,7 @@ function DispenseContent() {
                   Available: {item.trackIndividually
                     ? `${item.subItems.length} units`
                     : `${item.availableQty} ${item.issueUnit.name}`}
-                  {item.location && ` · ${item.location.room}${item.location.cabinet ? ` / ${item.location.cabinet}` : ""}`}
+                  {item.location && ` · ${[item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")}`}
                 </p>
               </div>
               <Button

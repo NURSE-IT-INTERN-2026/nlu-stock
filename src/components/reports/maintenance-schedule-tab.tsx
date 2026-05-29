@@ -13,7 +13,6 @@ interface Row {
   id: string;
   code: string;
   name: string;
-  serialNumber: string;
   model: string;
   categoryName: string;
   location: string;

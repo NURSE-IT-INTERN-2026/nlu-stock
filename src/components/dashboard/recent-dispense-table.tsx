@@ -8,6 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Pagination } from "./pagination";
+import { USAGE_TYPE_LABELS } from "@/lib/constants";
 
 interface RecentDispenseRecord {
   id: string;
@@ -15,7 +16,8 @@ interface RecentDispenseRecord {
   quantity: number;
   item: { id: string; code: string; name: string };
   staff: { name: string };
-  subject: { name: string; code: string } | null;
+  usageType: string | null;
+  usageNote: string | null;
 }
 
 interface RecentDispenseTableProps {
@@ -49,7 +51,7 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
                   <TableHead>Item</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="hidden sm:table-cell">Staff</TableHead>
-                  <TableHead className="hidden md:table-cell">Subject</TableHead>
+                  <TableHead className="hidden md:table-cell">Usage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -69,7 +71,7 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
                     <TableCell className="text-right text-sm text-foreground font-bold">{r.quantity}</TableCell>
                     <TableCell className="hidden sm:table-cell text-sm text-foreground/80 font-medium">{r.staff.name}</TableCell>
                     <TableCell className="hidden md:table-cell text-sm text-muted-foreground font-light">
-                      {r.subject?.name ?? <span className="text-muted-foreground/50">—</span>}
+                      {r.usageType ? USAGE_TYPE_LABELS[r.usageType] ?? r.usageType : <span className="text-muted-foreground/50">—</span>}
                     </TableCell>
                   </TableRow>
                 ))}

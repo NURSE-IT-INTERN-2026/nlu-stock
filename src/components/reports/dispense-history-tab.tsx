@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 const filterConfig: FilterConfig = {
   dateRange: true,
   staff: true,
-  subjects: true,
+  usageTypes: true,
 };
 
 interface Row {
@@ -20,7 +20,7 @@ interface Row {
   quantity: number;
   quantitySub: number;
   staffName: string;
-  subjectName: string;
+  usageTypeLabel: string;
   lotNumber: string;
   dispensedAt: string;
   returnedAt: string | null;
@@ -37,7 +37,7 @@ const columns: Column<Row>[] = [
   { key: "itemName", header: "Item" },
   { key: "quantity", header: "Qty" },
   { key: "staffName", header: "Staff" },
-  { key: "subjectName", header: "Subject" },
+  { key: "usageTypeLabel", header: "Usage" },
   {
     key: "returnedAt",
     header: "Status",
@@ -65,7 +65,7 @@ export function DispenseHistoryTab() {
     if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
     if (filters.dateTo) params.set("dateTo", filters.dateTo);
     if (filters.staffId) params.set("staffId", filters.staffId);
-    if (filters.subjectId) params.set("subjectId", filters.subjectId);
+    if (filters.usageType) params.set("usageType", filters.usageType);
     params.set("page", String(page));
     params.set("perPage", String(perPage));
     const res = await fetch(`/api/reports/dispense-history?${params.toString()}`);

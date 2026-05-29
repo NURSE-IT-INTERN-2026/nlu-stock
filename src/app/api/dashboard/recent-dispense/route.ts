@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     include: {
       item: { select: { id: true, code: true, name: true } },
       staff: { select: { name: true } },
-      subject: { select: { name: true, code: true } },
     },
   });
 

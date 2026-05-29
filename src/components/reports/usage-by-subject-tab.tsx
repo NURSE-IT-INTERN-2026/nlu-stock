@@ -9,15 +9,13 @@ import { UsageBySubjectChart } from "./charts/usage-by-subject-chart";
 const filterConfig: FilterConfig = { dateRange: true, categories: true };
 
 interface Row {
-  subjectId: string | null;
-  subjectCode: string;
-  subjectName: string;
+  usageType: string | null;
+  label: string;
   totalQuantity: number;
 }
 
 const columns: Column<Row>[] = [
-  { key: "subjectCode", header: "Code" },
-  { key: "subjectName", header: "Subject" },
+  { key: "label", header: "Type" },
   { key: "totalQuantity", header: "Total Qty" },
 ];
 

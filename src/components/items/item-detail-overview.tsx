@@ -14,16 +14,18 @@ interface SubItemRecord {
   id: string;
   subCode: string;
   status: string;
+  condition: string | null;
+  serialNumber: string | null;
 }
 
 interface CategoryType { id: string; name: string; category: string }
-interface LocationType { id: string; room: string; cabinet: string | null; shelf: string | null }
+interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
 interface ItemData {
   id: string;
   code: string;
   name: string;
-  nameTh: string | null;
+  nameEn: string | null;
   category: CategoryType;
   trackIndividually: boolean;
   status: string;
@@ -34,16 +36,21 @@ interface ItemData {
   location: LocationType | null;
   imageUrl: string | null;
   description: string | null;
+  storageRequirements: string | null;
   availableQty: number;
   totalQty: number;
   subItems: SubItemRecord[];
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  CONSUMABLE: "สิ้นเปลือง",
-  DURABLE: "คงทน",
-  FIXED_ASSET: "ครุภัณฑ์",
+  KRU: "ครุภัณฑ์",
+  ELE: "อิเล็กทรอนิกส์",
   BOOK: "หนังสือ",
+  TOY: "ของเล่น",
+  DUR: "วัสดุคงทน",
+  CON: "วัสดุสิ้นเปลือง",
+  MED: "ยา",
+  KIT: "อุปกรณ์ประกอบวิชา",
 };
 
 interface Props {
@@ -101,7 +108,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     }
   };
 
-  const statusSummary = item.trackIndividually
+  const statusSummary = item.trackIndividually && item.subItems.length > 1
     ? item.subItems.reduce((acc, s) => {
         acc[s.status] = (acc[s.status] || 0) + 1;
         return acc;
@@ -121,7 +128,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               <Badge variant="outline">{CATEGORY_LABELS[item.category.category]}</Badge>
             </div>
             <p className="font-medium text-lg">{item.name}</p>
-            {item.nameTh && <p className="text-muted-foreground">{item.nameTh}</p>}
+            {item.nameEn && <p className="text-muted-foreground">{item.nameEn}</p>}
             {item.imageUrl && (
               <img src={item.imageUrl} alt={item.name} className="mt-2 h-24 w-auto rounded object-contain" />
             )}
@@ -139,8 +146,26 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Location</span>
-                <span>{item.location ? [item.location.room, item.location.cabinet, item.location.shelf].filter(Boolean).join(" / ") : "-"}</span>
+                <span>{item.location ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ") : "-"}</span>
               </div>
+              {item.storageRequirements && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Storage Requirements</span>
+                  <span>{item.storageRequirements}</span>
+                </div>
+              )}
+              {item.trackIndividually && item.subItems.length === 1 && item.subItems[0].serialNumber && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Serial No.</span>
+                  <span className="font-mono">{item.subItems[0].serialNumber}</span>
+                </div>
+              )}
+              {item.trackIndividually && item.subItems.length === 1 && item.subItems[0].condition && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Condition</span>
+                  <span>{item.subItems[0].condition}</span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -221,7 +246,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
         </Card>
       )}
 
-      {canAct && !item.trackIndividually && item.category.category !== "CONSUMABLE" && item.availableQty < item.totalQty && (
+      {canAct && !item.trackIndividually && item.category.category !== "CON" && item.availableQty < item.totalQty && (
         <Button variant="outline" onClick={handleReturnQty}>
           <Undo2 className="h-4 w-4 mr-1" />Return Qty
         </Button>

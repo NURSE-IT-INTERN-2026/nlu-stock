@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
-import { itemCreateSchema } from "@/lib/validators";
+import { itemCreateSchema, forcedTrackIndividually } from "@/lib/validators";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     where.OR = [
       { code: { contains: search, mode: "insensitive" } },
       { name: { contains: search, mode: "insensitive" } },
-      { nameTh: { contains: search, mode: "insensitive" } },
+      { nameEn: { contains: search, mode: "insensitive" } },
     ];
   }
 
@@ -68,6 +68,13 @@ export async function POST(request: NextRequest) {
 
   const existing = await prisma.item.findUnique({ where: { code: data.code } });
   if (existing) return error("Item code already exists");
+
+  // Enforce trackIndividually based on category
+  const cat = await prisma.categoryType.findUnique({ where: { id: data.categoryId } });
+  if (cat) {
+    const forced = forcedTrackIndividually(cat.category);
+    if (forced !== undefined) data.trackIndividually = forced;
+  }
 
   const item = await prisma.item.create({
     data,

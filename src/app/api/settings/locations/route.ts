@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   if (auth.denied) return auth.denied;
 
   const locations = await prisma.location.findMany({
-    orderBy: [{ room: "asc" }, { cabinet: "asc" }, { shelf: "asc" }],
+    orderBy: [{ building: "asc" }, { floor: "asc" }, { room: "asc" }, { detail: "asc" }],
     include: { _count: { select: { items: true } } },
   });
 

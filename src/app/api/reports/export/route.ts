@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { toCsv, toXlsx, toPdf } from "@/lib/export-utils";
 import { format } from "date-fns";
 import { ItemStatus } from "@/generated/prisma/enums";
+import { USAGE_TYPE_LABELS } from "@/lib/constants";
 
 type ReportType =
   | "stock-summary"
@@ -66,15 +67,14 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (itemId) where.itemId = itemId;
       const staffId = params.get("staffId");
       if (staffId) where.staffId = staffId;
-      const subjectId = params.get("subjectId");
-      if (subjectId) where.subjectId = subjectId;
+      const usageType = params.get("usageType");
+      if (usageType) where.usageType = usageType;
 
       const records = await prisma.dispenseRecord.findMany({
         where,
         include: {
           item: { select: { code: true, name: true } },
           staff: { select: { name: true } },
-          subject: { select: { name: true } },
         },
         orderBy: { dispensedAt: "desc" },
         take: 10000,
@@ -86,7 +86,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         "Item Name": r.item.name,
         Quantity: r.quantity,
         Staff: r.staff.name,
-        Subject: r.subject?.name ?? "—",
+        Usage: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
         Notes: r.notes ?? "",
       }));
     }
@@ -105,23 +105,15 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (categoryId) where.item = { categoryId };
 
       const groups = await prisma.dispenseRecord.groupBy({
-        by: ["subjectId"],
-        where: { ...where, subjectId: { not: null } },
+        by: ["usageType"],
+        where: { ...where, usageType: { not: null } },
         _sum: { quantity: true },
         orderBy: { _sum: { quantity: "desc" } },
       });
 
-      const subjects = await prisma.subject.findMany({
-        where: { id: { in: groups.map((g) => g.subjectId!) } },
-        select: { id: true, code: true, name: true },
-      });
-      const subjectMap = new Map(subjects.map((s) => [s.id, s]));
-
       return groups.map((g) => {
-        const s = subjectMap.get(g.subjectId!);
         return {
-          "Subject Code": s?.code ?? "",
-          "Subject Name": s?.name ?? "Unknown",
+          "Usage Type": USAGE_TYPE_LABELS[g.usageType ?? ""] ?? g.usageType ?? "Unknown",
           "Total Quantity": g._sum.quantity ?? 0,
         };
       });
@@ -234,7 +226,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         where: { isActive: true, status: { in: statuses } },
         include: {
           category: { select: { name: true } },
-          location: { select: { room: true, cabinet: true, shelf: true } },
+          location: { select: { building: true, floor: true, room: true, detail: true } },
         },
         take: 10000,
       });
@@ -244,7 +236,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         Name: i.name,
         Status: i.status,
         Category: i.category.name,
-        Location: [i.location?.room, i.location?.cabinet, i.location?.shelf].filter(Boolean).join(" / "),
+        Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
       }));
     }
 
@@ -266,7 +258,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         where,
         include: {
           category: { select: { name: true } },
-          location: { select: { room: true, cabinet: true, shelf: true } },
+          location: { select: { building: true, floor: true, room: true, detail: true } },
         },
         orderBy: { nextMaintenanceDate: "asc" },
         take: 10000,
@@ -276,7 +268,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         Code: i.code,
         Name: i.name,
         Category: i.category.name,
-        Location: [i.location?.room, i.location?.cabinet, i.location?.shelf].filter(Boolean).join(" / "),
+        Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
         "Next Maintenance": i.nextMaintenanceDate ? format(i.nextMaintenanceDate, "yyyy-MM-dd") : "",
         "Cycle (months)": i.maintenanceCycleMonths,
         "Last Maintenance": i.lastMaintenanceDate ? format(i.lastMaintenanceDate, "yyyy-MM-dd") : "",

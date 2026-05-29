@@ -58,10 +58,14 @@ interface CategoryType {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  CONSUMABLE: "สิ้นเปลือง",
-  DURABLE: "คงทน",
-  FIXED_ASSET: "ครุภัณฑ์",
+  KRU: "ครุภัณฑ์",
+  ELE: "ครุภัณฑ์อิเล็กทรอนิกส์",
   BOOK: "หนังสือ",
+  TOY: "ของเล่น/อุปกรณ์การศึกษา",
+  DUR: "คงทน",
+  CON: "สิ้นเปลือง",
+  MED: "เวชภัณฑ์",
+  KIT: "ชุดวัสดุ",
 };
 
 function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
@@ -97,7 +101,7 @@ export function CategoriesTab() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
-  const [form, setForm] = useState({ name: "", category: "CONSUMABLE" as string, description: "" });
+  const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -116,7 +120,7 @@ export function CategoriesTab() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ name: "", category: "CONSUMABLE", description: "" });
+    setForm({ name: "", category: "CON", description: "" });
     setDialogOpen(true);
   }
 
@@ -224,10 +228,14 @@ export function CategoriesTab() {
               <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v! })}>
                 <SelectTrigger><SelectValue>{CATEGORY_LABELS[form.category] || form.category}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CONSUMABLE">สิ้นเปลือง</SelectItem>
-                  <SelectItem value="DURABLE">คงทน</SelectItem>
-                  <SelectItem value="FIXED_ASSET">ครุภัณฑ์</SelectItem>
+                  <SelectItem value="KRU">ครุภัณฑ์</SelectItem>
+                  <SelectItem value="ELE">ครุภัณฑ์อิเล็กทรอนิกส์</SelectItem>
                   <SelectItem value="BOOK">หนังสือ</SelectItem>
+                  <SelectItem value="TOY">ของเล่น/อุปกรณ์การศึกษา</SelectItem>
+                  <SelectItem value="DUR">คงทน</SelectItem>
+                  <SelectItem value="CON">สิ้นเปลือง</SelectItem>
+                  <SelectItem value="MED">เวชภัณฑ์</SelectItem>
+                  <SelectItem value="KIT">ชุดวัสดุ</SelectItem>
                 </SelectContent>
               </Select>
             </div>

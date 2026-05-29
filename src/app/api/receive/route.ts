@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
         if (!item) throw new Error(`Item ${ri.itemId} not found`);
 
-        const isConsumable = item.category.category === "CONSUMABLE";
+        const isConsumable = item.category.category === "CON" || item.category.category === "MED";
 
         // Enforce lotNumber for consumable
         if (isConsumable && !ri.lotNumber?.trim()) {

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { Category, AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 
-export const itemCreateSchema = z.object({
+const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
   name: z.string().min(1, "Name is required").max(200),
-  nameTh: z.string().max(200).optional().nullable(),
+  nameEn: z.string().max(200).optional().nullable(),
   categoryId: z.string().min(1, "Category is required"),
   trackIndividually: z.boolean().default(false),
   issueUnitId: z.string().min(1, "Issue unit is required"),
@@ -16,21 +16,32 @@ export const itemCreateSchema = z.object({
   description: z.string().max(1000).optional().nullable(),
   isActive: z.boolean().default(true),
   // Fixed Asset fields
-  serialNumber: z.string().max(100).optional().nullable(),
   model: z.string().max(200).optional().nullable(),
   purchaseDate: z.coerce.date().optional().nullable(),
   purchasePrice: z.number().min(0).optional().nullable(),
-  vendor: z.string().max(200).optional().nullable(),
-  warrantyEndDate: z.coerce.date().optional().nullable(),
+  vendorCompany: z.string().max(200).optional().nullable(),
+  vendorContact: z.string().max(200).optional().nullable(),
+  vendorPhone: z.string().max(50).optional().nullable(),
+  warrantyMonths: z.number().int().min(0).optional().default(0),
   maintenanceCycleMonths: z.number().int().min(1).default(12),
   lastMaintenanceDate: z.coerce.date().optional().nullable(),
   manualUrl: z.string().optional().nullable(),
+  // Consumable fields
+  storageRequirements: z.string().max(500).optional().nullable(),
 });
 
-export const itemUpdateSchema = itemCreateSchema.partial();
+export const itemCreateSchema = itemBaseSchema;
+export const itemUpdateSchema = itemBaseSchema.partial();
 
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
 export type ItemUpdateInput = z.infer<typeof itemUpdateSchema>;
+
+// Category → forced trackIndividually value. undefined = user choice (DUR, KIT).
+export function forcedTrackIndividually(categoryEnum: string): boolean | undefined {
+  if (categoryEnum === "KRU" || categoryEnum === "ELE" || categoryEnum === "BOOK" || categoryEnum === "TOY") return true;
+  if (categoryEnum === "CON" || categoryEnum === "MED") return false;
+  return undefined; // DUR, KIT — user choice
+}
 
 export const stockAdjustSchema = z.object({
   shelfCount: z.number().int().min(0, "Shelf count cannot be negative"),

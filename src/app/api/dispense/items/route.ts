@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       OR: [
         { code: { contains: q, mode: "insensitive" as const } },
         { name: { contains: q, mode: "insensitive" as const } },
-        { nameTh: { contains: q, mode: "insensitive" as const } },
+        { nameEn: { contains: q, mode: "insensitive" as const } },
       ],
     }),
   };
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
           where: { status: "AVAILABLE" },
           select: { id: true, subCode: true, status: true, condition: true },
         },
-        location: { select: { room: true, cabinet: true, shelf: true } },
+        location: { select: { building: true, floor: true, room: true, detail: true } },
       },
       orderBy: { name: "asc" },
       skip: (page - 1) * limit,

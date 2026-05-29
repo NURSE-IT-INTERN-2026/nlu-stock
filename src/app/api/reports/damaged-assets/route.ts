@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         category: { select: { name: true } },
-        location: { select: { room: true, cabinet: true, shelf: true } },
+        location: { select: { building: true, floor: true, room: true, detail: true } },
         statusLogs: {
           where: { newStatus: { in: statuses } },
           orderBy: { changedAt: "desc" },
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     name: i.name,
     status: i.status,
     categoryName: i.category.name,
-    location: [i.location?.room, i.location?.cabinet, i.location?.shelf]
+    location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail]
       .filter(Boolean)
       .join(" / "),
     reason: i.statusLogs[0]?.reason ?? "",

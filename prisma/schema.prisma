@@ -8,10 +8,14 @@ datasource db {
 }
 
 enum Category {
-  CONSUMABLE
-  DURABLE
-  FIXED_ASSET
+  KRU
+  ELE
   BOOK
+  TOY
+  DUR
+  CON
+  MED
+  KIT
 }
 
 enum ItemStatus {
@@ -53,8 +57,15 @@ enum ItemCondition {
   NEW
   OLD
   USABLE
+  FAIR
   UNUSABLE
   DAMAGED
+}
+
+enum UsageType {
+  COURSE
+  ACTIVITY
+  OTHER
 }
 
 // --- Users ---
@@ -89,29 +100,17 @@ model CategoryType {
   @@map("categories")
 }
 
-// --- Subjects ---
-model Subject {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  dispenseRecords DispenseRecord[]
-
-  @@map("subjects")
-}
-
 // --- Locations ---
 model Location {
-  id      String  @id @default(cuid())
-  room    String
-  cabinet String?
-  shelf   String?
+  id       String  @id @default(cuid())
+  building String
+  floor    String
+  room     String
+  detail   String?
 
   items Item[]
 
-  @@unique([room, cabinet, shelf])
+  @@unique([building, floor, room, detail])
   @@map("locations")
 }
 
@@ -131,7 +130,7 @@ model Item {
   id                String       @id @default(cuid())
   code              String       @unique
   name              String
-  nameTh            String?
+  nameEn            String?
   categoryId        String
   category          CategoryType @relation(fields: [categoryId], references: [id])
   trackIndividually Boolean      @default(false)
@@ -154,13 +153,17 @@ model Item {
   totalQty     Int @default(0)
   availableQty Int @default(0)
 
-  // Fixed Asset fields (nullable, used when category = FIXED_ASSET)
-  serialNumber           String?
+  // Consumable fields (used when category = CON, MED)
+  storageRequirements String?
+
+  // Fixed Asset fields (nullable, used when category = KRU, ELE)
   model                  String?
   purchaseDate           DateTime?
   purchasePrice          Float?
-  vendor                 String?
-  warrantyEndDate        DateTime?
+  vendorCompany          String?
+  vendorContact          String?
+  vendorPhone            String?
+  warrantyMonths         Int        @default(0)
   maintenanceCycleMonths Int        @default(12)
   lastMaintenanceDate    DateTime?
   nextMaintenanceDate    DateTime?
@@ -175,6 +178,10 @@ model Item {
   maintenanceRecords MaintenanceRecord[]
   statusLogs         ItemStatusLog[]
 
+  // Kit relations
+  kitComponents      KitComponent[] @relation("KitComponents")
+  kitStockItems      KitComponent[] @relation("KitStockItem")
+
   @@index([categoryId, isActive])
   @@index([locationId])
   @@index([availableQty])
@@ -183,16 +190,17 @@ model Item {
 
 // --- Sub-Items ---
 model SubItem {
-  id        String     @id @default(cuid())
-  itemId    String
-  item      Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  subCode   String
-  status    ItemStatus @default(AVAILABLE)
-  condition ItemCondition?
-  notes     String?
-  imageUrl  String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id           String        @id @default(cuid())
+  itemId       String
+  item         Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  subCode      String
+  status       ItemStatus    @default(AVAILABLE)
+  condition    ItemCondition?
+  serialNumber String?
+  notes        String?
+  imageUrl     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   dispenseRecords DispenseRecord[]
   statusLogs      ItemStatusLog[]
@@ -233,8 +241,8 @@ model DispenseRecord {
   lot         Lot?      @relation(fields: [lotId], references: [id])
   quantity    Int
   quantitySub Int
-  subjectId   String?
-  subject     Subject?  @relation(fields: [subjectId], references: [id])
+  usageType   UsageType?
+  usageNote   String?
   staffId     String
   staff       User      @relation(fields: [staffId], references: [id])
   dispensedAt DateTime  @default(now())
@@ -243,7 +251,7 @@ model DispenseRecord {
 
   @@index([itemId, dispensedAt])
   @@index([staffId, dispensedAt])
-  @@index([subjectId, dispensedAt])
+  @@index([usageType, dispensedAt])
   @@map("dispense_records")
 }
 
@@ -301,6 +309,22 @@ model MaintenanceRecord {
   createdAt         DateTime          @default(now())
 
   @@map("maintenance_records")
+}
+
+// --- Kit Components ---
+model KitComponent {
+  id          String  @id @default(cuid())
+  kitId       String
+  kit         Item    @relation("KitComponents", fields: [kitId], references: [id], onDelete: Cascade)
+  itemId      String? // null = non-stock item
+  item        Item?   @relation("KitStockItem", fields: [itemId], references: [id])
+  name        String  // component name
+  quantity    Int     @default(1)
+  unit        String  // unit of measurement
+  isStockItem Boolean @default(false) // true = deduct from stock on dispense
+
+  @@index([kitId])
+  @@map("kit_components")
 }
 
 // --- Status Change Log ---

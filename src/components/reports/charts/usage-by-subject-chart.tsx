@@ -17,20 +17,21 @@ function resolveToHex(cssVar: string): string {
   return ctx.fillStyle;
 }
 
-interface UsageBySubjectData {
-  subjectName: string;
+interface UsageByTypeData {
+  usageType: string | null;
+  label: string;
   totalQuantity: number;
 }
 
 interface UsageBySubjectChartProps {
-  data: UsageBySubjectData[];
+  data: UsageByTypeData[];
 }
 
 export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
   const fillColor = useMemo(() => resolveToHex("--chart-1"), []);
 
   const chartData = data.map((d) => ({
-    name: d.subjectName.length > 20 ? d.subjectName.slice(0, 18) + "…" : d.subjectName,
+    name: d.label,
     totalQuantity: d.totalQuantity,
   }));
 
@@ -38,7 +39,7 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Usage by Subject</CardTitle>
+          <CardTitle className="text-base font-semibold">Usage by Type</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground text-center py-8">No data</p>
@@ -50,7 +51,7 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Usage by Subject</CardTitle>
+        <CardTitle className="text-base font-semibold">Usage by Type</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>

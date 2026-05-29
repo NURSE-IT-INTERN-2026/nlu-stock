@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 
 interface AlertCounts {
   lowStock: number;
@@ -17,6 +17,10 @@ export function useAlerts() {
   return useContext(AlertContext);
 }
 
+function countsEqual(a: AlertCounts, b: AlertCounts) {
+  return a.lowStock === b.lowStock && a.nearExpiry === b.nearExpiry && a.overdueMaintenance === b.overdueMaintenance && a.total === b.total;
+}
+
 export function AlertProvider({ children }: { children: ReactNode }) {
   const [counts, setCounts] = useState<AlertCounts>(defaultCounts);
 
@@ -24,8 +28,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch("/api/alerts");
       if (res.ok) {
-        const data = await res.json();
-        setCounts(data);
+        const data: AlertCounts = await res.json();
+        setCounts((prev) => countsEqual(prev, data) ? prev : data);
       }
     } catch {
       // silent — will retry
@@ -34,12 +38,14 @@ export function AlertProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchAlerts();
-    const interval = setInterval(fetchAlerts, 5 * 60 * 1000); // refresh every 5 min
+    const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAlerts]);
 
+  const value = useMemo(() => counts, [counts]);
+
   return (
-    <AlertContext.Provider value={counts}>
+    <AlertContext.Provider value={value}>
       {children}
     </AlertContext.Provider>
   );
