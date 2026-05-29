@@ -35,6 +35,7 @@ interface UnitType { id: string; name: string }
 interface SubItemRecord {
   id: string;
   subCode: string;
+  name: string | null;
   status: string;
   condition: string | null;
   notes: string | null;
@@ -282,13 +283,14 @@ function ItemsContent() {
             ) : items.map((item) => {
               const expanded = expandedIds.has(item.id);
               const subs = subItemsMap[item.id];
-              const hasSubItems = item.trackIndividually && item._count.subItems > 0;
+              const hasSubItems = item.trackIndividually && item._count.subItems > 1;
               return (
                 <Fragment key={item.id}>
                   <TableRow
                     className={`cursor-pointer hover:bg-muted/50 ${expanded ? "bg-muted/20" : ""}`}
                     onClick={() => {
-                      if (!hasSubItems) router.push(`/items/${item.id}`);
+                      if (hasSubItems) toggleExpand(item.id);
+                      else router.push(`/items/${item.id}`);
                     }}
                   >
                     <TableCell>
@@ -339,8 +341,8 @@ function ItemsContent() {
                       onClick={() => router.push(`/items/${item.id}`)}
                     >
                       <TableCell></TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground pl-8">{sub.subCode}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{sub.notes || "-"}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">{sub.subCode}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{sub.name || sub.notes || "-"}</TableCell>
                       <TableCell></TableCell>
                       <TableCell></TableCell>
                       <TableCell></TableCell>

@@ -381,7 +381,7 @@ export function ItemsMasterTab() {
                   </TableCell>
                   <TableCell className="font-mono text-sm">
                     <div className="flex items-center gap-1">
-                      {item.trackIndividually && (
+                      {item.trackIndividually && item._count.subItems > 1 && (
                         <button onClick={() => setExpandedRow(expandedRow === item.id ? null : item.id)} className="p-0.5 hover:bg-muted rounded">
                           {expandedRow === item.id ? <ChevronDown className="h-3.5 w-3.5" /> : <ExpandIcon className="h-3.5 w-3.5" />}
                         </button>
@@ -411,7 +411,7 @@ export function ItemsMasterTab() {
                     </div>
                   </TableCell>
                 </TableRow>
-                {expandedRow === item.id && item.trackIndividually && (
+                {expandedRow === item.id && item.trackIndividually && item._count.subItems > 1 && (
                   <TableRow key={`${item.id}-expand`}>
                     <TableCell colSpan={9} className="bg-muted/30 p-4">
                       <SubCodesManager itemId={item.id} itemCode={item.code} />

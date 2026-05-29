@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Loader2 } from "lucide-react";
 
 const quickLogins = [
-  { label: "Admin", email: "admin@dev", role: "ADMIN" },
-  { label: "Staff", email: "staff@dev", role: "STAFF" },
-  { label: "Instructor", email: "instructor@dev", role: "INSTRUCTOR" },
+  { label: "Admin", email: "admin@nlu.ac.th", role: "ADMIN" },
+  { label: "Staff", email: "staff@nlu.ac.th", role: "STAFF" },
+  { label: "Instructor", email: "instructor@nlu.ac.th", role: "INSTRUCTOR" },
 ];
 
 export default function LoginPage() {

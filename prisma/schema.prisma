@@ -194,6 +194,7 @@ model SubItem {
   itemId       String
   item         Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
   subCode      String
+  name         String?
   status       ItemStatus    @default(AVAILABLE)
   condition    ItemCondition?
   serialNumber String?

@@ -21,6 +21,7 @@ import { Separator } from "@/components/ui/separator";
 interface SubItemRecord {
   id: string;
   subCode: string;
+  name: string | null;
   status: string;
   condition: string | null;
   serialNumber: string | null;
@@ -53,13 +54,13 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
 
   function openCreate() {
     setEditing(null);
-    setEditForm({ subCode: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
+    setEditForm({ subCode: "", name: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
     setEditDialogOpen(true);
   }
 
   function openEdit(sub: SubItemRecord) {
     setEditing(sub);
-    setEditForm({ subCode: sub.subCode, status: sub.status, condition: sub.condition || "", serialNumber: sub.serialNumber || "", notes: sub.notes || "" });
+    setEditForm({ subCode: sub.subCode, name: sub.name || "", status: sub.status, condition: sub.condition || "", serialNumber: sub.serialNumber || "", notes: sub.notes || "" });
     setEditDialogOpen(true);
   }
 
@@ -70,6 +71,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: editForm.status,
+          name: editForm.name || null,
           condition: editForm.condition || null,
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
@@ -83,6 +85,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subCode: editForm.subCode,
+          name: editForm.name || null,
           status: editForm.status,
           condition: editForm.condition || null,
           serialNumber: editForm.serialNumber || null,
@@ -138,6 +141,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Sub-code</TableHead>
+              <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Condition</TableHead>
               <TableHead>Serial No.</TableHead>
@@ -147,10 +151,11 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           </TableHeader>
           <TableBody>
             {subItems.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
             ) : subItems.map((sub) => (
               <TableRow key={sub.id}>
                 <TableCell className="font-mono text-sm">{sub.subCode}</TableCell>
+                <TableCell className="text-sm">{sub.name || "-"}</TableCell>
                 <TableCell>
                   <Badge variant={sub.status === "AVAILABLE" ? "default" : sub.status === "DAMAGED" ? "destructive" : "secondary"}>
                     {sub.status}
@@ -184,6 +189,10 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
                 <Input value={editForm.subCode} onChange={(e) => setEditForm({ ...editForm, subCode: e.target.value })} placeholder="e.g. ITM001-01" />
               </div>
             )}
+            <div>
+              <Label>Name</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="e.g. โต๊ะเขียนหนังสือ #1" />
+            </div>
             <div>
               <Label>Status</Label>
               <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v ?? "AVAILABLE" })}>

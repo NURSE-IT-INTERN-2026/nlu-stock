@@ -73,6 +73,7 @@ async function main() {
   const { prisma } = await import("../src/lib/prisma");
 
   // Clean all tables (order matters for FK)
+  const stripTrailingNum = (s: string) => s.replace(/\s*\(\d+\)\s*$/, "");
   await prisma.itemStatusLog.deleteMany();
   await prisma.maintenanceRecord.deleteMany();
   await prisma.stockAdjustment.deleteMany();
@@ -223,7 +224,7 @@ async function main() {
     const item = await prisma.item.create({
       data: {
         code: group.nluCode,
-        name: group.nameTh,
+        name: stripTrailingNum(group.nameTh),
         nameEn: group.nameEn || null,
         categoryId: catKru.id,
         trackIndividually: true,
@@ -236,11 +237,13 @@ async function main() {
       },
     });
 
-    for (const sub of group.subItems) {
+    for (let si = 0; si < group.subItems.length; si++) {
+      const sub = group.subItems[si];
       await prisma.subItem.create({
         data: {
           itemId: item.id,
           subCode: sub.nluCode,
+          name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
           status: mapStatus(sub.condition) as any,
           condition: mapCondition(sub.condition) as any,
           serialNumber: sub.serialNo && sub.serialNo !== "N/A" && sub.serialNo !== "รอเลขจากพัสดุ" ? sub.serialNo : null,
@@ -320,7 +323,7 @@ async function main() {
     const item = await prisma.item.create({
       data: {
         code: group.nluCode,
-        name: group.nameTh,
+        name: stripTrailingNum(group.nameTh),
         categoryId: catEle.id,
         trackIndividually: true,
         issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"), conversionFactor: 1,
@@ -332,11 +335,13 @@ async function main() {
       },
     });
 
-    for (const sub of group.subItems) {
+    for (let si = 0; si < group.subItems.length; si++) {
+      const sub = group.subItems[si];
       await prisma.subItem.create({
         data: {
           itemId: item.id,
           subCode: sub.nluCode,
+          name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
           status: mapStatus(sub.condition) as any,
           condition: mapCondition(sub.condition) as any,
           serialNumber: sub.serialNo && sub.serialNo !== "N/A" ? sub.serialNo : null,
@@ -382,7 +387,7 @@ async function main() {
     const item = await prisma.item.create({
       data: {
         code: `NLU-BOOK-${String(bookItemCount + 1).padStart(3, "0")}`,
-        name: group.bookName,
+        name: stripTrailingNum(group.bookName),
         categoryId: catBook.id,
         trackIndividually: true,
         issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"), conversionFactor: 1,
@@ -397,6 +402,7 @@ async function main() {
         data: {
           itemId: item.id,
           subCode: group.codes[ci],
+          name: group.codes.length > 1 ? `${stripTrailingNum(group.bookName)} (${ci + 1})` : group.bookName,
           status: "AVAILABLE",
           condition: "NEW",
         },
@@ -440,7 +446,7 @@ async function main() {
     const item = await prisma.item.create({
       data: {
         code: `NLU-TOY-${String(toyItemCount + 1).padStart(3, "0")}`,
-        name: group.toyName,
+        name: stripTrailingNum(group.toyName),
         categoryId: catToy.id,
         trackIndividually: true,
         issueUnitId: unitId("ชิ้น"), subUnitId: unitId("ชิ้น"), conversionFactor: 1,
@@ -455,6 +461,7 @@ async function main() {
         data: {
           itemId: item.id,
           subCode: group.codes[ci],
+          name: group.codes.length > 1 ? `${stripTrailingNum(group.toyName)} (${ci + 1})` : group.toyName,
           status: "AVAILABLE",
           condition: "NEW",
         },

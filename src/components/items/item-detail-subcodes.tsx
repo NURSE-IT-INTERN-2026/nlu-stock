@@ -15,6 +15,7 @@ import { toast } from "sonner";
 interface SubItemRecord {
   id: string;
   subCode: string;
+  name: string | null;
   status: string;
   condition: string | null;
   notes: string | null;
@@ -121,6 +122,7 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
                 </TableHead>
               )}
               <TableHead>Sub-code</TableHead>
+              <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Condition</TableHead>
               <TableHead>Notes</TableHead>
@@ -129,7 +131,7 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
           <TableBody>
             {subItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canAct ? 5 : 4} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={canAct ? 6 : 5} className="text-center text-muted-foreground py-8">
                   No sub-codes
                 </TableCell>
               </TableRow>
@@ -141,6 +143,7 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
                   </TableCell>
                 )}
                 <TableCell className="font-mono text-sm">{sub.subCode}</TableCell>
+                <TableCell className="text-sm">{sub.name || "-"}</TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANTS[sub.status] || "secondary"}>
                     {sub.status.replace(/_/g, " ")}
