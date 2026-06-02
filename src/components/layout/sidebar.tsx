@@ -48,7 +48,7 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-200",
+        "hidden md:flex flex-col border-r bg-card text-card-foreground transition-all duration-200",
         collapsed ? "w-16" : "w-60"
       )}
     >
@@ -73,22 +73,24 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
           className={cn(
             "flex items-center rounded-xl text-sm transition-colors",
             collapsed ? "mx-2 justify-center p-2 relative" : "mx-3 gap-3 px-3 py-2.5",
-            "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 hover:bg-orange-100 dark:hover:bg-orange-950/60"
+            "text-orange-600 dark:text-orange-300 bg-orange-50 dark:bg-orange-950/60 hover:bg-orange-100 dark:hover:bg-orange-950/80"
           )}
         >
-          <span className="flex items-center justify-center shrink-0 h-8 w-8 rounded-lg bg-orange-200 dark:bg-orange-900/60">
-            <Bell className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          <span className="flex items-center justify-center shrink-0 h-8 w-8 rounded-lg bg-orange-200 dark:bg-orange-800/70">
+            <Bell className="h-4 w-4 text-orange-600 dark:text-orange-300" />
           </span>
           {!collapsed && (
             <>
-              <span className="flex-1 font-medium">{alerts.total} Alerts</span>
-              <span className="text-xs text-orange-500 dark:text-orange-400/70">
-                {alerts.lowStock > 0 && `${alerts.lowStock} low`}
-                {alerts.lowStock > 0 && alerts.nearExpiry > 0 && " · "}
-                {alerts.nearExpiry > 0 && `${alerts.nearExpiry} exp`}
-                {(alerts.lowStock > 0 || alerts.nearExpiry > 0) && alerts.overdueMaintenance > 0 && " · "}
-                {alerts.overdueMaintenance > 0 && `${alerts.overdueMaintenance} maint`}
-              </span>
+              <div className="flex-1 min-w-0">
+                <span className="font-medium">{alerts.total} Alerts</span>
+                <div className="text-xs text-orange-500 dark:text-orange-300/80 truncate">
+                  {alerts.lowStock > 0 && `${alerts.lowStock} low`}
+                  {alerts.lowStock > 0 && alerts.nearExpiry > 0 && " · "}
+                  {alerts.nearExpiry > 0 && `${alerts.nearExpiry} exp`}
+                  {(alerts.lowStock > 0 || alerts.nearExpiry > 0) && alerts.overdueMaintenance > 0 && " · "}
+                  {alerts.overdueMaintenance > 0 && `${alerts.overdueMaintenance} maint`}
+                </div>
+              </div>
             </>
           )}
           {collapsed && (
