@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound } from "@/lib/api-utils";
+import { requireAuth, json, notFound, error } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +46,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
 
   if (!item) return notFound("Item not found");
+
+  return json(item);
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth(request);
+  if (auth.denied) return auth.denied;
+
+  const { id } = await params;
+  const body = await request.json();
+  const { imageUrl, images } = body as { imageUrl?: string | null; images?: string[] };
+
+  const item = await prisma.item.update({
+    where: { id },
+    data: {
+      ...(imageUrl === null ? { imageUrl: null } : imageUrl ? { imageUrl } : {}),
+      ...(images !== undefined ? { images } : {}),
+    },
+  });
 
   return json(item);
 }

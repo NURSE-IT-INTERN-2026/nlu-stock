@@ -144,6 +144,7 @@ model Item {
   locationId        String?
   location          Location?    @relation(fields: [locationId], references: [id])
   imageUrl          String?
+  images            String[]     @default([])
   description       String?
   isActive          Boolean      @default(true)
   createdAt         DateTime     @default(now())

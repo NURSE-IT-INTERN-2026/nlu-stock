@@ -5,12 +5,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   ShoppingCart, ArrowDownToLine, Package, RefreshCw, Wrench,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TimelineEvent {
   id: string;
@@ -36,6 +34,15 @@ const TYPE_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "o
   STATUS_CHANGE: "secondary",
   MAINTENANCE: "outline",
 };
+
+const EVENT_CHIPS = [
+  { value: "", label: "All", activeClass: "bg-primary text-primary-foreground border-primary" },
+  { value: "DISPENSE", label: "Dispense", activeClass: "bg-blue-600 text-white border-blue-600" },
+  { value: "RECEIVE", label: "Receive", activeClass: "bg-emerald-600 text-white border-emerald-600" },
+  { value: "ADJUSTMENT", label: "Adjustment", activeClass: "bg-slate-600 text-white border-slate-600" },
+  { value: "STATUS_CHANGE", label: "Status", activeClass: "bg-amber-600 text-white border-amber-600" },
+  { value: "MAINTENANCE", label: "Maintenance", activeClass: "bg-purple-600 text-white border-purple-600" },
+];
 
 interface Props {
   itemId: string;
@@ -70,29 +77,41 @@ export function ItemDetailHistory({ itemId }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v === "__all__" ? "" : (v ?? "")); setPage(1); }}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Events" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All Events</SelectItem>
-            <SelectItem value="DISPENSE">Dispense</SelectItem>
-            <SelectItem value="RECEIVE">Receive</SelectItem>
-            <SelectItem value="ADJUSTMENT">Adjustment</SelectItem>
-            <SelectItem value="STATUS_CHANGE">Status Change</SelectItem>
-            <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* ── Quick Filter Chips ── */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted-foreground mr-1">Type:</span>
+        {EVENT_CHIPS.map((chip) => (
+          <button
+            key={chip.value}
+            className={cn(
+              "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+              typeFilter === chip.value
+                ? chip.activeClass
+                : "bg-muted/50 text-foreground/70 border-border hover:bg-muted",
+            )}
+            onClick={() => { setTypeFilter(chip.value); setPage(1); }}
+          >
+            {chip.label}
+          </button>
+        ))}
       </div>
 
+      {/* ── Timeline ── */}
       {events.length === 0 ? (
         <p className="text-muted-foreground text-center py-8">No history events</p>
       ) : (
         <div className="space-y-2">
-          {events.map((event) => {
+          {events.map((event, idx) => {
             const Icon = TYPE_ICONS[event.type] || Package;
             return (
-              <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg border">
-                <div className="mt-0.5 p-2 rounded-full bg-muted">
+              <div
+                key={event.id}
+                className={cn(
+                  "flex items-start gap-3 p-3 rounded-lg border",
+                  idx % 2 === 1 && "bg-muted/20",
+                )}
+              >
+                <div className="mt-0.5 p-2 rounded-full bg-muted shrink-0">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -113,6 +132,7 @@ export function ItemDetailHistory({ itemId }: Props) {
         </div>
       )}
 
+      {/* ── Pagination ── */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">{total} events, page {page} of {totalPages}</p>

@@ -1,9 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wrench } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface MaintenanceRecord {
   id: string;
@@ -58,50 +59,82 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onRecordMaintenance }: Props) {
-  const maintStatus = getMaintenanceStatus(item.nextMaintenanceDate);
+  const maintStatus = useMemo(
+    () => getMaintenanceStatus(item.nextMaintenanceDate),
+    [item.nextMaintenanceDate],
+  );
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Fixed Asset Info</CardTitle>
+      {/* ── Card-light: Fixed Asset Info ── */}
+      <section className="rounded-lg border divide-y">
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-muted-foreground">Fixed Asset Info</h3>
             <Badge variant={maintStatus.variant}>{maintStatus.label}</Badge>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
             {item.model && (
-              <div><span className="text-muted-foreground">Model:</span> {item.model}</div>
+              <div>
+                <dt className="text-muted-foreground">Model</dt>
+                <dd>{item.model}</dd>
+              </div>
             )}
             {item.purchaseDate && (
-              <div><span className="text-muted-foreground">Purchase:</span> {new Date(item.purchaseDate).toLocaleDateString("th-TH")}</div>
+              <div>
+                <dt className="text-muted-foreground">Purchase</dt>
+                <dd>{new Date(item.purchaseDate).toLocaleDateString("th-TH")}</dd>
+              </div>
             )}
             {item.purchasePrice != null && (
-              <div><span className="text-muted-foreground">Price:</span> ฿{item.purchasePrice.toLocaleString()}</div>
+              <div>
+                <dt className="text-muted-foreground">Price</dt>
+                <dd>฿{item.purchasePrice.toLocaleString()}</dd>
+              </div>
             )}
             {item.vendorCompany && (
-              <div><span className="text-muted-foreground">บริษัท:</span> {item.vendorCompany}</div>
+              <div>
+                <dt className="text-muted-foreground">บริษัท</dt>
+                <dd>{item.vendorCompany}</dd>
+              </div>
             )}
             {item.vendorContact && (
-              <div><span className="text-muted-foreground">ตัวแทน:</span> {item.vendorContact}</div>
+              <div>
+                <dt className="text-muted-foreground">ตัวแทน</dt>
+                <dd>{item.vendorContact}</dd>
+              </div>
             )}
             {item.vendorPhone && (
-              <div><span className="text-muted-foreground">เบอร์โทร:</span> {item.vendorPhone}</div>
+              <div>
+                <dt className="text-muted-foreground">เบอร์โทร</dt>
+                <dd>{item.vendorPhone}</dd>
+              </div>
             )}
             {item.warrantyMonths > 0 && (
-              <div><span className="text-muted-foreground">รับประกัน:</span> {item.warrantyMonths} เดือน</div>
+              <div>
+                <dt className="text-muted-foreground">รับประกัน</dt>
+                <dd>{item.warrantyMonths} เดือน</dd>
+              </div>
             )}
-            <div><span className="text-muted-foreground">Cycle:</span> {item.maintenanceCycleMonths} months</div>
+            <div>
+              <dt className="text-muted-foreground">Cycle</dt>
+              <dd>{item.maintenanceCycleMonths} months</dd>
+            </div>
             {item.lastMaintenanceDate && (
-              <div><span className="text-muted-foreground">Last Maint:</span> {new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH")}</div>
+              <div>
+                <dt className="text-muted-foreground">Last Maint</dt>
+                <dd>{new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH")}</dd>
+              </div>
             )}
             {item.nextMaintenanceDate && (
-              <div><span className="text-muted-foreground">Next Maint:</span> {new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH")}</div>
+              <div>
+                <dt className="text-muted-foreground">Next Maint</dt>
+                <dd>{new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH")}</dd>
+              </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+          </dl>
+        </div>
+      </section>
 
       {canAct && (
         <Button onClick={onRecordMaintenance}>
@@ -109,14 +142,21 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
         </Button>
       )}
 
+      {/* ── Maintenance History ── */}
       <div>
         <h4 className="text-sm font-medium mb-3">Maintenance History</h4>
         {maintenanceRecords.length === 0 ? (
           <p className="text-muted-foreground text-sm text-center py-6">No maintenance records</p>
         ) : (
           <div className="space-y-2">
-            {maintenanceRecords.map((rec) => (
-              <div key={rec.id} className="p-3 rounded-lg border">
+            {maintenanceRecords.map((rec, idx) => (
+              <div
+                key={rec.id}
+                className={cn(
+                  "p-3 rounded-lg border",
+                  idx % 2 === 1 && "bg-muted/20",
+                )}
+              >
                 <div className="flex items-center gap-2 mb-1">
                   <Badge variant="outline" className="text-xs">{TYPE_LABELS[rec.type] || rec.type}</Badge>
                   <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
