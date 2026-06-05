@@ -1017,6 +1017,231 @@ Week 5:  M7 (dashboard) → M8 (reports)
 Week 6:  M10 (alerts & email) → M12 (polish & testing)
 ```
 
+**Status: M0–M12 all DONE.** New milestones below based on grill session (2026-05-28).
+
+---
+
+## Milestone 13: Schema Overhaul — Category Rules, Location & Field Changes
+
+Based on grill sessions (2026-05-28). See `CONTEXT.md` for full glossary.
+
+### 13.1 Item field changes
+
+| Change | Before | After | Reason |
+|--------|--------|-------|--------|
+| `name` | unclear language | Thai (primary display) | UI shows Thai names |
+| `nameTh` → `nameEn` | `nameTh String?` | `nameEn String?` | field name was misleading |
+| `model` | brand/model combined | keep as-is (brand+model combined) | CSV sometimes has brand only, sometimes both; search handles lookup |
+| `serialNumber` | on Item | **move to SubItem** | each piece has different serial (e.g. Syringe Pump 1, 2, 3) |
+| `vendor` | single String | → `vendorCompany`, `vendorContact`, `vendorPhone` | match CSV columns |
+| `warrantyEndDate` | DateTime | → `warrantyMonths Int @default(0)` | CSV gives duration not date; compute endDate from purchaseDate |
+| `storageRequirements` | n/a | add `storageRequirements String?` | for consumables |
+
+### 13.2 SubItem changes
+- Add `serialNumber String?` (moved from Item)
+- Add `condition ItemCondition?` enum field (already exists in schema)
+
+### 13.3 Location model change
+- **Before**: `Location { room, cabinet, shelf }`
+- **After**: `Location { building, floor, room, detail? }`
+- `detail` = optional free-text (locker, ตู้ชั้น 4, เคาว์เตอร์หน้าห้อง, ตู้เย็น, Simman 1, ด้านหลังชั้น 5)
+- Parsing: `"อาคาร 2 ชั้น 5"` → building=`อาคาร 2`, floor=`ชั้น 5`; `"501"` → room; `"Simman 1"` → detail
+- Unique constraint: `[building, floor, room, detail]`
+
+### 13.4 trackIndividually derived from Category
+- FIXED_ASSET → always `true`
+- CONSUMABLE → always `false`
+- DURABLE → per-item choice (keep field)
+- BOOK → always `true`
+- Add validation in API: reject `trackIndividually=true` for CONSUMABLE, force `true` for FIXED_ASSET and BOOK
+
+### 13.5 New CategoryType seed data
+
+**FIXED_ASSET (12 types):**
+- หุ่นสำหรับตรวจร่างกาย
+- หุ่นทางสูติศาสตร์และนรีเวช
+- ครุภัณฑ์ทางการแพทย์
+- เครื่องมือทางอาชีวอนามัย
+- หุ่นทางศัลยศาสตร์
+- อุปกรณ์ทางออร์โธปิดิกส์
+- หุ่นฝึกทักษะการทำหัตถการเฉพาะทาง
+- หุ่นจำลองสถานการณ์ทางการพยาบาลขั้นสูง
+- หุ่นจำลองสถานการณ์
+- หุ่นฝึกช่วยฟื้นคืนชีพ
+- อุปกรณ์อิเล็กทรอนิกส์
+- โสตทัศนูปกรณ์
+
+**DURABLE (3 types):**
+- วัสดุคงทน
+- ของเล่น — หมวดที่ 14: สื่อการสอน/ของเล่นส่งเสริมพัฒนาการ (trackIndividually: true)
+- อุปกรณ์ประกอบวิชา
+
+**CONSUMABLE (2 types):**
+- วัสดุสิ้นเปลือง
+- ยา
+
+**BOOK (13 types):** หมวด 1–13 (see CONTEXT.md)
+
+### 13.6 Item Status mapping (CSV → enum)
+
+| CSV Thai | Enum |
+|----------|------|
+| พร้อมใช้งาน | AVAILABLE |
+| ถูกใช้งาน | CHECKED_OUT |
+| ชำรุด | DAMAGED |
+| ส่งซ่อม | UNDER_REPAIR |
+| แทงจำหน่าย | DISPOSED |
+| สูญหาย | LOST |
+
+### 13.7 Reference data from CSV (units)
+
+**Issue units:** กล่อง, ถุง, ชิ้น, set, ชุด, ห่อ, เครื่อง, อัน, แผง, กระปุก
+**Sub units:** ชิ้น, กรัม, อัน, เม็ด, ซีซี
+
+**Deliverable**: Migration runs clean. All new fields, CategoryTypes, and Units seeded. Location uses building/floor/room/detail. trackIndividually enforced by category.
+
+---
+
+## Milestone 14: Kit / BOM System
+
+### 14.1 KitComponent model
+```prisma
+model KitComponent {
+  id              String  @id @default(cuid())
+  kitItemId       String
+  kitItem         Item    @relation("KitComponents", fields: [kitItemId], references: [id], onDelete: Cascade)
+  componentItemId String
+  componentItem   Item    @relation("KitComponentParts", fields: [componentItemId], references: [id], onDelete: Restrict)
+  quantity        Int     // how many of this component per kit
+
+  @@unique([kitItemId, componentItemId])
+  @@map("kit_components")
+}
+```
+
+### 14.2 Assemble / Disassemble API
+```
+POST /api/kits/[id]/assemble
+Body: { quantity: int }
+Transaction:
+  1. For each KitComponent: check component has enough availableQty
+  2. Deduct from each component's availableQty
+  3. Add to kit's availableQty
+  4. Create StockAdjustment records for audit trail
+
+POST /api/kits/[id]/disassemble
+Body: { quantity: int }
+Transaction:
+  1. Check kit has enough availableQty
+  2. Deduct from kit's availableQty
+  3. Add back to each component's availableQty
+  4. Create StockAdjustment records for audit trail
+```
+
+### 14.3 Kit management UI
+- In Settings > Items Master: mark item as "isKit" + add component picker
+- Component picker: search items, set quantity per component
+- On Item Detail for kits: show BOM table (component, qty per kit, current stock)
+- Assemble/Disassemble buttons with quantity input
+- Kit stock shown separately from component stock
+
+### 14.4 Dispense with kit awareness
+- When dispensing a kit: deduct kit stock only (components already deducted at assembly)
+- When dispensing a component directly: deduct component stock only
+- No cross-deduction at dispense time — BOM resolution happens at assemble/disassemble
+
+**Deliverable**: Admin can define kits with components. Staff can assemble/disassemble kits. Stock moves correctly. Audit trail exists.
+
+---
+
+## Milestone 15: Real Data Import from CSV
+
+### 15.1 Import order (by file)
+
+**Phase 1 — FIXED_ASSET (trackIndividually, SubItem per piece):**
+1. `วัสดุอุปกรณ์อิเล็กทรอนิกส์.csv` → ~105 rows, FIXED_ASSET
+   - Each row = SubItem (iPad 1, iPad 2, VR 1, VR 2...)
+   - Group by name → Item (strip trailing number)
+   - Fields: brand+model → model, Serial No. → SubItem.serialNumber, gov tag → SubItem.serialNumber
+2. `ครุภัณฑ์.csv` → ~594 rows, FIXED_ASSET
+   - Each row = SubItem
+   - Group by name → Item (strip trailing number)
+   - Fields: ยี่ห้อ/รุ่น → model, หมายเลขครุภัณฑ์ → SubItem.serialNumber, รหัส NLU → SubItem.subCode
+   - Vendor: ชื่อบริษัท → vendorCompany, ชื่อตัวแทน → vendorContact, เบอร์โทร → vendorPhone
+   - warrantyMonths from `การรับประกันสินค้า` (parse "1 ปี" → 12)
+   - purchasePrice from `ราคา`
+
+**Phase 2 — BOOK (trackIndividually, copy = SubItem):**
+3. `หนังสือ.csv` → ~236 rows, BOOK
+   - Copies (suffix -c1, -c2) = same Item, different SubItem
+   - No brand, serial, purchase info
+   - CategoryType = หมวดที่ 1-13
+
+**Phase 3 — DURABLE:**
+4. `ของเล่น.csv` → ~210 rows, DURABLE + trackIndividually
+   - Same pattern as books (copies → SubItem)
+   - CategoryType = หมวดที่ 14
+5. `บัญชีวัสดุคงทน.csv` → ~250 rows, DURABLE (quantity only)
+   - code = SP001-SP250, qty from CSV
+   - Notes contain kit info (skip for now, store as text)
+
+**Phase 4 — CONSUMABLE:**
+6. `วัสดุสิ้นเปลือง.csv` → ~194 items, CONSUMABLE
+   - Import latest `คงเหลือ` as totalQty
+   - Import quarterly history: `ซื้อเพิ่ม` → ReceiveRecord, `ใช้ไป` → DispenseRecord per quarter
+   - Date: midpoint of quarter period
+
+**Deferred:**
+7. `อุปกรณ์นักศึกษายืมประกอบวิชา.csv` → DURABLE kit items — import with M14 (Kit/BOM)
+
+### 15.2 Grouping logic (for trackIndividually items)
+- Strip trailing number from name: "Syringe Pump 1" → Item "Syringe Pump", SubItem #1
+- Copy suffix: "002-001-c1" → Item "002-001", SubItem "c1"
+- Deduplicate Items by (name + categoryType + model)
+
+### 15.3 Import script
+- `npx tsx scripts/import-csv.ts` — one-time import
+- Idempotent: skip if item code already exists
+- Summary report: imported X items, Y sub-items, Z lots, errors
+- Parse Thai dates: "11 ธันวาคม 2567" → DateTime
+
+**Deliverable**: All real NLU data imported (except kits). App shows real items instead of demo data.
+
+---
+
+## Milestone 16: UI Updates for New Categories
+
+### 16.1 Category-aware forms
+- Item form: show/hide fields based on Category
+  - FIXED_ASSET: show all fixed asset fields, force trackIndividually=true
+  - DURABLE: show trackIndividually toggle
+  - CONSUMABLE: show lot fields, show storage requirements, force trackIndividually=false
+  - BOOK: force trackIndividually=true, no serial/brand fields
+
+### 16.2 Category badges & filters
+- Update category labels throughout app (Thai names + Category enum badge)
+- Filter dropdowns group by Category type
+
+### 16.3 Dispense flow updates
+- FIXED_ASSET: must select specific SubItem
+- BOOK: must select specific SubItem (copy c1, c2, c3)
+- DURABLE (trackIndividually=true): must select specific SubItem (toy code)
+- DURABLE (quantity): simple quantity input
+- CONSUMABLE: lot selection + quantity
+
+**Deliverable**: All forms respect category rules. UI shows correct fields per category type.
+
+---
+
+## Implementation Order (New Milestones)
+
+```
+Phase A:  M13 (schema overhaul — location, categories, trackIndividually, storage)
+Phase B:  M15 (CSV import — get real data in to test with)
+Phase C:  M14 (kit/BOM system)
+Phase D:  M16 (UI updates for new categories)
+```
+
 ## Key Decisions
 
 1. **Settings first** — all other features depend on master data
@@ -1027,3 +1252,16 @@ Week 6:  M10 (alerts & email) → M12 (polish & testing)
 6. **jose JWT (no next-auth)** — custom auth with httpOnly cookie, lighter and more flexible
 7. **File uploads local** — migrate to cloud storage (S3/Blob) for production
 8. **Zod validation** on every API route input
+9. **Category drives tracking** — trackIndividually derived from Category, not free choice
+10. **Electronics = FIXED_ASSET** — iPads, VR, TVs have serial numbers and individual tracking
+11. **Toys = DURABLE + trackIndividually** — individual codes but no serial/brand
+12. **Books = BOOK + trackIndividually** — 13 sub-categories, each copy tracked
+13. **Kit/BOM = assemble/disassemble** — stock moves between component and kit, not at dispense time
+14. **Location = building/floor/room/detail** — matches real NLU building structure
+15. **`name` = Thai, `nameEn` = English** — Thai is primary display language
+16. **`model` combines brand+model** — single text field, search for lookup
+17. **`serialNumber` on SubItem, not Item** — each piece has different serial
+18. **Vendor split into 3 fields** — vendorCompany, vendorContact, vendorPhone (match CSV columns)
+19. **`warrantyMonths` (Int) replaces `warrantyEndDate`** — CSV gives duration, compute endDate from purchaseDate
+20. **Consumable quarterly history → ReceiveRecord/DispenseRecord** — import as actual transactions per quarter
+21. **Kit/BOM import deferred** — after M14 implementation

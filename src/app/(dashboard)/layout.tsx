@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import { useSession } from "@/components/layout/auth-guard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertProvider } from "@/hooks/use-alerts";
+import { CartProvider } from "@/components/dispense/cart-context";
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -20,6 +21,7 @@ const pageTitles: Record<string, string> = {
 
 function getTitle(pathname: string) {
   if (pathname.startsWith("/items/") && pathname !== "/items") return "Item Detail";
+  if (pathname === "/dispense/confirm") return "Confirm Dispense";
   return pageTitles[pathname] || "NLU Stock";
 }
 
@@ -34,7 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (loading) {
     return (
       <div className="flex min-h-screen">
-        <Skeleton className="hidden md:block w-56 h-full" />
+        <Skeleton className="hidden md:block w-72 h-full" />
         <div className="flex-1 space-y-4 p-6">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-64 w-full" />
@@ -50,6 +52,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <AlertProvider>
+      <CartProvider>
       <div className="flex h-screen overflow-hidden">
         <Sidebar
           user={user}
@@ -64,6 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         <BottomTab user={user} />
       </div>
+      </CartProvider>
     </AlertProvider>
   );
 }

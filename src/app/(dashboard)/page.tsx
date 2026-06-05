@@ -44,7 +44,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* 2 bar charts */}
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-4 h-full">
           <DashboardBarCharts />
         </div>
       </div>

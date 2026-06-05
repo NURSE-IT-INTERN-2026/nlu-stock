@@ -17,6 +17,23 @@ export const cartItemSchema = z.object({
   subItemId: z.string().optional().nullable(),
   subCode: z.string().optional().nullable(),
   availableQty: z.number().int(),
+  imageUrl: z.string().optional().nullable(),
+  location: z.object({
+    building: z.string(),
+    floor: z.string(),
+    room: z.string(),
+    detail: z.string().nullable(),
+  }).optional().nullable(),
+  lots: z.array(z.object({
+    id: z.string(),
+    lotNumber: z.string(),
+    expiryDate: z.string().nullable(),
+    quantity: z.number(),
+  })).optional().default([]),
+  subItems: z.array(z.object({
+    id: z.string(),
+    subCode: z.string(),
+  })).optional().default([]),
 });
 
 export type CartItem = z.infer<typeof cartItemSchema>;

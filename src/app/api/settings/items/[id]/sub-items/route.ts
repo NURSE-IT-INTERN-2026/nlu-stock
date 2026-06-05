@@ -12,6 +12,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const subItems = await prisma.subItem.findMany({
     where: { itemId: id },
     orderBy: { subCode: "asc" },
+    include: {
+      dispenseRecords: {
+        where: { returnedAt: null },
+        orderBy: { dispensedAt: "desc" },
+        take: 1,
+        include: { staff: { select: { name: true } } },
+      },
+    },
   });
 
   return json(subItems);

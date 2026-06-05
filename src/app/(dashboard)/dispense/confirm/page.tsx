@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCart } from "@/components/dispense/cart-context";
-import { Loader2, Minus, Plus, Package, Trash2, Pencil, ShoppingCart, ArrowLeft } from "lucide-react";
+import { Loader2, Minus, Plus, Package, Trash2, Pencil, ShoppingCart, ArrowLeft, MapPin } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
@@ -189,145 +189,146 @@ export default function ConfirmDispensePage() {
         {items.map((item) => {
           const key = `${item.itemId}-${item.lotId ?? ""}-${item.subItemId ?? ""}`;
           return (
-            <Card key={key} className="relative flex flex-row gap-3 py-[10px] px-[14px]">
-              {/* Delete — top right */}
+            <article key={key} className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(15,23,42,0.08)] transition-shadow hover:shadow-[0_1px_0_rgba(0,0,0,0.02),0_12px_28px_-12px_rgba(15,23,42,0.14)]">
+              {/* Delete */}
               <button
-                className="absolute top-1 right-1 p-1 rounded text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                aria-label="Remove"
+                className="absolute right-3 top-3 z-10 grid size-7 place-items-center rounded-md text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                 onClick={() => removeItem(item.itemId, item.lotId, item.subItemId)}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </button>
 
-              {/* Image — LEFT: same as dispense page */}
-              <div className="relative self-stretch aspect-square shrink-0 rounded-md overflow-hidden bg-muted">
-                {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.itemName} className="absolute inset-0 h-full w-full object-cover" />
-                ) : (
-                  <Package className="h-6 w-6 text-muted-foreground/50 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                )}
-              </div>
-
-              {/* Right column: content + action */}
-              <div className="flex-1 min-w-0 flex flex-col">
-                {/* ── Content area (top) ── */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base text-muted-foreground">{item.itemCode}</span>
-                    <Badge variant="outline" className="text-sm">{item.categoryName}</Badge>
-                  </div>
-                  <p className="text-base font-semibold line-clamp-1 mt-0.5">{item.itemName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Available: {item.trackIndividually
-                      ? `${item.subItems?.length ?? 0} units`
-                      : `${item.availableQty} ${item.issueUnit}`}
-                  </p>
-                  {item.location && (
-                    <p className="text-xs text-muted-foreground/70 mt-1">📍 {locationLabel(item.location)}</p>
+              {/* ── Top: image + body ── */}
+              <div className="flex gap-4 p-4">
+                {/* Thumbnail */}
+                <div className="relative size-32 shrink-0 overflow-hidden rounded-xl bg-muted">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.itemName} loading="lazy" width={192} height={192} className="size-full object-cover" />
+                  ) : (
+                    <div className="grid size-full place-items-center text-muted-foreground/40">
+                      <Package className="size-8" strokeWidth={1.5} />
+                    </div>
                   )}
+                </div>
+
+                {/* Body */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{item.itemCode}</span>
+                    <Badge variant="secondary" className="rounded-md bg-accent px-1.5 py-0 text-[10px] font-medium text-accent-foreground">
+                      {item.categoryName}
+                    </Badge>
+                  </div>
+                  <h3 className="mt-1 truncate text-[15px] font-semibold leading-snug text-foreground">{item.itemName}</h3>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                    <span className="inline-flex items-baseline gap-1 text-muted-foreground">
+                      Available
+                      <span className="text-sm font-semibold text-foreground">
+                        {item.trackIndividually ? `${item.subItems?.length ?? 0}` : item.availableQty}
+                      </span>
+                      <span>{item.issueUnit}</span>
+                    </span>
+                    {item.location && (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        <MapPin className="size-3.5 text-primary/80" />
+                        {locationLabel(item.location)}
+                      </span>
+                    )}
+                  </div>
                   {item.conversionFactor > 1 && (
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                    <p className="mt-1 text-[10px] text-muted-foreground/50">
                       = {item.quantity * item.conversionFactor} {item.subUnit}
                     </p>
                   )}
                 </div>
+              </div>
 
-                {/* ── Divider ── */}
-                <div className="border-t my-2" />
-
-                {/* ── Action card: dropdown + qty ── */}
-                <div className="rounded-md border bg-muted/30 px-2.5 py-2 flex items-center justify-between gap-2">
-                  {/* Dropdowns */}
-                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                    {/* Lot picker */}
-                    {(isConsumable(item) && item.lots && item.lots.length > 1) && (
-                      <Select
-                        value={item.lotId ?? ""}
-                        onValueChange={(v) => changeLot(item, v)}
-                      >
-                        <SelectTrigger className="h-6 text-[11px] gap-1 w-auto min-w-[120px]">
-                          <SelectValue>
-                            {(value: string | null) => {
-                              if (!value) return "Select lot";
-                              const lot = item.lots?.find((l) => l.id === value);
-                              return lot ? `${lot.lotNumber} — ${lot.quantity}` : value;
-                            }}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {item.lots.map((lot) => (
-                            <SelectItem key={lot.id} value={lot.id}>
-                              {lot.lotNumber} — {lot.quantity} {item.issueUnit}
-                              {lot.expiryDate && ` (exp: ${new Date(lot.expiryDate).toLocaleDateString()})`}
+              {/* ── Footer: lot/sub-item + qty ── */}
+              <div className="mt-auto grid grid-cols-[1fr_auto] items-center gap-2 border-t border-border bg-muted/30 px-3 py-2.5">
+                {/* Dropdowns */}
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  {/* Lot picker */}
+                  {isConsumable(item) && item.lots && item.lots.length > 1 && (
+                    <Select value={item.lotId ?? ""} onValueChange={(v) => changeLot(item, v)}>
+                      <SelectTrigger className="h-8 w-full justify-between rounded-lg border-border bg-card font-mono text-xs">
+                        <SelectValue>
+                          {(value: string | null) => {
+                            if (!value) return "Select lot";
+                            const lot = item.lots?.find((l) => l.id === value);
+                            return lot ? `${lot.lotNumber} — ${lot.quantity}` : value;
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {item.lots.map((lot) => (
+                          <SelectItem key={lot.id} value={lot.id} className="font-mono text-xs">
+                            {lot.lotNumber} — {lot.quantity} {item.issueUnit}
+                            {lot.expiryDate && ` (exp: ${new Date(lot.expiryDate).toLocaleDateString()})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {/* Single lot badge */}
+                  {isConsumable(item) && item.lots && item.lots.length <= 1 && item.lotNumber && (
+                    <Badge variant="secondary" className="text-[10px]">Lot {item.lotNumber}</Badge>
+                  )}
+                  {/* Sub-item picker */}
+                  {item.trackIndividually && item.subItems && item.subItems.length > 0 && (
+                    <Select value={item.subItemId ?? ""} onValueChange={(v) => changeSubItem(item, v)}>
+                      <SelectTrigger className="h-8 w-full justify-between rounded-lg border-border bg-card font-mono text-xs">
+                        <SelectValue>
+                          {(value: string | null) => {
+                            if (!value) return "Select unit";
+                            const sub = item.subItems?.find((s) => s.id === value);
+                            return sub ? sub.subCode : value;
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {item.subItems.map((sub) => {
+                          const inCart = items.some(
+                            (c) => c.itemId === item.itemId && c.subItemId === sub.id && (item.subItemId ?? null) !== sub.id
+                          );
+                          return (
+                            <SelectItem key={sub.id} value={sub.id} disabled={inCart} className="font-mono text-xs">
+                              {sub.subCode} {inCart ? "(in cart)" : ""}
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    {/* Single lot badge */}
-                    {isConsumable(item) && item.lots && item.lots.length <= 1 && item.lotNumber && (
-                      <Badge variant="secondary" className="text-[10px]">Lot {item.lotNumber}</Badge>
-                    )}
-                    {/* Sub-item picker */}
-                    {item.trackIndividually && item.subItems && item.subItems.length > 0 && (
-                      <Select
-                        value={item.subItemId ?? ""}
-                        onValueChange={(v) => changeSubItem(item, v)}
-                      >
-                        <SelectTrigger className="h-6 text-[11px] gap-1 w-auto min-w-[100px]">
-                          <SelectValue>
-                            {(value: string | null) => {
-                              if (!value) return "Select sub-item";
-                              const sub = item.subItems?.find((s) => s.id === value);
-                              return sub ? sub.subCode : value;
-                            }}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {item.subItems.map((sub) => {
-                            const inCart = items.some(
-                              (c) => c.itemId === item.itemId && c.subItemId === sub.id && (item.subItemId ?? null) !== sub.id
-                            );
-                            return (
-                              <SelectItem key={sub.id} value={sub.id} disabled={inCart}>
-                                {sub.subCode} {inCart ? "(in cart)" : ""}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
 
-                  {/* Qty control */}
-                  <div className="flex items-center shrink-0">
-                    <div className="flex items-center gap-0.5 bg-background border rounded-full px-0.5">
-                      <button
-                        className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
-                        onClick={() => adjustQty(item, -1)}
-                        disabled={item.quantity <= 1}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <EditableQty
-                        value={item.quantity}
-                        max={!item.trackIndividually ? item.availableQty : undefined}
-                        unit={item.issueUnit}
-                        onChange={(v) => {
-                          updateItem(item.itemId, { quantity: v }, item.lotId, item.subItemId);
-                        }}
-                      />
-                      <button
-                        className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
-                        onClick={() => adjustQty(item, 1)}
-                        disabled={!item.trackIndividually && item.quantity >= item.availableQty}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
+                {/* Qty control */}
+                <div className="flex h-9 items-center rounded-lg border border-border bg-card">
+                  <button
+                    className="size-9 grid place-items-center rounded-l-lg rounded-r-none text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                    onClick={() => adjustQty(item, -1)}
+                    disabled={item.quantity <= 1}
+                  >
+                    <Minus className="size-3.5" />
+                  </button>
+                  <div className="flex min-w-[56px] items-baseline justify-center gap-1 px-1.5 text-sm">
+                    <EditableQty
+                      value={item.quantity}
+                      max={!item.trackIndividually ? item.availableQty : undefined}
+                      unit={item.issueUnit}
+                      onChange={(v) => updateItem(item.itemId, { quantity: v }, item.lotId, item.subItemId)}
+                    />
                   </div>
+                  <button
+                    className="size-9 grid place-items-center rounded-l-none rounded-r-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                    onClick={() => adjustQty(item, 1)}
+                    disabled={!item.trackIndividually && item.quantity >= item.availableQty}
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
                 </div>
               </div>
-            </Card>
+            </article>
           );
         })}
         </div>

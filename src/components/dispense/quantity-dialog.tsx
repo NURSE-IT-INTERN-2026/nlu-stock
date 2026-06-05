@@ -26,6 +26,7 @@ interface ItemData {
   id: string;
   code: string;
   name: string;
+  imageUrl: string | null;
   category: { name: string; category: string };
   trackIndividually: boolean;
   issueUnit: { id: string; name: string };
@@ -43,7 +44,7 @@ interface Props {
 }
 
 export function QuantityDialog({ item, open, onClose }: Props) {
-  const { addItem } = useCart();
+  const { addItem, getItemQty } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [quantitySub, setQuantitySub] = useState(0);
   const [lotId, setLotId] = useState<string | null>(null);
@@ -66,12 +67,16 @@ export function QuantityDialog({ item, open, onClose }: Props) {
   const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;
 
   const handleAdd = () => {
+    const lotList = item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, quantity: l.quantity }));
+    const subList = item.subItems.map((s) => ({ id: s.id, subCode: s.subCode }));
+
     if (isConsumable) {
       const lot = item.lots.find((l) => l.id === lotId);
       addItem({
         itemId: item.id,
         itemCode: item.code,
         itemName: item.name,
+        imageUrl: item.imageUrl,
         categoryName: item.category.name,
         categoryType,
         trackIndividually: isTracked,
@@ -83,6 +88,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         lotId,
         lotNumber: lot?.lotNumber ?? null,
         availableQty: item.availableQty,
+        lots: lotList,
+        subItems: [],
       });
     } else if (isTracked) {
       for (const subId of selectedSubItems) {
@@ -91,6 +98,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
           itemId: item.id,
           itemCode: item.code,
           itemName: item.name,
+          imageUrl: item.imageUrl,
           categoryName: item.category.name,
           categoryType,
           trackIndividually: true,
@@ -102,6 +110,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
           subItemId: subId,
           subCode: sub?.subCode ?? null,
           availableQty: item.availableQty,
+          lots: [],
+          subItems: subList,
         });
       }
     } else {
@@ -109,6 +119,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         itemId: item.id,
         itemCode: item.code,
         itemName: item.name,
+        imageUrl: item.imageUrl,
         categoryName: item.category.name,
         categoryType,
         trackIndividually: false,
@@ -120,6 +131,8 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         subItemId: hasSingleSubItem ? item.subItems[0].id : null,
         subCode: hasSingleSubItem ? item.subItems[0].subCode : null,
         availableQty: item.availableQty,
+        lots: [],
+        subItems: [],
       });
     }
 
@@ -149,6 +162,9 @@ export function QuantityDialog({ item, open, onClose }: Props) {
       : isTracked
         ? selectedSubItems.size > 0
         : quantity > 0;
+
+  const alreadyInCart = item ? getItemQty(item.id) : 0;
+  const maxQty = Math.max(1, item.availableQty - alreadyInCart);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && resetAndClose()}>
@@ -191,9 +207,9 @@ export function QuantityDialog({ item, open, onClose }: Props) {
                   <Input
                     type="number"
                     min={1}
-                    max={item.availableQty}
+                    max={maxQty}
                     value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setQuantity(Math.min(parseInt(e.target.value) || 1, maxQty))}
                   />
                 </div>
                 {item.conversionFactor > 1 && (
@@ -241,9 +257,9 @@ export function QuantityDialog({ item, open, onClose }: Props) {
               <Input
                 type="number"
                 min={1}
-                max={item.availableQty}
+                max={maxQty}
                 value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                onChange={(e) => setQuantity(Math.min(parseInt(e.target.value) || 1, maxQty))}
               />
             </div>
           )}

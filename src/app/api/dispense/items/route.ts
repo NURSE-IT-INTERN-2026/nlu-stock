@@ -8,6 +8,8 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
+  const categoryId = searchParams.get("categoryId") ?? "";
+  const locationId = searchParams.get("locationId") ?? "";
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "20");
 
@@ -20,6 +22,8 @@ export async function GET(req: NextRequest) {
         { nameEn: { contains: q, mode: "insensitive" as const } },
       ],
     }),
+    ...(categoryId && { categoryId }),
+    ...(locationId && { locationId }),
   };
 
   const [items, total] = await Promise.all([

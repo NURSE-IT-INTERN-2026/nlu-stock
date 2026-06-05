@@ -1,7 +1,14 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Moon, Sun, LogOut } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { Moon, Sun, LogOut, User, Settings, ShoppingCart, Search, ChevronRight } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import { useCart } from "@/components/dispense/cart-context";
 import type { SessionUser } from "@/types";
 
 interface HeaderProps {
@@ -9,8 +16,49 @@ interface HeaderProps {
   user: SessionUser;
 }
 
+function Breadcrumb({ title }: { title: string }) {
+  const pathname = usePathname();
+  const segments = pathname.split("/").filter(Boolean);
+
+  // Build trail from intermediate segments only (skip root)
+  const trail = segments.slice(0, -1).map((seg, i, arr) => {
+    const href = "/" + arr.slice(0, i + 1).join("/");
+    return { label: seg.charAt(0).toUpperCase() + seg.slice(1), href };
+  });
+
+  // If no trail, just show the title
+  if (trail.length === 0) {
+    return (
+      <nav className="text-sm min-w-0">
+        <span className="font-medium truncate">{title}</span>
+      </nav>
+    );
+  }
+
+  return (
+    <nav className="flex items-center gap-1 text-sm min-w-0">
+      {trail.map((crumb, i) => (
+        <span key={crumb.href} className="flex items-center gap-1">
+          {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/50" />}
+          <a href={crumb.href} className="text-muted-foreground hover:text-foreground transition-colors truncate">
+            {crumb.label}
+          </a>
+        </span>
+      ))}
+      <ChevronRight className="size-3.5 text-muted-foreground/50" />
+      <span className="font-medium truncate">{title}</span>
+    </nav>
+  );
+}
+
 export function Header({ title, user }: HeaderProps) {
   const { setTheme, theme } = useTheme();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { itemCount } = useCart();
+
+  // Don't show search on root dashboard
+  const showSearch = pathname !== "/";
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -18,35 +66,95 @@ export function Header({ title, user }: HeaderProps) {
   }
 
   return (
-    <header className="flex items-center justify-end px-4 h-14 gap-2">
-      {/* Theme toggle — perfect circle */}
-      <button
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="flex items-center justify-center h-9 w-9 rounded-full bg-card shadow-sm hover:shadow-md transition-shadow"
-      >
-        <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-        <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        <span className="sr-only">Toggle theme</span>
-      </button>
+    <header className="sticky top-0 z-30 flex items-center gap-3 px-4 h-14 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
+      {/* Left: breadcrumb */}
+      <Breadcrumb title={title} />
 
-      {/* Logout — perfect circle */}
-      <button
-        onClick={handleLogout}
-        title="Logout"
-        className="flex items-center justify-center h-9 w-9 rounded-full bg-card shadow-sm hover:shadow-md transition-shadow text-muted-foreground hover:text-foreground"
-      >
-        <LogOut className="h-4 w-4" />
-      </button>
+      {/* Center: search */}
+      {showSearch && (
+        <div className="flex-1 flex justify-center max-w-md mx-auto">
+          <div className="relative w-full">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search items…"
+              className="h-8 w-full rounded-lg border border-border bg-muted/40 pl-8 pr-3 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
+            />
+          </div>
+        </div>
+      )}
 
-      {/* Profile pill — name left, avatar right */}
-      <div className="flex items-center gap-2 bg-card rounded-full pl-3 pr-1.5 py-1.5 shadow-sm">
-        <div className="hidden sm:flex flex-col items-end min-w-0">
-          <p className="text-sm font-medium truncate max-w-[100px] leading-tight">{user.name}</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">{user.role}</p>
-        </div>
-        <div className="h-7 w-7 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xs font-bold text-orange-600 dark:text-orange-400 shrink-0">
-          {user.name.charAt(0).toUpperCase()}
-        </div>
+      {/* Spacer when no search */}
+      {!showSearch && <span className="flex-1" />}
+
+      {/* Right: actions */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* Cart */}
+        <button
+          onClick={() => router.push("/dispense/confirm")}
+          className="relative flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors"
+        >
+          <ShoppingCart className="size-4" />
+          {itemCount > 0 && (
+            <Badge
+              key={itemCount}
+              className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[9px]"
+            >
+              {itemCount}
+            </Badge>
+          )}
+        </button>
+
+        {/* Theme */}
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="relative flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors"
+        >
+          <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </button>
+
+        {/* Avatar gradient pill */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div
+              role="button"
+              tabIndex={0}
+              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pl-3 pr-1 py-1 hover:from-primary/15 transition-all cursor-pointer"
+            >
+              <div className="hidden sm:flex flex-col items-end min-w-0">
+                <p className="text-xs font-medium truncate max-w-[80px] leading-tight">{user.name}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{user.role}</p>
+              </div>
+              <div className="size-7 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium">{user.name}</p>
+                <p className="text-xs text-muted-foreground">{user.email}</p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <User className="mr-2 h-4 w-4" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+              <LogOut className="mr-2 h-4 w-4" />
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

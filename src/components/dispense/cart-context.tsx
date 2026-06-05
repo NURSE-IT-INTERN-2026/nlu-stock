@@ -7,9 +7,10 @@ interface CartState {
   items: CartItem[];
   addItem: (item: CartItem) => void;
   removeItem: (itemId: string, lotId?: string | null, subItemId?: string | null) => void;
-  updateItem: (itemId: string, updates: Partial<CartItem>) => void;
+  updateItem: (itemId: string, updates: Partial<CartItem>, lotId?: string | null, subItemId?: string | null) => void;
   clearCart: () => void;
   itemCount: number;
+  getItemQty: (itemId: string) => number;
 }
 
 const CartContext = createContext<CartState | null>(null);
@@ -19,15 +20,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback((item: CartItem) => {
     setItems((prev) => {
-      // Same item + same lot/sub = update quantity
       const key = (i: CartItem) => `${i.itemId}-${i.lotId ?? ""}-${i.subItemId ?? ""}`;
       const idx = prev.findIndex((i) => key(i) === key(item));
       if (idx >= 0) {
+        const existing = prev[idx];
+        const newQty = Math.min(existing.quantity + item.quantity, item.availableQty);
+        const newQtySub = existing.quantitySub + item.quantitySub;
         const updated = [...prev];
-        updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + item.quantity, quantitySub: updated[idx].quantitySub + item.quantitySub };
+        updated[idx] = { ...existing, quantity: newQty, quantitySub: newQtySub };
         return updated;
       }
-      return [...prev, item];
+      const clampedQty = Math.min(item.quantity, item.availableQty);
+      return [...prev, { ...item, quantity: clampedQty }];
     });
   }, []);
 
@@ -49,8 +53,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
+  const getItemQty = useCallback((itemId: string) =>
+    items.filter((i) => i.itemId === itemId).reduce((s, i) => s + i.quantity, 0),
+  [items]);
+
   return (
-    <CartContext value={{ items, addItem, removeItem, updateItem, clearCart, itemCount: items.length }}>
+    <CartContext value={{ items, addItem, removeItem, updateItem, clearCart, itemCount: items.length, getItemQty }}>
       {children}
     </CartContext>
   );

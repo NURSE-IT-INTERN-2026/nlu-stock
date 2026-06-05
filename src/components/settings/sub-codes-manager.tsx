@@ -39,7 +39,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SubItemRecord | null>(null);
-  const [editForm, setEditForm] = useState({ subCode: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
+  const [editForm, setEditForm] = useState({ subCode: "", name: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
   const [batchForm, setBatchForm] = useState({ prefix: `${itemCode}-`, startNumber: 1, endNumber: 10 });
 
   const fetchSubItems = useCallback(async () => {
