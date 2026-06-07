@@ -54,3 +54,6 @@ next-env.d.ts
 
 # CSV data
 /CSV/
+
+# Graphify outputs (rebuild locally)
+graphify-out/
