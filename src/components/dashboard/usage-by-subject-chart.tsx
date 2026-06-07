@@ -66,7 +66,7 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
           <UsageByTypeEmpty />
         ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={chartData} margin={{ bottom: 5 }}>
+            <BarChart data={chartData} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />

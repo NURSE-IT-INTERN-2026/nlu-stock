@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     where: { dispensedAt: { gte: startOfMonth } },
     _sum: { quantity: true },
     orderBy: { _sum: { quantity: "desc" } },
-    take: 10,
+    take: 7,
   });
 
   const itemIds = groups.map((g) => g.itemId);

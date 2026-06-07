@@ -66,7 +66,7 @@ export function TopDispenseChart({ data }: TopDispenseChartProps) {
           <TopDispenseEmpty />
         ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 10 }}>
+            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
               <XAxis type="number" />
               <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
               <Tooltip />
