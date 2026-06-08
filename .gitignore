@@ -57,3 +57,6 @@ next-env.d.ts
 
 # Graphify outputs (rebuild locally)
 graphify-out/
+
+# Auto-generated reports
+TECH_STACK_REPORT.html
