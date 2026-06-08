@@ -17,6 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
@@ -44,9 +45,12 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
 
   const fetchSubItems = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/settings/items/${itemId}/sub-items`);
-    const data = await res.json();
-    setSubItems(data);
+    try {
+      const data = await getSubItems(itemId);
+      setSubItems(data as SubItemRecord[]);
+    } catch {
+      toast.error("Failed to load sub-codes");
+    }
     setLoading(false);
   }, [itemId]);
 
@@ -65,59 +69,54 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   }
 
   async function handleSave() {
-    if (editing) {
-      const res = await fetch(`/api/settings/sub-items/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    try {
+      if (editing) {
+        await updateSubItem(editing.id, {
           status: editForm.status,
           name: editForm.name || null,
           condition: editForm.condition || null,
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
-        }),
-      });
-      if (!res.ok) { toast.error("Failed to update"); return; }
-      toast.success("Sub-code updated");
-    } else {
-      const res = await fetch(`/api/settings/items/${itemId}/sub-items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        });
+        toast.success("Sub-code updated");
+      } else {
+        await createSubItem(itemId, {
           subCode: editForm.subCode,
           name: editForm.name || null,
           status: editForm.status,
           condition: editForm.condition || null,
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
-        }),
-      });
-      if (!res.ok) { toast.error("Failed to create"); return; }
-      toast.success("Sub-code created");
+        });
+        toast.success("Sub-code created");
+      }
+      setEditDialogOpen(false);
+      fetchSubItems();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
     }
-    setEditDialogOpen(false);
-    fetchSubItems();
   }
 
   async function handleBatchCreate() {
-    const res = await fetch(`/api/settings/items/${itemId}/sub-items`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(batchForm),
-    });
-    if (!res.ok) { toast.error("Failed to create sub-codes"); return; }
-    const data = await res.json();
-    toast.success(`Created ${data.created} sub-codes`);
-    setBatchDialogOpen(false);
-    fetchSubItems();
+    try {
+      const data = await createSubItem(itemId, batchForm) as { created: number };
+      toast.success(`Created ${data.created} sub-codes`);
+      setBatchDialogOpen(false);
+      fetchSubItems();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create sub-codes");
+    }
   }
 
   async function handleDelete(sub: SubItemRecord) {
     if (!confirm(`Delete "${sub.subCode}"?`)) return;
-    const res = await fetch(`/api/settings/sub-items/${sub.id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("Failed to delete"); return; }
-    toast.success("Sub-code deleted");
-    fetchSubItems();
+    try {
+      await deleteSubItem(sub.id);
+      toast.success("Sub-code deleted");
+      fetchSubItems();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    }
   }
 
   if (loading) return <div className="text-muted-foreground text-sm p-4">Loading sub-codes...</div>;

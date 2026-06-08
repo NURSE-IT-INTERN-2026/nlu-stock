@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from "react";
 import type { SessionUser } from "@/types";
+import { getSession } from "@/lib/api";
 
 export function useSession() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/auth/session")
-      .then((res) => (res.ok ? res.json() : null))
+    getSession()
       .then((data) => {
-        if (data?.user) setUser(data.user);
+        if (data.user) setUser(data.user as SessionUser);
       })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

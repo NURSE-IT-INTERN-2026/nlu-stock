@@ -9,6 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Plus, Minus, Search, QrCode, Package } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useCategories, useLocations } from "@/hooks/use-lookup-data";
+import { Category, locationLabel, CATEGORY_COLORS } from "@/lib/constants";
+import { searchDispenseItems } from "@/lib/api";
 import { useCart } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import {
@@ -66,23 +69,6 @@ function CardEditableQty({ value, max, onChange }: {
   );
 }
 
-interface CategoryType {
-  id: string;
-  name: string;
-  category: string;
-}
-
-interface Location {
-  id: string;
-  building: string;
-  floor: string;
-  room: string;
-  detail: string | null;
-}
-
-function locationLabel(loc: Location) {
-  return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
-}
 
 interface SearchItem {
   id: string;
@@ -105,8 +91,8 @@ function DispenseContent() {
   const { itemCount, getItemQty, items: cartItems, updateItem, removeItem, addItem } = useCart();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
-  const [categories, setCategories] = useState<CategoryType[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const { categories } = useCategories();
+  const { locations } = useLocations();
   const [filterCategory, setFilterCategory] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
   const [loading, setLoading] = useState(true);
@@ -118,22 +104,13 @@ function DispenseContent() {
   const searchItems = useCallback(async (q: string, catId: string, locId: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ q, limit: "200" });
-      if (catId) params.set("categoryId", catId);
-      if (locId) params.set("locationId", locId);
-      const res = await fetch(`/api/dispense/items?${params}`);
-      const data = await res.json();
-      setItems(data.items ?? []);
+      const data = await searchDispenseItems({ q, limit: "200", categoryId: catId || undefined, locationId: locId || undefined });
+      setItems((data.items ?? []) as SearchItem[]);
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/settings/categories").then((r) => r.json()).then(setCategories);
-    fetch("/api/settings/locations").then((r) => r.json()).then(setLocations);
   }, []);
 
   useEffect(() => {
@@ -237,12 +214,9 @@ function DispenseContent() {
   const handleQrScan = async (code: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ q: code, limit: "1" });
-      if (filterCategory) params.set("categoryId", filterCategory);
-      if (filterLocation) params.set("locationId", filterLocation);
-      const res = await fetch(`/api/dispense/items?${params}`);
-      const data = await res.json();
-      const found = data.items?.[0] as SearchItem | undefined;
+      const data = await searchDispenseItems({ q: code, limit: "1", categoryId: filterCategory || undefined, locationId: filterLocation || undefined });
+      const items = (data.items ?? []) as SearchItem[];
+      const found = items[0];
       if (found && found.code === code) {
         handleAdd(found);
       } else {
@@ -255,21 +229,8 @@ function DispenseContent() {
     }
   };
 
-  const categoryColor = (cat: string) => {
-    switch (cat) {
-      case "CON": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case "DUR": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "KRU": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-      case "BOOK": return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
-      case "ELE": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200";
-      case "TOY": return "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200";
-      case "MED": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-      case "KIT": return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
-      default: return "";
-    }
-  };
 
-  return (
+return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <Card className="p-3 mb-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -354,7 +315,7 @@ function DispenseContent() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[15px] text-muted-foreground">{item.code}</span>
-                    <Badge className={`text-[13px] ${categoryColor(item.category.category)}`}>
+                    <Badge className={`text-[13px] ${CATEGORY_COLORS[item.category.category as Category] ?? ""}`}>
                       {item.category.name}
                     </Badge>
                   </div>

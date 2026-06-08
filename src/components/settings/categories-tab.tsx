@@ -47,6 +47,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Category, CATEGORY_LABELS } from "@/lib/constants";
+import { getCategories, createCategory, updateCategory, deleteCategory } from "@/lib/api";
 
 interface CategoryType {
   id: string;
@@ -56,17 +58,6 @@ interface CategoryType {
   sortOrder: number;
   _count: { items: number };
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  KRU: "ครุภัณฑ์",
-  ELE: "ครุภัณฑ์อิเล็กทรอนิกส์",
-  BOOK: "หนังสือ",
-  TOY: "ของเล่น/อุปกรณ์การศึกษา",
-  DUR: "คงทน",
-  CON: "สิ้นเปลือง",
-  MED: "เวชภัณฑ์",
-  KIT: "ชุดวัสดุ",
-};
 
 function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
@@ -84,7 +75,7 @@ function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c:
         </button>
       </TableCell>
       <TableCell className="font-medium">{cat.name}</TableCell>
-      <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category] || cat.category}</Badge></TableCell>
+      <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
       <TableCell>{cat._count.items}</TableCell>
       <TableCell>
         <div className="flex gap-1">
@@ -110,9 +101,12 @@ export function CategoriesTab() {
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/settings/categories");
-    const data = await res.json();
-    setCategories(data);
+    try {
+      const data = await getCategories();
+      setCategories(data as CategoryType[]);
+    } catch {
+      toast.error("Failed to load categories");
+    }
     setLoading(false);
   }, []);
 
@@ -133,33 +127,30 @@ export function CategoriesTab() {
   async function handleSave() {
     const payload = { name: form.name, category: form.category, description: form.description || undefined };
 
-    if (editing) {
-      const res = await fetch(`/api/settings/categories/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to update"); return; }
-      toast.success("Category updated");
-    } else {
-      const res = await fetch("/api/settings/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to create"); return; }
-      toast.success("Category created");
+    try {
+      if (editing) {
+        await updateCategory(editing.id, payload);
+        toast.success("Category updated");
+      } else {
+        await createCategory(payload);
+        toast.success("Category created");
+      }
+      setDialogOpen(false);
+      fetchCategories();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
     }
-    setDialogOpen(false);
-    fetchCategories();
   }
 
   async function handleDelete(cat: CategoryType) {
     if (!confirm(`Delete "${cat.name}"?`)) return;
-    const res = await fetch(`/api/settings/categories/${cat.id}`, { method: "DELETE" });
-    if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to delete"); return; }
-    toast.success("Category deleted");
-    fetchCategories();
+    try {
+      await deleteCategory(cat.id);
+      toast.success("Category deleted");
+      fetchCategories();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -171,11 +162,7 @@ export function CategoriesTab() {
     const reordered = arrayMove(categories, oldIndex, newIndex);
     setCategories(reordered);
 
-    const updates = reordered.map((c, i) => fetch(`/api/settings/categories/${c.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sortOrder: i + 1 }),
-    }));
+    const updates = reordered.map((c, i) => updateCategory(c.id, { sortOrder: i + 1 }));
     await Promise.all(updates);
   }
 
@@ -226,7 +213,7 @@ export function CategoriesTab() {
             <div>
               <Label>Type</Label>
               <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v! })}>
-                <SelectTrigger><SelectValue>{CATEGORY_LABELS[form.category] || form.category}</SelectValue></SelectTrigger>
+                <SelectTrigger><SelectValue>{CATEGORY_LABELS[form.category as Category] || form.category}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="KRU">ครุภัณฑ์</SelectItem>
                   <SelectItem value="ELE">ครุภัณฑ์อิเล็กทรอนิกส์</SelectItem>

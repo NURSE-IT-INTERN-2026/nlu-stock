@@ -6,6 +6,7 @@ import { Download, Upload, FileText, AlertCircle, CheckCircle2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { importRows } from "@/lib/api";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -52,15 +53,19 @@ export function ImportTab() {
   }, []);
 
   async function downloadTemplate() {
-    const res = await fetch(`/api/settings/import?type=${importType}`);
-    if (!res.ok) { toast.error("Failed to download template"); return; }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${importType}-template.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const res = await fetch(`/api/settings/import?type=${importType}`);
+      if (!res.ok) { toast.error("Failed to download template"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${importType}-template.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download template");
+    }
   }
 
   async function handleImport() {
@@ -77,17 +82,11 @@ export function ImportTab() {
     }
 
     try {
-      const res = await fetch("/api/settings/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: importType, rows }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error || "Import failed"); setImporting(false); return; }
-      setResult(data);
+      const data = await importRows(importType, rows);
+      setResult(data as { imported: number; errors: { row: number; message: string }[] });
       toast.success(`Imported ${data.imported} rows`);
-    } catch {
-      toast.error("Import failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import failed");
     }
     setImporting(false);
   }

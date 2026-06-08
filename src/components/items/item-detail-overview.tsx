@@ -14,7 +14,9 @@ import {
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Category, CATEGORY_LABELS } from "@/lib/constants";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
+import { updateItemStatus, returnItem, getItemHistory, uploadFile, updateItem } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
@@ -48,17 +50,6 @@ interface ItemData {
   subItems: SubItemRecord[];
   images: string[];
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  KRU: "ครุภัณฑ์",
-  ELE: "อิเล็กทรอนิกส์",
-  BOOK: "หนังสือ",
-  TOY: "ของเล่น",
-  DUR: "วัสดุคงทน",
-  CON: "วัสดุสิ้นเปลือง",
-  MED: "ยา",
-  KIT: "อุปกรณ์ประกอบวิชา",
-};
 
 interface Props {
   item: ItemData;
@@ -134,9 +125,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       try {
         const formData = new FormData();
         formData.append("file", p.file);
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error("Upload failed");
-        const { url } = await res.json();
+        const { url } = await uploadFile(formData);
         newUrls.push(url);
       } catch {
         toast.error(`Failed to upload ${p.file.name}`);
@@ -159,11 +148,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       // promote first server extra to cover, or clear
       const newCover = serverExtras[0] || null;
       const newExtras = serverExtras.slice(1);
-      fetch(`/api/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: newCover, images: newExtras }),
-      }).then(() => { onRefresh(); });
+      updateItem(item.id, { imageUrl: newCover, images: newExtras }).then(() => { onRefresh(); });
       return;
     }
 
@@ -172,11 +157,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     // inside server extras (item.images)?
     if (serverExtraIdx < serverExtras.length) {
       const newExtras = serverExtras.filter((_, i) => i !== serverExtraIdx);
-      fetch(`/api/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: newExtras }),
-      }).then(() => { onRefresh(); });
+      updateItem(item.id, { images: newExtras }).then(() => { onRefresh(); });
       return;
     }
 
@@ -211,25 +192,19 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
 
   // ── Handlers ──
   const handleReturn = async (subItemId: string) => {
-    const res = await fetch(`/api/items/${item.id}/return`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subItemId }),
-    });
-    if (res.ok) { toast.success("Returned"); onRefresh(); }
-    else { const err = await res.json(); toast.error(err.error ?? "Return failed"); }
+    try {
+      await returnItem(item.id, { subItemId });
+      toast.success("Returned"); onRefresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Return failed"); }
   };
 
   const handleReturnQty = async () => {
     const qty = prompt("Enter quantity to return:");
     if (!qty) return;
-    const res = await fetch(`/api/items/${item.id}/return`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ quantity: parseInt(qty) }),
-    });
-    if (res.ok) { toast.success("Returned"); onRefresh(); }
-    else { const err = await res.json(); toast.error(err.error ?? "Return failed"); }
+    try {
+      await returnItem(item.id, { quantity: parseInt(qty) });
+      toast.success("Returned"); onRefresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Return failed"); }
   };
 
   const locationStr = item.location
@@ -326,7 +301,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <SectionHeading eyebrow="Item info" title="Specification" />
           <dl className="divide-y divide-border">
             <SpecRow icon={Hash} label="Code" value={<span className="font-mono">{item.code}</span>} />
-            <SpecRow icon={Tag} label="Category" value={CATEGORY_LABELS[item.category.category] ?? item.category.category} />
+            <SpecRow icon={Tag} label="Category" value={CATEGORY_LABELS[item.category.category as Category] ?? item.category.category} />
             <SpecRow icon={Layers} label="Issue unit" value={item.issueUnit.name} />
             {item.subUnit && (
               <SpecRow icon={Layers} label="Sub unit" value={`${item.subUnit.name} (1 ${item.issueUnit.name} = ${item.conversionFactor} ${item.subUnit.name})`} />
@@ -547,9 +522,8 @@ function RecentEvents({ itemId }: { itemId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/items/${itemId}/history?perPage=3`)
-      .then((r) => r.json())
-      .then((d) => { setEvents(d.events || []); setLoading(false); })
+    getItemHistory(itemId, "perPage=3")
+      .then((d) => { setEvents((d.events || []) as { type: string; description: string; date: string; user: string }[]); setLoading(false); })
       .catch(() => setLoading(false));
   }, [itemId]);
 

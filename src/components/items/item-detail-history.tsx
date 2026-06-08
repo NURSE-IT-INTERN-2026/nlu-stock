@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getItemHistory } from "@/lib/api";
 
 interface TimelineEvent {
   id: string;
@@ -58,12 +59,11 @@ export function ItemDetailHistory({ itemId }: Props) {
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page), perPage: String(perPage) });
-    if (typeFilter) params.set("type", typeFilter);
-    const res = await fetch(`/api/items/${itemId}/history?${params}`);
-    const data = await res.json();
-    setEvents(data.events || []);
-    setTotal(data.total || 0);
+    const qs = new URLSearchParams({ page: String(page), perPage: String(perPage) });
+    if (typeFilter) qs.set("type", typeFilter);
+    const data = await getItemHistory(itemId, qs.toString());
+    setEvents((data.events || []) as TimelineEvent[]);
+    setTotal((data as Record<string, unknown>).total as number || 0);
     setLoading(false);
   }, [itemId, page, perPage, typeFilter]);
 

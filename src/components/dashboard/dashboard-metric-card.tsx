@@ -36,10 +36,10 @@ export function DashboardMetricCard({ title, value, subtitle, iconName, color, h
       className={["cursor-pointer transition-all hover:shadow-xl hover:-translate-y-0.5 py-0 gap-0", href ? "" : "pointer-events-none", className].filter(Boolean).join(" ")}
       onClick={href ? () => router.push(href) : undefined}
     >
-      <CardContent className="px-4 py-2.5">
+      <CardContent className="px-4 py-2.5 flex flex-col justify-center h-full">
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-muted-foreground tracking-wide">{title}</p>
+            <p className="text-xs font-medium text-muted-foreground tracking-wide leading-tight">{title}</p>
             <p className={`text-2xl font-extrabold leading-none tracking-tight mt-0.5 ${value === 0 ? "text-muted-foreground/40" : "text-foreground"}`}>
               {value}
             </p>

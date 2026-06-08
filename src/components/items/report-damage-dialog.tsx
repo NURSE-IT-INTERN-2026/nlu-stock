@@ -13,13 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { FileUpload } from "@/components/shared/file-upload";
-
-const STATUS_OPTIONS = [
-  { value: "DAMAGED", label: "Damaged" },
-  { value: "UNDER_REPAIR", label: "Under Repair" },
-  { value: "LOST", label: "Lost" },
-  { value: "DISPOSED", label: "Disposed" },
-];
+import { DAMAGE_STATUS_OPTIONS } from "@/lib/constants";
+import { updateItemStatus } from "@/lib/api";
 
 interface SubItemOption {
   id: string;
@@ -51,21 +46,12 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
     }
     setSaving(true);
     try {
-      const res = await fetch(`/api/items/${itemId}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newStatus,
-          subItemId: trackIndividually ? subItemId : null,
-          notes: notes || null,
-          imageUrl: imageUrl || null,
-        }),
+      await updateItemStatus(itemId, {
+        newStatus,
+        subItemId: trackIndividually ? subItemId : null,
+        notes: notes || null,
+        imageUrl: imageUrl || null,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to report");
-        return;
-      }
       toast.success("Status updated");
       onOpenChange(false);
       setNewStatus("");
@@ -73,8 +59,8 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
       setNotes("");
       setImageUrl(null);
       onSuccess();
-    } catch {
-      toast.error("Failed to report");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to report");
     }
     setSaving(false);
   }
@@ -106,7 +92,7 @@ export function ReportDamageDialog({ open, onOpenChange, itemId, trackIndividual
             <Select value={newStatus} onValueChange={(v) => setNewStatus(v ?? "")}>
               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
+                {DAMAGE_STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                 ))}
               </SelectContent>

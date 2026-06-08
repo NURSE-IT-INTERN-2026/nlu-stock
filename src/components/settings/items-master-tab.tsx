@@ -27,25 +27,12 @@ import { Separator } from "@/components/ui/separator";
 import { SubCodesManager } from "./sub-codes-manager";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
+import { Category, CATEGORY_LABELS, locationLabel } from "@/lib/constants";
+import { getSettingsItems, getUnits, deleteSettingsItem, saveSettingsItem } from "@/lib/api";
+import type { CategoryOption, LocationOption, UnitOption } from "@/lib/api";
+import { useCategories, useLocations } from "@/hooks/use-lookup-data";
+import { usePagination } from "@/hooks/use-pagination";
 
-interface CategoryType {
-  id: string;
-  name: string;
-  category: string;
-}
-
-interface Location {
-  id: string;
-  building: string;
-  floor: string;
-  room: string;
-  detail: string | null;
-}
-
-interface UnitType {
-  id: string;
-  name: string;
-}
 
 interface ItemRecord {
   id: string;
@@ -53,17 +40,17 @@ interface ItemRecord {
   name: string;
   nameEn: string | null;
   categoryId: string;
-  category: CategoryType;
+  category: CategoryOption;
   trackIndividually: boolean;
   status: string;
   issueUnitId: string;
-  issueUnit: UnitType;
+  issueUnit: UnitOption;
   subUnitId: string;
-  subUnit: UnitType;
+  subUnit: UnitOption;
   conversionFactor: number;
   minThreshold: number;
   locationId: string | null;
-  location: Location | null;
+  location: LocationOption | null;
   imageUrl: string | null;
   description: string | null;
   isActive: boolean;
@@ -81,17 +68,6 @@ interface ItemRecord {
   storageRequirements: string | null;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  KRU: "ครุภัณฑ์",
-  ELE: "ครุภัณฑ์อิเล็กทรอนิกส์",
-  BOOK: "หนังสือ",
-  TOY: "ของเล่น/อุปกรณ์การศึกษา",
-  DUR: "คงทน",
-  CON: "สิ้นเปลือง",
-  MED: "เวชภัณฑ์",
-  KIT: "ชุดวัสดุ",
-};
-
 const defaultForm = {
   code: "", name: "", nameEn: "", categoryId: "", trackIndividually: false,
   issueUnitId: "", subUnitId: "", conversionFactor: 1, minThreshold: 0,
@@ -105,13 +81,11 @@ const defaultForm = {
 
 export function ItemsMasterTab() {
   const [items, setItems] = useState<ItemRecord[]>([]);
-  const [categories, setCategories] = useState<CategoryType[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [units, setUnits] = useState<UnitType[]>([]);
+  const { categories } = useCategories();
+  const { locations } = useLocations();
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [perPage] = useState(20);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -126,41 +100,28 @@ export function ItemsMasterTab() {
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({
+    const params: Record<string, string> = {
       page: String(page),
       perPage: String(perPage),
-    });
-    if (search) params.set("search", search);
-    if (filterCategory) params.set("categoryId", filterCategory);
+    };
+    if (search) params.search = search;
+    if (filterCategory) params.categoryId = filterCategory;
     if (filterStatus === "INACTIVE") {
-      params.set("active", "false");
+      params.active = "false";
     } else if (filterStatus) {
-      params.set("status", filterStatus);
+      params.status = filterStatus;
     }
 
-    const res = await fetch(`/api/settings/items?${params}`);
-    const data = await res.json();
-    setItems(data.items || []);
+    const data = await getSettingsItems(params);
+    setItems((data.items || []) as ItemRecord[]);
     setTotal(data.total || 0);
     setLoading(false);
   }, [page, perPage, search, filterCategory, filterStatus]);
 
-  const fetchMeta = useCallback(async () => {
-    const [catRes, locRes, unitRes] = await Promise.all([
-      fetch("/api/settings/categories"),
-      fetch("/api/settings/locations"),
-      fetch("/api/settings/units"),
-    ]);
-    setCategories(await catRes.json());
-    setLocations(await locRes.json());
-    setUnits(await unitRes.json());
-  }, []);
+  useEffect(() => { getUnits().then(setUnits); }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEffect(() => { fetchMeta(); }, [fetchMeta]);
   useEffect(() => { setSelectedIds(new Set()); }, [page, search, filterCategory, filterStatus]);
-
-  const totalPages = Math.ceil(total / perPage);
 
   function openCreate() {
     setEditing(null);
@@ -219,33 +180,25 @@ export function ItemsMasterTab() {
     };
 
     try {
-      const url = editing ? `/api/settings/items/${editing.id}` : "/api/settings/items";
-      const method = editing ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to save");
-        return;
-      }
+      await saveSettingsItem(payload, editing?.id);
       toast.success(editing ? "Item updated" : "Item created");
       setDialogOpen(false);
       fetchItems();
-    } catch {
-      toast.error("Failed to save");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
     }
     setSaving(false);
   }
 
   async function handleDelete(item: ItemRecord) {
     if (!confirm(`Delete "${item.name}"? This cannot be undone if no transactions exist.`)) return;
-    const res = await fetch(`/api/settings/items/${item.id}`, { method: "DELETE" });
-    if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to delete"); return; }
-    toast.success("Item deleted");
-    fetchItems();
+    try {
+      await deleteSettingsItem(item.id);
+      toast.success("Item deleted");
+      fetchItems();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    }
   }
 
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
@@ -257,10 +210,6 @@ export function ItemsMasterTab() {
     : ["CON", "MED"].includes(selectedCategory.category) ? false
     : undefined
   ) : undefined;
-
-  function locationLabel(loc: Location) {
-    return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
-  }
 
   return (
     <div className="space-y-4">
@@ -396,7 +345,7 @@ export function ItemsMasterTab() {
                     </div>
                     {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="text-xs mt-0.5">Tracked ({item._count.subItems})</Badge>}
                   </TableCell>
-                  <TableCell><Badge variant="outline">{CATEGORY_LABELS[item.category.category] || item.category.name}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{CATEGORY_LABELS[item.category.category as Category] || item.category.name}</Badge></TableCell>
                   <TableCell className="text-right">
                     <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : ""}>{item.availableQty}</span>
                     <span className="text-muted-foreground"> / {item.totalQty}</span>

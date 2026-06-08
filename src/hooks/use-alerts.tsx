@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import { getAlerts } from "@/lib/api";
 
 interface AlertCounts {
   lowStock: number;
@@ -26,11 +27,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const res = await fetch("/api/alerts");
-      if (res.ok) {
-        const data: AlertCounts = await res.json();
-        setCounts((prev) => countsEqual(prev, data) ? prev : data);
-      }
+      const data: AlertCounts = await getAlerts();
+      setCounts((prev) => countsEqual(prev, data) ? prev : data);
     } catch {
       // silent — will retry
     }

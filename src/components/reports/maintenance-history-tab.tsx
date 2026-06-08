@@ -6,6 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { dateRange: true, maintenanceType: true };
 
@@ -60,14 +61,14 @@ export function MaintenanceHistoryTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.maintenanceType) params.set("maintenanceType", filters.maintenanceType);
-    params.set("page", String(page));
-    params.set("perPage", String(perPage));
-    const res = await fetch(`/api/reports/maintenance-history?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {
+      page: String(page),
+      perPage: String(perPage),
+    };
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.maintenanceType) params.maintenanceType = filters.maintenanceType;
+    const json = (await getReport("maintenance-history", params)) as { records: Row[]; total: number };
     setData(json.records);
     setTotal(json.total);
     setLoading(false);

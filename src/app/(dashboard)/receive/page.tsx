@@ -17,6 +17,8 @@ import {
 import { toast } from "sonner";
 import { Plus, Trash2, Search, Send, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Category, CATEGORY_COLORS } from "@/lib/constants";
+import { searchDispenseItems, createReceive } from "@/lib/api";
 
 interface SearchItem {
   id: string;
@@ -56,9 +58,8 @@ export default function ReceivePage() {
     if (!q) { setSearchResults([]); return; }
     setSearchLoading(true);
     try {
-      const res = await fetch(`/api/dispense/items?q=${encodeURIComponent(q)}&limit=20`);
-      const data = await res.json();
-      setSearchResults(data.items ?? []);
+      const data = await searchDispenseItems({ q, limit: "20" });
+      setSearchResults((data.items ?? []) as SearchItem[]);
     } catch {
       setSearchResults([]);
     } finally {
@@ -111,21 +112,8 @@ export default function ReceivePage() {
     setSearchResults([]);
   };
 
-  const categoryColor = (cat: string) => {
-    switch (cat) {
-      case "CON": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case "DUR": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "KRU": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-      case "BOOK": return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
-      case "ELE": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200";
-      case "TOY": return "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200";
-      case "MED": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-      case "KIT": return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
-      default: return "";
-    }
-  };
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     if (rows.length === 0) {
       toast.error("Add at least one item");
       return;
@@ -157,18 +145,7 @@ export default function ReceivePage() {
         notes: notes || null,
       };
 
-      const res = await fetch("/api/receive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Receive failed");
-        return;
-      }
-
+      const data = await createReceive(payload);
       toast.success(`Received ${data.count} item(s) successfully`);
       setRows([]);
       setNotes("");
@@ -209,7 +186,7 @@ export default function ReceivePage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs text-muted-foreground">{row.item.code}</span>
-                        <Badge className={cn("text-[10px]", categoryColor(row.item.category.category))}>
+                        <Badge className={cn("text-[10px]", CATEGORY_COLORS[row.item.category.category as Category] ?? "")}>
                           {row.item.category.name}
                         </Badge>
                         {row.item.trackIndividually && (
@@ -378,7 +355,7 @@ export default function ReceivePage() {
                     >
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
-                        <Badge className={cn("text-[10px]", categoryColor(item.category.category))}>
+                        <Badge className={cn("text-[10px]", CATEGORY_COLORS[item.category.category as Category] ?? "")}>
                           {item.category.category}
                         </Badge>
                         {alreadyAdded && (

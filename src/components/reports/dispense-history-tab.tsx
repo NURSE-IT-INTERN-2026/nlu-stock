@@ -6,6 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = {
   dateRange: true,
@@ -61,15 +62,15 @@ export function DispenseHistoryTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.staffId) params.set("staffId", filters.staffId);
-    if (filters.usageType) params.set("usageType", filters.usageType);
-    params.set("page", String(page));
-    params.set("perPage", String(perPage));
-    const res = await fetch(`/api/reports/dispense-history?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {
+      page: String(page),
+      perPage: String(perPage),
+    };
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.staffId) params.staffId = filters.staffId;
+    if (filters.usageType) params.usageType = filters.usageType;
+    const json = (await getReport("dispense-history", params)) as { records: Row[]; total: number };
     setData(json.records);
     setTotal(json.total);
     setLoading(false);

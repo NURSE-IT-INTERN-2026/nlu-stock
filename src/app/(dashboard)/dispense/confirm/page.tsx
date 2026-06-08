@@ -15,10 +15,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCart } from "@/components/dispense/cart-context";
-import { Loader2, Minus, Plus, Package, Trash2, Pencil, ShoppingCart, ArrowLeft, MapPin } from "lucide-react";
+import { Loader2, Minus, Plus, Package, Trash2, Pencil, ShoppingBasket, ArrowLeft, MapPin } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
+import { USAGE_TYPE_OPTIONS, locationLabel } from "@/lib/constants";
+import { createDispense } from "@/lib/api";
 
 function EditableQty({ value, max, unit, onChange }: {
   value: number;
@@ -69,10 +70,6 @@ function EditableQty({ value, max, unit, onChange }: {
   );
 }
 
-function locationLabel(loc: { building: string; floor: string; room: string; detail: string | null } | null | undefined) {
-  if (!loc) return null;
-  return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
-}
 
 export default function ConfirmDispensePage() {
   const { items, removeItem, updateItem, clearCart } = useCart();
@@ -89,29 +86,18 @@ export default function ConfirmDispensePage() {
     if (items.length === 0) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/dispense", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: items.map((i) => ({
-            itemId: i.itemId,
-            subItemId: i.subItemId ?? null,
-            lotId: i.lotId ?? null,
-            quantity: i.quantity,
-            quantitySub: i.quantitySub,
-          })),
-          usageType: usageType || null,
-          usageNote: usageType === "OTHER" ? usageNote || null : null,
-          notes: notes || null,
-        }),
+      const data = await createDispense({
+        items: items.map((i) => ({
+          itemId: i.itemId,
+          subItemId: i.subItemId ?? null,
+          lotId: i.lotId ?? null,
+          quantity: i.quantity,
+          quantitySub: i.quantitySub,
+        })),
+        usageType: usageType || null,
+        usageNote: usageType === "OTHER" ? usageNote || null : null,
+        notes: notes || null,
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Dispense failed");
-      }
-
-      const data = await res.json();
       toast.success(`Dispensed ${data.count} item(s) successfully`);
       clearCart();
       router.push("/dispense");
@@ -157,7 +143,7 @@ export default function ConfirmDispensePage() {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
         <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-          <ShoppingCart className="h-8 w-8 text-muted-foreground" />
+          <ShoppingBasket className="h-8 w-8 text-muted-foreground" />
         </div>
         <div className="text-center">
           <p className="text-lg font-medium">Cart is empty</p>

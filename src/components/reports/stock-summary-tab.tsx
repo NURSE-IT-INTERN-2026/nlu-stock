@@ -5,6 +5,7 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { StockSummaryChart } from "./charts/stock-summary-chart";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { categories: true };
 
@@ -30,10 +31,9 @@ export function StockSummaryTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    const res = await fetch(`/api/reports/stock-summary?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {};
+    if (filters.categoryId) params.categoryId = filters.categoryId;
+    const json = (await getReport("stock-summary", params)) as Row[];
     setData(json);
     setLoading(false);
   }, [filters]);

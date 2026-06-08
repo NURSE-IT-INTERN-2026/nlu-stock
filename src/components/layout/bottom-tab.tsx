@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, BarChart3, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { logout } from "@/lib/api";
 import {
   Sheet,
   SheetContent,
@@ -34,13 +35,13 @@ export function BottomTab({ user }: BottomTabProps) {
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await logout();
     window.location.href = "/login";
   }
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card">
-      <div className="flex items-center justify-around h-14">
+      <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const showBadge = tab.href === "/" && alerts.total > 0;
@@ -49,13 +50,13 @@ export function BottomTab({ user }: BottomTabProps) {
               key={tab.href}
               href={tab.href}
               className={cn(
-                "flex flex-col items-center gap-0.5 px-2 py-1 text-xs relative",
+                "flex flex-col items-center gap-1 px-3 py-1.5 text-xs relative",
                 isActive(tab.href)
                   ? "text-primary"
                   : "text-muted-foreground"
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-6 w-6" />
               <span>{tab.label}</span>
               {showBadge && (
                 <span className="absolute -top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
@@ -69,8 +70,8 @@ export function BottomTab({ user }: BottomTabProps) {
         <Sheet>
           <SheetTrigger
             render={(props) => (
-              <button {...props} className="flex flex-col items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
-                <MoreHorizontal className="h-5 w-5" />
+              <button {...props} className="flex flex-col items-center gap-1 px-3 py-1.5 text-xs text-muted-foreground">
+                <MoreHorizontal className="h-6 w-6" />
                 <span>More</span>
               </button>
             )}

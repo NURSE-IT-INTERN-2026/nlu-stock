@@ -49,7 +49,7 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
     <aside
       className={cn(
         "hidden md:flex flex-col border-r bg-card text-card-foreground transition-all duration-200",
-        collapsed ? "w-16" : "w-72"
+        collapsed ? "w-16" : "w-64"
       )}
     >
       {/* Logo / Toggle */}

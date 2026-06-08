@@ -5,6 +5,7 @@ import { TopDispenseChart } from "./top-dispense-chart";
 import { UsageBySubjectChart } from "./usage-by-subject-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getDashboardTopDispense, getDashboardUsageBySubject } from "@/lib/api";
 
 interface TopDispenseData { code: string; name: string; totalQuantity: number }
 interface UsageSubjectData { usageType: string | null; label: string; totalQuantity: number }
@@ -51,11 +52,11 @@ export function DashboardBarCharts() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/dashboard/top-dispense").then((r) => r.json()),
-      fetch("/api/dashboard/usage-by-subject").then((r) => r.json()),
+      getDashboardTopDispense(),
+      getDashboardUsageBySubject(),
     ]).then(([top, usage]) => {
-      setTopDispense(top);
-      setUsageBySubject(usage);
+      setTopDispense(top as TopDispenseData[]);
+      setUsageBySubject(usage as UsageSubjectData[]);
     }).finally(() => {
       setLoading(false);
     });

@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useSession } from "@/components/layout/auth-guard";
 import { cn } from "@/lib/utils";
+import { Category, CATEGORY_LABELS } from "@/lib/constants";
+import { getItem } from "@/lib/api";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailSubcodes } from "@/components/items/item-detail-subcodes";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
@@ -79,10 +81,10 @@ export default function ItemDetailPage() {
 
   const fetchItem = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/items/${id}`);
-    if (res.ok) {
-      setItem(await res.json());
-    }
+    try {
+      const data = await getItem(id);
+      setItem(data as ItemData);
+    } catch {}
     setLoading(false);
   }, [id]);
 
@@ -161,7 +163,7 @@ export default function ItemDetailPage() {
         <div className="flex flex-col lg:flex-row lg:items-end gap-6 lg:gap-10 pb-6 border-b border-border">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <BadgePill label={CATEGORY_LABELS[item.category.category] ?? item.category.category} />
+              <BadgePill label={CATEGORY_LABELS[item.category.category as Category] ?? item.category.category} />
               <span>·</span>
               <span className="font-mono">{item.code}</span>
               {/* Live status dot */}
@@ -338,14 +340,3 @@ function StockSummary({ available, total, unit, minThreshold }: {
     </div>
   );
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  KRU: "ครุภัณฑ์",
-  ELE: "อิเล็กทรอนิกส์",
-  BOOK: "หนังสือ",
-  TOY: "ของเล่น",
-  DUR: "วัสดุคงทน",
-  CON: "วัสดุสิ้นเปลือง",
-  MED: "ยา",
-  KIT: "อุปกรณ์ประกอบวิชา",
-};

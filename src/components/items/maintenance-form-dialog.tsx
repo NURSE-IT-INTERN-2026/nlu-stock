@@ -21,6 +21,7 @@ import {
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/shared/file-upload";
+import { createMaintenance } from "@/lib/api";
 
 interface Props {
   open: boolean;
@@ -43,24 +44,16 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/items/${itemId}/maintenance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          result,
-          performedAt,
-          issue: issue || null,
-          description: description || null,
-          cost: cost ? parseFloat(cost) : null,
-          nextMaintenanceAt: nextMaintenanceAt || null,
-          attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
-        }),
+      await createMaintenance(itemId, {
+        type,
+        result,
+        performedAt,
+        issue: issue || null,
+        description: description || null,
+        cost: cost ? parseFloat(cost) : null,
+        nextMaintenanceAt: nextMaintenanceAt || null,
+        attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Failed");
-      }
       toast.success("Maintenance record saved");
       resetAndClose();
       onSuccess();

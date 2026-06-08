@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon, FileText } from "lucide-react";
+import { uploadFile } from "@/lib/api";
 
 interface FileUploadProps {
   value: string | null;
@@ -25,12 +26,7 @@ export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
-      }
-      const { url } = await res.json();
+      const { url } = await uploadFile(formData);
       onChange(url);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");

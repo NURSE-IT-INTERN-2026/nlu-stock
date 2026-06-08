@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { getLocations, createLocation, updateLocation, deleteLocation } from "@/lib/api";
 
 interface Location {
   id: string;
@@ -33,9 +34,12 @@ export function LocationsTab() {
 
   const fetchLocations = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/settings/locations");
-    const data = await res.json();
-    setLocations(data);
+    try {
+      const data = await getLocations();
+      setLocations(data as Location[]);
+    } catch {
+      toast.error("Failed to load locations");
+    }
     setLoading(false);
   }, []);
 
@@ -71,33 +75,30 @@ export function LocationsTab() {
       detail: form.detail || null,
     };
 
-    if (editing) {
-      const res = await fetch(`/api/settings/locations/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to update"); return; }
-      toast.success("Location updated");
-    } else {
-      const res = await fetch("/api/settings/locations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to create"); return; }
-      toast.success("Location created");
+    try {
+      if (editing) {
+        await updateLocation(editing.id, payload);
+        toast.success("Location updated");
+      } else {
+        await createLocation(payload);
+        toast.success("Location created");
+      }
+      setDialogOpen(false);
+      fetchLocations();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
     }
-    setDialogOpen(false);
-    fetchLocations();
   }
 
   async function handleDelete(loc: Location) {
     if (!confirm(`Delete "${[loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ")}"?`)) return;
-    const res = await fetch(`/api/settings/locations/${loc.id}`, { method: "DELETE" });
-    if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to delete"); return; }
-    toast.success("Location deleted");
-    fetchLocations();
+    try {
+      await deleteLocation(loc.id);
+      toast.success("Location deleted");
+      fetchLocations();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    }
   }
 
   if (loading) return <div className="text-muted-foreground">Loading...</div>;

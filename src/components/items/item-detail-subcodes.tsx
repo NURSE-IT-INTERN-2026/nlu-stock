@@ -13,6 +13,7 @@ import {
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { updateItemStatus } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
@@ -100,14 +101,10 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
     setSubmitting(true);
     try {
       const promises = Array.from(selected).map((subItemId) =>
-        fetch(`/api/items/${itemId}/status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ newStatus, subItemId }),
-        })
+        updateItemStatus(itemId, { newStatus, subItemId })
       );
-      const results = await Promise.all(promises);
-      const failed = results.filter((r) => !r.ok).length;
+      const results = await Promise.allSettled(promises);
+      const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) toast.error(`${failed} update(s) failed`);
       else toast.success(`Updated ${selected.size} sub-item(s)`);
       setSelected(new Set());

@@ -7,6 +7,7 @@ import { TopDispenseChart } from "./top-dispense-chart";
 import { UsageBySubjectChart } from "./usage-by-subject-chart";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 import { Button } from "@/components/ui/button";
+import { getDashboardTopDispense, getDashboardUsageBySubject, getDashboardRecentDispense, getDashboardRecentReceive } from "@/lib/api";
 
 interface DispenseRecord {
   id: string; dispensedAt: string; quantity: number;
@@ -34,28 +35,17 @@ export function DashboardCharts() {
   useEffect(() => {
     async function fetchAll() {
       try {
-        const [dispenseRes, receiveRes, topRes, usageRes] = await Promise.all([
-          fetch("/api/dashboard/recent-dispense"),
-          fetch("/api/dashboard/recent-receive"),
-          fetch("/api/dashboard/top-dispense"),
-          fetch("/api/dashboard/usage-by-subject"),
-        ]);
-
-        if (!dispenseRes.ok || !receiveRes.ok || !topRes.ok || !usageRes.ok) {
-          throw new Error("Failed to fetch dashboard data");
-        }
-
         const [dispense, receive, top, usage] = await Promise.all([
-          dispenseRes.json(),
-          receiveRes.json(),
-          topRes.json(),
-          usageRes.json(),
+          getDashboardRecentDispense(),
+          getDashboardRecentReceive(),
+          getDashboardTopDispense(),
+          getDashboardUsageBySubject(),
         ]);
 
-        setDispenseData(dispense);
-        setReceiveData(receive);
-        setTopDispense(top);
-        setUsageBySubject(usage);
+        setDispenseData(dispense as DispenseRecord[]);
+        setReceiveData(receive as ReceiveRecord[]);
+        setTopDispense(top as TopDispenseData[]);
+        setUsageBySubject(usage as UsageSubjectData[]);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
       } finally {

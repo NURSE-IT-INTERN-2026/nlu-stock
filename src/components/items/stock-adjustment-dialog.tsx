@@ -13,14 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { FileUpload } from "@/components/shared/file-upload";
-
-const ADJUSTMENT_REASONS = [
-  { value: "LOST", label: "Lost" },
-  { value: "DAMAGED_PENDING_REPAIR", label: "Damaged (pending repair)" },
-  { value: "COUNT_MISMATCH", label: "Count mismatch" },
-  { value: "DISPOSAL", label: "Disposal" },
-  { value: "OTHER", label: "Other" },
-];
+import { ADJUSTMENT_REASON_OPTIONS } from "@/lib/constants";
+import { adjustStock } from "@/lib/api";
 
 interface Props {
   open: boolean;
@@ -48,16 +42,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
     if (safeParsed === null || !reason) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/items/${itemId}/adjust`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shelfCount: safeParsed, reason, notes: notes || null, imageEvidence: imageEvidence || null }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to adjust stock");
-        return;
-      }
+      await adjustStock(itemId, { shelfCount: safeParsed, reason, notes: notes || null, imageEvidence: imageEvidence || null });
       toast.success("Stock adjusted");
       onOpenChange(false);
       setShelfCount("");
@@ -65,8 +50,8 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
       setNotes("");
       setImageEvidence(null);
       onSuccess();
-    } catch {
-      toast.error("Failed to adjust stock");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to adjust stock");
     }
     setSaving(false);
   }
@@ -109,7 +94,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
             <Select value={reason} onValueChange={(v) => setReason(v ?? "")}>
               <SelectTrigger><SelectValue placeholder="Select reason" /></SelectTrigger>
               <SelectContent>
-                {ADJUSTMENT_REASONS.map((r) => (
+                {ADJUSTMENT_REASON_OPTIONS.map((r) => (
                   <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                 ))}
               </SelectContent>

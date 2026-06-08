@@ -5,6 +5,7 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { UsageBySubjectChart } from "./charts/usage-by-subject-chart";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { dateRange: true, categories: true };
 
@@ -26,12 +27,11 @@ export function UsageBySubjectTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    const res = await fetch(`/api/reports/usage-by-subject?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {};
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.categoryId) params.categoryId = filters.categoryId;
+    const json = (await getReport("usage-by-subject", params)) as Row[];
     setData(json);
     setLoading(false);
   }, [filters]);

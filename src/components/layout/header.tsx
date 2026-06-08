@@ -2,13 +2,14 @@
 
 import { useTheme } from "next-themes";
 import { useRouter, usePathname } from "next/navigation";
-import { Moon, Sun, LogOut, User, Settings, ShoppingCart, Search, ChevronRight } from "lucide-react";
+import { Moon, Sun, LogOut, User, Settings, ShoppingBasket, ChevronRight } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/components/dispense/cart-context";
+import { logout } from "@/lib/api";
 import type { SessionUser } from "@/types";
 
 interface HeaderProps {
@@ -57,44 +58,27 @@ export function Header({ title, user }: HeaderProps) {
   const pathname = usePathname();
   const { itemCount } = useCart();
 
-  // Don't show search on root dashboard
-  const showSearch = pathname !== "/";
-
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await logout();
     window.location.href = "/login";
   }
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-3 px-4 h-14 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-30 flex items-center gap-3 px-6 h-14 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
       {/* Left: breadcrumb */}
       <Breadcrumb title={title} />
 
-      {/* Center: search */}
-      {showSearch && (
-        <div className="flex-1 flex justify-center max-w-md mx-auto">
-          <div className="relative w-full">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search items…"
-              className="h-8 w-full rounded-lg border border-border bg-muted/40 pl-8 pr-3 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Spacer when no search */}
-      {!showSearch && <span className="flex-1" />}
+      {/* Spacer */}
+      <span className="flex-1" />
 
       {/* Right: actions */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Cart */}
         <button
           onClick={() => router.push("/dispense/confirm")}
-          className="relative flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors"
+          className="relative flex items-center justify-center size-8 rounded-full bg-white hover:bg-gray-50 transition-colors"
         >
-          <ShoppingCart className="size-4" />
+          <ShoppingBasket className="size-4" />
           {itemCount > 0 && (
             <Badge
               key={itemCount}
@@ -108,7 +92,7 @@ export function Header({ title, user }: HeaderProps) {
         {/* Theme */}
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="relative flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors"
+          className="relative flex items-center justify-center size-8 rounded-full bg-white hover:bg-gray-50 transition-colors"
         >
           <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
@@ -121,7 +105,7 @@ export function Header({ title, user }: HeaderProps) {
             <div
               role="button"
               tabIndex={0}
-              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pl-3 pr-1 py-1 hover:from-primary/15 transition-all cursor-pointer"
+              className="flex items-center gap-2 rounded-full bg-white pl-3 pr-1 py-1 hover:bg-gray-50 transition-all cursor-pointer"
             >
               <div className="hidden sm:flex flex-col items-end min-w-0">
                 <p className="text-xs font-medium truncate max-w-[80px] leading-tight">{user.name}</p>

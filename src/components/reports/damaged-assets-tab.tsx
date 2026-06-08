@@ -5,6 +5,7 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = {
   dateRange: true,
@@ -54,12 +55,11 @@ export function DamagedAssetsTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.status) params.set("status", filters.status);
-    const res = await fetch(`/api/reports/damaged-assets?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {};
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.status) params.status = filters.status;
+    const json = (await getReport("damaged-assets", params)) as { items: Row[] };
     setData(json.items);
     setLoading(false);
   }, [filters]);

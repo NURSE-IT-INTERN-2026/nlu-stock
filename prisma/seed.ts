@@ -654,6 +654,59 @@ async function main() {
     }
   }
 
+  // ============================================================
+  // Rich mock dispense data for this month (dashboard charts)
+  // ============================================================
+  console.log("Creating rich mock dispense data for dashboard charts...");
+
+  const allItems = await prisma.item.findMany({
+    select: { id: true, code: true, name: true, category: true },
+    take: 30,
+  });
+
+  // Pick up to 10 items to be "top dispensed" with varied quantities
+  const topItems = allItems.slice(0, Math.min(10, allItems.length));
+  const usageTypes = ["COURSE", "ACTIVITY", "OTHER"] as const;
+
+  const mockDispenses: Array<{ itemId: string; qty: number; usageType: typeof usageTypes[number]; daysAgo: number }> = [
+    { itemId: topItems[0]?.id, qty: 42, usageType: "COURSE",   daysAgo: 1 },
+    { itemId: topItems[0]?.id, qty: 18, usageType: "ACTIVITY", daysAgo: 3 },
+    { itemId: topItems[1]?.id, qty: 35, usageType: "COURSE",   daysAgo: 2 },
+    { itemId: topItems[1]?.id, qty: 10, usageType: "OTHER",    daysAgo: 4 },
+    { itemId: topItems[2]?.id, qty: 28, usageType: "ACTIVITY", daysAgo: 1 },
+    { itemId: topItems[3]?.id, qty: 25, usageType: "COURSE",   daysAgo: 2 },
+    { itemId: topItems[3]?.id, qty: 8,  usageType: "OTHER",    daysAgo: 5 },
+    { itemId: topItems[4]?.id, qty: 22, usageType: "COURSE",   daysAgo: 3 },
+    { itemId: topItems[5]?.id, qty: 19, usageType: "ACTIVITY", daysAgo: 1 },
+    { itemId: topItems[5]?.id, qty: 6,  usageType: "COURSE",   daysAgo: 4 },
+    { itemId: topItems[6]?.id, qty: 16, usageType: "OTHER",    daysAgo: 2 },
+    { itemId: topItems[7]?.id, qty: 14, usageType: "COURSE",   daysAgo: 3 },
+    { itemId: topItems[7]?.id, qty: 9,  usageType: "ACTIVITY", daysAgo: 1 },
+    { itemId: topItems[8]?.id, qty: 12, usageType: "ACTIVITY", daysAgo: 2 },
+    { itemId: topItems[8]?.id, qty: 5,  usageType: "OTHER",    daysAgo: 4 },
+    { itemId: topItems[9]?.id, qty: 11, usageType: "COURSE",   daysAgo: 1 },
+    // Extra ACTIVITY / OTHER to make usage-by-type chart interesting
+    { itemId: topItems[2]?.id, qty: 20, usageType: "ACTIVITY", daysAgo: 5 },
+    { itemId: topItems[4]?.id, qty: 15, usageType: "OTHER",    daysAgo: 2 },
+    { itemId: topItems[6]?.id, qty: 13, usageType: "COURSE",   daysAgo: 3 },
+    { itemId: topItems[9]?.id, qty: 17, usageType: "ACTIVITY", daysAgo: 4 },
+  ];
+
+  for (const m of mockDispenses) {
+    if (!m.itemId) continue;
+    await prisma.dispenseRecord.create({
+      data: {
+        itemId: m.itemId,
+        quantity: m.qty,
+        quantitySub: 0,
+        usageType: m.usageType,
+        staffId: admin.id,
+        dispensedAt: day(m.daysAgo),
+      },
+    });
+  }
+  console.log(`  ${mockDispenses.filter((m) => m.itemId).length} mock dispense records created`);
+
   // Near-expiry lot alert
   if (demoConsumables[0]) {
     await prisma.lot.create({

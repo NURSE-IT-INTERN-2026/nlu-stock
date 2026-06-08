@@ -19,9 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCart } from "./cart-context";
-import { ShoppingCart, Loader2, Minus, Plus, Package, Trash2, Pencil } from "lucide-react";
+import { ShoppingBasket, Loader2, Minus, Plus, Package, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
+import { createDispense } from "@/lib/api";
 
 function EditableQty({ value, max, unit, onChange }: {
   value: number;
@@ -91,29 +92,18 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
     if (items.length === 0) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/dispense", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: items.map((i) => ({
-            itemId: i.itemId,
-            subItemId: i.subItemId ?? null,
-            lotId: i.lotId ?? null,
-            quantity: i.quantity,
-            quantitySub: i.quantitySub,
-          })),
-          usageType: usageType || null,
-          usageNote: usageType === "OTHER" ? usageNote || null : null,
-          notes: notes || null,
-        }),
+      const data = await createDispense({
+        items: items.map((i) => ({
+          itemId: i.itemId,
+          subItemId: i.subItemId ?? null,
+          lotId: i.lotId ?? null,
+          quantity: i.quantity,
+          quantitySub: i.quantitySub,
+        })),
+        usageType: usageType || null,
+        usageNote: usageType === "OTHER" ? usageNote || null : null,
+        notes: notes || null,
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Dispense failed");
-      }
-
-      const data = await res.json();
       toast.success(`Dispensed ${data.count} item(s) successfully`);
       clearCart();
       setUsageType("");
@@ -172,7 +162,7 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
         {/* ── ZONE 1: Header ── */}
         <SheetHeader className="px-6 pt-6 pb-3 shrink-0">
           <SheetTitle className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" />
+            <ShoppingBasket className="h-5 w-5" />
             Cart ({items.length})
           </SheetTitle>
         </SheetHeader>

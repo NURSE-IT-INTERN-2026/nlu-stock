@@ -18,20 +18,12 @@ import { Progress, ProgressTrack, ProgressIndicator } from "@/components/ui/prog
 import { useSession } from "@/components/layout/auth-guard";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { useAlerts } from "@/hooks/use-alerts";
+import { useCategories, useLocations } from "@/hooks/use-lookup-data";
+import { usePagination } from "@/hooks/use-pagination";
+import { Category, CATEGORY_LABELS, locationLabel } from "@/lib/constants";
+import { getItems, getSubItems } from "@/lib/api";
+import type { CategoryOption, LocationOption } from "@/lib/api";
 
-interface CategoryType {
-  id: string;
-  name: string;
-  category: string;
-}
-
-interface Location {
-  id: string;
-  building: string;
-  floor: string;
-  room: string;
-  detail: string | null;
-}
 
 interface UnitType { id: string; name: string }
 
@@ -50,27 +42,16 @@ interface ItemRecord {
   code: string;
   name: string;
   nameEn: string | null;
-  category: CategoryType;
+  category: CategoryOption;
   trackIndividually: boolean;
   status: string;
   issueUnit: UnitType;
   availableQty: number;
   totalQty: number;
   minThreshold: number;
-  location: Location | null;
+  location: LocationOption | null;
   _count: { subItems: number };
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  KRU: "ครุภัณฑ์",
-  ELE: "อิเล็กทรอนิกส์",
-  BOOK: "หนังสือ",
-  TOY: "ของเล่น",
-  DUR: "วัสดุคงทน",
-  CON: "วัสดุสิ้นเปลือง",
-  MED: "ยา",
-  KIT: "อุปกรณ์ประกอบวิชา",
-};
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   AVAILABLE: "default",
@@ -125,10 +106,6 @@ const PRESET_CHIPS = [
   { value: "overdueMaint", label: "Overdue Maint.", alertKey: "overdueMaintenance" as const, color: "bg-purple-100 text-purple-800 hover:bg-purple-200 border-purple-300" },
 ] as const;
 
-function locationLabel(loc: Location) {
-  return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
-}
-
 export default function ItemsPage() {
   return (
     <Suspense fallback={<div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-96 w-full" /></div>}>
@@ -143,12 +120,10 @@ function ItemsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<ItemRecord[]>([]);
-  const [categories, setCategories] = useState<CategoryType[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const { categories } = useCategories();
+  const { locations } = useLocations();
+  const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [perPage] = useState(20);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
   const [filterStatus, setFilterStatus] = useState(searchParams.get("status") ?? "");
@@ -161,9 +136,8 @@ function ItemsContent() {
   const handleQrScan = async (code: string) => {
     setScannerOpen(false);
     try {
-      const res = await fetch(`/api/items?search=${encodeURIComponent(code)}&perPage=1`);
-      const data = await res.json();
-      const match = data.items?.find((it: ItemRecord) => it.code === code);
+      const data = await getItems({ search: code, perPage: "1" });
+      const match = (data.items as ItemRecord[])?.find((it: ItemRecord) => it.code === code);
       if (match) {
         router.push(`/items/${match.id}`);
         return;
@@ -181,32 +155,25 @@ function ItemsContent() {
       return next;
     });
     if (!subItemsMap[itemId]) {
-      const res = await fetch(`/api/settings/items/${itemId}/sub-items`);
-      const data = await res.json();
-      setSubItemsMap((prev) => ({ ...prev, [itemId]: data }));
+      const data = await getSubItems(itemId);
+      setSubItemsMap((prev) => ({ ...prev, [itemId]: data as SubItemRecord[] }));
     }
   };
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page), perPage: String(perPage) });
-    if (search) params.set("search", search);
-    if (filterCategory) params.set("categoryId", filterCategory);
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterLocation) params.set("locationId", filterLocation);
-    if (presetFilter) params.set(presetFilter, "true");
+    const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
+    if (search) params.search = search;
+    if (filterCategory) params.categoryId = filterCategory;
+    if (filterStatus) params.status = filterStatus;
+    if (filterLocation) params.locationId = filterLocation;
+    if (presetFilter) params[presetFilter] = "true";
 
-    const res = await fetch(`/api/items?${params}`);
-    const data = await res.json();
-    setItems(data.items || []);
+    const data = await getItems(params);
+    setItems((data.items || []) as ItemRecord[]);
     setTotal(data.total || 0);
     setLoading(false);
   }, [page, perPage, search, filterCategory, filterStatus, filterLocation, presetFilter]);
-
-  useEffect(() => {
-    fetch("/api/settings/categories").then((r) => r.json()).then(setCategories);
-    fetch("/api/settings/locations").then((r) => r.json()).then(setLocations);
-  }, []);
 
   useEffect(() => {
     const low = searchParams.get("lowStock");
@@ -218,8 +185,6 @@ function ItemsContent() {
   }, [searchParams]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
-
-  const totalPages = Math.ceil(total / perPage);
 
   return (
     <div className="space-y-4">
@@ -410,7 +375,7 @@ function ItemsContent() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{CATEGORY_LABELS[item.category.category] || item.category.name}</Badge>
+                        <Badge variant="outline">{CATEGORY_LABELS[item.category.category as Category] || item.category.name}</Badge>
                       </TableCell>
                       <TableCell>
                         <StockBar available={item.availableQty} total={item.totalQty} threshold={item.minThreshold} />

@@ -4,15 +4,15 @@ import { useState, useEffect } from "react";
 import { StatusOverviewChart } from "./status-overview-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getDashboardStatusOverview } from "@/lib/api";
 
 export function StatusOverviewWidget() {
   const [data, setData] = useState<{ status: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/dashboard/status-overview")
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
+    getDashboardStatusOverview()
+      .then((d) => { setData(d as { status: string; count: number }[]); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
+import { getPublicCategories, getPublicLocations, getUsers } from "@/lib/api";
 
 export interface FilterValues {
   dateFrom?: string;
@@ -57,21 +58,18 @@ export function ReportFilters({ config, values, onChange }: ReportFiltersProps) 
 
   useEffect(() => {
     if (config.categories) {
-      fetch("/api/categories")
-        .then((r) => r.json())
+      getPublicCategories()
         .then((data) => setCategories(data))
         .catch(() => {});
     }
     if (config.locations) {
-      fetch("/api/locations")
-        .then((r) => r.json())
-        .then((data) => setLocations(data))
+      getPublicLocations()
+        .then((data) => setLocations(data as Option[]))
         .catch(() => {});
     }
     if (config.staff) {
-      fetch("/api/users")
-        .then((r) => r.json())
-        .then((data) => setStaff(data))
+      getUsers()
+        .then((data) => setStaff(data as Option[]))
         .catch(() => {});
     }
     // usageTypes is static, no fetch needed

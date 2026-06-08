@@ -6,6 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { categories: true };
 
@@ -76,10 +77,9 @@ export function NearExpiryLowStockTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    const res = await fetch(`/api/reports/near-expiry-low-stock?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {};
+    if (filters.categoryId) params.categoryId = filters.categoryId;
+    const json = (await getReport("near-expiry-low-stock", params)) as { lowStock: LowStockRow[]; nearExpiry: NearExpiryRow[] };
     setLowStock(json.lowStock);
     setNearExpiry(json.nearExpiry);
     setLoading(false);

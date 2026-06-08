@@ -7,6 +7,7 @@ import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart } from "./charts/annual-cost-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
+import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { year: true, categories: true };
 
@@ -74,11 +75,16 @@ export function AnnualCostTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.year) params.set("year", filters.year);
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    const res = await fetch(`/api/reports/annual-cost?${params.toString()}`);
-    const json = await res.json();
+    const params: Record<string, string> = {};
+    if (filters.year) params.year = filters.year;
+    if (filters.categoryId) params.categoryId = filters.categoryId;
+    const json = (await getReport("annual-cost", params)) as {
+      purchases: PurchaseRow[];
+      repairs: RepairRow[];
+      byCategory: { categoryName: string; totalPurchase: number; totalRepair: number }[];
+      totalPurchase: number;
+      totalRepair: number;
+    };
     setPurchases(json.purchases);
     setRepairs(json.repairs);
     setByCategory(json.byCategory);

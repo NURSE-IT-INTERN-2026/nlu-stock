@@ -16,6 +16,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
 
 interface UserRecord {
   id: string;
@@ -40,9 +41,12 @@ export function UsersTab() {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/settings/users");
-    const data = await res.json();
-    setUsers(data.users || data);
+    try {
+      const data = await getSettingsUsers();
+      setUsers((data as { users?: UserRecord[] } & UserRecord[]).users || (data as UserRecord[]));
+    } catch {
+      toast.error("Failed to load users");
+    }
     setLoading(false);
   }, []);
 
@@ -61,44 +65,40 @@ export function UsersTab() {
   }
 
   async function handleSave() {
-    if (editing) {
-      const res = await fetch(`/api/settings/users/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, role: form.role }),
-      });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to update"); return; }
-      toast.success("User updated");
-    } else {
-      const res = await fetch("/api/settings/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Failed to create"); return; }
-      toast.success("User created");
+    try {
+      if (editing) {
+        await updateSettingsUser(editing.id, { name: form.name, role: form.role });
+        toast.success("User updated");
+      } else {
+        await createSettingsUser(form);
+        toast.success("User created");
+      }
+      setDialogOpen(false);
+      fetchUsers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
     }
-    setDialogOpen(false);
-    fetchUsers();
   }
 
   async function handleToggleActive(user: UserRecord) {
-    const res = await fetch(`/api/settings/users/${user.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !user.isActive }),
-    });
-    if (!res.ok) { toast.error("Failed to update"); return; }
-    toast.success(user.isActive ? "User deactivated" : "User activated");
-    fetchUsers();
+    try {
+      await updateSettingsUser(user.id, { isActive: !user.isActive });
+      toast.success(user.isActive ? "User deactivated" : "User activated");
+      fetchUsers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update");
+    }
   }
 
   async function handleDelete(user: UserRecord) {
     if (!confirm(`Deactivate "${user.name}"?`)) return;
-    const res = await fetch(`/api/settings/users/${user.id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("Failed to deactivate"); return; }
-    toast.success("User deactivated");
-    fetchUsers();
+    try {
+      await deleteSettingsUser(user.id);
+      toast.success("User deactivated");
+      fetchUsers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to deactivate");
+    }
   }
 
   if (loading) return <div className="text-muted-foreground">Loading...</div>;
