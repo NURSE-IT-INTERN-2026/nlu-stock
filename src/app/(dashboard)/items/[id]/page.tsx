@@ -90,22 +90,17 @@ export default function ItemDetailPage() {
 
   useEffect(() => { fetchItem(); }, [fetchItem]);
 
-  const isFixedAsset = useMemo(
-    () => item?.category.category === "KRU" || item?.category.category === "ELE",
-    [item?.category.category],
-  );
-
   const canAct = useMemo(
     () => user?.role === "ADMIN" || user?.role === "STAFF",
     [user?.role],
   );
 
   const tabs: { key: TabKey; label: string; icon: typeof Info; show: boolean }[] = useMemo(() => [
-    { key: "overview", label: "Overview", icon: Info, show: true },
-    { key: "subcodes", label: `Sub-codes${item?.subItems.length ? ` (${item.subItems.length})` : ""}`, icon: Hash, show: !!(item?.trackIndividually && item.subItems.length > 1) },
-    { key: "history", label: "History", icon: Clock, show: true },
-    { key: "maintenance", label: "Maintenance", icon: Wrench, show: !!isFixedAsset },
-  ], [item?.trackIndividually, item?.subItems.length, isFixedAsset]);
+    { key: "overview", label: "ข้อมูลทั่วไป", icon: Info, show: true },
+    { key: "subcodes", label: `รหัสย่อย${item?.subItems.length ? ` (${item.subItems.length})` : ""}`, icon: Hash, show: !!(item?.trackIndividually && item.subItems.length > 1) },
+    { key: "history", label: "ประวัติ", icon: Clock, show: true },
+    { key: "maintenance", label: "การซ่อมบำรุง", icon: Wrench, show: true },
+  ], [item?.trackIndividually, item?.subItems.length]);
 
   if (loading) {
     return (
@@ -143,22 +138,20 @@ export default function ItemDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* ── Sticky top bar ── */}
-      <header className="h-16 border-b border-border bg-background">
-        <div className="h-full max-w-[1400px] mx-auto px-4 sm:px-6 flex items-center gap-3">
-          <Link
-            href="/items"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" /> All items
-          </Link>
-          <span className="text-muted-foreground/50">/</span>
-          <span className="text-sm font-medium truncate font-mono">{item.code}</span>
-        </div>
-      </header>
+    <div>
+      {/* ── Back nav + code breadcrumb (replaces redundant page header) ── */}
+      <div className="flex items-center gap-2 text-sm mb-6">
+        <Link
+          href="/items"
+          className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="size-4" /> รายการทั้งหมด
+        </Link>
+        <span className="text-muted-foreground/50">/</span>
+        <span className="font-medium font-mono">{item.code}</span>
+      </div>
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-5xl">
         {/* ── Title + Stock at-a-glance ── */}
         <div className="flex flex-col lg:flex-row lg:items-end gap-6 lg:gap-10 pb-6 border-b border-border">
           <div className="min-w-0 flex-1">
@@ -217,7 +210,7 @@ export default function ItemDetailPage() {
             <ItemDetailHistory itemId={item.id} />
           )}
 
-          {tab === "maintenance" && isFixedAsset && (
+          {tab === "maintenance" && (
             <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} onRecordMaintenance={() => setMaintOpen(true)} />
           )}
         </div>
@@ -245,14 +238,13 @@ export default function ItemDetailPage() {
         onSuccess={fetchItem}
       />
 
-      {isFixedAsset && (
-        <MaintenanceFormDialog
-          open={maintOpen}
-          onOpenChange={setMaintOpen}
-          itemId={item.id}
-          onSuccess={fetchItem}
-        />
-      )}
+      <MaintenanceFormDialog
+        open={maintOpen}
+        onOpenChange={setMaintOpen}
+        itemId={item.id}
+        maintenanceCycleMonths={item.maintenanceCycleMonths}
+        onSuccess={fetchItem}
+      />
     </div>
   );
 }

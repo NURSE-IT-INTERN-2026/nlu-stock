@@ -1,0 +1,72 @@
+---
+title: NLU Stock Management — System Workflow
+---
+flowchart LR
+
+  SET(["⚙️ ตั้งค่า\n/settings"])
+  RECV["📦 1. รับเข้า\n/receive"]
+  INV["🗄️ 3. จัดการคลัง\n/items"]
+  DISP["🛒 2. เบิกจ่าย\n/dispense"]
+  CONF["✅ ยืนยันเบิก\n/dispense/confirm"]
+  MAINT["🔧 4. บำรุงรักษา\n/items/[id]"]
+  ADJ["📝 5. ปรับปรุงสต็อก\nadjust API"]
+  DASH(["📊 Dashboard\n/"])
+  REP(["📋 รายงาน\n/reports"])
+
+  SET  -.->|master data| RECV
+  SET  -.->|master data| INV
+  RECV --> INV
+  INV  --> DISP
+  INV  --> MAINT
+  DISP --> CONF
+  MAINT --> ADJ
+  INV   -.-> DASH
+  INV   -.-> REP
+  CONF  -.-> REP
+  MAINT -.-> REP
+  ADJ   -.-> REP
+
+  %% ── Item Status Lifecycle ───────────────────────────────────
+  subgraph LC ["สถานะวัสดุ / ครุภัณฑ์"]
+    direction LR
+    A1(["AVAILABLE"])
+    CO(["CHECKED_OUT"])
+    DM(["DAMAGED"])
+    UR(["UNDER_REPAIR"])
+    A2(["AVAILABLE"])
+    DP(["DISPOSED"])
+    LO(["LOST"])
+
+    A1 -->|เบิก| CO
+    CO -->|คืน| A1
+    A1 -->|ชำรุด| DM
+    DM -->|ส่งซ่อม| UR
+    UR -->|ซ่อมเสร็จ| A2
+    UR -->|จำหน่าย| DP
+    UR -->|สูญหาย| LO
+  end
+
+  CONF  -.-> LC
+  MAINT -.-> LC
+  ADJ   -.-> LC
+
+  %% ── Styles ──────────────────────────────────────────────────
+  classDef receive  fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef inv      fill:#f3e8ff,stroke:#7e22ce,color:#581c87
+  classDef dispense fill:#dcfce7,stroke:#15803d,color:#14532d
+  classDef maint    fill:#ffedd5,stroke:#c2410c,color:#7c2d12
+  classDef adj      fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef support  fill:#e0e7ff,stroke:#3730a3,color:#1e1b4b
+  classDef ok       fill:#dcfce7,stroke:#15803d,color:#14532d
+  classDef bad      fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef warn     fill:#ffedd5,stroke:#c2410c,color:#7c2d12
+
+  class RECV receive
+  class INV inv
+  class DISP,CONF dispense
+  class MAINT maint
+  class ADJ adj
+  class SET,DASH,REP support
+  class A1,A2,CO ok
+  class DM,UR warn
+  class DP,LO bad

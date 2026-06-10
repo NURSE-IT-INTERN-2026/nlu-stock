@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,19 +18,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/shared/file-upload";
-import { createMaintenance } from "@/lib/api";
+import { createMaintenance, searchDispenseItems } from "@/lib/api";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  itemId: string;
+  itemId?: string;
+  itemLabel?: string;
+  maintenanceCycleMonths?: number;
   onSuccess: () => void;
 }
 
-export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }: Props) {
+interface SearchItem {
+  id: string;
+  code: string;
+  name: string;
+  category: { name: string; category: string };
+}
+
+export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, maintenanceCycleMonths, onSuccess }: Props) {
+  // ── Item selection ──
+  const hasDefaultItem = !!itemId;
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(itemId ?? null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // ── Form fields ──
   const [type, setType] = useState<"PREVENTIVE" | "CORRECTIVE">("PREVENTIVE");
   const [result, setResult] = useState<"AVAILABLE" | "NEEDS_MORE_REPAIR" | "DISPOSED">("AVAILABLE");
   const [performedAt, setPerformedAt] = useState(new Date().toISOString().split("T")[0]);
@@ -41,10 +59,55 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // ── Reset on open/close ──
+  useEffect(() => {
+    if (open) {
+      setSelectedItemId(itemId ?? null);
+      setSearchQuery("");
+      setSearchResults([]);
+    }
+  }, [open, itemId]);
+
+  // ── Item search ──
+  const doSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const data = await searchDispenseItems({ q, limit: "20" });
+      setSearchResults((data.items ?? []) as SearchItem[]);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hasDefaultItem) return; // no search when item is pre-selected
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => doSearch(searchQuery), 300);
+    return () => clearTimeout(searchTimer.current);
+  }, [searchQuery, doSearch, hasDefaultItem]);
+
+  // ── Auto-calculate next maintenance date ──
+  const cycle = maintenanceCycleMonths ?? 0;
+  useEffect(() => {
+    if (cycle > 0 && performedAt) {
+      const d = new Date(performedAt);
+      d.setMonth(d.getMonth() + cycle);
+      setNextMaintenanceAt(d.toISOString().split("T")[0]);
+    }
+  }, [performedAt, cycle]);
+
   const handleSubmit = async () => {
+    const targetId = selectedItemId;
+    if (!targetId) {
+      toast.error("Please select an item");
+      return;
+    }
     setSubmitting(true);
     try {
-      await createMaintenance(itemId, {
+      await createMaintenance(targetId, {
         type,
         result,
         performedAt,
@@ -73,6 +136,9 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
     setCost("");
     setNextMaintenanceAt("");
     setAttachmentUrl(null);
+    setSelectedItemId(itemId ?? null);
+    setSearchQuery("");
+    setSearchResults([]);
     onOpenChange(false);
   };
 
@@ -84,6 +150,59 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* ── Item selector ── */}
+          {hasDefaultItem ? (
+            <div className="rounded-lg border px-3 py-2 text-sm bg-muted/30">
+              <span className="text-muted-foreground">Item: </span>
+              <span className="font-medium">{itemLabel ?? itemId}</span>
+            </div>
+          ) : selectedItemId ? (
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <span className="text-sm font-medium">Item selected</span>
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedItemId(null); setSearchQuery(""); }}>
+                Change
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search item by name or code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
+              {searching && (
+                <div className="text-xs text-muted-foreground py-1">Searching...</div>
+              )}
+              {searchResults.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-lg border divide-y">
+                  {searchResults.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedItemId(item.id);
+                        setSearchResults([]);
+                        setSearchQuery("");
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
+                      <span className="ml-2">{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchQuery && !searching && searchResults.length === 0 && (
+                <div className="text-xs text-muted-foreground py-1">No items found</div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Type</Label>
@@ -133,6 +252,9 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
             <div className="space-y-1.5">
               <Label>Next Maintenance</Label>
               <Input type="date" value={nextMaintenanceAt} onChange={(e) => setNextMaintenanceAt(e.target.value)} />
+              {cycle > 0 && nextMaintenanceAt && (
+                <span className="text-[11px] text-muted-foreground">Auto: +{cycle} months</span>
+              )}
             </div>
           </div>
 
@@ -148,7 +270,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, onSuccess }:
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={resetAndClose}>Cancel</Button>
-            <Button disabled={submitting} onClick={handleSubmit}>
+            <Button disabled={submitting || !selectedItemId} onClick={handleSubmit}>
               {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               Save
             </Button>

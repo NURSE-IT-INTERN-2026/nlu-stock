@@ -17,6 +17,15 @@ interface HeaderProps {
   user: SessionUser;
 }
 
+const SEGMENT_LABELS: Record<string, string> = {
+  items: "รายการพัสดุ",
+  dispense: "เบิกพัสดุ",
+  receive: "รับพัสดุเข้า",
+  reports: "รายงาน",
+  settings: "ตั้งค่าระบบ",
+  confirm: "ยืนยันการเบิก",
+};
+
 function Breadcrumb({ title }: { title: string }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
@@ -24,7 +33,7 @@ function Breadcrumb({ title }: { title: string }) {
   // Build trail from intermediate segments only (skip root)
   const trail = segments.slice(0, -1).map((seg, i, arr) => {
     const href = "/" + arr.slice(0, i + 1).join("/");
-    return { label: seg.charAt(0).toUpperCase() + seg.slice(1), href };
+    return { label: SEGMENT_LABELS[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1), href };
   });
 
   // If no trail, just show the title
@@ -75,8 +84,10 @@ export function Header({ title, user }: HeaderProps) {
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Cart */}
         <button
+          type="button"
+          aria-label="ดูตะกร้า"
           onClick={() => router.push("/dispense/confirm")}
-          className="relative flex items-center justify-center size-8 rounded-full bg-white hover:bg-gray-50 transition-colors"
+          className="relative flex items-center justify-center size-8 rounded-full bg-muted hover:bg-muted/80 transition-colors"
         >
           <ShoppingBasket className="size-4" />
           {itemCount > 0 && (
@@ -91,8 +102,9 @@ export function Header({ title, user }: HeaderProps) {
 
         {/* Theme */}
         <button
+          type="button"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="relative flex items-center justify-center size-8 rounded-full bg-white hover:bg-gray-50 transition-colors"
+          className="relative flex items-center justify-center size-8 rounded-full bg-muted hover:bg-muted/80 transition-colors"
         >
           <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />

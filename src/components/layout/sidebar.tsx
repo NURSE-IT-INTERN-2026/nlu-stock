@@ -7,6 +7,7 @@ import {
   Package,
   ShoppingCart,
   Truck,
+  Wrench,
   BarChart3,
   Settings,
   ChevronLeft,
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/items", label: "All Items", icon: Package },
   { href: "/dispense", label: "Dispense", icon: ShoppingCart },
   { href: "/receive", label: "Receive", icon: Truck },
+  { href: "/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
@@ -56,6 +58,8 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
       <div className={cn("flex items-center h-16", collapsed ? "justify-center" : "justify-between px-4")}>
         {!collapsed && <span className="font-bold text-lg tracking-tight">NLU Stock</span>}
         <button
+          type="button"
+          aria-label={collapsed ? "ขยายเมนู" : "ย่อเมนู"}
           onClick={onToggle}
           className="p-1.5 rounded-md hover:bg-sidebar-accent text-muted-foreground"
         >

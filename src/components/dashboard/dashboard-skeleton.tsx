@@ -8,7 +8,7 @@ export function DashboardSkeleton() {
         <Skeleton className="h-[250px] w-full rounded-lg" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 mt-6">
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
         <Skeleton className="h-[280px] w-full rounded-lg" />
         <Skeleton className="h-[280px] w-full rounded-lg" />
       </div>

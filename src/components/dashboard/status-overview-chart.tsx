@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { useMemo } from "react";
+import { useThemeColors } from "@/lib/resolve-color";
+import type { StatusData } from "@/lib/dashboard-types";
 
 const STATUS_VAR_MAP: Record<string, string> = {
   AVAILABLE: "--chart-2",
@@ -26,20 +27,22 @@ const STATUS_LABELS: Record<string, string> = {
   DISPOSED: "Disposed",
 };
 
-function resolveToHex(cssVar: string): string {
-  if (typeof window === "undefined") return "#888";
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-  if (!raw) return "#888";
-  if (raw.startsWith("#")) return raw;
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) return "#888";
-  ctx.fillStyle = raw;
-  return ctx.fillStyle;
+interface StatusTooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: number; payload: { name: string } }>;
 }
 
-interface StatusData {
-  status: string;
-  count: number;
+function StatusTooltip({ active, payload }: StatusTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
+      <p className="font-medium text-foreground">{d.payload.name}</p>
+      <p className="text-muted-foreground">
+        จำนวน: <span className="font-semibold text-foreground">{d.value.toLocaleString("th-TH")}</span> รายการ
+      </p>
+    </div>
+  );
 }
 
 interface StatusOverviewChartProps {
@@ -47,13 +50,12 @@ interface StatusOverviewChartProps {
 }
 
 export function StatusOverviewChart({ data }: StatusOverviewChartProps) {
-  const colorMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const [status, cssVar] of Object.entries(STATUS_VAR_MAP)) {
-      map[status] = resolveToHex(cssVar);
-    }
-    return map;
-  }, []);
+  const colorMap = useThemeColors(Object.values(STATUS_VAR_MAP));
+
+  const resolvedColorMap: Record<string, string> = {};
+  for (const [status, cssVar] of Object.entries(STATUS_VAR_MAP)) {
+    resolvedColorMap[status] = colorMap[cssVar] ?? "oklch(50% 0 0)";
+  }
 
   const chartData = data.map((d) => ({
     name: STATUS_LABELS[d.status] || d.status,
@@ -62,18 +64,19 @@ export function StatusOverviewChart({ data }: StatusOverviewChartProps) {
   }));
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold text-foreground">
-          Status Overview
+          สถานะภาพรวม
         </CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No data</p>
+          <p className="text-sm text-muted-foreground text-center py-8">ไม่มีข้อมูล</p>
         ) : (
-          <div className="flex flex-col items-center gap-3">
-            <ResponsiveContainer width="100%" height={160}>
+          <div className="flex flex-col items-center gap-3" role="img" aria-label={`Item status breakdown: ${chartData.map((e) => `${e.name}: ${e.value}`).join(", ")}`}>
+            <div className="w-full" style={{ height: 160 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={chartData}
@@ -82,20 +85,26 @@ export function StatusOverviewChart({ data }: StatusOverviewChartProps) {
                   innerRadius={38}
                   outerRadius={65}
                   dataKey="value"
+                  animationDuration={400}
+                  animationEasing="ease-out"
                 >
                   {chartData.map((entry, i) => (
-                    <Cell key={i} fill={colorMap[entry.status] || colorMap["DISPOSED"]} />
+                    <Cell key={i} fill={resolvedColorMap[entry.status] || resolvedColorMap["DISPOSED"]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip content={<StatusTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-            <ul className="grid grid-cols-2 gap-x-3 gap-y-1 w-full px-2">
+            </div>
+            <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 w-full px-2">
               {chartData.map((entry) => (
-                <li key={entry.status} className="flex items-center gap-1.5 text-xs">
+                <li
+                  key={entry.status}
+                  className="flex items-center gap-1.5 text-xs rounded px-1.5 py-1 transition-colors hover:bg-muted/50"
+                >
                   <span
                     className="inline-block h-2 w-2 rounded-full shrink-0"
-                    style={{ backgroundColor: colorMap[entry.status] || colorMap["DISPOSED"] }}
+                    style={{ backgroundColor: resolvedColorMap[entry.status] || resolvedColorMap["DISPOSED"] }}
                   />
                   <span className="truncate text-foreground/80">{entry.name}</span>
                   <span className="text-foreground font-semibold ml-auto">{entry.value}</span>

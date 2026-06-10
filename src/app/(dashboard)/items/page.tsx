@@ -64,27 +64,27 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
 };
 
 const STATUS_PILLS: Record<string, string> = {
-  AVAILABLE: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  CHECKED_OUT: "bg-blue-100 text-blue-800 border-blue-200",
-  DAMAGED: "bg-red-100 text-red-800 border-red-200",
-  UNDER_REPAIR: "bg-amber-100 text-amber-800 border-amber-200",
-  LOST: "bg-gray-100 text-gray-700 border-gray-200",
-  DISPOSED: "bg-gray-200 text-gray-800 border-gray-300",
-  PENDING_MAINTENANCE: "bg-amber-100 text-amber-800 border-amber-200",
+  AVAILABLE: "bg-success/15 text-success border-success/30",
+  CHECKED_OUT: "bg-info-500/15 text-info-500 border-info-500/30",
+  DAMAGED: "bg-destructive/15 text-destructive border-destructive/30",
+  UNDER_REPAIR: "bg-warning/15 text-warning-foreground border-warning/30",
+  LOST: "bg-muted text-muted-foreground border-border",
+  DISPOSED: "bg-muted text-muted-foreground border-border",
+  PENDING_MAINTENANCE: "bg-warning/15 text-warning-foreground border-warning/30",
 };
 
 function StockBar({ available, total, threshold }: { available: number; total: number; threshold: number }) {
   if (total === 0) return <span className="text-xs text-muted-foreground">-</span>;
   const pct = Math.round((available / total) * 100);
   const barColor = available < threshold
-    ? "bg-red-500" : pct < 50
-    ? "bg-amber-500" : "bg-emerald-500";
+    ? "bg-destructive" : pct < 50
+    ? "bg-warning" : "bg-success";
   return (
     <div className="flex items-center gap-2 min-w-[100px]">
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className={`text-xs tabular-nums whitespace-nowrap ${available < threshold ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
+      <span className={`text-xs tabular-nums whitespace-nowrap ${available < threshold ? "text-destructive font-medium" : "text-muted-foreground"}`}>
         {available}/{total}
       </span>
     </div>
@@ -92,18 +92,18 @@ function StockBar({ available, total, threshold }: { available: number; total: n
 }
 
 const STATUS_CHIPS = [
-  { value: "AVAILABLE", label: "Available", color: "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-300" },
-  { value: "CHECKED_OUT", label: "Checked Out", color: "bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-300" },
-  { value: "DAMAGED", label: "Damaged", color: "bg-red-100 text-red-800 hover:bg-red-200 border-red-300" },
-  { value: "UNDER_REPAIR", label: "Under Repair", color: "bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-300" },
-  { value: "LOST", label: "Lost", color: "bg-slate-200 text-slate-800 hover:bg-slate-300 border-slate-400" },
-  { value: "DISPOSED", label: "Disposed", color: "bg-zinc-200 text-zinc-800 hover:bg-zinc-300 border-zinc-400" },
+  { value: "AVAILABLE", label: "มีอยู่", color: "bg-success/15 text-success hover:bg-success/25 border-success/30" },
+  { value: "CHECKED_OUT", label: "ถูกยืม", color: "bg-info-500/15 text-info-500 hover:bg-info-500/25 border-info-500/30" },
+  { value: "DAMAGED", label: "ชำรุด", color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
+  { value: "UNDER_REPAIR", label: "ซ่อมอยู่", color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
+  { value: "LOST", label: "สูญหาย", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
+  { value: "DISPOSED", label: "จำหน่ายแล้ว", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
 ] as const;
 
 const PRESET_CHIPS = [
-  { value: "lowStock", label: "Low Stock", alertKey: "lowStock" as const, color: "bg-orange-100 text-orange-800 hover:bg-orange-200 border-orange-300" },
-  { value: "nearExpiry", label: "Near Expiry", alertKey: "nearExpiry" as const, color: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-300" },
-  { value: "overdueMaint", label: "Overdue Maint.", alertKey: "overdueMaintenance" as const, color: "bg-purple-100 text-purple-800 hover:bg-purple-200 border-purple-300" },
+  { value: "lowStock", label: "สต๊อกต่ำ", alertKey: "lowStock" as const, color: "bg-orange-500/15 text-orange-500 hover:bg-orange-500/25 border-orange-500/30" },
+  { value: "nearExpiry", label: "ใกล้หมดอายุ", alertKey: "nearExpiry" as const, color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
+  { value: "overdueMaint", label: "บำรุเกินกำหนด", alertKey: "overdueMaintenance" as const, color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
 ] as const;
 
 export default function ItemsPage() {
@@ -194,42 +194,42 @@ function ItemsContent() {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search code, name..."
+              placeholder="ค้นหารหัส, ชื่อพัสดุ..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-8"
+              className="pl-8 text-gray-900"
             />
           </div>
-          <Button variant="outline" size="icon" onClick={() => setScannerOpen(true)} title="Scan QR" className="shrink-0">
+          <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} aria-label="สแกน QR Code" className="shrink-0">
             <QrCode className="h-4 w-4" />
           </Button>
           <Select value={filterCategory || "__all__"} onValueChange={(v) => { setFilterCategory(!v || v === "__all__" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All Categories">
+              <SelectValue placeholder="ทุกหมวดหมู่">
                 {(value: string | null) => {
-                  if (!value) return "All Categories";
+                  if (!value) return "ทุกหมวดหมู่";
                   const cat = categories.find((c) => c.id === value);
-                  return cat?.name ?? "All Categories";
+                  return cat?.name ?? "ทุกหมวดหมู่";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All Categories</SelectItem>
+              <SelectItem value="__all__">ทุกหมวดหมู่</SelectItem>
               {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterLocation || "__all__"} onValueChange={(v) => { setFilterLocation(!v || v === "__all__" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Locations">
+              <SelectValue placeholder="ทุกสถานที่">
                 {(value: string | null) => {
-                  if (!value) return "All Locations";
+                  if (!value) return "ทุกสถานที่";
                   const loc = locations.find((l) => l.id === value);
-                  return loc ? locationLabel(loc) : "All Locations";
+                  return loc ? locationLabel(loc) : "ทุกสถานที่";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All Locations</SelectItem>
+              <SelectItem value="__all__">ทุกสถานที่</SelectItem>
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>{locationLabel(loc)}</SelectItem>
               ))}
@@ -239,8 +239,9 @@ function ItemsContent() {
 
         {/* Row 2: status quick-filter chips */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-muted-foreground mr-1">Status:</span>
+          <span className="text-xs text-muted-foreground mr-1">สถานะ:</span>
           <button
+            type="button"
             className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
               !filterStatus
                 ? "bg-primary text-primary-foreground border-primary"
@@ -248,7 +249,7 @@ function ItemsContent() {
             }`}
             onClick={() => { setFilterStatus(""); setPage(1); }}
           >
-            All
+            ทั้งหมด
           </button>
           {STATUS_CHIPS.map((chip) => {
             const active = filterStatus === chip.value;

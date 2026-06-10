@@ -63,6 +63,8 @@ function EditableQty({ value, max, unit, onChange }: {
 
   return (
     <button
+      type="button"
+      aria-label={`แก้ไขจำนวน ${value} ${unit}`}
       className="flex items-center gap-0.5 w-14 justify-center group"
       onClick={() => { setDraft(String(value)); setEditing(true); }}
     >
@@ -271,6 +273,8 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
                       <div className="flex items-center justify-end gap-1 mt-1">
                         <div className="flex items-center gap-0.5 bg-background border rounded-full px-0.5">
                           <button
+                            type="button"
+                            aria-label="ลดจำนวน"
                             className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
                             onClick={() => adjustQty(item, -1)}
                             disabled={item.quantity <= 1}
@@ -286,6 +290,8 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
                             }}
                           />
                           <button
+                            type="button"
+                            aria-label="เพิ่มจำนวน"
                             className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
                             onClick={() => adjustQty(item, 1)}
                             disabled={!item.trackIndividually && item.quantity >= item.availableQty}
@@ -303,7 +309,9 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
 
                     {/* Delete button top-right */}
                     <button
-                      className="absolute top-2 right-2 p-1 rounded text-muted-foreground/40 hover:text-destructive transition-colors"
+                      type="button"
+                      aria-label="ลบออกจากตะกร้า"
+                      className="absolute top-2 right-2 p-2 rounded text-muted-foreground/40 hover:text-destructive transition-colors"
                       onClick={() => removeItem(item.itemId, item.lotId, item.subItemId)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

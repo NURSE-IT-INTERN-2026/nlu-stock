@@ -1,16 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { TopDispenseChart } from "./top-dispense-chart";
 import { UsageBySubjectChart } from "./usage-by-subject-chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDashboardTopDispense, getDashboardUsageBySubject } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { useTopDispense, useUsageBySubject } from "@/hooks/use-dashboard-queries";
 
-interface TopDispenseData { code: string; name: string; totalQuantity: number }
-interface UsageSubjectData { usageType: string | null; label: string; totalQuantity: number }
-
-function ChartGhost({ title, variant }: { title: string; variant: "horizontal" | "vertical" }) {
+function ChartGhost({ variant }: { variant: "horizontal" | "vertical" }) {
   return (
     <Card>
       <CardHeader className="pb-2 shrink-0">
@@ -18,7 +15,6 @@ function ChartGhost({ title, variant }: { title: string; variant: "horizontal" |
       </CardHeader>
       <CardContent className="space-y-3">
         {variant === "horizontal" ? (
-          // Mimic horizontal bar chart rows
           Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3">
               <Skeleton className="h-3 w-24 shrink-0" />
@@ -29,7 +25,6 @@ function ChartGhost({ title, variant }: { title: string; variant: "horizontal" |
             </div>
           ))
         ) : (
-          // Mimic vertical bar chart columns
           <div className="flex items-end justify-around gap-2 h-[240px]">
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton
@@ -46,35 +41,42 @@ function ChartGhost({ title, variant }: { title: string; variant: "horizontal" |
 }
 
 export function DashboardBarCharts() {
-  const [topDispense, setTopDispense] = useState<TopDispenseData[]>([]);
-  const [usageBySubject, setUsageBySubject] = useState<UsageSubjectData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const topQuery = useTopDispense();
+  const usageQuery = useUsageBySubject();
 
-  useEffect(() => {
-    Promise.all([
-      getDashboardTopDispense(),
-      getDashboardUsageBySubject(),
-    ]).then(([top, usage]) => {
-      setTopDispense(top as TopDispenseData[]);
-      setUsageBySubject(usage as UsageSubjectData[]);
-    }).finally(() => {
-      setLoading(false);
-    });
-  }, []);
+  const loading = topQuery.isLoading || usageQuery.isLoading;
+  const error = topQuery.error?.message ?? usageQuery.error?.message ?? null;
 
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 h-full">
-        <ChartGhost title="Top Dispensed This Month" variant="horizontal" />
-        <ChartGhost title="Usage by Type This Month" variant="vertical" />
+      <div className="grid gap-3 md:grid-cols-2 min-h-[340px]">
+        <ChartGhost variant="horizontal" />
+        <ChartGhost variant="vertical" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="animate-fade-in text-center py-8">
+        <p className="text-destructive mb-2">{error}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            topQuery.refetch();
+            usageQuery.refetch();
+          }}
+        >
+          โหลดใหม่
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 h-full">
-      <TopDispenseChart data={topDispense} />
-      <UsageBySubjectChart data={usageBySubject} />
+    <div className="animate-fade-in grid gap-3 md:grid-cols-2 h-full min-h-[340px]">
+      <TopDispenseChart data={topQuery.data ?? []} />
+      <UsageBySubjectChart data={usageQuery.data ?? []} />
     </div>
   );
 }

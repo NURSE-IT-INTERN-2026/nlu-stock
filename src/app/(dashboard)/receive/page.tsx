@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +13,27 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Search, Send, Package } from "lucide-react";
+import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Category, CATEGORY_COLORS } from "@/lib/constants";
-import { searchDispenseItems, createReceive } from "@/lib/api";
+import {
+  searchDispenseItems,
+  createReceive,
+  getCategories,
+  getUnits,
+  quickCreateItem,
+  type CategoryOption,
+  type UnitOption,
+} from "@/lib/api";
 
 interface SearchItem {
   id: string;
@@ -29,8 +44,11 @@ interface SearchItem {
   subUnit: { id: string; name: string };
   conversionFactor: number;
   trackIndividually: boolean;
+  availableQty: number;
   category: { name: string; category: string };
   location: { building: string; floor: string; room: string; detail: string | null } | null;
+  imageUrl?: string | null;
+  images?: string[];
 }
 
 interface ReceiveRow {
@@ -46,17 +64,78 @@ export default function ReceivePage() {
   const [rows, setRows] = useState<ReceiveRow[]>([]);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerIdx, setPickerIdx] = useState<number | null>(null);
+  const [mobileTab, setMobileTab] = useState<"search" | "cart">("search");
 
-  // Item search
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Quick-create dialog
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [qcForm, setQcForm] = useState({
+    code: "",
+    name: "",
+    categoryId: "",
+    issueUnitId: "",
+    subUnitId: "",
+    conversionFactor: 1,
+  });
+
+  useEffect(() => {
+    if (!quickOpen) return;
+    if (categories.length > 0 && units.length > 0) return;
+    setLookupLoading(true);
+    Promise.all([getCategories(), getUnits()])
+      .then(([cats, us]) => { setCategories(cats); setUnits(us); })
+      .catch(() => toast.error("Failed to load categories/units"))
+      .finally(() => setLookupLoading(false));
+  }, [quickOpen, categories.length, units.length]);
+
+  const openQuickCreate = () => {
+    setQcForm({ code: searchQ.trim(), name: "", categoryId: "", issueUnitId: "", subUnitId: "", conversionFactor: 1 });
+    setQuickOpen(true);
+  };
+
+  const handleQuickCreate = async () => {
+    if (!qcForm.code || !qcForm.name || !qcForm.categoryId || !qcForm.issueUnitId || !qcForm.subUnitId) {
+      toast.error("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
+      return;
+    }
+    setQuickLoading(true);
+    try {
+      const created = await quickCreateItem({ ...qcForm });
+      const newItem: SearchItem = {
+        id: created.id,
+        code: created.code,
+        name: created.name,
+        nameEn: created.nameEn,
+        issueUnit: created.issueUnit,
+        subUnit: created.subUnit,
+        conversionFactor: created.conversionFactor,
+        trackIndividually: created.trackIndividually,
+        availableQty: 0,
+        category: created.category,
+        location: created.location,
+      };
+      toast.success(`สร้างพัสดุ "${created.code}" สำเร็จ`);
+      setQuickOpen(false);
+      addItem(newItem);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "สร้างพัสดุไม่สำเร็จ");
+    } finally {
+      setQuickLoading(false);
+    }
+  };
 
   const doSearch = useCallback(async (q: string) => {
-    if (!q) { setSearchResults([]); return; }
+    if (!q) { setSearchResults([]); setHasSearched(false); return; }
     setSearchLoading(true);
+    setHasSearched(true);
     try {
       const data = await searchDispenseItems({ q, limit: "20" });
       setSearchResults((data.items ?? []) as SearchItem[]);
@@ -70,68 +149,35 @@ export default function ReceivePage() {
   const handleSearchChange = (val: string) => {
     setSearchQ(val);
     if (val) doSearch(val);
-    else setSearchResults([]);
+    else { setSearchResults([]); setHasSearched(false); }
   };
 
   const addItem = (item: SearchItem) => {
     setRows((prev) => {
       if (prev.some((r) => r.item.id === item.id)) {
-        toast.error(`${item.code} already in list`);
+        toast.error(`${item.code} อยู่ในรายการแล้ว`);
         return prev;
       }
-      return [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          item,
-          quantity: 1,
-          lotNumber: "",
-          expiryDate: "",
-          subCodes: [],
-        },
-      ];
+      return [...prev, { id: crypto.randomUUID(), item, quantity: 1, lotNumber: "", expiryDate: "", subCodes: [] }];
     });
-    setPickerOpen(false);
-    setPickerIdx(null);
-    setSearchQ("");
-    setSearchResults([]);
+    setMobileTab("cart");
   };
 
-  const updateRow = (id: string, updates: Partial<ReceiveRow>) => {
+  const updateRow = (id: string, updates: Partial<ReceiveRow>) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
-  };
 
-  const removeRow = (id: string) => {
+  const removeRow = (id: string) =>
     setRows((prev) => prev.filter((r) => r.id !== id));
-  };
 
-  const openItemPicker = (idx: number | null) => {
-    setPickerIdx(idx);
-    setPickerOpen(true);
-    setSearchQ("");
-    setSearchResults([]);
-  };
+  const totalUnits = rows.reduce((s, r) => s + r.quantity, 0);
 
-
-const handleSubmit = async () => {
-    if (rows.length === 0) {
-      toast.error("Add at least one item");
-      return;
-    }
-
-    // Validate
+  const handleSubmit = async () => {
+    if (rows.length === 0) { toast.error("เพิ่มพัสดุอย่างน้อย 1 รายการ"); return; }
     for (const row of rows) {
-      if (row.quantity < 1) {
-        toast.error(`Invalid quantity for ${row.item.code}`);
-        return;
-      }
+      if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.code}`); return; }
       const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
-      if (isConsumable && !row.lotNumber.trim()) {
-        toast.error(`Lot number required for consumable: ${row.item.code}`);
-        return;
-      }
+      if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุ Lot Number: ${row.item.code}`); return; }
     }
-
     setSubmitting(true);
     try {
       const payload = {
@@ -144,236 +190,388 @@ const handleSubmit = async () => {
         })),
         notes: notes || null,
       };
-
       const data = await createReceive(payload);
-      toast.success(`Received ${data.count} item(s) successfully`);
+      toast.success(`รับเข้าสำเร็จ ${data.count} รายการ`);
       setRows([]);
       setNotes("");
+      setMobileTab("search");
     } catch {
-      toast.error("Network error");
+      toast.error("เกิดข้อผิดพลาด กรุณาลองใหม่");
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <div className="flex flex-col gap-4 pb-24">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Receive Items</h1>
-        <Button onClick={() => openItemPicker(null)} size="sm">
-          <Plus className="h-4 w-4 mr-1" /> Add Item
-        </Button>
+  // ── Search panel ──────────────────────────────────────────────
+  const SearchPanel = (
+    <div className="flex flex-col h-full">
+      {/* Search input */}
+      <div className="relative mb-0">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="ค้นหาพัสดุ (รหัส / ชื่อ)..."
+          value={searchQ}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="pl-9 text-gray-900 border-0 shadow-none rounded-none focus-visible:ring-0"
+          autoFocus
+        />
       </div>
+      <div className="border-b shrink-0" />
 
-      {rows.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Package className="h-10 w-10 text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">
-              No items added yet. Click &quot;Add Item&quot; to start receiving.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((row, idx) => {
-            const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
-            return (
-              <Card key={row.id}>
-                <CardContent className="space-y-3">
-                  {/* Item header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs text-muted-foreground">{row.item.code}</span>
-                        <Badge className={cn("text-[10px]", CATEGORY_COLORS[row.item.category.category as Category] ?? "")}>
-                          {row.item.category.name}
-                        </Badge>
-                        {row.item.trackIndividually && (
-                          <Badge variant="outline" className="text-[10px]">Tracked</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm font-medium">{row.item.name}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => openItemPicker(idx)}
-                        title="Change item"
-                      >
-                        <Search className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive"
-                        onClick={() => removeRow(row.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Quantity */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Quantity ({row.item.issueUnit.name})</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={row.quantity}
-                        onChange={(e) => updateRow(row.id, { quantity: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    {row.item.trackIndividually && (
-                      <div className="space-y-1">
-                        <Label className="text-xs">Sub-codes (comma separated)</Label>
-                        <Input
-                          placeholder="A001, A002, A003"
-                          value={row.subCodes.join(", ")}
-                          onChange={(e) => {
-                            const codes = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
-                            updateRow(row.id, { subCodes: codes });
-                          }}
-                        />
-                      </div>
+      {/* Results list */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {searchLoading ? (
+          <div className="space-y-px">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-1 py-3">
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-8 w-8 rounded-md" />
+              </div>
+            ))}
+          </div>
+        ) : !hasSearched ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <Search className="h-9 w-9 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">พิมพ์รหัสหรือชื่อพัสดุเพื่อค้นหา</p>
+          </div>
+        ) : searchResults.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <Package className="h-9 w-9 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">ไม่พบ &ldquo;{searchQ}&rdquo; ในระบบ</p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {searchResults.map((item) => {
+              const alreadyAdded = rows.some((r) => r.item.id === item.id);
+              const thumb = item.images?.[0] ?? item.imageUrl ?? null;
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    "flex items-center gap-4 py-4 px-2",
+                    alreadyAdded ? "opacity-40" : "",
+                  )}
+                >
+                  {/* Thumbnail */}
+                  <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted flex items-center justify-center">
+                    {thumb ? (
+                      <img src={thumb} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Package className="h-5 w-5 text-muted-foreground" />
                     )}
                   </div>
-
-                  {/* Consumable fields */}
-                  {isConsumable && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Lot Number *</Label>
-                        <Input
-                          placeholder="LOT-001"
-                          value={row.lotNumber}
-                          onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Expiry Date</Label>
-                        <Input
-                          type="date"
-                          value={row.expiryDate}
-                          onChange={(e) => updateRow(row.id, { expiryDate: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Notes */}
-      {rows.length > 0 && (
-        <div className="space-y-1">
-          <Label className="text-xs">Notes</Label>
-          <Textarea
-            placeholder="Optional notes..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-          />
-        </div>
-      )}
-
-      {/* Submit FAB */}
-      {rows.length > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 px-4 md:bottom-6 md:left-auto md:right-6 md:w-auto z-40">
-          <Button
-            size="lg"
-            className="w-full md:w-auto shadow-lg"
-            onClick={handleSubmit}
-            disabled={submitting}
-          >
-            <Send className="h-4 w-4 mr-2" />
-            {submitting ? "Processing..." : `Receive ${rows.length} Item(s)`}
-          </Button>
-        </div>
-      )}
-
-      {/* Item Picker Dialog */}
-      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Select Item</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by code or name..."
-                value={searchQ}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9"
-                autoFocus
-              />
-            </div>
-            <div className="max-h-[300px] overflow-y-auto space-y-1">
-              {searchLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))
-              ) : searchResults.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  {searchQ ? "No items found" : "Type to search"}
-                </p>
-              ) : (
-                searchResults.map((item) => {
-                  const alreadyAdded = rows.some((r) => r.item.id === item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      className={cn(
-                        "w-full text-left rounded-lg border p-2.5 transition-colors",
-                        alreadyAdded
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:bg-muted/50 cursor-pointer",
-                      )}
-                      disabled={alreadyAdded}
-                      onClick={() => {
-                        if (pickerIdx !== null) {
-                          setRows((prev) =>
-                            prev.map((r, i) =>
-                              i === pickerIdx
-                                ? { ...r, item, quantity: 1, lotNumber: "", expiryDate: "", subCodes: [] }
-                                : r
-                            )
-                          );
-                          setPickerOpen(false);
-                          setPickerIdx(null);
-                        } else {
-                          addItem(item);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
-                        <Badge className={cn("text-[10px]", CATEGORY_COLORS[item.category.category as Category] ?? "")}>
-                          {item.category.category}
-                        </Badge>
-                        {alreadyAdded && (
-                          <Badge variant="outline" className="text-[10px]">Added</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm font-medium">{item.name}</p>
-                      {item.location && (
-                        <p className="text-xs text-muted-foreground">
-                          {[item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")}
-                        </p>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-base leading-snug text-foreground">{item.name}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {item.code}
+                      {" · "}
+                      {item.category.name}
+                      {" · "}
+                      คงเหลือ {item.availableQty} {item.issueUnit.name}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={alreadyAdded}
+                    aria-label={`เพิ่ม ${item.name}`}
+                    onClick={() => !alreadyAdded && addItem(item)}
+                    className={cn(
+                      "h-10 w-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                      alreadyAdded
+                        ? "bg-muted text-muted-foreground cursor-not-allowed"
+                        : "bg-foreground text-background hover:bg-foreground/80 cursor-pointer",
+                    )}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
+        )}
+      </div>
+
+      {/* Sticky "สร้างใหม่" at bottom */}
+      <div className="pt-3 mt-auto shrink-0 border-t">
+        <Button variant="outline" className="w-full gap-2" onClick={openQuickCreate}>
+          <PackagePlus className="h-4 w-4" />
+          ไม่มีพัสดุนี้ — เพิ่มใหม่
+        </Button>
+      </div>
+    </div>
+  );
+
+  // ── Cart panel ────────────────────────────────────────────────
+  const CartPanel = (
+    <div className="flex flex-col h-full">
+      {/* Header summary */}
+      <div className="pb-3 mb-1 shrink-0 border-b">
+        <p className="text-xs text-muted-foreground">
+          {rows.length} รายการ · รวม {totalUnits} หน่วย
+        </p>
+      </div>
+
+      {/* Items or empty state */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-8">
+            <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+              <ArrowDownToLine className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              เลือกพัสดุจากฝั่งซ้าย<br />เพื่อเริ่มบันทึกรับเข้า
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2 pb-2">
+            {rows.map((row) => {
+              const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
+              return (
+                <Card key={row.id} className="border shadow-none">
+                  <CardContent className="pt-3 pb-3 space-y-3">
+                    {/* Item header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm leading-snug">{row.item.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {row.item.code}
+                          {" · "}
+                          <Badge className={cn("text-[10px] align-middle", CATEGORY_COLORS[row.item.category.category as Category] ?? "")}>
+                            {row.item.category.name}
+                          </Badge>
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="ลบออก"
+                        onClick={() => removeRow(row.id)}
+                        className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Fields */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">จำนวน ({row.item.issueUnit.name})</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={row.quantity}
+                          onChange={(e) => updateRow(row.id, { quantity: parseInt(e.target.value) || 0 })}
+                          className="text-gray-900 h-8 text-sm"
+                        />
+                      </div>
+                      {row.item.trackIndividually && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Sub-codes</Label>
+                          <Input
+                            placeholder="A001, A002"
+                            value={row.subCodes.join(", ")}
+                            onChange={(e) => updateRow(row.id, { subCodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+                            className="text-gray-900 h-8 text-sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {isConsumable && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Lot Number *</Label>
+                          <Input
+                            placeholder="LOT-001"
+                            value={row.lotNumber}
+                            onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
+                            className="text-gray-900 h-8 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">วันหมดอายุ</Label>
+                          <Input
+                            type="date"
+                            value={row.expiryDate}
+                            onChange={(e) => updateRow(row.id, { expiryDate: e.target.value })}
+                            className="text-gray-900 h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {rows.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <Label className="text-xs text-muted-foreground">หมายเหตุ</Label>
+                <Textarea
+                  placeholder="หมายเหตุ (optional)..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  className="text-gray-900 text-sm"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Submit — always visible */}
+      <div className="pt-3 shrink-0 border-t mt-auto">
+        <Button
+          className="w-full"
+          onClick={handleSubmit}
+          disabled={submitting || rows.length === 0}
+        >
+          <ArrowDownToLine className="h-4 w-4 mr-2" />
+          {submitting ? "กำลังบันทึก..." : `บันทึกรับเข้า (${rows.length})`}
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-[calc(100dvh-4rem)] md:h-[calc(100dvh-5rem)]">
+      {/* Header */}
+      <div className="flex items-start justify-between px-1 pt-4 pb-3 shrink-0">
+        <div>
+          <h1 className="text-xl font-bold">รับเข้าพัสดุ</h1>
+          <p className="text-sm text-muted-foreground">เลือกพัสดุที่มีอยู่หรือเพิ่มรายการใหม่เข้าระบบ</p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold tracking-widest text-muted-foreground bg-muted/50 shrink-0 mt-0.5">
+          <ArrowDownToLine className="h-3 w-3" />
+          STOCK IN
+        </span>
+      </div>
+
+      {/* ── Desktop: 2-column ──────────────────────────────── */}
+      <div className="hidden md:grid md:grid-cols-2 md:gap-4 flex-1 min-h-0 pb-4">
+        <Card className="flex flex-col overflow-hidden">
+          <CardContent className="flex-1 min-h-0 overflow-hidden py-0 flex flex-col">
+            {SearchPanel}
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col overflow-hidden">
+          <div className="px-6 pt-4 pb-0 shrink-0">
+            <p className="font-semibold text-base">รายการรับเข้า</p>
+          </div>
+          <CardContent className="flex-1 min-h-0 overflow-hidden py-0 flex flex-col">
+            {CartPanel}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Mobile: tabs ───────────────────────────────────── */}
+      <div className="flex md:hidden flex-col flex-1 min-h-0">
+        <div className="flex shrink-0 border-b bg-background">
+          <button
+            type="button"
+            className={cn(
+              "flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors",
+              mobileTab === "search" ? "border-primary text-primary" : "border-transparent text-muted-foreground",
+            )}
+            onClick={() => setMobileTab("search")}
+          >
+            <Search className="h-4 w-4" /> เพิ่มพัสดุ
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors",
+              mobileTab === "cart" ? "border-primary text-primary" : "border-transparent text-muted-foreground",
+            )}
+            onClick={() => setMobileTab("cart")}
+          >
+            <ClipboardList className="h-4 w-4" />
+            รายการ
+            {rows.length > 0 && (
+              <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                {rows.length}
+              </span>
+            )}
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-hidden p-3 flex flex-col">
+          {mobileTab === "search" ? SearchPanel : CartPanel}
+        </div>
+      </div>
+
+      {/* Quick-create dialog */}
+      <Dialog open={quickOpen} onOpenChange={setQuickOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>สร้างพัสดุใหม่</DialogTitle>
+          </DialogHeader>
+          {lookupLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">รหัสพัสดุ *</Label>
+                  <Input placeholder="NLU-001" value={qcForm.code} onChange={(e) => setQcForm((f) => ({ ...f, code: e.target.value }))} className="text-gray-900" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">ชื่อพัสดุ *</Label>
+                  <Input placeholder="ชื่อพัสดุ" value={qcForm.name} onChange={(e) => setQcForm((f) => ({ ...f, name: e.target.value }))} className="text-gray-900" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">หมวดหมู่ *</Label>
+                <Select value={qcForm.categoryId} onValueChange={(v) => setQcForm((f) => ({ ...f, categoryId: v }))}>
+                  <SelectTrigger className="text-gray-900">
+                    <span className={qcForm.categoryId ? "text-gray-900" : "text-muted-foreground"}>
+                      {qcForm.categoryId ? (categories.find((c) => c.id === qcForm.categoryId)?.name ?? "เลือกหมวดหมู่") : "เลือกหมวดหมู่"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">หน่วยเบิก *</Label>
+                  <Select value={qcForm.issueUnitId} onValueChange={(v) => setQcForm((f) => ({ ...f, issueUnitId: v, subUnitId: f.subUnitId || v }))}>
+                    <SelectTrigger className="text-gray-900">
+                      <span className={qcForm.issueUnitId ? "text-gray-900" : "text-muted-foreground"}>
+                        {qcForm.issueUnitId ? (units.find((u) => u.id === qcForm.issueUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">หน่วยย่อย *</Label>
+                  <Select value={qcForm.subUnitId} onValueChange={(v) => setQcForm((f) => ({ ...f, subUnitId: v }))}>
+                    <SelectTrigger className="text-gray-900">
+                      <span className={qcForm.subUnitId ? "text-gray-900" : "text-muted-foreground"}>
+                        {qcForm.subUnitId ? (units.find((u) => u.id === qcForm.subUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Conversion factor <span className="text-muted-foreground">(1 หน่วยเบิก = ? หน่วยย่อย)</span></Label>
+                <Input type="number" min={1} value={qcForm.conversionFactor} onChange={(e) => setQcForm((f) => ({ ...f, conversionFactor: parseInt(e.target.value) || 1 }))} className="text-gray-900" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickOpen(false)} disabled={quickLoading}>ยกเลิก</Button>
+            <Button onClick={handleQuickCreate} disabled={quickLoading || lookupLoading}>
+              {quickLoading ? "กำลังสร้าง..." : "สร้างและเพิ่ม"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

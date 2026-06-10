@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/sidebar";
 import { BottomTab } from "@/components/layout/bottom-tab";
 import { Header } from "@/components/layout/header";
@@ -11,17 +12,18 @@ import { AlertProvider } from "@/hooks/use-alerts";
 import { CartProvider } from "@/components/dispense/cart-context";
 
 const pageTitles: Record<string, string> = {
-  "/": "Dashboard",
-  "/items": "All Items",
-  "/dispense": "Dispense",
-  "/receive": "Receive",
-  "/reports": "Reports",
-  "/settings": "Settings",
+  "/": "หน้าหลัก",
+  "/items": "รายการพัสดุทั้งหมด",
+  "/dispense": "เบิกพัสดุ",
+  "/receive": "รับพัสดุเข้า",
+  "/maintenance": "การซ่อมบำรุง",
+  "/reports": "รายงาน",
+  "/settings": "ตั้งค่าระบบ",
 };
 
 function getTitle(pathname: string) {
-  if (pathname.startsWith("/items/") && pathname !== "/items") return "Item Detail";
-  if (pathname === "/dispense/confirm") return "Confirm Dispense";
+  if (pathname.startsWith("/items/") && pathname !== "/items") return "รายละเอียดพัสดุ";
+  if (pathname === "/dispense/confirm") return "ยืนยันการเบิก";
   return pageTitles[pathname] || "NLU Stock";
 }
 
@@ -30,6 +32,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60_000,
+        refetchOnWindowFocus: false,
+      },
+    },
+  }));
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), []);
 
@@ -51,6 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
+    <QueryClientProvider client={queryClient}>
     <AlertProvider>
       <CartProvider>
       <div className="flex h-screen overflow-hidden">
@@ -69,5 +81,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
       </CartProvider>
     </AlertProvider>
+    </QueryClientProvider>
   );
 }

@@ -148,6 +148,35 @@ export function getUnits() {
   return request<UnitOption[]>("/api/settings/units");
 }
 
+// ─── Quick-create item (ADMIN + STAFF) ───
+
+export interface QuickCreateItemPayload {
+  code: string;
+  name: string;
+  categoryId: string;
+  issueUnitId: string;
+  subUnitId: string;
+  conversionFactor: number;
+}
+
+export function quickCreateItem(data: QuickCreateItemPayload) {
+  return request<{
+    id: string;
+    code: string;
+    name: string;
+    nameEn: string | null;
+    trackIndividually: boolean;
+    conversionFactor: number;
+    category: { name: string; category: string };
+    issueUnit: { id: string; name: string };
+    subUnit: { id: string; name: string };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+  }>("/api/items/quick-create", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Users ───
 
 export function getUsers() {
@@ -315,6 +344,14 @@ export function uploadFile(formData: FormData) {
     if (!res.ok) throw new ApiError(res.status, "Upload failed");
     return res.json() as Promise<{ url: string }>;
   });
+}
+
+// ─── Maintenance ───
+
+export function getMaintenanceSummary() {
+  return request<{ overdue: number; dueSoon: number; completedThisMonth: number }>(
+    "/api/maintenance/summary",
+  );
 }
 
 // ─── Alerts ───

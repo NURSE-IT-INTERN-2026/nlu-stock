@@ -418,6 +418,8 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
 
             {/* Close */}
             <button
+              type="button"
+              aria-label="ปิด"
               onClick={() => setLightboxIdx(-1)}
               className="absolute top-4 right-4 size-10 grid place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
             >
@@ -428,12 +430,16 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
             {allImages.length > 1 && (
               <>
                 <button
+                  type="button"
+                  aria-label="รูปก่อน"
                   onClick={() => lightboxNav(-1)}
                   className="absolute left-3 top-1/2 -translate-y-1/2 size-10 grid place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
                 >
                   <ChevronLeft className="size-5" />
                 </button>
                 <button
+                  type="button"
+                  aria-label="รูปถัดไป"
                   onClick={() => lightboxNav(1)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 size-10 grid place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
                 >

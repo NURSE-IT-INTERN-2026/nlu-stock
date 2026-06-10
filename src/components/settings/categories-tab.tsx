@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, Tag } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -49,6 +49,18 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Category, CATEGORY_LABELS } from "@/lib/constants";
 import { getCategories, createCategory, updateCategory, deleteCategory } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface CategoryType {
   id: string;
@@ -78,10 +90,22 @@ function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c:
       <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
       <TableCell>{cat._count.items}</TableCell>
       <TableCell>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={() => onEdit(cat)}><Pencil className="h-3.5 w-3.5" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(cat)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
-        </div>
+        <TooltipProvider>
+          <div className="flex gap-1">
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => onEdit(cat)} aria-label="แก้ไข" />}>
+                <Pencil className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>แก้ไข</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => onDelete(cat)} aria-label="ลบ" />}>
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </TooltipTrigger>
+              <TooltipContent>ลบ</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </TableCell>
     </TableRow>
   );
@@ -93,6 +117,7 @@ export function CategoriesTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
   const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
+  const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -105,7 +130,7 @@ export function CategoriesTab() {
       const data = await getCategories();
       setCategories(data as CategoryType[]);
     } catch {
-      toast.error("Failed to load categories");
+      toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
   }, []);
@@ -130,27 +155,32 @@ export function CategoriesTab() {
     try {
       if (editing) {
         await updateCategory(editing.id, payload);
-        toast.success("Category updated");
+        toast.success("อัปเดตหมวดหมู่สำเร็จ");
       } else {
         await createCategory(payload);
-        toast.success("Category created");
+        toast.success("สร้างหมวดหมู่สำเร็จ");
       }
       setDialogOpen(false);
       fetchCategories();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save");
+      toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     }
   }
 
   async function handleDelete(cat: CategoryType) {
-    if (!confirm(`Delete "${cat.name}"?`)) return;
+    setDeleteTarget(cat);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await deleteCategory(cat.id);
-      toast.success("Category deleted");
+      await deleteCategory(deleteTarget.id);
+      toast.success("ลบหมวดหมู่สำเร็จ");
       fetchCategories();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete");
+      toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
+    setDeleteTarget(null);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -166,31 +196,59 @@ export function CategoriesTab() {
     await Promise.all(updates);
   }
 
-  if (loading) return <div className="text-muted-foreground">Loading...</div>;
-
-  return (
+  if (loading) return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Categories</h3>
-        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />Add</Button>
+        <Skeleton className="h-6 w-28" />
+        <Skeleton className="h-8 w-16" />
+      </div>
+      <div className="rounded-2xl border overflow-hidden bg-card">
+        <div className="divide-y divide-border">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-4 w-8" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          <div className="rounded-md border">
+          <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                   <TableHead className="w-[40px]" />
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead>ชื่อ</TableHead>
+                  <TableHead>ประเภท</TableHead>
+                  <TableHead>จำนวน</TableHead>
+                  <TableHead className="w-[100px]">การดำเนินการ</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {categories.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No categories</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="py-12">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <Tag className="h-8 w-8 text-muted-foreground/40" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">ยังไม่มีหมวดหมู่</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">สร้างหมวดหมู่แรกเพื่อจัดกลุ่มพัสดุ</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มหมวดหมู่</Button>
+                    </div>
+                  </TableCell></TableRow>
                 ) : categories.map((cat) => (
                   <SortableRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDelete} />
                 ))}
@@ -203,15 +261,15 @@ export function CategoriesTab() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Category" : "Add Category"}</DialogTitle>
+            <DialogTitle>{editing ? "แก้ไขหมวดหมู่" : "เพิ่มหมวดหมู่"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
+              <Input id="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label>Type</Label>
+              <Label htmlFor="cat-type">ประเภท</Label>
               <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v! })}>
                 <SelectTrigger><SelectValue>{CATEGORY_LABELS[form.category as Category] || form.category}</SelectValue></SelectTrigger>
                 <SelectContent>
@@ -227,16 +285,31 @@ export function CategoriesTab() {
               </Select>
             </div>
             <div>
-              <Label>Description</Label>
-              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <Label htmlFor="cat-desc">รายละเอียด</Label>
+              <Textarea id="cat-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!form.name}>{editing ? "Update" : "Create"}</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={handleSave} disabled={!form.name}>{editing ? "บันทึก" : "สร้าง"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ลบหมวดหมู่</AlertDialogTitle>
+            <AlertDialogDescription>
+              ต้องการลบหมวดหมู่ &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>ลบ</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

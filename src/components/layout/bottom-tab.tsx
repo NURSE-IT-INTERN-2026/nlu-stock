@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, BarChart3, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/lib/api";
 import {
@@ -80,6 +80,13 @@ export function BottomTab({ user }: BottomTabProps) {
             <SheetTitle className="sr-only">More menu</SheetTitle>
             <div className="space-y-1 pb-4">
               <Link
+                href="/maintenance"
+                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
+              >
+                <Wrench className="h-4 w-4" />
+                Maintenance
+              </Link>
+              <Link
                 href="/reports"
                 className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
               >
@@ -96,6 +103,7 @@ export function BottomTab({ user }: BottomTabProps) {
                 </Link>
               )}
               <button
+                type="button"
                 onClick={handleLogout}
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-destructive hover:bg-accent"
               >

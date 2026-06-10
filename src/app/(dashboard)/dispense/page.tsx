@@ -237,42 +237,42 @@ return (
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search code, name..."
+              placeholder="ค้นหารหัส, ชื่อพัสดุ..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="pl-8"
+              className="pl-8 text-gray-900"
             />
           </div>
-          <Button variant="outline" size="icon" onClick={() => setScannerOpen(true)} title="Scan QR" className="shrink-0">
+          <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} aria-label="สแกน QR Code" className="shrink-0">
             <QrCode className="h-4 w-4" />
           </Button>
           <Select value={filterCategory || "__all__"} onValueChange={(v) => setFilterCategory(!v || v === "__all__" ? "" : v)}>
             <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All Categories">
+              <SelectValue placeholder="ทุกหมวดหมู่">
                 {(value: string | null) => {
-                  if (!value) return "All Categories";
+                  if (!value) return "ทุกหมวดหมู่";
                   const cat = categories.find((c) => c.id === value);
-                  return cat?.name ?? "All Categories";
+                  return cat?.name ?? "ทุกหมวดหมู่";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All Categories</SelectItem>
+              <SelectItem value="__all__">ทุกหมวดหมู่</SelectItem>
               {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterLocation || "__all__"} onValueChange={(v) => setFilterLocation(!v || v === "__all__" ? "" : v)}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Locations">
+              <SelectValue placeholder="ทุกสถานที่">
                 {(value: string | null) => {
-                  if (!value) return "All Locations";
+                  if (!value) return "ทุกสถานที่";
                   const loc = locations.find((l) => l.id === value);
-                  return loc ? locationLabel(loc) : "All Locations";
+                  return loc ? locationLabel(loc) : "ทุกสถานที่";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All Locations</SelectItem>
+              <SelectItem value="__all__">ทุกสถานที่</SelectItem>
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>{locationLabel(loc)}</SelectItem>
               ))}
@@ -291,17 +291,17 @@ return (
           </div>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            {query ? "No items found" : "Type to search items"}
+            {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-2 items-start">
             {items.map((item) => (
               <div
                 key={item.id}
-                className="relative flex items-start gap-3 rounded-2xl border p-3 h-[142px] hover:bg-muted/50 transition-colors"
+                className="relative flex items-start gap-3 rounded-2xl border p-3 min-h-[120px] hover:bg-muted/50 transition-colors"
               >
                 {/* Cover image */}
-                <div className="h-28 w-28 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center">
+                <div className="h-20 w-20 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center">
                   {item.imageUrl ? (
                     <img
                       src={item.imageUrl}
@@ -309,20 +309,20 @@ return (
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <Package className="h-6 w-6 text-muted-foreground/50" />
+                    <Package className="h-5 w-5 text-muted-foreground/50" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[15px] text-muted-foreground">{item.code}</span>
-                    <Badge className={`text-[13px] ${CATEGORY_COLORS[item.category.category as Category] ?? ""}`}>
+                  <span className="font-mono text-sm text-muted-foreground block">{item.code}</span>
+                  <div className="flex items-baseline gap-1.5 flex-wrap mt-0.5">
+                    <Badge className={`text-xs shrink-0 ${CATEGORY_COLORS[item.category.category as Category] ?? ""}`}>
                       {item.category.name}
                     </Badge>
+                    <span className="text-base font-medium leading-snug">{item.name}</span>
                   </div>
-                  <p className="text-[17px] font-medium line-clamp-2">{item.name}</p>
-                  <p className="text-[15px] text-muted-foreground">
-                    Available: {item.trackIndividually
-                      ? `${item.subItems.length} units`
+                  <p className="text-sm text-muted-foreground">
+                    คงเหลือ: {item.trackIndividually
+                      ? `${item.subItems.length} ชิ้น`
                       : `${item.availableQty} ${item.issueUnit.name}`}
                   </p>
                   {item.location && !filterLocation && (
