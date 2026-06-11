@@ -29,8 +29,9 @@ import { Separator } from "@/components/ui/separator";
 import { SubCodesManager } from "./sub-codes-manager";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
-import { Category, CATEGORY_LABELS, locationLabel } from "@/lib/constants";
+import { Category, CATEGORY_LABELS, locationLabel, STATUS_PILLS, STATUS_LABELS } from "@/lib/constants";
 import { getSettingsItems, getUnits, deleteSettingsItem, saveSettingsItem } from "@/lib/api";
+import { AddItemModal } from "@/components/shared/add-item-modal";
 import type { CategoryOption, LocationOption, UnitOption } from "@/lib/api";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { usePagination } from "@/hooks/use-pagination";
@@ -92,35 +93,20 @@ const defaultForm = {
   storageRequirements: "",
 };
 
-const STATUS_PILLS: Record<string, string> = {
-  AVAILABLE: "bg-success/15 text-success border-success/30",
-  CHECKED_OUT: "bg-info-500/15 text-info-500 border-info-500/30",
-  DAMAGED: "bg-destructive/15 text-destructive border-destructive/30",
-  UNDER_REPAIR: "bg-warning/15 text-warning-foreground border-warning/30",
-  LOST: "bg-muted text-muted-foreground border-border",
-  DISPOSED: "bg-muted text-muted-foreground border-border",
-  PENDING_MAINTENANCE: "bg-warning/15 text-warning-foreground border-warning/30",
-};
-
 const STATUS_CHIPS = [
   { value: "AVAILABLE", label: "มีอยู่", color: "bg-success/15 text-success hover:bg-success/25 border-success/30" },
   { value: "CHECKED_OUT", label: "ถูกยืม", color: "bg-info-500/15 text-info-500 hover:bg-info-500/25 border-info-500/30" },
   { value: "DAMAGED", label: "ชำรุด", color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
   { value: "UNDER_REPAIR", label: "ซ่อมอยู่", color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
-  { value: "LOST", label: "สูญหาย", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
+  { value: "LOST", label: "สูญหาย", color: "bg-purple-500/15 text-purple-500 hover:bg-purple-500/25 border-purple-500/30" },
   { value: "DISPOSED", label: "จำหน่ายแล้ว", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
   { value: "INACTIVE", label: "ปิดใช้งาน", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
 ] as const;
 
+// Local labels for this tab (includes INACTIVE)
 const STATUS_THAI: Record<string, string> = {
-  AVAILABLE: "มีอยู่",
-  CHECKED_OUT: "ถูกยืม",
-  DAMAGED: "ชำรุด",
-  UNDER_REPAIR: "ซ่อมอยู่",
-  LOST: "สูญหาย",
-  DISPOSED: "จำหน่ายแล้ว",
+  ...STATUS_LABELS,
   INACTIVE: "ปิดใช้งาน",
-  PENDING_MAINTENANCE: "รอบำรุงรักษา",
 };
 
 function StockBar({ available, total, threshold }: { available: number; total: number; threshold: number }) {
@@ -151,6 +137,7 @@ export function ItemsMasterTab() {
   const [filterStatus, setFilterStatus] = useState("");
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addItemOpen, setAddItemOpen] = useState(false);
   const [editing, setEditing] = useState<ItemRecord | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
@@ -290,18 +277,7 @@ export function ItemsMasterTab() {
   }, [dialogOpen, prefix, editing]);
 
   function openCreate() {
-    setEditing(null);
-    setForm(defaultForm);
-    setCodeGroup("");
-    setCodeSubcode("");
-    setCodeSet("");
-    setCodeLocked(true);
-    setSuggestedCode("");
-    setExistingItems([]);
-    setCodeGroups([]);
-    setNameDuplicates([]);
-    setDialogTab("basic");
-    setDialogOpen(true);
+    setAddItemOpen(true);
   }
 
   function openEdit(item: ItemRecord) {
@@ -996,6 +972,15 @@ export function ItemsMasterTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AddItemModal
+        open={addItemOpen}
+        onClose={() => setAddItemOpen(false)}
+        onCreated={() => {
+          setAddItemOpen(false);
+          fetchItems();
+        }}
+      />
     </div>
   );
 }

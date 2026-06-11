@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,19 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,12 +15,8 @@ import { Category, CATEGORY_COLORS } from "@/lib/constants";
 import {
   searchDispenseItems,
   createReceive,
-  getCategories,
-  getUnits,
-  quickCreateItem,
-  type CategoryOption,
-  type UnitOption,
 } from "@/lib/api";
+import { AddItemModal } from "@/components/shared/add-item-modal";
 
 interface SearchItem {
   id: string;
@@ -73,63 +56,27 @@ export default function ReceivePage() {
 
   // Quick-create dialog
   const [quickOpen, setQuickOpen] = useState(false);
-  const [quickLoading, setQuickLoading] = useState(false);
-  const [categories, setCategories] = useState<CategoryOption[]>([]);
-  const [units, setUnits] = useState<UnitOption[]>([]);
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [qcForm, setQcForm] = useState({
-    code: "",
-    name: "",
-    categoryId: "",
-    issueUnitId: "",
-    subUnitId: "",
-    conversionFactor: 1,
-  });
-
-  useEffect(() => {
-    if (!quickOpen) return;
-    if (categories.length > 0 && units.length > 0) return;
-    setLookupLoading(true);
-    Promise.all([getCategories(), getUnits()])
-      .then(([cats, us]) => { setCategories(cats); setUnits(us); })
-      .catch(() => toast.error("Failed to load categories/units"))
-      .finally(() => setLookupLoading(false));
-  }, [quickOpen, categories.length, units.length]);
 
   const openQuickCreate = () => {
-    setQcForm({ code: searchQ.trim(), name: "", categoryId: "", issueUnitId: "", subUnitId: "", conversionFactor: 1 });
     setQuickOpen(true);
   };
 
-  const handleQuickCreate = async () => {
-    if (!qcForm.code || !qcForm.name || !qcForm.categoryId || !qcForm.issueUnitId || !qcForm.subUnitId) {
-      toast.error("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
-      return;
-    }
-    setQuickLoading(true);
-    try {
-      const created = await quickCreateItem({ ...qcForm });
-      const newItem: SearchItem = {
-        id: created.id,
-        code: created.code,
-        name: created.name,
-        nameEn: created.nameEn,
-        issueUnit: created.issueUnit,
-        subUnit: created.subUnit,
-        conversionFactor: created.conversionFactor,
-        trackIndividually: created.trackIndividually,
-        availableQty: 0,
-        category: created.category,
-        location: created.location,
-      };
-      toast.success(`สร้างพัสดุ "${created.code}" สำเร็จ`);
-      setQuickOpen(false);
-      addItem(newItem);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "สร้างพัสดุไม่สำเร็จ");
-    } finally {
-      setQuickLoading(false);
-    }
+  const handleItemCreated = (created: unknown) => {
+    const c = created as {
+      id: string; code: string; name: string; nameEn: string | null;
+      issueUnit: { id: string; name: string }; subUnit: { id: string; name: string };
+      conversionFactor: number; trackIndividually: boolean;
+      category: { name: string; category: string };
+      location: { building: string; floor: string; room: string; detail: string | null } | null;
+    };
+    const newItem: SearchItem = {
+      id: c.id, code: c.code, name: c.name, nameEn: c.nameEn,
+      issueUnit: c.issueUnit, subUnit: c.subUnit, conversionFactor: c.conversionFactor,
+      trackIndividually: c.trackIndividually, availableQty: 0,
+      category: c.category, location: c.location,
+    };
+    addItem(newItem);
+    setQuickOpen(false);
   };
 
   const doSearch = useCallback(async (q: string) => {
@@ -503,77 +450,13 @@ export default function ReceivePage() {
         </div>
       </div>
 
-      {/* Quick-create dialog */}
-      <Dialog open={quickOpen} onOpenChange={setQuickOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>สร้างพัสดุใหม่</DialogTitle>
-          </DialogHeader>
-          {lookupLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">รหัสพัสดุ *</Label>
-                  <Input placeholder="NLU-001" value={qcForm.code} onChange={(e) => setQcForm((f) => ({ ...f, code: e.target.value }))} className="text-gray-900" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">ชื่อพัสดุ *</Label>
-                  <Input placeholder="ชื่อพัสดุ" value={qcForm.name} onChange={(e) => setQcForm((f) => ({ ...f, name: e.target.value }))} className="text-gray-900" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">หมวดหมู่ *</Label>
-                <Select value={qcForm.categoryId} onValueChange={(v) => setQcForm((f) => ({ ...f, categoryId: v }))}>
-                  <SelectTrigger className="text-gray-900">
-                    <span className={qcForm.categoryId ? "text-gray-900" : "text-muted-foreground"}>
-                      {qcForm.categoryId ? (categories.find((c) => c.id === qcForm.categoryId)?.name ?? "เลือกหมวดหมู่") : "เลือกหมวดหมู่"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">หน่วยเบิก *</Label>
-                  <Select value={qcForm.issueUnitId} onValueChange={(v) => setQcForm((f) => ({ ...f, issueUnitId: v, subUnitId: f.subUnitId || v }))}>
-                    <SelectTrigger className="text-gray-900">
-                      <span className={qcForm.issueUnitId ? "text-gray-900" : "text-muted-foreground"}>
-                        {qcForm.issueUnitId ? (units.find((u) => u.id === qcForm.issueUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">หน่วยย่อย *</Label>
-                  <Select value={qcForm.subUnitId} onValueChange={(v) => setQcForm((f) => ({ ...f, subUnitId: v }))}>
-                    <SelectTrigger className="text-gray-900">
-                      <span className={qcForm.subUnitId ? "text-gray-900" : "text-muted-foreground"}>
-                        {qcForm.subUnitId ? (units.find((u) => u.id === qcForm.subUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Conversion factor <span className="text-muted-foreground">(1 หน่วยเบิก = ? หน่วยย่อย)</span></Label>
-                <Input type="number" min={1} value={qcForm.conversionFactor} onChange={(e) => setQcForm((f) => ({ ...f, conversionFactor: parseInt(e.target.value) || 1 }))} className="text-gray-900" />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setQuickOpen(false)} disabled={quickLoading}>ยกเลิก</Button>
-            <Button onClick={handleQuickCreate} disabled={quickLoading || lookupLoading}>
-              {quickLoading ? "กำลังสร้าง..." : "สร้างและเพิ่ม"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Add item modal (wizard) */}
+      <AddItemModal
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        onCreated={handleItemCreated}
+        defaultCode={searchQ.trim()}
+      />
     </div>
   );
 }

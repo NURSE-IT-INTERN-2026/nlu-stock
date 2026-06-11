@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Category, CATEGORY_LABELS } from "@/lib/constants";
-import { getCategories, createCategory, updateCategory, deleteCategory } from "@/lib/api";
+import { getCategories, updateCategory, deleteCategory } from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CategorySelectModal } from "@/components/shared/category-select-modal";
 
 interface CategoryType {
   id: string;
@@ -115,6 +116,7 @@ export function CategoriesTab() {
   const [categories, setCategories] = useState<CategoryType[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
   const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
   const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
@@ -138,9 +140,7 @@ export function CategoriesTab() {
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
   function openCreate() {
-    setEditing(null);
-    setForm({ name: "", category: "CON", description: "" });
-    setDialogOpen(true);
+    setSelectModalOpen(true);
   }
 
   function openEdit(cat: CategoryType) {
@@ -150,16 +150,12 @@ export function CategoriesTab() {
   }
 
   async function handleSave() {
+    if (!editing) return;
     const payload = { name: form.name, category: form.category, description: form.description || undefined };
 
     try {
-      if (editing) {
-        await updateCategory(editing.id, payload);
-        toast.success("อัปเดตหมวดหมู่สำเร็จ");
-      } else {
-        await createCategory(payload);
-        toast.success("สร้างหมวดหมู่สำเร็จ");
-      }
+      await updateCategory(editing.id, payload);
+      toast.success("อัปเดตหมวดหมู่สำเร็จ");
       setDialogOpen(false);
       fetchCategories();
     } catch (e) {
@@ -310,6 +306,16 @@ export function CategoriesTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CategorySelectModal
+        open={selectModalOpen}
+        onClose={() => setSelectModalOpen(false)}
+        onSelect={() => {
+          fetchCategories();
+          setSelectModalOpen(false);
+        }}
+        title="เพิ่มหมวดหมู่"
+      />
     </div>
   );
 }

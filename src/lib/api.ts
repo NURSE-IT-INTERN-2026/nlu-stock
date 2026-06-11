@@ -87,6 +87,11 @@ export function getCategories() {
   return request<CategoryOption[]>("/api/settings/categories");
 }
 
+export function searchCategories(q: string) {
+  const qs = new URLSearchParams({ q }).toString();
+  return request<CategoryOption[]>(`/api/settings/categories?${qs}`);
+}
+
 export function getPublicCategories() {
   return request<CategoryOption[]>("/api/categories");
 }
@@ -240,13 +245,14 @@ export function searchDispenseItems(params: {
   categoryId?: string;
   locationId?: string;
   limit?: string;
+  page?: string;
 }) {
   const qs = new URLSearchParams(
     Object.entries(params)
       .filter(([, v]) => v)
       .map(([k, v]) => [k, v!]),
   ).toString();
-  return request<{ items: unknown[] }>(`/api/dispense/items?${qs}`);
+  return request<{ items: unknown[]; total: number }>(`/api/dispense/items?${qs}`);
 }
 
 export function createDispense(data: Record<string, unknown>) {
