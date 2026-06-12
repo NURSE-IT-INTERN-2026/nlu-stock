@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { getUnits } from "@/lib/api";
 import type { CategoryOption, UnitOption } from "@/lib/api";
 import type { Category } from "@/lib/constants";
-import { CategorySelectModal } from "@/components/shared/category-select-modal";
+import { BookCodeBuilder } from "./book-code-builder";
 
 interface StepCategoryUnitsProps {
   code: string;
@@ -32,6 +32,13 @@ interface StepCategoryUnitsProps {
   onSubUnitChange: (id: string) => void;
   conversionFactor: number;
   onConversionFactorChange: (factor: number) => void;
+  /** Opens inline category selection step */
+  onOpenCategorySelect: () => void;
+  /** Category type code (e.g. "CON", "KRU"). Used to determine if code input should be disabled */
+  categoryType?: string;
+  /** Number of copies (for BOOK/TOY) */
+  copyCount?: number;
+  onCopyCountChange?: (count: number) => void;
 }
 
 export function StepCategoryUnits({
@@ -47,10 +54,13 @@ export function StepCategoryUnits({
   onSubUnitChange,
   conversionFactor,
   onConversionFactorChange,
+  onOpenCategorySelect,
+  categoryType,
+  copyCount = 1,
+  onCopyCountChange,
 }: StepCategoryUnitsProps) {
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
-  const [catModalOpen, setCatModalOpen] = useState(false);
 
   const fetchUnits = useCallback(async () => {
     if (units.length > 0) return;
@@ -70,14 +80,25 @@ export function StepCategoryUnits({
     <div className="space-y-5">
       {/* Code */}
       <div className="space-y-2">
-        <Label htmlFor="item-code">รหัสพัสดุ</Label>
-        <Input
-          id="item-code"
-          placeholder="NLU-001"
-          value={code}
-          onChange={(e) => onCodeChange(e.target.value)}
-          className="bg-card"
-        />
+        <Label>รหัสพัสดุ</Label>
+        {!categoryType ? (
+          <Input placeholder="เลือกหมวดหมู่ก่อน" disabled className="bg-card" />
+        ) : categoryType === "BOOK" || categoryType === "TOY" ? (
+          <BookCodeBuilder
+            prefix={categoryType}
+            value={code}
+            onChange={onCodeChange}
+            copyCount={copyCount}
+            onCopyCountChange={onCopyCountChange ?? (() => {})}
+          />
+        ) : (
+          <Input
+            placeholder="กำลังสร้างรหัส..."
+            value={code}
+            onChange={(e) => onCodeChange(e.target.value)}
+            className="bg-card"
+          />
+        )}
       </div>
 
       {/* Category */}
@@ -85,7 +106,7 @@ export function StepCategoryUnits({
         <Label>หมวดหมู่</Label>
         <button
           type="button"
-          onClick={() => setCatModalOpen(true)}
+          onClick={onOpenCategorySelect}
           className={cn(
             "flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-all",
             categoryId
@@ -178,18 +199,6 @@ export function StepCategoryUnits({
           className="bg-card"
         />
       </div>
-
-      {/* Category select modal (overlay) */}
-      <CategorySelectModal
-        open={catModalOpen}
-        onClose={() => setCatModalOpen(false)}
-        onSelect={(cat) => {
-          onCategorySelect(cat);
-          setCatModalOpen(false);
-        }}
-        title="เลือกหมวดหมู่พัสดุ"
-        allowedCategoryTypes={allowedCategoryTypes}
-      />
     </div>
   );
 }

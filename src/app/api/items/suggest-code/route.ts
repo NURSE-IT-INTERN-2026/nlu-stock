@@ -65,15 +65,20 @@ export async function GET(req: NextRequest) {
       const likePrefix = `NLU-${prefix}-`;
       const items = await prisma.item.findMany({
         where: { code: { startsWith: likePrefix } },
-        select: { code: true, name: true },
+        select: { code: true, name: true, description: true },
       });
 
-      // Extract unique CODE groups with their first name
+      // Extract unique CODE groups — prefer description (หมวด name) over item name
       const groups = new Map<string, string>();
       for (const item of items) {
         const parts = item.code.split("-");
         const grp = parts[2];
-        if (grp && !groups.has(grp)) groups.set(grp, item.name);
+        if (grp && !groups.has(grp)) {
+          // Clean up description: skip "หมวดที่ N" line, take the section name
+          const lines = (item.description ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+          const name = lines.find((l) => !/^หมวดที่\s*\d+/.test(l)) ?? "";
+          groups.set(grp, name); // empty if no section name
+        }
       }
 
       const maxGroup = [...groups.keys()].reduce((max, g) => {
@@ -114,7 +119,36 @@ export async function GET(req: NextRequest) {
   // ── 3. BOOK / TOY: NLU-BOOK-NNN(หมวด)-NNN(title)-SNN-CNN ─────────────────
   if (COPY_TRACK.includes(prefix)) {
     if (!code) {
-      return NextResponse.json({ error: "code (หมวด) required for BOOK/TOY" }, { status: 400 });
+      // No หมวด yet — list existing หมวด groups + suggest next
+      const likePrefix = `NLU-${prefix}-`;
+      const items = await prisma.item.findMany({
+        where: { code: { startsWith: likePrefix } },
+        select: { code: true, name: true, description: true },
+      });
+
+      const groups = new Map<string, string>();
+      for (const item of items) {
+        const parts = item.code.split("-");
+        const grp = parts[2];
+        if (grp && !groups.has(grp)) {
+          // Clean up description: skip "หมวดที่ N" line, take the section name
+          const lines = (item.description ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+          const name = lines.find((l) => !/^หมวดที่\s*\d+/.test(l)) ?? "";
+          groups.set(grp, name); // empty if no section name
+        }
+      }
+
+      const maxGroup = [...groups.keys()].reduce((max, g) => {
+        const n = parseInt(g, 10);
+        return isNaN(n) ? max : Math.max(max, n);
+      }, 0);
+      const nextGroup = String(maxGroup + 1).padStart(3, "0");
+
+      return NextResponse.json({
+        suggestedCode: `NLU-${prefix}-${nextGroup}`,
+        nextNumber: nextGroup,
+        groups: [...groups.entries()].map(([g, name]) => ({ code: g, name })).sort((a, b) => a.code.localeCompare(b.code)),
+      });
     }
 
     if (!subcode) {

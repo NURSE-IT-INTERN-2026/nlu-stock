@@ -5,26 +5,22 @@ import { Check, Sparkles, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CATEGORY_COLORS } from "@/lib/constants";
-import { searchDispenseItems } from "@/lib/api";
+import { searchItemsAI } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { UsageType } from "./types";
+import type { SimilarItem } from "./types";
 import { USAGE_OPTIONS } from "./types";
-
-interface SimilarItem {
-  id: string;
-  code: string;
-  name: string;
-  category: { name: string; category: string };
-}
 
 interface StepItemDetailsProps {
   name: string;
   onNameChange: (name: string) => void;
   usageType: UsageType | null;
   onUsageTypeChange: (type: UsageType) => void;
+  onSelectExisting?: (item: SimilarItem) => void;
 }
 
 export function StepItemDetails({
@@ -32,19 +28,25 @@ export function StepItemDetails({
   onNameChange,
   usageType,
   onUsageTypeChange,
+  onSelectExisting,
 }: StepItemDetailsProps) {
   const [similar, setSimilar] = useState<SimilarItem[]>([]);
   const [similarLoading, setSimilarLoading] = useState(false);
-  const debouncedName = useDebounce(name, 300);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const debouncedName = useDebounce(name, 500);
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim() || q.trim().length < 2) { setSimilar([]); return; }
     setSimilarLoading(true);
     try {
-      const data = await searchDispenseItems({ q, limit: "5" });
-      const items = (data.items ?? []) as SimilarItem[];
-      // Filter out exact match
-      setSimilar(items.filter((r) => r.name.toLowerCase() !== q.toLowerCase()));
+      const data = await searchItemsAI({ q: q.trim(), limit: 5 });
+      const items = (data.items ?? []).map((r) => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        category: { name: r.categoryName, category: r.categoryType },
+      }));
+      setSimilar(items);
     } catch {
       setSimilar([]);
     }
@@ -83,22 +85,64 @@ export function StepItemDetails({
                 พบพัสดุที่ชื่อคล้ายกัน — เป็นของเดิมหรือเปล่า?
               </div>
               <div className="space-y-1.5">
-                {similar.slice(0, 3).map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
-                  >
-                    <Package className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="flex-1 font-medium text-foreground">{item.name}</span>
-                    <span className="text-xs text-muted-foreground">{item.code}</span>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[item.category?.category as keyof typeof CATEGORY_COLORS] ?? "")}
+                {similar.slice(0, 3).map((item) => {
+                  const isConfirming = confirmingId === item.id;
+                  const isSelectable = !!onSelectExisting;
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "rounded-lg border bg-card text-sm overflow-hidden",
+                        isConfirming
+                          ? "border-primary"
+                          : isSelectable
+                            ? "border-border cursor-pointer hover:border-primary/50 transition-colors"
+                            : "border-border",
+                      )}
+                      onClick={() => isSelectable && !isConfirming && setConfirmingId(item.id)}
                     >
-                      {item.category?.name}
-                    </Badge>
-                  </div>
-                ))}
+                      <div className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{item.code}</span>
+                          <Badge
+                          variant="outline"
+                          className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[item.category?.category as keyof typeof CATEGORY_COLORS] ?? "")}
+                        >
+                          {item.category?.name}
+                        </Badge>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="flex-1 font-medium text-foreground">{item.name}</span>
+                        </div>
+                      {isConfirming && onSelectExisting && (
+                        <div className="flex items-center justify-between border-t border-primary/20 bg-primary/5 px-3 py-2">
+                          <span className="text-xs text-foreground">
+                            ต้องการเพิ่ม <strong>{item.name}</strong> ใช่ไหม?
+                          </span>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={(e) => { e.stopPropagation(); setConfirmingId(null); }}
+                            >
+                              ยกเลิก
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={(e) => { e.stopPropagation(); onSelectExisting(item); }}
+                            >
+                              ยืนยัน
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}

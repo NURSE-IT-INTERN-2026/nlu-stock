@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, error, parseBody } from "@/lib/api-utils";
 import { forcedTrackIndividually } from "@/lib/validators";
+import { embedItem } from "@/lib/gemini";
 import { z } from "zod";
 
 const quickCreateSchema = z.object({
@@ -11,6 +12,7 @@ const quickCreateSchema = z.object({
   issueUnitId: z.string().min(1, "Issue unit is required"),
   subUnitId: z.string().min(1, "Sub unit is required"),
   conversionFactor: z.number().int().min(1).default(1),
+  copyCount: z.number().int().min(1).default(1),
 });
 
 export async function POST(request: NextRequest) {
@@ -32,6 +34,19 @@ export async function POST(request: NextRequest) {
 
   const trackIndividually = forcedTrackIndividually(cat.category) ?? false;
 
+  // Build sub-items for individually tracked items
+  const subItems = trackIndividually
+    ? Array.from({ length: data.copyCount }, (_, i) => ({
+        subCode: data.copyCount === 1
+          ? data.code
+          : `${data.code}-C${String(i + 1).padStart(2, "0")}`,
+        name: data.copyCount === 1
+          ? data.name
+          : `${data.name} (copy ${i + 1})`,
+        status: "AVAILABLE" as const,
+      }))
+    : [];
+
   const item = await prisma.item.create({
     data: {
       code: data.code,
@@ -41,6 +56,11 @@ export async function POST(request: NextRequest) {
       subUnitId: data.subUnitId,
       conversionFactor: data.conversionFactor,
       trackIndividually,
+      ...(subItems.length > 0
+        ? { subItems: { createMany: { data: subItems } } }
+        : {}),
+      totalQty: trackIndividually ? data.copyCount : 0,
+      availableQty: trackIndividually ? data.copyCount : 0,
     },
     include: {
       category: true,
@@ -49,6 +69,9 @@ export async function POST(request: NextRequest) {
       location: true,
     },
   });
+
+  // Generate embedding in background (don't block the response)
+  embedItem(item.id).catch((e) => console.error("Embedding failed for", item.id, e));
 
   return json(item, 201);
 }

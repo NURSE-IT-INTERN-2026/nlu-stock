@@ -162,6 +162,7 @@ export interface QuickCreateItemPayload {
   issueUnitId: string;
   subUnitId: string;
   conversionFactor: number;
+  copyCount?: number;
 }
 
 export function quickCreateItem(data: QuickCreateItemPayload) {
@@ -253,6 +254,25 @@ export function searchDispenseItems(params: {
       .map(([k, v]) => [k, v!]),
   ).toString();
   return request<{ items: unknown[]; total: number }>(`/api/dispense/items?${qs}`);
+}
+
+export function searchItemsAI(params: { q: string; limit?: number }) {
+  const qs = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)]),
+  ).toString();
+  return request<{
+    items: Array<{
+      id: string;
+      code: string;
+      name: string;
+      categoryName: string;
+      categoryType: string;
+      similarity: number;
+    }>;
+    total: number;
+  }>(`/api/items/search-ai?${qs}`);
 }
 
 export function createDispense(data: Record<string, unknown>) {

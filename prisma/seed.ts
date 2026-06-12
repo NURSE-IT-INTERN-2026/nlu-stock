@@ -57,16 +57,16 @@ function parsePrice(raw: string): number | null {
 
 // Extract NLU code prefix for grouping
 // "NLU-KRU-001-001" → "NLU-KRU-001"
-// "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001"
-// "NLU-TOY-014-061-S02-C01" → "NLU-TOY-014-061"
+// "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001-S02" (keep set, strip copy)
+// "NLU-BOOK-005-008-S03" → "NLU-BOOK-005-008-S03" (keep set)
 function extractItemCode(fullCode: string, prefix: string): string {
   // For KRU/ELE: NLU-PREFIX-NNN-NNN → base = NLU-PREFIX-NNN
   if (prefix === "KRU" || prefix === "ELE") {
     const match = fullCode.match(/^(NLU-[A-Z]+-\d{3})-\d{3}/);
     return match ? match[1] : fullCode;
   }
-  // For BOOK/TOY: strip -S## and -C## suffixes to get base
-  return fullCode.replace(/-S\d+-C\d+$/, "").replace(/-C\d+$/, "");
+  // For BOOK/TOY: strip only -C## (copy) suffix, keep -S## (set)
+  return fullCode.replace(/-C\d+$/, "");
 }
 
 async function main() {
@@ -380,13 +380,13 @@ async function main() {
   }
 
   let bookItemCount = 0, bookSubCount = 0;
-  for (const [, group] of bookGroups) {
+  for (const [baseCode, group] of bookGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
 
     const item = await prisma.item.create({
       data: {
-        code: `NLU-BOOK-${String(bookItemCount + 1).padStart(3, "0")}`,
+        code: baseCode,
         name: stripTrailingNum(group.bookName),
         categoryId: catBook.id,
         trackIndividually: true,
@@ -439,13 +439,13 @@ async function main() {
   }
 
   let toyItemCount = 0, toySubCount = 0;
-  for (const [, group] of toyGroups) {
+  for (const [baseCode, group] of toyGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
 
     const item = await prisma.item.create({
       data: {
-        code: `NLU-TOY-${String(toyItemCount + 1).padStart(3, "0")}`,
+        code: baseCode,
         name: stripTrailingNum(group.toyName),
         categoryId: catToy.id,
         trackIndividually: true,
@@ -730,6 +730,84 @@ async function main() {
       data: { minThreshold: lowStockItem.totalQty + 10 },
     });
   }
+
+  // ============================================================
+  // Maintenance demo data
+  // ============================================================
+  console.log("Creating maintenance demo data...");
+
+  const maintItems = await prisma.item.findMany({
+    where: { trackIndividually: true, isActive: true },
+    select: { id: true, code: true, name: true },
+    take: 20,
+  });
+
+  // --- Set nextMaintenanceDate on some items ---
+  // 3 overdue (past dates)
+  for (let i = 0; i < Math.min(3, maintItems.length); i++) {
+    await prisma.item.update({
+      where: { id: maintItems[i].id },
+      data: {
+        nextMaintenanceDate: day((i + 1) * 5),   // 5-15 days ago
+        lastMaintenanceDate: day(180 + i * 30),   // ~6-12 months ago
+        maintenanceCycleMonths: 6,
+      },
+    });
+  }
+
+  // 4 due-soon (within 30 days)
+  for (let i = 3; i < Math.min(7, maintItems.length); i++) {
+    await prisma.item.update({
+      where: { id: maintItems[i].id },
+      data: {
+        nextMaintenanceDate: new Date(now.getTime() + (i - 2) * 5 * 24 * 60 * 60 * 1000), // 5-25 days ahead
+        lastMaintenanceDate: day(200),
+        maintenanceCycleMonths: 12,
+      },
+    });
+  }
+
+  // 5 normal (far future)
+  for (let i = 7; i < Math.min(12, maintItems.length); i++) {
+    await prisma.item.update({
+      where: { id: maintItems[i].id },
+      data: {
+        nextMaintenanceDate: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
+        lastMaintenanceDate: day(30),
+        maintenanceCycleMonths: 12,
+      },
+    });
+  }
+
+  // --- Maintenance history records ---
+  const maintTypes = ["PREVENTIVE", "CORRECTIVE"] as const;
+  const maintResults = ["AVAILABLE", "AVAILABLE", "AVAILABLE", "NEEDS_MORE_REPAIR", "DISPOSED"] as const;
+
+  for (let i = 0; i < Math.min(8, maintItems.length); i++) {
+    await prisma.maintenanceRecord.create({
+      data: {
+        itemId: maintItems[i].id,
+        type: maintTypes[i % 2],
+        result: maintResults[i % maintResults.length],
+        performedAt: day((i + 1) * 7),
+        performedBy: admin.id,
+        issue: [
+          "ตรวจสอบสภาพปกติ บำรุงรักษาตามรอบ",
+          "สวิตช์เสีย เปลี่ยนใหม่",
+          "ทำความสะอาดตามรอบ",
+          "สายไฟขาด ซ่อมเสร็จ",
+          "เปลี่ยนถ่านสำรอง",
+          "จอภาพจาง ปรับแล้วใช้ได้",
+          "ตัวเครื่องมีรอด ทาสีใหม่",
+          "เสียงผิดปกติ ต้องเปลี่ยน motor",
+        ][i],
+        cost: [0, 500, 0, 1200, 150, 3500, 800, 4500][i],
+      },
+    });
+  }
+
+  console.log(`  ${Math.min(12, maintItems.length)} items with maintenance schedule`);
+  console.log(`  ${Math.min(8, maintItems.length)} maintenance records`);
 
   // ============================================================
   // Stats
