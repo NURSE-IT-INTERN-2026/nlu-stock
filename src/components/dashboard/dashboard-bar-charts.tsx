@@ -74,7 +74,7 @@ export function DashboardBarCharts() {
   }
 
   return (
-    <div className="animate-fade-in grid gap-3 md:grid-cols-2 h-full min-h-[340px]">
+    <div className="animate-fade-in grid gap-3 md:grid-cols-2 md:h-full min-h-[280px] md:min-h-[340px]">
       <TopDispenseChart data={topQuery.data ?? []} />
       <UsageBySubjectChart data={usageQuery.data ?? []} />
     </div>

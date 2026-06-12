@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { STATUS_PILLS, STATUS_VARIANTS, STATUS_LABELS } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -53,26 +54,6 @@ interface ItemRecord {
   _count: { subItems: number };
 }
 
-const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  AVAILABLE: "default",
-  CHECKED_OUT: "secondary",
-  DAMAGED: "destructive",
-  UNDER_REPAIR: "secondary",
-  LOST: "destructive",
-  DISPOSED: "destructive",
-  PENDING_MAINTENANCE: "secondary",
-};
-
-const STATUS_PILLS: Record<string, string> = {
-  AVAILABLE: "bg-success/15 text-success border-success/30",
-  CHECKED_OUT: "bg-info-500/15 text-info-500 border-info-500/30",
-  DAMAGED: "bg-destructive/15 text-destructive border-destructive/30",
-  UNDER_REPAIR: "bg-warning/15 text-warning-foreground border-warning/30",
-  LOST: "bg-muted text-muted-foreground border-border",
-  DISPOSED: "bg-muted text-muted-foreground border-border",
-  PENDING_MAINTENANCE: "bg-warning/15 text-warning-foreground border-warning/30",
-};
-
 function StockBar({ available, total, threshold }: { available: number; total: number; threshold: number }) {
   if (total === 0) return <span className="text-xs text-muted-foreground">-</span>;
   const pct = Math.round((available / total) * 100);
@@ -96,8 +77,9 @@ const STATUS_CHIPS = [
   { value: "CHECKED_OUT", label: "ถูกยืม", color: "bg-info-500/15 text-info-500 hover:bg-info-500/25 border-info-500/30" },
   { value: "DAMAGED", label: "ชำรุด", color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
   { value: "UNDER_REPAIR", label: "ซ่อมอยู่", color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
-  { value: "LOST", label: "สูญหาย", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
+  { value: "LOST", label: "สูญหาย", color: "bg-purple-500/15 text-purple-500 hover:bg-purple-500/25 border-purple-500/30" },
   { value: "DISPOSED", label: "จำหน่ายแล้ว", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
+  { value: "PENDING_MAINTENANCE", label: "รอบำรุง", color: "bg-cyan-500/15 text-cyan-600 hover:bg-cyan-500/25 border-cyan-500/30" },
 ] as const;
 
 const PRESET_CHIPS = [
@@ -385,7 +367,7 @@ function ItemsContent() {
                       <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
-                          {item.status.replace(/_/g, " ")}
+                          {STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ")}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -410,7 +392,7 @@ function ItemsContent() {
                         </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[sub.status] || "bg-muted text-muted-foreground border-border"}`}>
-                            {sub.status.replace(/_/g, " ")}
+                            {STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")}
                           </span>
                         </TableCell>
                       </TableRow>

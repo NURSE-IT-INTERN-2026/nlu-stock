@@ -270,3 +270,13 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Status overview container query ── */
+.status-layout {
+  container-type: inline-size;
+}
+@container (min-width: 360px) {
+  .status-layout-inner { flex-direction: row; }
+  .status-donut { width: 50%; }
+  .status-legend { width: 50%; }
+}

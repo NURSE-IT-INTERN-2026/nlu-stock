@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { Plus, Minus, Search, QrCode, Package } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +13,7 @@ import { Category, locationLabel, CATEGORY_COLORS } from "@/lib/constants";
 import { searchDispenseItems } from "@/lib/api";
 import { useCart } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
+import { Pagination } from "@/components/dashboard/pagination";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -98,24 +98,54 @@ function DispenseContent() {
   const [loading, setLoading] = useState(true);
   const [scannerOpen, setScannerOpen] = useState(false);
   const prevCount = useRef(itemCount);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const skipPageEffect = useRef(false);
+  const PAGE_SIZE = 18;
 
   const debounced = useDebounce(query, 300);
 
-  const searchItems = useCallback(async (q: string, catId: string, locId: string) => {
+  const searchItems = useCallback(async (q: string, catId: string, locId: string, p: number) => {
     setLoading(true);
     try {
-      const data = await searchDispenseItems({ q, limit: "200", categoryId: catId || undefined, locationId: locId || undefined });
+      const data = await searchDispenseItems({
+        q,
+        limit: String(PAGE_SIZE),
+        page: String(p),
+        categoryId: catId || undefined,
+        locationId: locId || undefined,
+      });
       setItems((data.items ?? []) as SearchItem[]);
+      setTotal(data.total ?? 0);
     } catch {
       setItems([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Filter changes → reset to page 1
   useEffect(() => {
-    searchItems(debounced, filterCategory, filterLocation);
+    skipPageEffect.current = true;
+    setPage(1);
+    searchItems(debounced, filterCategory, filterLocation, 1);
   }, [debounced, filterCategory, filterLocation, searchItems]);
+
+  // Page changes from pagination click
+  useEffect(() => {
+    if (skipPageEffect.current) {
+      skipPageEffect.current = false;
+      return;
+    }
+    searchItems(debounced, filterCategory, filterLocation, page);
+    gridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePageChange = (p: number) => {
+    setPage(p);
+  };
 
   const handleAdd = (item: SearchItem) => {
     const categoryType = item.category.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "MED" | "KIT";
@@ -231,8 +261,8 @@ function DispenseContent() {
 
 
 return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
-      <Card className="p-3 mb-4">
+    <div className="flex flex-col h-full">
+      <Card className="p-3 mb-4 shrink-0">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -281,27 +311,25 @@ return (
         </div>
       </Card>
 
-      <Card className="flex-1 min-h-0 p-3 flex flex-col">
-        <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="grid grid-cols-3 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : items.length === 0 ? (
+      <Card className="flex-1 min-h-0 p-3 flex flex-col relative">
+        <div ref={gridRef} className="flex-1 overflow-y-auto pb-1">
+        {items.length === 0 && !loading ? (
           <p className="text-sm text-muted-foreground text-center py-8">
             {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-2 items-start">
-            {items.map((item) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+            {items.map((item) => {
+              const inCart = getItemQty(item.id);
+              const cartEntry = cartItems.find((c) => c.itemId === item.id);
+              const atMax = !item.trackIndividually && inCart >= item.availableQty;
+              return (
               <div
                 key={item.id}
-                className="relative flex items-start gap-3 rounded-2xl border p-3 min-h-[120px] hover:bg-muted/50 transition-colors"
+                className="relative flex items-stretch gap-3 rounded-2xl border p-3 hover:bg-muted/50 transition-colors"
               >
-                {/* Cover image */}
-                <div className="h-20 w-20 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center">
+                {/* Cover image — 96×96px square */}
+                <div className="w-24 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center aspect-square">
                   {item.imageUrl ? (
                     <img
                       src={item.imageUrl}
@@ -312,14 +340,16 @@ return (
                     <Package className="h-5 w-5 text-muted-foreground/50" />
                   )}
                 </div>
+
+                {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <span className="font-mono text-sm text-muted-foreground block">{item.code}</span>
-                  <div className="flex items-baseline gap-1.5 flex-wrap mt-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-sm text-muted-foreground">{item.code}</span>
                     <Badge className={`text-xs shrink-0 ${CATEGORY_COLORS[item.category.category as Category] ?? ""}`}>
                       {item.category.name}
                     </Badge>
-                    <span className="text-base font-medium leading-snug">{item.name}</span>
                   </div>
+                  <span className="text-base font-medium leading-snug mt-0.5 line-clamp-2">{item.name}</span>
                   <p className="text-sm text-muted-foreground">
                     คงเหลือ: {item.trackIndividually
                       ? `${item.subItems.length} ชิ้น`
@@ -331,67 +361,73 @@ return (
                     </p>
                   )}
                 </div>
-                {/* Qty control bottom-right */}
-                {(() => {
-                  const inCart = getItemQty(item.id);
-                  const cartEntry = cartItems.find((c) => c.itemId === item.id);
-                  const atMax = !item.trackIndividually && inCart >= item.availableQty;
-                  if (inCart > 0 && cartEntry) {
-                    return (
-                      <div className="absolute bottom-2 right-2 flex items-center gap-0.5 bg-background border rounded-full px-0.5">
-                        <button
-                          className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (cartEntry.quantity <= 1) {
-                              removeItem(item.id, cartEntry.lotId, cartEntry.subItemId);
-                            } else {
-                              updateItem(item.id, { quantity: cartEntry.quantity - 1 }, cartEntry.lotId, cartEntry.subItemId);
-                            }
-                          }}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <CardEditableQty
-                          value={inCart}
-                          max={!item.trackIndividually ? item.availableQty : undefined}
-                          onChange={(v) => {
-                            updateItem(item.id, { quantity: v }, cartEntry.lotId, cartEntry.subItemId);
-                          }}
-                        />
-                        <button
-                          className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (atMax) return;
-                            if (item.trackIndividually) {
-                              handleAdd(item);
-                            } else {
-                              updateItem(item.id, { quantity: cartEntry.quantity + 1 }, cartEntry.lotId, cartEntry.subItemId);
-                            }
-                          }}
-                          disabled={atMax}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  }
-                  return (
+
+                {/* Qty control — absolute bottom-right of card */}
+                {inCart > 0 && cartEntry ? (
+                  <div className="absolute bottom-2 right-2 flex items-center gap-0.5 bg-background border rounded-full px-0.5">
                     <button
-                      className="absolute bottom-2 right-2 h-7 w-7 flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors disabled:opacity-30"
-                      onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
-                      disabled={!item.trackIndividually && item.availableQty <= 0}
+                      className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (cartEntry.quantity <= 1) {
+                          removeItem(item.id, cartEntry.lotId, cartEntry.subItemId);
+                        } else {
+                          updateItem(item.id, { quantity: cartEntry.quantity - 1 }, cartEntry.lotId, cartEntry.subItemId);
+                        }
+                      }}
                     >
-                      <Plus className="h-4 w-4" />
+                      <Minus className="h-3 w-3" />
                     </button>
-                  );
-                })()}
+                    <CardEditableQty
+                      value={inCart}
+                      max={!item.trackIndividually ? item.availableQty : undefined}
+                      onChange={(v) => {
+                        updateItem(item.id, { quantity: v }, cartEntry.lotId, cartEntry.subItemId);
+                      }}
+                    />
+                    <button
+                      className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (atMax) return;
+                        if (item.trackIndividually) {
+                          handleAdd(item);
+                        } else {
+                          updateItem(item.id, { quantity: cartEntry.quantity + 1 }, cartEntry.lotId, cartEntry.subItemId);
+                        }
+                      }}
+                      disabled={atMax}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="absolute bottom-2 right-2 h-7 w-7 flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors disabled:opacity-30"
+                    onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
+                    disabled={!item.trackIndividually && item.availableQty <= 0}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
         </div>
+
+        <Pagination
+          page={page}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onChange={handlePageChange}
+        />
+        {loading && items.length > 0 && (
+          <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] rounded-xl flex items-center justify-center z-10">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+          </div>
+        )}
       </Card>
 
       <QrScanner

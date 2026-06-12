@@ -40,7 +40,7 @@ export function BottomTab({ user }: BottomTabProps) {
   }
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card">
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;

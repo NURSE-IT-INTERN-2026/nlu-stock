@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -42,6 +42,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
   }));
 
+  // Auto-collapse on tablet (md–xl), expand on desktop (xl+)
+  React.useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    setSidebarCollapsed(!mq.matches);
+    const handler = (e: MediaQueryListEvent) => setSidebarCollapsed(!e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), []);
 
   if (loading) {
@@ -73,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         />
         <div className="flex flex-1 flex-col min-w-0">
           <Header title={getTitle(pathname)} user={user} />
-          <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
+          <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">
             {children}
           </main>
         </div>

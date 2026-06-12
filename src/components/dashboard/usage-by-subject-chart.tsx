@@ -57,7 +57,7 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
   }));
 
   return (
-    <Card className="flex flex-col h-full overflow-hidden pb-0 pt-0 gap-0">
+    <Card className="flex flex-col md:h-full overflow-hidden pb-0 pt-0 gap-0">
       <CardHeader className="py-3 shrink-0">
         <CardTitle className="text-xs font-semibold text-foreground whitespace-nowrap font-sans">
           สัดส่วนการใช้งานเดือนนี้
@@ -67,7 +67,7 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
         {chartData.length === 0 ? (
           <UsageByTypeEmpty />
         ) : (
-          <div className="flex-1 min-h-0" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
+          <div className="flex-1 min-h-[200px] md:min-h-0" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />

@@ -18,10 +18,9 @@ interface PaginationProps {
 
 export function Pagination({ page, total, pageSize, onChange }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  if (total === 0) return null;
 
   const pages: (number | "ellipsis")[] = [];
-  if (totalPages <= 7) {
+  if (totalPages <= 5) {
     for (let i = 1; i <= totalPages; i++) pages.push(i);
   } else {
     pages.push(1);
@@ -34,8 +33,8 @@ export function Pagination({ page, total, pageSize, onChange }: PaginationProps)
   }
 
   return (
-    <PaginationNav className="mt-3 border-t pt-3">
-      <PaginationContent className="[&_button]:min-h-[44px] [&_button]:min-w-[44px] [&_a]:min-h-[44px] [&_a]:min-w-[44px]">
+    <PaginationNav className="border-t pt-2 mt-2">
+      <PaginationContent className="sm:flex-wrap [&_button]:h-7 [&_button]:min-w-7 [&_button]:px-1.5 [&_button]:text-xs [&_a]:h-7 [&_a]:min-w-7 [&_a]:px-1.5 [&_a]:text-xs">
         <PaginationItem>
           <PaginationLink
             href="#"
@@ -65,7 +64,7 @@ export function Pagination({ page, total, pageSize, onChange }: PaginationProps)
         {pages.map((p, i) =>
           p === "ellipsis" ? (
             <PaginationItem key={`e${i}`}>
-              <PaginationEllipsis />
+              <PaginationEllipsis className="size-7" />
             </PaginationItem>
           ) : (
             <PaginationItem key={p}>

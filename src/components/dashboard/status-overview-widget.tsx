@@ -11,7 +11,7 @@ export function StatusOverviewWidget() {
 
   if (isLoading) {
     return (
-      <Card className="h-full">
+      <Card className="h-full w-full">
         <CardHeader>
           <Skeleton className="h-4 w-32" />
         </CardHeader>
@@ -24,7 +24,7 @@ export function StatusOverviewWidget() {
 
   if (error) {
     return (
-      <Card className="animate-fade-in h-full">
+      <Card className="animate-fade-in h-full w-full">
         <CardHeader>
           <p className="text-sm font-semibold text-foreground">สถานะภาพรวม</p>
         </CardHeader>
@@ -39,8 +39,6 @@ export function StatusOverviewWidget() {
   }
 
   return (
-    <div className="animate-fade-in">
-      <StatusOverviewChart data={data ?? []} />
-    </div>
+    <StatusOverviewChart data={data ?? []} />
   );
 }

@@ -123,6 +123,7 @@ export default function MaintenancePage() {
           subtitle={summary.overdue > 0 ? "ต้องดำเนินการ" : undefined}
           iconName="Wrench"
           color="text-danger-500"
+          className=""
         />
         <DashboardMetricCard
           title="ใกล้ถึงรอบ"
@@ -130,6 +131,7 @@ export default function MaintenancePage() {
           subtitle={summary.dueSoon > 0 ? "ภายใน 30 วัน" : undefined}
           iconName="AlertTriangle"
           color="text-orange-500"
+          className=""
         />
         <DashboardMetricCard
           title="เสร็จเดือนนี้"
@@ -137,6 +139,7 @@ export default function MaintenancePage() {
           subtitle="รายการ"
           iconName="CheckCircle2"
           color="text-success"
+          className=""
         />
       </div>
 
@@ -156,7 +159,7 @@ export default function MaintenancePage() {
             ไม่มีรายการที่เลยรอบหรือใกล้ถึงรอบ
           </div>
         ) : (
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border overflow-hidden !bg-white">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -241,7 +244,7 @@ export default function MaintenancePage() {
               <div
                 key={rec.id}
                 className={cn(
-                  "p-3 rounded-lg border",
+                  "p-3 rounded-lg border !bg-white",
                   idx % 2 === 1 && "bg-muted/20",
                 )}
               >

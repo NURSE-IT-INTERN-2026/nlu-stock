@@ -78,7 +78,7 @@ export function TopDispenseChart({ data }: TopDispenseChartProps) {
   }));
 
   return (
-    <Card className="flex flex-col h-full overflow-hidden pb-0 pt-0 gap-0">
+    <Card className="flex flex-col md:h-full overflow-hidden pb-0 pt-0 gap-0">
       <CardHeader className="py-3 shrink-0">
         <CardTitle className="text-xs font-semibold text-foreground whitespace-nowrap font-sans">
           รายการเบิกมากที่สุดเดือนนี้
@@ -88,11 +88,11 @@ export function TopDispenseChart({ data }: TopDispenseChartProps) {
         {chartData.length === 0 ? (
           <TopDispenseEmpty />
         ) : (
-          <div className="flex-1 min-h-0" role="img" aria-label={`รายการเบิกมากที่สุด: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
+          <div className="flex-1 min-h-[200px] md:min-h-0" role="img" aria-label={`รายการเบิกมากที่สุด: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 24, bottom: 5, left: 4 }}>
                 <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" width={140} tick={<ThaiTick />} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={<ThaiTick />} tickLine={false} interval={0} />
                 <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="totalQuantity" fill={fillColor} radius={[0, 4, 4, 0]} animationDuration={400} animationEasing="ease-out" />
               </BarChart>

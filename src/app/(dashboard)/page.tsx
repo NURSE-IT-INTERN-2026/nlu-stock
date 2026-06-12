@@ -41,8 +41,8 @@ export default async function DashboardPage() {
       </div>
 
       {/* Charts + status overview */}
-      <div className="grid gap-4 lg:grid-cols-5">
-        <div className="lg:col-span-1">
+      <div className="grid gap-4 lg:grid-cols-5 items-stretch">
+        <div className="lg:col-span-1 flex">
           <StatusOverviewWidget />
         </div>
         <div className="lg:col-span-4">
