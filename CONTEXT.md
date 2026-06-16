@@ -61,6 +61,35 @@ Top-level classification of items. Four enum values with distinct rules.
   - หมวด 13: คู่มือสำหรับใช้อ้างอิง
 - **Why BOOK separate from DURABLE**: Semantically different — books are not equipment. Same tracking behavior (trackIndividually) but distinct category for user-facing clarity.
 
+## หมวดย่อย (CategoryType)
+
+Granular sub-category under a top-level Category. Stored as `CategoryType` rows; `Item.categoryId` points to one. **Not embedded in the item code.**
+
+`CategoryType.number` is **optional (nullable)** — present only where the domain uses canonical numbers:
+- BOOK: 001-013 (numbered + named)
+- TOY: 014 (single)
+- KRU: 12 named types, **no number** (we don't fabricate one)
+- ELE: types are 1:1 with items — no separate row; the running code already serves as the type number
+- CON / DUR / MED / KIT: flat, no หมวดย่อย — but **future-ready**: adding one = insert rows + set `categoryId`, no schema change.
+
+## Copy (C{NN})
+
+Per-piece identifier for `trackIndividually` items, stored as `SubItem.subCode` (`C01`, `C02`, …). Uniform across KRU / ELE / BOOK / TOY. **Same mechanism, different meaning:**
+
+- **KRU / ELE** — each Copy is a distinct physical asset (own serial, location, maintenance). "ชิ้นที่ N ของรุ่นนั้น."
+- **BOOK / TOY** — each Copy is a duplicate of the same title/set. "เล่ม/ชุดฉบับที่ N."
+
+_Avoid_: calling KRU copies "duplicates" — they are unique assets, not copies of each other.
+
+## tracking_type
+
+How an item is tracked (from the standardized inventory model):
+- **Asset** — `trackIndividually`, per-piece via SubItem (KRU, ELE, BOOK, TOY)
+- **Durable** — quantity, borrow-return counted (DUR, KIT)
+- **Consumable** — quantity + lot, used up (CON, MED)
+
+Coarser than the `Category` enum. `borrowable` (Y/N) is a separate per-item flag.
+
 ## Kit / BOM (ชุดอุปกรณ์)
 
 A kit is a DURABLE item composed of multiple component items.
@@ -124,6 +153,16 @@ No separate quarterly report needed. Lot model provides:
 - **Grouping for trackIndividually**: strip trailing number from name → Item. SubItems are individual pieces.
 - **Copy suffix** (books, toys): `-c1`, `-c2` → same Item, different SubItem.
 - **Kit/BOM import deferred** to M14.
+
+## Code scheme (grill session 2026-06-16)
+
+Full rationale in [ADR-0001](./docs/adr/0001-nlu-code-scheme.md) and [ADR-0002](./docs/adr/0002-lot-quantity-immutable.md).
+
+- **Item code = `NLU-{PREFIX}-{NNN}`** (+ optional `-{SNN}` set for BOOK/TOY; copy `-{CNN}` lives on SubItem). หมวดย่อย NOT in code.
+- **Copy = `C{NN}` uniform** across KRU/ELE/BOOK/TOY (was lowercase `-c1` for books, bare `001` for KRU).
+- **SET shown only for sets** (`-S{NN}`); single book/toy omits it. `setSize` stored as a field (source of truth), mirrored in code.
+- **Lot = `receivedQty` (immutable) + `remainingQty`**; corrections via `StockAdjustment` (gains `lotId`). Never edit `receivedQty`.
+- **`availableQty` derived** from `sum(lot.remainingQty)` (consumables) or `totalQty − unreturned dispenses` (durables) — no maintained counter.
 
 ## Import Data Sources
 
