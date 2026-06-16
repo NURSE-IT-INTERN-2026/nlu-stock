@@ -163,6 +163,8 @@ export interface QuickCreateItemPayload {
   subUnitId: string;
   conversionFactor: number;
   copyCount?: number;
+  setSize?: number;
+  initialQty?: number;
 }
 
 export function quickCreateItem(data: QuickCreateItemPayload) {

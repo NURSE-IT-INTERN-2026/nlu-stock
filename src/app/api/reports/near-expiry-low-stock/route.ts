@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     id: l.id,
     lotNumber: l.lotNumber,
     expiryDate: l.expiryDate!.toISOString(),
-    quantity: l.quantity,
+    quantity: l.remainingQty,
     itemCode: l.item.code,
     itemName: l.item.name,
     categoryName: l.item.category.name,

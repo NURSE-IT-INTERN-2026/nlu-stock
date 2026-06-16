@@ -157,7 +157,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         Code: l.item.code,
         Name: l.item.name,
         Category: "",
-        "Available Qty": l.quantity,
+        "Available Qty": l.remainingQty,
         "Min Threshold": "",
         "Expiry Date": l.expiryDate ? format(l.expiryDate, "yyyy-MM-dd") : "",
       }));

@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         location: true,
         issueUnit: true,
         subUnit: true,
-        _count: { select: { subItems: true } },
+        _count: { select: { subItems: true, dispenseRecords: true, receiveRecords: true } },
       },
     }),
     prisma.item.count({ where }),

@@ -57,7 +57,8 @@ export async function POST(req: NextRequest) {
             await tx.lot.update({
               where: { id: existingLot.id },
               data: {
-                quantity: { increment: ri.quantity },
+                receivedQty: { increment: ri.quantity },
+                remainingQty: { increment: ri.quantity },
                 ...(ri.expiryDate && { expiryDate: new Date(ri.expiryDate) }),
               },
             });
@@ -68,7 +69,8 @@ export async function POST(req: NextRequest) {
                 itemId: item.id,
                 lotNumber: ri.lotNumber,
                 expiryDate: ri.expiryDate ? new Date(ri.expiryDate) : null,
-                quantity: ri.quantity,
+                receivedQty: ri.quantity,
+                remainingQty: ri.quantity,
               },
             });
             lotId = newLot.id;

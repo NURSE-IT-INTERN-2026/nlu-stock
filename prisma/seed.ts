@@ -55,6 +55,21 @@ function parsePrice(raw: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+// Uniform code generator (ADR-0001): NLU-{PREFIX}-{NNN}[-S{NN}].
+// Per-prefix running counter; setSize>1 appends the set segment.
+const prefixCounters: Record<string, number> = {};
+function nextCode(prefix: string, setSize = 1): string {
+  prefixCounters[prefix] = (prefixCounters[prefix] ?? 0) + 1;
+  const nnn = String(prefixCounters[prefix]).padStart(3, "0");
+  return setSize > 1 ? `NLU-${prefix}-${nnn}-S${String(setSize).padStart(2, "0")}` : `NLU-${prefix}-${nnn}`;
+}
+
+// Extract set size from an old-format code (NLU-BOOK-013-001-S06 → 6), else 1.
+function extractSetSize(oldCode: string): number {
+  const m = oldCode.match(/-S(\d{2})$/);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
 // Extract NLU code prefix for grouping
 // "NLU-KRU-001-001" → "NLU-KRU-001"
 // "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001-S02" (keep set, strip copy)
@@ -130,6 +145,22 @@ async function main() {
   const catCon = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CON", sortOrder: 6 } });
   const catMed = await prisma.categoryType.create({ data: { name: "ยา", category: "MED", sortOrder: 7 } });
   const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", category: "KIT", sortOrder: 8 } });
+
+  // Granular หมวดย่อย (CategoryType rows beyond the 8 top-level).
+  // BOOK: 13 numbered หมวด; TOY: single 014; KRU: one row per named type (number null).
+  // ELE/CON/MED/DUR/KIT stay top-level (ELE is 1:1 with items; others are flat).
+  const subCatCache = new Map<string, string>();
+  let subSort = 100;
+  async function ensureSubCategory(category: string, name: string, number: string | null = null): Promise<string> {
+    const key = `${category}|${number ?? ""}|${name}`;
+    const cached = subCatCache.get(key);
+    if (cached) return cached;
+    const row = await prisma.categoryType.create({
+      data: { name, category: category as any, number, sortOrder: subSort++ },
+    });
+    subCatCache.set(key, row.id);
+    return row.id;
+  }
 
   // ============================================================
   // Locations — from CSV data
@@ -223,10 +254,10 @@ async function main() {
 
     const item = await prisma.item.create({
       data: {
-        code: group.nluCode,
+        code: nextCode("KRU"),
         name: stripTrailingNum(group.nameTh),
         nameEn: group.nameEn || null,
-        categoryId: catKru.id,
+        categoryId: group.subCategory ? await ensureSubCategory("KRU", group.subCategory) : catKru.id,
         trackIndividually: true,
         issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"), conversionFactor: 1,
         minThreshold: 1, locationId: locId,
@@ -242,7 +273,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: sub.nluCode,
+          subCode: `C${String(si + 1).padStart(2, "0")}`,
           name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
           status: mapStatus(sub.condition) as any,
           condition: mapCondition(sub.condition) as any,
@@ -322,7 +353,7 @@ async function main() {
 
     const item = await prisma.item.create({
       data: {
-        code: group.nluCode,
+        code: nextCode("ELE"),
         name: stripTrailingNum(group.nameTh),
         categoryId: catEle.id,
         trackIndividually: true,
@@ -340,7 +371,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: sub.nluCode,
+          subCode: `C${String(si + 1).padStart(2, "0")}`,
           name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
           status: mapStatus(sub.condition) as any,
           condition: mapCondition(sub.condition) as any,
@@ -380,16 +411,22 @@ async function main() {
   }
 
   let bookItemCount = 0, bookSubCount = 0;
-  for (const [baseCode, group] of bookGroups) {
+  for (const [, group] of bookGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
+    const setSize = extractSetSize(group.codes[0]);
+    const หมวดNum = (group.codes[0].split("-")[2] || "").trim();
+    const bookCatId = หมวดNum
+      ? await ensureSubCategory("BOOK", group.category || `หมวด ${หมวดNum}`, หมวดNum)
+      : catBook.id;
 
     const item = await prisma.item.create({
       data: {
-        code: baseCode,
+        code: nextCode("BOOK", setSize),
         name: stripTrailingNum(group.bookName),
-        categoryId: catBook.id,
+        categoryId: bookCatId,
         trackIndividually: true,
+        setSize,
         issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"), conversionFactor: 1,
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
@@ -401,7 +438,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: group.codes[ci],
+          subCode: `C${String(ci + 1).padStart(2, "0")}`,
           name: group.codes.length > 1 ? `${stripTrailingNum(group.bookName)} (${ci + 1})` : group.bookName,
           status: "AVAILABLE",
           condition: "NEW",
@@ -439,16 +476,19 @@ async function main() {
   }
 
   let toyItemCount = 0, toySubCount = 0;
-  for (const [baseCode, group] of toyGroups) {
+  const toyCatId = await ensureSubCategory("TOY", "สื่อการสอน/ของเล่นส่งเสริมพัฒนาการ", "014");
+  for (const [, group] of toyGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
+    const setSize = extractSetSize(group.codes[0]);
 
     const item = await prisma.item.create({
       data: {
-        code: baseCode,
+        code: nextCode("TOY", setSize),
         name: stripTrailingNum(group.toyName),
-        categoryId: catToy.id,
+        categoryId: toyCatId,
         trackIndividually: true,
+        setSize,
         issueUnitId: unitId("ชิ้น"), subUnitId: unitId("ชิ้น"), conversionFactor: 1,
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
@@ -460,7 +500,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: group.codes[ci],
+          subCode: `C${String(ci + 1).padStart(2, "0")}`,
           name: group.codes.length > 1 ? `${stripTrailingNum(group.toyName)} (${ci + 1})` : group.toyName,
           status: "AVAILABLE",
           condition: "NEW",
@@ -492,7 +532,7 @@ async function main() {
     const { name, nameEn } = parseName(nameRaw);
     const qty = parseInt(qtyStr) || 0;
     const unitName = parseUnit(unitRaw);
-    const code = (row[1] || "").trim() || `NLU-DUR-${String(durCount + 1).padStart(3, "0")}`;
+    const code = nextCode("DUR");
 
     await prisma.item.create({
       data: {
@@ -519,10 +559,10 @@ async function main() {
   for (let i = 3; i < conRows.length; i++) {
     const row = conRows[i];
     if (!row || row.length < 4) continue;
-    const code = (row[1] || "").trim();
+    const code = nextCode("CON");
     const nameRaw = (row[2] || "").trim();
     const room = (row[3] || "").trim();
-    if (!nameRaw || !code) continue;
+    if (!nameRaw) continue;
 
     // Stock = last คงเหลือ column (col 22 = มี.ค.-69)
     // Fallback chain: col 22 → col 16 → col 10 → col 4
@@ -573,7 +613,7 @@ async function main() {
 
       const qty = parseInt(qtyStr) || 1;
       const unitName = parseUnit(unitRaw);
-      const code = `NLU-KIT-${String(kitCount + 1).padStart(3, "0")}`;
+      const code = nextCode("KIT");
 
       const item = await prisma.item.create({
         data: {
@@ -630,7 +670,7 @@ async function main() {
     const lot = await prisma.lot.create({
       data: {
         itemId: item.id, lotNumber: `LOT-${item.code}`,
-        quantity: item.totalQty,
+        receivedQty: item.totalQty, remainingQty: item.totalQty,
         expiryDate: new Date(now.getTime() + (Math.random() * 365 + 30) * 24 * 60 * 60 * 1000),
         receivedDate: day(60),
       },
@@ -712,7 +752,7 @@ async function main() {
     await prisma.lot.create({
       data: {
         itemId: demoConsumables[0].id, lotNumber: "LOT-EXPIRE",
-        quantity: 5,
+        receivedQty: 5, remainingQty: 5,
         expiryDate: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000),
         receivedDate: day(120),
       },

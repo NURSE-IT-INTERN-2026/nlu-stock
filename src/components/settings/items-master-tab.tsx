@@ -70,7 +70,7 @@ interface ItemRecord {
   isActive: boolean;
   totalQty: number;
   availableQty: number;
-  _count: { subItems: number };
+  _count: { subItems: number; dispenseRecords: number; receiveRecords: number };
   model: string | null;
   purchaseDate: string | null;
   purchasePrice: number | null;
@@ -631,17 +631,16 @@ export function ItemsMasterTab() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[640px] gap-0 p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/60">
-            <div className="flex items-start justify-between gap-4 pr-8">
-              <div className="min-w-0">
-                <DialogTitle className="text-lg font-semibold">
-                  {editing ? "แก้ไขรายการ" : "เพิ่มรายการใหม่"}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  {editing ? "แก้ไขข้อมูลพัสดุ" : "ระบบจะสร้างรหัสให้อัตโนมัติตามหมวดหมู่"}
-                </DialogDescription>
+        <DialogContent className="max-w-[640px] sm:max-w-[640px] gap-0 p-0 overflow-hidden">
+          <DialogHeader className="flex-row items-center gap-3 border-b border-border bg-card px-6 py-4 pr-14">
+            {/* Group 1: icon + title + code badge — flex-none */}
+            <div className="flex items-center gap-3 shrink-0 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                {editing ? <Pencil className="h-4 w-4" /> : <Package className="h-4 w-4" />}
               </div>
+              <DialogTitle className="text-base font-semibold text-foreground shrink-0">
+                {editing ? "แก้ไขรายการ" : "เพิ่มรายการใหม่"}
+              </DialogTitle>
               <div className="flex items-center gap-1 rounded-full border border-orange-300/50 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 pl-2.5 pr-1 py-1 shrink-0">
                 <Sparkles className="h-3 w-3 text-orange-400 shrink-0" />
                 <span className="font-mono text-xs font-semibold text-orange-600 dark:text-orange-300 tabular-nums ml-1">
@@ -665,6 +664,28 @@ export function ItemsMasterTab() {
                 </button>
               </div>
             </div>
+            {/* Spacer */}
+            <div className="flex-1" />
+            {editing && (
+              <label className={`flex items-center gap-2 cursor-pointer select-none rounded-full border px-3 py-1.5 transition-colors ${
+                form.isActive
+                  ? "border-success/30 bg-success/8 text-success"
+                  : "border-border bg-muted/60 text-muted-foreground"
+              }`}>
+                <span className="text-xs font-medium">
+                  {form.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+                </span>
+                <Switch
+                  checked={form.isActive}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
+                  aria-label="เปลี่ยนสถานะการใช้งาน"
+                  className={form.isActive ? "data-checked:!bg-success" : ""}
+                />
+              </label>
+            )}
+            <DialogDescription className="sr-only">
+              {editing ? "แก้ไขข้อมูลพัสดุ" : "ระบบจะสร้างรหัสให้อัตโนมัติตามหมวดหมู่"}
+            </DialogDescription>
           </DialogHeader>
 
           <Tabs value={dialogTab} onValueChange={setDialogTab} className="flex flex-col">
@@ -672,7 +693,7 @@ export function ItemsMasterTab() {
               {DIALOG_TABS.map((t) => {
                 const Icon = t.icon;
                 return (
-                  <TabsTrigger key={t.value} value={t.value} className="text-xs gap-1.5">
+                  <TabsTrigger key={t.value} value={t.value} className="text-xs gap-1.5 data-active:!bg-primary/10 data-active:!text-primary data-active:!shadow-none">
                     <Icon className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">{t.label}</span>
                   </TabsTrigger>
@@ -680,11 +701,11 @@ export function ItemsMasterTab() {
               })}
             </TabsList>
 
-            <div className="px-6 py-5 min-h-[300px] max-h-[55vh] overflow-y-auto">
+            <div className="px-6 py-5 min-h-[300px] max-h-[55vh] overflow-y-auto bg-secondary/40">
               {/* ── Tab 1: ข้อมูลพื้นฐาน ── */}
               <TabsContent value="basic" className="mt-0 space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">หมวดหมู่ <span className="text-red-500">*</span></Label>
+                  <Label className="text-[11px] font-medium text-muted-foreground">หมวดหมู่ <span className="text-destructive">*</span></Label>
 
               {form.categoryId && (
                 <div className="space-y-3">
@@ -749,30 +770,39 @@ export function ItemsMasterTab() {
                 </div>
               )}
 
-                  <Select value={form.categoryId} onValueChange={(v) => {
-                    const cat = categories.find((c) => c.id === v);
-                    const forced = cat ? (
-                      ["KRU", "ELE", "BOOK", "TOY"].includes(cat.category) ? true
-                      : ["CON", "MED"].includes(cat.category) ? false
-                      : undefined
-                    ) : undefined;
-                    setForm({ ...form, categoryId: v ?? "", code: "", ...(forced !== undefined ? { trackIndividually: forced } : {}) });
-                    setCodeGroup(""); setCodeSubcode(""); setCodeSet("");
-                    setCodeLocked(true); setSuggestedCode(""); setExistingItems([]); setCodeGroups([]);
-                  }}>
-                    <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
-                      <span className={form.categoryId ? "text-gray-900" : "text-muted-foreground"}>
-                        {form.categoryId ? (categories.find((c) => c.id === form.categoryId)?.name ?? "Select") : "เลือก..."}
+                  {editing ? (
+                    <div className="flex h-10 items-center gap-2 rounded-md bg-primary/5 px-3 border border-primary/20">
+                      <span className="text-sm text-gray-900 flex-1">
+                        {categories.find((c) => c.id === form.categoryId)?.name ?? "—"}
                       </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                      <Lock className="h-3.5 w-3.5 text-primary/40 shrink-0" />
+                    </div>
+                  ) : (
+                    <Select value={form.categoryId} onValueChange={(v) => {
+                      const cat = categories.find((c) => c.id === v);
+                      const forced = cat ? (
+                        ["KRU", "ELE", "BOOK", "TOY"].includes(cat.category) ? true
+                        : ["CON", "MED"].includes(cat.category) ? false
+                        : undefined
+                      ) : undefined;
+                      setForm({ ...form, categoryId: v ?? "", code: "", ...(forced !== undefined ? { trackIndividually: forced } : {}) });
+                      setCodeGroup(""); setCodeSubcode(""); setCodeSet("");
+                      setCodeLocked(true); setSuggestedCode(""); setExistingItems([]); setCodeGroups([]);
+                    }}>
+                      <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
+                        <span className={form.categoryId ? "text-gray-900" : "text-muted-foreground"}>
+                          {form.categoryId ? (categories.find((c) => c.id === form.categoryId)?.name ?? "Select") : "เลือก..."}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">ชื่อไทย <span className="text-red-500">*</span></Label>
+                    <Label className="text-[11px] font-medium text-muted-foreground">ชื่อไทย <span className="text-destructive">*</span></Label>
                     <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-10 text-gray-900 bg-muted/50 border-transparent shadow-none" placeholder="เช่น เครื่องดื่มหัวปลีแบบผง" />
                   </div>
                   <div className="space-y-1.5">
@@ -795,9 +825,18 @@ export function ItemsMasterTab() {
 
               {/* ── Tab 2: หน่วย ── */}
               <TabsContent value="units" className="mt-0 space-y-4">
+                {editing && (editing._count.dispenseRecords + editing._count.receiveRecords) > 0 && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-300">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">มี {editing._count.dispenseRecords + editing._count.receiveRecords} transaction ที่อ้างอิงหน่วยปัจจุบัน</p>
+                      <p className="text-amber-700 dark:text-amber-400 mt-0.5">เปลี่ยนหน่วยจะไม่กระทบ transaction เก่า แต่ตัวเลขอาจอ่านต่างกัน</p>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">หน่วยหลัก <span className="text-red-500">*</span></Label>
+                    <Label className="text-[11px] font-medium text-muted-foreground">หน่วยหลัก <span className="text-destructive">*</span></Label>
                   <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
                     <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
                       <span className={form.issueUnitId ? "text-gray-900" : "text-muted-foreground"}>
@@ -808,7 +847,7 @@ export function ItemsMasterTab() {
                   </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">หน่วยย่อย <span className="text-red-500">*</span></Label>
+                    <Label className="text-[11px] font-medium text-muted-foreground">หน่วยย่อย <span className="text-destructive">*</span></Label>
                     <Select value={form.subUnitId} onValueChange={(v) => setForm({ ...form, subUnitId: v ?? "" })}>
                       <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
                         <span className={form.subUnitId ? "text-gray-900" : "text-muted-foreground"}>
@@ -862,13 +901,6 @@ export function ItemsMasterTab() {
                     <Input type="number" min={0} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: parseInt(e.target.value) || 0 })} className="h-10 text-gray-900 bg-muted/50 border-transparent shadow-none" />
                   </div>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
-                  <div>
-                    <div className="text-sm font-medium">Active</div>
-                    <div className="text-xs text-muted-foreground">เปิดใช้งานรายการนี้ในระบบ</div>
-                  </div>
-                  <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
-                </div>
               </TabsContent>
 
               {/* ── Tab 4: เพิ่มเติม ── */}
@@ -892,7 +924,7 @@ export function ItemsMasterTab() {
                 {isFixedAsset && (
                   <>
                     <Separator className="mt-2" />
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 pt-1">ข้อมูลครุภัณฑ์</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/60 pt-1">ข้อมูลครุภัณฑ์</p>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-medium text-muted-foreground">รุ่น (Model)</Label>
                       <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} className="h-10 text-gray-900 bg-muted/50 border-transparent shadow-none" />
@@ -937,7 +969,7 @@ export function ItemsMasterTab() {
             </div>
           </Tabs>
 
-          <DialogFooter className="px-6 py-3.5 border-t border-border/60 bg-muted/30 sm:justify-between">
+          <DialogFooter className="mx-0 mb-0 px-6 py-3.5 border-t border-border/60 bg-muted/30 sm:justify-between">
             <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
               แท็บ {DIALOG_TABS.findIndex((t) => t.value === dialogTab) + 1} / {DIALOG_TABS.length}

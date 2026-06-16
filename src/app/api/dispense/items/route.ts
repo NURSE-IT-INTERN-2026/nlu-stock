@@ -34,9 +34,9 @@ export async function GET(req: NextRequest) {
         issueUnit: { select: { id: true, name: true } },
         subUnit: { select: { id: true, name: true } },
         lots: {
-          where: { quantity: { gt: 0 } },
+          where: { remainingQty: { gt: 0 } },
           orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }],
-          select: { id: true, lotNumber: true, expiryDate: true, quantity: true },
+          select: { id: true, lotNumber: true, expiryDate: true, remainingQty: true },
         },
         subItems: {
           where: { status: "AVAILABLE" },

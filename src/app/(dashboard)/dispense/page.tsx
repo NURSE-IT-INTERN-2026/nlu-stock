@@ -82,7 +82,7 @@ interface SearchItem {
   conversionFactor: number;
   trackIndividually: boolean;
   category: { name: string; category: string };
-  lots: { id: string; lotNumber: string; expiryDate: string | null; quantity: number }[];
+  lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;
 }
@@ -176,7 +176,7 @@ function DispenseContent() {
         subCode: null,
         availableQty: item.availableQty,
         location: loc,
-        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, quantity: l.quantity })),
+        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, quantity: l.remainingQty })),
         subItems: [],
       });
     } else if (isTracked) {

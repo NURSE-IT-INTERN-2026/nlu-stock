@@ -94,6 +94,7 @@ model CategoryType {
   category    Category
   description String?
   sortOrder   Int      @default(0)
+  number      String? // canonical หมวดย่อย number (BOOK 001-013, TOY 014); null when none (KRU/flat)
 
   items Item[]
 
@@ -160,6 +161,10 @@ model Item {
   // Consumable fields (used when category = CON, MED)
   storageRequirements String?
 
+  // Book/Toy set + borrowing (see ADR-0001)
+  setSize     Int     @default(1) // volumes per set; 1 = single
+  borrowable  Boolean @default(false)
+
   // Fixed Asset fields (nullable, used when category = KRU, ELE)
   model                  String?
   purchaseDate           DateTime?
@@ -222,13 +227,15 @@ model Lot {
   item         Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   lotNumber    String
   expiryDate   DateTime?
-  quantity     Int       @default(0)
-  receivedDate DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  receivedQty  Int      @default(0) // immutable: how much entered this lot
+  remainingQty Int      @default(0) // decremented on dispense; see ADR-0002
+  receivedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   dispenseRecords DispenseRecord[]
   receiveRecords  ReceiveRecord[]
+  adjustments     StockAdjustment[]
 
   @@unique([itemId, lotNumber])
   @@index([itemId, expiryDate])
@@ -282,6 +289,9 @@ model StockAdjustment {
   id            String           @id @default(cuid())
   itemId        String
   item          Item             @relation(fields: [itemId], references: [id])
+  lotId         String?
+  lot           Lot?             @relation(fields: [lotId], references: [id])
+  delta         Int              @default(0) // signed change applied to Lot.remainingQty
   previousQty   Int
   newQty        Int
   reason        AdjustmentReason

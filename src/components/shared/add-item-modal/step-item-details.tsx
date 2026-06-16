@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Sparkles, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,17 @@ export function StepItemDetails({
   const [similarLoading, setSimilarLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const debouncedName = useDebounce(name, 500);
+  const router = useRouter();
+
+  // receive context: select existing. settings context: navigate to item detail.
+  const isReceiveMode = !!onSelectExisting;
+  const handleConfirm = useCallback((item: SimilarItem) => {
+    if (onSelectExisting) {
+      onSelectExisting(item);
+    } else {
+      router.push(`/items/${item.id}`);
+    }
+  }, [onSelectExisting, router]);
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim() || q.trim().length < 2) { setSimilar([]); return; }
@@ -59,7 +71,7 @@ export function StepItemDetails({
     <div className="space-y-6">
       {/* Name */}
       <div className="space-y-2">
-        <Label htmlFor="item-name">ชื่อพัสดุ</Label>
+        <Label htmlFor="item-name">ชื่อพัสดุ <span className="text-destructive">*</span></Label>
         <Input
           id="item-name"
           placeholder="เช่น ปากกาลูกลื่น, สว่านไฟฟ้า"
@@ -82,12 +94,16 @@ export function StepItemDetails({
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                 <Sparkles className="h-3 w-3" />
-                พบพัสดุที่ชื่อคล้ายกัน — เป็นของเดิมหรือเปล่า?
+                พบพัสดุที่ชื่อคล้ายกัน
               </div>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                {isReceiveMode
+                  ? "ถ้าใช่ — กดที่รายการเพื่อเลือกรับเข้าเลย ไม่ต้องสร้างใหม่. ถ้าไม่ใช่ — กรอกข้อมูลด้านล่างต่อไปได้เลย"
+                  : "ถ้าใช่ — กดที่รายการเพื่อเปิดดูรายละเอียดพัสดุนี้. ถ้าไม่ใช่ — กรอกข้อมูลด้านล่างต่อไปได้เลย"}
+              </p>
               <div className="space-y-1.5">
                 {similar.slice(0, 3).map((item) => {
                   const isConfirming = confirmingId === item.id;
-                  const isSelectable = !!onSelectExisting;
                   return (
                     <div
                       key={item.id}
@@ -95,11 +111,9 @@ export function StepItemDetails({
                         "rounded-lg border bg-card text-sm overflow-hidden",
                         isConfirming
                           ? "border-primary"
-                          : isSelectable
-                            ? "border-border cursor-pointer hover:border-primary/50 transition-colors"
-                            : "border-border",
+                          : "border-border cursor-pointer hover:border-primary/50 transition-colors",
                       )}
-                      onClick={() => isSelectable && !isConfirming && setConfirmingId(item.id)}
+                      onClick={() => !isConfirming && setConfirmingId(item.id)}
                     >
                       <div className="px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -115,10 +129,12 @@ export function StepItemDetails({
                           <Package className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="flex-1 font-medium text-foreground">{item.name}</span>
                         </div>
-                      {isConfirming && onSelectExisting && (
+                      {isConfirming && (
                         <div className="flex items-center justify-between border-t border-primary/20 bg-primary/5 px-3 py-2">
                           <span className="text-xs text-foreground">
-                            ต้องการเพิ่ม <strong>{item.name}</strong> ใช่ไหม?
+                            {isReceiveMode
+                              ? <>ต้องการเพิ่มพัสดุ <strong>{item.name}</strong> ใช่หรือไม่?</>
+                              : <>ต้องการตรวจสอบพัสดุใช่หรือไม่?</>}
                           </span>
                           <div className="flex gap-2">
                             <Button
@@ -132,7 +148,7 @@ export function StepItemDetails({
                             <Button
                               size="sm"
                               className="h-7 text-xs"
-                              onClick={(e) => { e.stopPropagation(); onSelectExisting(item); }}
+                              onClick={(e) => { e.stopPropagation(); handleConfirm(item); }}
                             >
                               ยืนยัน
                             </Button>
@@ -152,12 +168,12 @@ export function StepItemDetails({
       {/* Usage type picker */}
       <div className="space-y-3">
         <div>
-          <Label>ของชิ้นนี้ใช้งานยังไง?</Label>
+          <Label id="usage-group-label">ของชิ้นนี้ใช้งานยังไง? <span className="text-destructive">*</span></Label>
           <p className="mt-0.5 text-xs text-muted-foreground">
             เลือกรูปแบบการใช้งานเพื่อกำหนดวิธีติดตามสต็อก
           </p>
         </div>
-        <div className="grid gap-2">
+        <div role="radiogroup" aria-labelledby="usage-group-label" className="grid gap-2">
           {USAGE_OPTIONS.map((opt) => {
             const Icon = opt.icon;
             const active = usageType === opt.id;
@@ -165,9 +181,10 @@ export function StepItemDetails({
               <button
                 key={opt.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => onUsageTypeChange(opt.id)}
                 className={cn(
-                  "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                  "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                   active
                     ? "border-primary bg-primary/5 shadow-sm"
                     : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02]",

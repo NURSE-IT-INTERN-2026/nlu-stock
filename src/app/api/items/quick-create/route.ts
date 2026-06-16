@@ -13,6 +13,8 @@ const quickCreateSchema = z.object({
   subUnitId: z.string().min(1, "Sub unit is required"),
   conversionFactor: z.number().int().min(1).default(1),
   copyCount: z.number().int().min(1).default(1),
+  setSize: z.number().int().min(1).default(1),
+  initialQty: z.number().int().min(0).default(0),
 });
 
 export async function POST(request: NextRequest) {
@@ -34,15 +36,12 @@ export async function POST(request: NextRequest) {
 
   const trackIndividually = forcedTrackIndividually(cat.category) ?? false;
 
-  // Build sub-items for individually tracked items
+  // Build sub-items for individually tracked items — subCode is the copy part (C01, C02…);
+  // full reference = item.code + "-" + subCode (see ADR-0001).
   const subItems = trackIndividually
     ? Array.from({ length: data.copyCount }, (_, i) => ({
-        subCode: data.copyCount === 1
-          ? data.code
-          : `${data.code}-C${String(i + 1).padStart(2, "0")}`,
-        name: data.copyCount === 1
-          ? data.name
-          : `${data.name} (copy ${i + 1})`,
+        subCode: `C${String(i + 1).padStart(2, "0")}`,
+        name: data.copyCount === 1 ? data.name : `${data.name} (copy ${i + 1})`,
         status: "AVAILABLE" as const,
       }))
     : [];
@@ -56,11 +55,12 @@ export async function POST(request: NextRequest) {
       subUnitId: data.subUnitId,
       conversionFactor: data.conversionFactor,
       trackIndividually,
+      setSize: data.setSize,
       ...(subItems.length > 0
         ? { subItems: { createMany: { data: subItems } } }
         : {}),
-      totalQty: trackIndividually ? data.copyCount : 0,
-      availableQty: trackIndividually ? data.copyCount : 0,
+      totalQty: trackIndividually ? data.copyCount : data.initialQty,
+      availableQty: trackIndividually ? data.copyCount : data.initialQty,
     },
     include: {
       category: true,

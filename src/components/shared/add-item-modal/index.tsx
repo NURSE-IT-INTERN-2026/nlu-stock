@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { PackagePlus, ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { PackagePlus, ArrowLeft, ArrowRight, Check, X, FileText, Layers, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import type { AddItemModalProps, CategoryWizardState, ItemFormState, SimilarItem
 import { USAGE_OPTIONS } from "./types";
 import { StepItemDetails } from "./step-item-details";
 import { StepCategoryUnits } from "./step-category-units";
+import type { CodeMeta } from "./code-builder";
 import { StepSummary } from "./step-summary";
 import { StepSelect } from "../category-select-modal/step-select";
 import { StepCreateName } from "../category-select-modal/step-create-name";
@@ -37,6 +38,13 @@ const STEP_TITLES: Record<WizardStep, string> = {
   "cat-create-name": "สร้างหมวดหมู่ใหม่",
   "cat-create-confirm": "ตรวจสอบและยืนยัน",
 };
+
+// Sidebar stepper metadata (3 main steps; cat-* sub-steps map to index 1)
+const MAIN_STEPS = [
+  { idx: 0, title: "ข้อมูลพัสดุ", desc: "ชื่อและประเภทการใช้งาน", icon: FileText },
+  { idx: 1, title: "หมวดหมู่และหน่วย", desc: "หมวดหมู่ รหัส และหน่วยนับ", icon: Layers },
+  { idx: 2, title: "ตรวจสอบและยืนยัน", desc: "สรุปข้อมูลก่อนสร้าง", icon: ClipboardCheck },
+] as const;
 
 const INITIAL_CAT_WIZARD: CategoryWizardState = {
   selectedExisting: null,
@@ -72,7 +80,8 @@ export function AddItemModal({
     form: ItemFormState;
     isSubmitting: boolean;
     catWizard: CategoryWizardState;
-    copyCount: number;
+    codeMeta: CodeMeta | null;
+    initialQty: number;
   }>({
     step: "details",
     form: {
@@ -83,12 +92,15 @@ export function AddItemModal({
       categoryName: "",
       categoryType: "",
       issueUnitId: "",
+      issueUnitName: "",
       subUnitId: "",
+      subUnitName: "",
       conversionFactor: 1,
     },
     isSubmitting: false,
     catWizard: { ...INITIAL_CAT_WIZARD },
-    copyCount: 1,
+    codeMeta: null,
+    initialQty: 1,
   });
 
   const reset = useCallback(() => {
@@ -102,11 +114,14 @@ export function AddItemModal({
         categoryName: "",
         categoryType: "",
         issueUnitId: "",
+        issueUnitName: "",
         subUnitId: "",
+        subUnitName: "",
         conversionFactor: 1,
       },
       isSubmitting: false,
-      copyCount: 1,
+      codeMeta: null,
+      initialQty: 1,
       catWizard: { ...INITIAL_CAT_WIZARD },
     });
   }, [defaultCode]);
@@ -115,6 +130,43 @@ export function AddItemModal({
     reset();
     onClose();
   }, [reset, onClose]);
+
+  // When usageType changes, clear step-2 fields so user picks fresh values
+  const prevUsageType = useRef(state.form.usageType);
+  useEffect(() => {
+    if (prevUsageType.current !== state.form.usageType) {
+      prevUsageType.current = state.form.usageType;
+      setState((s) => ({
+        ...s,
+        form: {
+          ...s.form,
+          code: "",
+          categoryId: "",
+          categoryName: "",
+          categoryType: "",
+          issueUnitId: "",
+          issueUnitName: "",
+          subUnitId: "",
+          subUnitName: "",
+          conversionFactor: 1,
+        },
+        copyCount: 1,
+        codeMeta: null,
+        initialQty: 1,
+      }));
+    }
+  }, [state.form.usageType]);
+
+  const handleCodeMetaChange = useCallback((meta: CodeMeta) => {
+    setState((s) => {
+      if (
+        s.codeMeta?.copyCount === meta.copyCount &&
+        s.codeMeta?.isSet === meta.isSet &&
+        s.codeMeta?.setSize === meta.setSize
+      ) return s;
+      return { ...s, codeMeta: meta };
+    });
+  }, []);
 
   const setCatWizard = useCallback((updater: (prev: CategoryWizardState) => CategoryWizardState) => {
     setState((s) => ({ ...s, catWizard: updater(s.catWizard) }));
@@ -128,25 +180,35 @@ export function AddItemModal({
 
   /** Apply a selected/created category, fetch suggested code, return to category-units step */
   const applyCategory = useCallback(async (cat: CategoryOption) => {
+    const selfManaged = ["BOOK", "TOY", "KRU", "ELE"];
     setState((s) => ({
       ...s,
       step: "category-units",
-      form: { ...s.form, categoryId: cat.id, categoryName: cat.name, categoryType: cat.category },
+      form: {
+        ...s.form,
+        categoryId: cat.id,
+        categoryName: cat.name,
+        categoryType: cat.category,
+        // Reset code — let the builder component generate it
+        code: selfManaged.includes(cat.category) ? "" : s.form.code,
+      },
       catWizard: { ...INITIAL_CAT_WIZARD },
+      codeMeta: selfManaged.includes(cat.category) ? null : s.codeMeta,
     }));
 
-    // Auto-generate code based on category type
-    try {
-      const prefix = cat.category;
-      const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(prefix)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.suggestedCode) {
-          setState((s) => ({ ...s, form: { ...s.form, code: data.suggestedCode } }));
+    // Auto-generate code only for flat types (CON, DUR, MED, KIT) — builders handle themselves
+    if (!selfManaged.includes(cat.category)) {
+      try {
+        const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(cat.category)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.suggestedCode) {
+            setState((s) => ({ ...s, form: { ...s.form, code: data.suggestedCode } }));
+          }
         }
+      } catch {
+        // Silent fail — user can type code manually
       }
-    } catch {
-      // Silent fail — user can type code manually
     }
   }, []);
 
@@ -187,6 +249,7 @@ export function AddItemModal({
     } else if (state.step === "summary") {
       setState((s) => ({ ...s, isSubmitting: true }));
       try {
+        const isFlat = ["CON", "DUR", "MED", "KIT"].includes(state.form.categoryType);
         const created = await quickCreateItem({
           code: state.form.code,
           name: state.form.name,
@@ -194,7 +257,9 @@ export function AddItemModal({
           issueUnitId: state.form.issueUnitId,
           subUnitId: state.form.subUnitId,
           conversionFactor: state.form.conversionFactor,
-          copyCount: state.copyCount,
+          copyCount: state.codeMeta?.copyCount ?? 1,
+          setSize: state.codeMeta?.isSet ? state.codeMeta.setSize : 1,
+          initialQty: isFlat ? state.initialQty : 0,
         });
         toast.success(`สร้างพัสดุ "${created.code}" สำเร็จ`);
         onCreated(created);
@@ -270,9 +335,78 @@ export function AddItemModal({
     );
   }
 
+  // Vertical stepper for desktop split-pane layout
+  function renderSidebar() {
+    return (
+      <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-sidebar">
+        {/* Sidebar header */}
+        <div className="flex items-center border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <PackagePlus className="h-4 w-4" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">{title}</span>
+          </div>
+        </div>
+
+        {/* Steps */}
+        <nav className="flex flex-col gap-1 p-4">
+          {MAIN_STEPS.map((step, i) => {
+            const Icon = step.icon;
+            const isComplete = stepIdx > step.idx;
+            const isCurrent = stepIdx === step.idx;
+            const isUpcoming = stepIdx < step.idx;
+            return (
+              <div
+                key={step.idx}
+                className={cn(
+                  "flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors",
+                  isCurrent && "bg-primary/5",
+                )}
+              >
+                {/* Indicator */}
+                <div
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                    isComplete && "border-primary bg-primary text-primary-foreground",
+                    isCurrent && "border-primary bg-card text-primary",
+                    isUpcoming && "border-border bg-card text-muted-foreground",
+                  )}
+                >
+                  {isComplete ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
+                </div>
+                {/* Label */}
+                <div className="min-w-0 pt-0.5">
+                  <p
+                    className={cn(
+                      "text-sm font-medium",
+                      isCurrent || isComplete ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {step.title}
+                  </p>
+                  {/* Show current sub-step label for category branch */}
+                  {isCurrent && isCatStep(state.step) ? (
+                    <p className="mt-0.5 text-xs text-primary">{stepTitle}</p>
+                  ) : (
+                    <p className="mt-0.5 text-xs text-muted-foreground">{step.desc}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </nav>
+      </aside>
+    );
+  }
+
   function renderBody() {
     return (
-      <div className="max-h-[60vh] overflow-y-auto bg-secondary/40 px-6 py-6">
+      <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
         {state.step === "details" && (
           <StepItemDetails
             name={state.form.name}
@@ -293,15 +427,19 @@ export function AddItemModal({
             }
             allowedCategoryTypes={allowedCategoryTypes}
             issueUnitId={state.form.issueUnitId}
+            issueUnitName={state.form.issueUnitName}
             subUnitId={state.form.subUnitId}
-            onIssueUnitChange={(id) => setState((s) => ({ ...s, form: { ...s.form, issueUnitId: id } }))}
-            onSubUnitChange={(id) => setState((s) => ({ ...s, form: { ...s.form, subUnitId: id } }))}
+            subUnitName={state.form.subUnitName}
+            onIssueUnitChange={(id, name) => setState((s) => ({ ...s, form: { ...s.form, issueUnitId: id, issueUnitName: name } }))}
+            onSubUnitChange={(id, name) => setState((s) => ({ ...s, form: { ...s.form, subUnitId: id, subUnitName: name } }))}
             conversionFactor={state.form.conversionFactor}
             onConversionFactorChange={(f) => setState((s) => ({ ...s, form: { ...s.form, conversionFactor: f } }))}
             onOpenCategorySelect={() => setState((s) => ({ ...s, step: "cat-select" }))}
             categoryType={state.form.categoryType}
-            copyCount={state.copyCount}
-            onCopyCountChange={(c) => setState((s) => ({ ...s, copyCount: c }))}
+            onCodeMetaChange={handleCodeMetaChange}
+            initialCodeMeta={state.codeMeta}
+            initialQty={state.initialQty}
+            onInitialQtyChange={(q) => setState((s) => ({ ...s, initialQty: q }))}
           />
         )}
         {state.step === "summary" && (
@@ -310,9 +448,12 @@ export function AddItemModal({
             usageType={state.form.usageType}
             code={state.form.code}
             categoryName={state.form.categoryName}
-            issueUnitName={state.form.issueUnitId}
-            subUnitName={state.form.subUnitId}
+            categoryType={state.form.categoryType}
+            issueUnitName={state.form.issueUnitName}
+            subUnitName={state.form.subUnitName}
             conversionFactor={state.form.conversionFactor}
+            codeMeta={state.codeMeta}
+            initialQty={state.initialQty}
           />
         )}
 
@@ -372,7 +513,7 @@ export function AddItemModal({
           {state.step === "summary" ? (
             <>
               <Check className="h-4 w-4" />
-              {state.isSubmitting ? "กำลังสร้าง..." : "สร้างและเพิ่ม"}
+              {state.isSubmitting ? "กำลังสร้าง..." : "สร้างพัสดุ"}
             </>
           ) : state.step === "cat-create-confirm" ? (
             <>
@@ -396,15 +537,26 @@ export function AddItemModal({
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
         <DialogContent
-          className="max-w-2xl gap-0 overflow-hidden p-0 sm:rounded-2xl"
+          className="sm:max-w-3xl gap-0 overflow-hidden p-0 sm:rounded-2xl"
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>
           <DialogDescription className="sr-only">{stepTitle}</DialogDescription>
-          {renderHeader()}
-          {renderProgress()}
-          {renderBody()}
-          {renderFooter()}
+          <div className="relative flex h-[580px] w-full overflow-hidden">
+            {renderSidebar()}
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              {renderBody()}
+              {renderFooter()}
+            </div>
+            {/* Close button — top-right of modal */}
+            <button
+              onClick={handleClose}
+              className="absolute right-3 top-3 z-10 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              aria-label="ปิด"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
     );

@@ -24,7 +24,7 @@ import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialo
 interface CategoryType { id: string; name: string; category: string }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 interface SubItemType { id: string; subCode: string; name: string | null; status: string; condition: string | null; serialNumber: string | null; notes: string | null }
-interface LotType { id: string; lotNumber: string; expiryDate: string | null; quantity: number }
+interface LotType { id: string; lotNumber: string; expiryDate: string | null; receivedQty: number; remainingQty: number }
 
 interface ItemData {
   id: string;

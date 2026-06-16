@@ -386,7 +386,7 @@ export default function ReceivePage() {
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)] md:h-[calc(100dvh-5rem)]">
       {/* Header */}
-      <div className="flex items-start justify-between px-1 pt-4 pb-3 shrink-0">
+      <div className="flex items-start justify-between pt-4 pb-3 shrink-0">
         <div>
           <h1 className="text-xl font-bold">รับเข้าพัสดุ</h1>
           <p className="text-sm text-muted-foreground">เลือกพัสดุที่มีอยู่หรือเพิ่มรายการใหม่เข้าระบบ</p>

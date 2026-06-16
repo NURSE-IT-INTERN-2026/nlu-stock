@@ -169,7 +169,7 @@ function ItemsContent() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Card className="p-3 space-y-3">
         {/* Row 1: search + scan + dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
@@ -291,7 +291,7 @@ function ItemsContent() {
       </Card>
 
       <div className="rounded-2xl border overflow-hidden bg-card">
-        <div className="overflow-auto max-h-[calc(100vh-260px)]">
+        <div className="overflow-auto max-h-[calc(100vh-268px)]">
           <Table>
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -379,7 +379,7 @@ function ItemsContent() {
                       >
                         <TableCell></TableCell>
                         <TableCell className="font-mono text-sm text-muted-foreground pl-10">
-                          <div className="border-l-2 border-orange-300 pl-3">{sub.subCode}</div>
+                          <span className="text-orange-300/80 mr-1.5">└</span>{sub.subCode}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{sub.name || sub.notes || "-"}</TableCell>
                         <TableCell></TableCell>
