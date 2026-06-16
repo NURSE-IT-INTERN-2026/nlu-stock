@@ -2,24 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, GripVertical, Tag } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Plus, Pencil, Trash2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,26 +50,16 @@ interface CategoryType {
   id: string;
   name: string;
   category: string;
+  number: string | null;
   description: string | null;
   sortOrder: number;
   _count: { items: number };
 }
 
-function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
+function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
-    <TableRow ref={setNodeRef} style={style}>
-      <TableCell className="w-[40px]">
-        <button className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground" {...attributes} {...listeners}>
-          <GripVertical className="h-4 w-4" />
-        </button>
-      </TableCell>
+    <TableRow>
+      <TableCell className="font-mono text-muted-foreground w-[80px]">{cat.number ?? "—"}</TableCell>
       <TableCell className="font-medium">{cat.name}</TableCell>
       <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
       <TableCell>{cat._count.items}</TableCell>
@@ -118,13 +91,9 @@ export function CategoriesTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
-  const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
+  const [filterType, setFilterType] = useState<string>("ALL");
+  const [form, setForm] = useState({ name: "", category: "CON" as string, number: "", description: "" });
   const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
@@ -145,13 +114,18 @@ export function CategoriesTab() {
 
   function openEdit(cat: CategoryType) {
     setEditing(cat);
-    setForm({ name: cat.name, category: cat.category, description: cat.description || "" });
+    setForm({ name: cat.name, category: cat.category, number: cat.number || "", description: cat.description || "" });
     setDialogOpen(true);
   }
 
   async function handleSave() {
     if (!editing) return;
-    const payload = { name: form.name, category: form.category, description: form.description || undefined };
+    const payload = {
+      name: form.name,
+      category: form.category,
+      number: form.number.trim() || null,
+      description: form.description || undefined,
+    };
 
     try {
       await updateCategory(editing.id, payload);
@@ -179,18 +153,7 @@ export function CategoriesTab() {
     setDeleteTarget(null);
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = categories.findIndex((c) => c.id === active.id);
-    const newIndex = categories.findIndex((c) => c.id === over.id);
-    const reordered = arrayMove(categories, oldIndex, newIndex);
-    setCategories(reordered);
-
-    const updates = reordered.map((c, i) => updateCategory(c.id, { sortOrder: i + 1 }));
-    await Promise.all(updates);
-  }
+  const filtered = filterType === "ALL" ? categories : categories.filter((c) => c.category === filterType);
 
   if (loading) return (
     <div className="space-y-4">
@@ -216,43 +179,53 @@ export function CategoriesTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "ALL")}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="ทุกประเภท" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">ทุกประเภท</SelectItem>
+            <SelectItem value="KRU">ครุภัณฑ์</SelectItem>
+            <SelectItem value="ELE">อิเล็กทรอนิกส์</SelectItem>
+            <SelectItem value="BOOK">หนังสือ</SelectItem>
+            <SelectItem value="TOY">ของเล่น</SelectItem>
+            <SelectItem value="DUR">วัสดุคงทน</SelectItem>
+            <SelectItem value="CON">วัสดุสิ้นเปลือง</SelectItem>
+            <SelectItem value="MED">ยา</SelectItem>
+            <SelectItem value="KIT">ชุด</SelectItem>
+          </SelectContent>
+        </Select>
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
-            <Table>
-              <TableHeader>
-                <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                  <TableHead className="w-[40px]" />
-                  <TableHead>ชื่อ</TableHead>
-                  <TableHead>ประเภท</TableHead>
-                  <TableHead>จำนวน</TableHead>
-                  <TableHead className="w-[100px]">การดำเนินการ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="py-12">
-                    <div className="flex flex-col items-center gap-3 text-center">
-                      <Tag className="h-8 w-8 text-muted-foreground/40" />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">ยังไม่มีหมวดหมู่</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">สร้างหมวดหมู่แรกเพื่อจัดกลุ่มพัสดุ</p>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มหมวดหมู่</Button>
-                    </div>
-                  </TableCell></TableRow>
-                ) : categories.map((cat) => (
-                  <SortableRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </SortableContext>
-      </DndContext>
+      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+        <Table>
+          <TableHeader>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+              <TableHead className="w-[80px]">เลข</TableHead>
+              <TableHead>ชื่อ</TableHead>
+              <TableHead>ประเภท</TableHead>
+              <TableHead>จำนวน</TableHead>
+              <TableHead className="w-[100px]">การดำเนินการ</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="py-12">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <Tag className="h-8 w-8 text-muted-foreground/40" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">ไม่มีหมวดหมู่</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">ลองเปลี่ยนตัวกรอง หรือสร้างใหม่</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มหมวดหมู่</Button>
+                </div>
+              </TableCell></TableRow>
+            ) : filtered.map((cat) => (
+              <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDelete} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -263,6 +236,10 @@ export function CategoriesTab() {
             <div>
               <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
               <Input id="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div>
+              <Label htmlFor="cat-number">เลขหมวด (ถ้ามี)</Label>
+              <Input id="cat-number" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} placeholder="เช่น 013 (หนังสือ), 014 (ของเล่น)" className="font-mono" />
             </div>
             <div>
               <Label htmlFor="cat-type">ประเภท</Label>

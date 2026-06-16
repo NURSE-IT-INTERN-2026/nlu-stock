@@ -4,6 +4,7 @@ import { Category } from "@/generated/prisma/enums";
 export const categoryCreateSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   category: z.nativeEnum(Category),
+  number: z.string().max(20).optional().nullable(),
   description: z.string().max(500).optional(),
   sortOrder: z.number().int().min(0).default(0),
 });
