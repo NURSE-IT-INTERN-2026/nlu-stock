@@ -192,6 +192,7 @@ export function StepCategoryUnits({
             <Select
               value={issueUnitId}
               onValueChange={(v) => {
+                if (!v) return;
                 const name = units.find((u) => u.id === v)?.name ?? "";
                 onIssueUnitChange(v, name);
                 if (!subUnitId) onSubUnitChange(v, name);
@@ -223,6 +224,7 @@ export function StepCategoryUnits({
             />
 
             <Select value={subUnitId} onValueChange={(v) => {
+              if (!v) return;
               const name = units.find((u) => u.id === v)?.name ?? "";
               onSubUnitChange(v, name);
             }}>

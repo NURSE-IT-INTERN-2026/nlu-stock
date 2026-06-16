@@ -46,7 +46,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, m
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // ── Form fields ──
   const [type, setType] = useState<"PREVENTIVE" | "CORRECTIVE">("PREVENTIVE");
