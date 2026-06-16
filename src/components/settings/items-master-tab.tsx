@@ -80,6 +80,8 @@ interface ItemRecord {
   warrantyMonths: number;
   maintenanceCycleMonths: number;
   storageRequirements: string | null;
+  setSize: number;
+  borrowable: boolean;
 }
 
 const defaultForm = {
@@ -91,6 +93,7 @@ const defaultForm = {
   vendorCompany: "", vendorContact: "", vendorPhone: "",
   warrantyMonths: 0, maintenanceCycleMonths: 12,
   storageRequirements: "",
+  setSize: 1, borrowable: false,
 };
 
 const STATUS_CHIPS = [
@@ -146,16 +149,10 @@ export function ItemsMasterTab() {
   const [printOpen, setPrintOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ItemRecord | null>(null);
 
-  // ── Code builder state ───────────────────────────────────────
-  // codeGroup = NNN for KRU/ELE group, or หมวด NNN for BOOK/TOY
-  const [codeGroup, setCodeGroup] = useState("");
-  const [codeSubcode, setCodeSubcode] = useState("");
-  const [codeSet, setCodeSet] = useState("");  // e.g. "S10"
+  // ── Code builder state (uniform scheme: NLU-PREFIX-NNN[-SNN]) ──
   const [codeLocked, setCodeLocked] = useState(true); // true = auto, false = manual
   const [suggestedCode, setSuggestedCode] = useState("");
   const [codeLoading, setCodeLoading] = useState(false);
-  const [existingItems, setExistingItems] = useState<{ code: string; name: string }[]>([]);
-  const [codeGroups, setCodeGroups] = useState<{ code: string; name: string }[]>([]);
   const suggestDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [nameDuplicates, setNameDuplicates] = useState<{ code: string; name: string }[]>([]);
   const nameDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -211,40 +208,36 @@ export function ItemsMasterTab() {
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
   const prefix = selectedCategory?.category ?? "";
   const FLAT = ["DUR", "CON", "MED", "KIT"];
-  const INDIVIDUAL = ["KRU", "ELE"];
   const COPY_TRACK = ["BOOK", "TOY"];
 
   const fetchSuggestedCode = useCallback(async () => {
     if (!prefix || editing) return; // don't auto-suggest when editing
-    const params = new URLSearchParams({ prefix });
-    if (INDIVIDUAL.includes(prefix) && codeGroup) params.set("code", codeGroup);
-    if (COPY_TRACK.includes(prefix)) {
-      if (codeGroup) params.set("code", codeGroup);
-      if (codeSubcode) params.set("subcode", codeSubcode);
-      if (codeSet) params.set("set", codeSet);
-    }
     setCodeLoading(true);
     try {
-      const res = await fetch(`/api/items/suggest-code?${params}`);
+      const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(prefix)}`);
       const data = await res.json();
-      setSuggestedCode(data.suggestedCode ?? "");
-      setExistingItems(data.existingItems ?? []);
-      if (data.groups) setCodeGroups(data.groups);
-      if (codeLocked) setForm((f) => ({ ...f, code: data.suggestedCode ?? f.code }));
+      const nnn = data.nextNumber ?? "001";
+      // Uniform scheme: NLU-PREFIX-NNN[-SNN] for BOOK/TOY sets; copy -CNN lives on SubItem.
+      let code = `NLU-${prefix}-${nnn}`;
+      if (COPY_TRACK.includes(prefix) && form.setSize > 1) {
+        code += `-S${String(form.setSize).padStart(2, "0")}`;
+      }
+      setSuggestedCode(code);
+      if (codeLocked) setForm((f) => ({ ...f, code }));
     } catch {
       // ignore
     } finally {
       setCodeLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefix, codeGroup, codeSubcode, codeSet, codeLocked, editing]);
+  }, [prefix, form.setSize, codeLocked, editing]);
 
   useEffect(() => {
     if (!prefix || editing) return;
     if (suggestDebounce.current) clearTimeout(suggestDebounce.current);
     suggestDebounce.current = setTimeout(fetchSuggestedCode, 300);
     return () => { if (suggestDebounce.current) clearTimeout(suggestDebounce.current); };
-  }, [prefix, codeGroup, codeSubcode, codeSet, fetchSuggestedCode, editing]);
+  }, [prefix, form.setSize, fetchSuggestedCode, editing]);
 
   // ── Name duplicate check for FLAT categories ──────────────
   useEffect(() => {
@@ -265,16 +258,6 @@ export function ItemsMasterTab() {
     return () => { if (nameDebounce.current) clearTimeout(nameDebounce.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.name, form.categoryId, prefix, editing]);
-
-  // When dialog opens, also load KRU/ELE groups
-  useEffect(() => {
-    if (!dialogOpen || editing || !INDIVIDUAL.includes(prefix)) return;
-    fetch(`/api/items/suggest-code?prefix=${prefix}`)
-      .then((r) => r.json())
-      .then((d) => { if (d.groups) setCodeGroups(d.groups); })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialogOpen, prefix, editing]);
 
   function openCreate() {
     setAddItemOpen(true);
@@ -305,6 +288,8 @@ export function ItemsMasterTab() {
       warrantyMonths: item.warrantyMonths ?? 0,
       maintenanceCycleMonths: item.maintenanceCycleMonths,
       storageRequirements: item.storageRequirements || "",
+      setSize: item.setSize ?? 1,
+      borrowable: item.borrowable ?? false,
     });
     setDialogTab("basic");
     setDialogOpen(true);
@@ -709,14 +694,14 @@ export function ItemsMasterTab() {
 
               {form.categoryId && (
                 <div className="space-y-3">
-                  {existingItems.length > 0 && (
-                    <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-300">
-                      <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                      <div className="text-xs">
-                        <p className="font-medium">พบ {existingItems.length} รายการที่ match อยู่แล้ว</p>
-                        {existingItems.slice(0, 3).map((i) => <p key={i.code} className="font-mono">{i.code} — {i.name}</p>)}
-                        {existingItems.length > 3 && <p>และอีก {existingItems.length - 3} รายการ</p>}
-                      </div>
+                  {codeLoading ? (
+                    <div className="h-10 rounded-md bg-muted/50 animate-pulse" />
+                  ) : (
+                    <div className="flex h-10 items-center gap-2 rounded-md bg-muted/50 px-3 border border-transparent">
+                      <span className="text-sm font-mono text-gray-900 flex-1 truncate">{form.code || suggestedCode || "—"}</span>
+                      <button type="button" onClick={() => setCodeLocked((l) => !l)} className="text-xs text-primary hover:underline shrink-0">
+                        {codeLocked ? "แก้เอง" : "อัตโนมัติ"}
+                      </button>
                     </div>
                   )}
                   {!codeLocked && (
@@ -725,46 +710,12 @@ export function ItemsMasterTab() {
                       <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="text-gray-900 bg-muted/50 border-transparent shadow-none font-mono" placeholder="NLU-..." />
                     </div>
                   )}
-                  {INDIVIDUAL.includes(prefix) && (
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-medium text-muted-foreground">
-                        ชื่ออุปกรณ์ (NNN) <span className="text-muted-foreground/60">— NNN ที่สองจะเป็นลำดับ copy อัตโนมัติ</span>
-                      </Label>
-                      <Select value={codeGroup} onValueChange={(v) => setCodeGroup(v === "__new__" ? "" : v)}>
-                        <SelectTrigger className="bg-muted/50 border-transparent shadow-none">
-                          <span className={codeGroup ? "text-gray-900" : "text-muted-foreground"}>
-                            {codeGroup ? `${codeGroup} — ${codeGroups.find((g) => g.code === codeGroup)?.name ?? "ใหม่"}` : "เลือกชื่ออุปกรณ์ หรือสร้างใหม่"}
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__new__">+ เพิ่มอุปกรณ์ชื่อใหม่</SelectItem>
-                          {codeGroups.map((g) => <SelectItem key={g.code} value={g.code}>{g.code} — {g.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
                   {COPY_TRACK.includes(prefix) && (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-medium text-muted-foreground">หมวด (CODE)</Label>
-                        <Input placeholder="001" maxLength={3} value={codeGroup}
-                          onChange={(e) => setCodeGroup(e.target.value.replace(/\D/g, ""))}
-                          onBlur={(e) => { if (e.target.value) setCodeGroup(e.target.value.padStart(3, "0")); }}
-                          className="text-gray-900 bg-muted/50 border-transparent shadow-none font-mono" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-medium text-muted-foreground">รายการ (SUBCODE)</Label>
-                        <Input placeholder="auto" maxLength={3} value={codeSubcode}
-                          onChange={(e) => setCodeSubcode(e.target.value.replace(/\D/g, ""))}
-                          onBlur={(e) => { if (e.target.value) setCodeSubcode(e.target.value.padStart(3, "0")); }}
-                          className="text-gray-900 bg-muted/50 border-transparent shadow-none font-mono" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-medium text-muted-foreground">จำนวนใน Set</Label>
-                        <Input placeholder="S10 (optional)" value={codeSet}
-                          onChange={(e) => setCodeSet(e.target.value.replace(/[^S\d]/gi, "").toUpperCase())}
-                          className="text-gray-900 bg-muted/50 border-transparent shadow-none font-mono" />
-                      </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">จำนวนในชุด (set) — มากกว่า 1 = เป็นชุด</Label>
+                      <Input type="number" min={1} value={form.setSize}
+                        onChange={(e) => setForm({ ...form, setSize: Math.max(1, parseInt(e.target.value) || 1) })}
+                        className="text-gray-900 bg-muted/50 border-transparent shadow-none font-mono w-32" />
                     </div>
                   )}
                 </div>
@@ -785,9 +736,8 @@ export function ItemsMasterTab() {
                         : ["CON", "MED"].includes(cat.category) ? false
                         : undefined
                       ) : undefined;
-                      setForm({ ...form, categoryId: v ?? "", code: "", ...(forced !== undefined ? { trackIndividually: forced } : {}) });
-                      setCodeGroup(""); setCodeSubcode(""); setCodeSet("");
-                      setCodeLocked(true); setSuggestedCode(""); setExistingItems([]); setCodeGroups([]);
+                      setForm({ ...form, categoryId: v ?? "", code: "", setSize: 1, ...(forced !== undefined ? { trackIndividually: forced } : {}) });
+                      setCodeLocked(true); setSuggestedCode("");
                     }}>
                       <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
                         <span className={form.categoryId ? "text-gray-900" : "text-muted-foreground"}>

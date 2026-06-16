@@ -28,6 +28,9 @@ const itemBaseSchema = z.object({
   manualUrl: z.string().optional().nullable(),
   // Consumable fields
   storageRequirements: z.string().max(500).optional().nullable(),
+  // Book/Toy set + borrowing (ADR-0001)
+  setSize: z.number().int().min(1).default(1),
+  borrowable: z.boolean().default(false),
 });
 
 export const itemCreateSchema = itemBaseSchema;
