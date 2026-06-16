@@ -298,7 +298,14 @@ export function createReceive(data: Record<string, unknown>) {
 
 export function adjustStock(
   itemId: string,
-  data: { shelfCount: number; reason: string; notes?: string | null; imageEvidence?: string | null },
+  data: {
+    shelfCount?: number;
+    lotId?: string | null;
+    lotCount?: number;
+    reason: string;
+    notes?: string | null;
+    imageEvidence?: string | null;
+  },
 ) {
   return request<unknown>(`/api/items/${itemId}/adjust`, {
     method: "POST",

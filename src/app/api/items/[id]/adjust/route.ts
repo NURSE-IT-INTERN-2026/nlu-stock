@@ -18,14 +18,54 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const item = await tx.item.findUnique({ where: { id } });
     if (!item) throw new Error("NOT_FOUND");
 
+    // ── Lot-level correction (consumables): set a specific lot's remainingQty.
+    if (data.lotId != null && data.lotCount != null) {
+      const lot = await tx.lot.findUnique({ where: { id: data.lotId } });
+      if (!lot || lot.itemId !== id) throw new Error("NOT_FOUND");
+      const prev = lot.remainingQty;
+      if (data.lotCount === prev) throw new Error("SAME_QTY");
+      const delta = data.lotCount - prev;
+
+      await tx.lot.update({ where: { id: lot.id }, data: { remainingQty: data.lotCount } });
+      const sumRem = await tx.lot.aggregate({ where: { itemId: id }, _sum: { remainingQty: true } });
+      const newAvailable = sumRem._sum.remainingQty ?? 0;
+
+      const adjustment = await tx.stockAdjustment.create({
+        data: {
+          itemId: id,
+          lotId: lot.id,
+          delta,
+          previousQty: prev,
+          newQty: data.lotCount,
+          reason: data.reason,
+          notes: data.notes,
+          adjustedBy: auth.user.userId,
+          imageEvidence: data.imageEvidence,
+        },
+      });
+      await tx.item.update({ where: { id }, data: { availableQty: newAvailable } });
+      await tx.itemStatusLog.create({
+        data: {
+          itemId: id,
+          previousStatus: item.status,
+          newStatus: item.status,
+          reason: `Lot ${lot.lotNumber} adjusted: ${prev} → ${data.lotCount} (${delta >= 0 ? "+" : ""}${delta}) (${data.reason})`,
+          changedBy: auth.user.userId,
+        },
+      });
+      return adjustment;
+    }
+
+    // ── Item-level shelf count (durables / coarse consumable).
     // For tracked items: count CHECKED_OUT sub-items (dispense changes status, not qty)
     // For non-tracked items: diff between total and available
     const checkedOut = item.trackIndividually
       ? await tx.subItem.count({ where: { itemId: id, status: ItemStatus.CHECKED_OUT } })
       : item.totalQty - item.availableQty;
 
-    const newAvailable = data.shelfCount;
-    const newTotal = data.shelfCount + checkedOut;
+    const shelfCount = data.shelfCount ?? 0;
+    const newAvailable = shelfCount;
+    const newTotal = shelfCount + checkedOut;
 
     if (newAvailable === item.availableQty) throw new Error("SAME_QTY");
 

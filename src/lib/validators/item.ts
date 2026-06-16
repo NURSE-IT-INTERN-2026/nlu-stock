@@ -47,10 +47,15 @@ export function forcedTrackIndividually(categoryEnum: string): boolean | undefin
 }
 
 export const stockAdjustSchema = z.object({
-  shelfCount: z.number().int().min(0, "Shelf count cannot be negative"),
+  shelfCount: z.number().int().min(0, "Shelf count cannot be negative").optional(),
+  // Lot-level correction (consumables): correct a specific lot's remainingQty.
+  lotId: z.string().optional().nullable(),
+  lotCount: z.number().int().min(0).optional(),
   reason: z.nativeEnum(AdjustmentReason),
   notes: z.string().max(500).optional().nullable(),
   imageEvidence: z.string().optional().nullable(),
+}).refine((d) => d.shelfCount != null || (d.lotId != null && d.lotCount != null), {
+  message: "Either shelfCount or (lotId + lotCount) is required",
 });
 
 export type StockAdjustInput = z.infer<typeof stockAdjustSchema>;
