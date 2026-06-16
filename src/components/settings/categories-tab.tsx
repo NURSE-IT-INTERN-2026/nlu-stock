@@ -198,7 +198,7 @@ export function CategoriesTab() {
         <Table>
           <TableHeader>
             <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead>ชื่อ</TableHead>
+              <TableHead>ชื่อหมวดหมู่</TableHead>
               <TableHead>ประเภท</TableHead>
               <TableHead>จำนวน</TableHead>
               <TableHead className="w-[100px]">การดำเนินการ</TableHead>
