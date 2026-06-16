@@ -84,6 +84,13 @@ interface ItemRecord {
   borrowable: boolean;
 }
 
+// Dispense type label derived from the item's top-level category.
+function dispenseTypeLabel(cat: string): string {
+  if (["CON", "MED", "KIT"].includes(cat)) return "ใช้แล้วทิ้ง";
+  if (cat === "DUR") return "ยืม-คืน (นับจำนวน)";
+  return "ยืม-คืน (รายชิ้น)"; // KRU, ELE, BOOK, TOY
+}
+
 const defaultForm = {
   code: "", name: "", nameEn: "", categoryId: "", trackIndividually: false,
   issueUnitId: "", subUnitId: "", conversionFactor: 1, minThreshold: 0,
@@ -456,6 +463,7 @@ export function ItemsMasterTab() {
               <TableHead>รหัส</TableHead>
               <TableHead>ชื่อพัสดุ</TableHead>
               <TableHead>หมวดหมู่</TableHead>
+              <TableHead>ประเภทการเบิกจ่าย</TableHead>
               <TableHead className="text-right">คงเหลือ / ทั้งหมด</TableHead>
               <TableHead>หน่วย</TableHead>
               <TableHead>สถานที่</TableHead>
@@ -467,13 +475,13 @@ export function ItemsMasterTab() {
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 9 }).map((_, j) => (
+                  {Array.from({ length: 10 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : items.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="py-12">
+              <TableRow><TableCell colSpan={10} className="py-12">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <Package className="h-8 w-8 text-muted-foreground/40" />
                   <div>
@@ -524,6 +532,7 @@ export function ItemsMasterTab() {
                     {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="text-xs mt-0.5">ติดตาม ({item._count.subItems})</Badge>}
                   </TableCell>
                   <TableCell><Badge variant="outline">{CATEGORY_LABELS[item.category.category as Category] || item.category.name}</Badge></TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(item.category.category)}</TableCell>
                   <TableCell>
                     <StockBar available={item.availableQty} total={item.totalQty} threshold={item.minThreshold} />
                   </TableCell>
@@ -555,7 +564,7 @@ export function ItemsMasterTab() {
                 </TableRow>
                 {expandedRow === item.id && item.trackIndividually && item._count.subItems > 1 && (
                   <TableRow key={`${item.id}-expand`}>
-                    <TableCell colSpan={9} className="bg-muted/30 p-4">
+                    <TableCell colSpan={10} className="bg-muted/30 p-4">
                       <SubCodesManager itemId={item.id} itemCode={item.code} />
                     </TableCell>
                   </TableRow>
