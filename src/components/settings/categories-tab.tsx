@@ -50,7 +50,6 @@ interface CategoryType {
   id: string;
   name: string;
   category: string;
-  number: string | null;
   description: string | null;
   sortOrder: number;
   _count: { items: number };
@@ -59,7 +58,6 @@ interface CategoryType {
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
     <TableRow>
-      <TableCell className="font-mono text-muted-foreground w-[80px]">{cat.number ?? "—"}</TableCell>
       <TableCell className="font-medium">{cat.name}</TableCell>
       <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
       <TableCell>{cat._count.items}</TableCell>
@@ -92,7 +90,7 @@ export function CategoriesTab() {
   const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
   const [filterType, setFilterType] = useState<string>("ALL");
-  const [form, setForm] = useState({ name: "", category: "CON" as string, number: "", description: "" });
+  const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
   const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
 
   const fetchCategories = useCallback(async () => {
@@ -114,7 +112,7 @@ export function CategoriesTab() {
 
   function openEdit(cat: CategoryType) {
     setEditing(cat);
-    setForm({ name: cat.name, category: cat.category, number: cat.number || "", description: cat.description || "" });
+    setForm({ name: cat.name, category: cat.category, description: cat.description || "" });
     setDialogOpen(true);
   }
 
@@ -123,7 +121,6 @@ export function CategoriesTab() {
     const payload = {
       name: form.name,
       category: form.category,
-      number: form.number.trim() || null,
       description: form.description || undefined,
     };
 
@@ -201,7 +198,6 @@ export function CategoriesTab() {
         <Table>
           <TableHeader>
             <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead className="w-[80px]">เลข</TableHead>
               <TableHead>ชื่อ</TableHead>
               <TableHead>ประเภท</TableHead>
               <TableHead>จำนวน</TableHead>
@@ -210,7 +206,7 @@ export function CategoriesTab() {
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="py-12">
+              <TableRow><TableCell colSpan={4} className="py-12">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <Tag className="h-8 w-8 text-muted-foreground/40" />
                   <div>
@@ -236,10 +232,6 @@ export function CategoriesTab() {
             <div>
               <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
               <Input id="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div>
-              <Label htmlFor="cat-number">เลขหมวด (ถ้ามี)</Label>
-              <Input id="cat-number" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} placeholder="เช่น 013 (หนังสือ), 014 (ของเล่น)" className="font-mono" />
             </div>
             <div>
               <Label htmlFor="cat-type">ประเภท</Label>

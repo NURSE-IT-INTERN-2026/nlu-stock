@@ -168,12 +168,12 @@ async function main() {
   // ELE/CON/MED/DUR/KIT stay top-level (ELE is 1:1 with items; others are flat).
   const subCatCache = new Map<string, string>();
   let subSort = 100;
-  async function ensureSubCategory(category: string, name: string, number: string | null = null): Promise<string> {
-    const key = `${category}|${number ?? ""}|${name}`;
+  async function ensureSubCategory(category: string, name: string): Promise<string> {
+    const key = `${category}|${name}`;
     const cached = subCatCache.get(key);
     if (cached) return cached;
     const row = await prisma.categoryType.create({
-      data: { name, category: category as any, number, sortOrder: subSort++ },
+      data: { name, category: category as any, sortOrder: subSort++ },
     });
     subCatCache.set(key, row.id);
     return row.id;
@@ -434,7 +434,7 @@ async function main() {
     const setSize = extractSetSize(group.codes[0]);
     const หมวดNum = (group.codes[0].split("-")[2] || "").trim();
     const bookCatId = หมวดNum
-      ? await ensureSubCategory("BOOK", BOOK_CAT_NAMES[หมวดNum] || group.category || `หมวด ${หมวดNum}`, หมวดNum)
+      ? await ensureSubCategory("BOOK", BOOK_CAT_NAMES[หมวดNum] || group.category || `หมวด ${หมวดNum}`)
       : catBook.id;
 
     const item = await prisma.item.create({
@@ -493,7 +493,7 @@ async function main() {
   }
 
   let toyItemCount = 0, toySubCount = 0;
-  const toyCatId = await ensureSubCategory("TOY", "สื่อการสอน/ของเล่นส่งเสริมพัฒนาการ", "014");
+  const toyCatId = await ensureSubCategory("TOY", "สื่อการสอน/ของเล่นส่งเสริมพัฒนาการ");
   for (const [, group] of toyGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;

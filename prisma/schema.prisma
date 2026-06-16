@@ -94,7 +94,6 @@ model CategoryType {
   category    Category
   description String?
   sortOrder   Int      @default(0)
-  number      String? // canonical หมวดย่อย number (BOOK 001-013, TOY 014); null when none (KRU/flat)
 
   items Item[]
 

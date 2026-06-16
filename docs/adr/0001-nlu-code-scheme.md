@@ -12,13 +12,15 @@ We decided to flatten the code and move หมวดย่อย out of it entir
   - **copy (`-{CNN}`)** lives on the SubItem (`subCode`), not the Item code. Full reference = `item.code + "-" + subCode`.
 - **หมวดย่อย = `CategoryType` rows**; `Item.categoryId` points to one. It is NOT in the code.
 - **COPY (`CNN`) is uniform** across every `trackIndividually` category (KRU/ELE/BOOK/TOY). Previously KRU used bare `001` and BOOK/TOY used `C01`.
-- **`CategoryType.number` is nullable.** BOOK 001-013 and TOY 014 have canonical numbers; KRU's 12 named types do not (we do not fabricate numbers); ELE's types are 1:1 with items so the running `NNN` already serves as the type number.
 - **SET shown only for sets** (option B): `-S06` for a 6-volume set, nothing for a single book. `Item.setSize` is stored as a field (source of truth) and the `S` segment is generated from it.
+
+> Note: an earlier draft stored a canonical หมวด `number` (BOOK 001-013) on `CategoryType`.
+> It was dropped — it drove no logic (code uses a running `NNN`, not the หมวด number) and the
+> category **name** is the only reference needed. `CategoryType` carries `name` + `sortOrder` only.
 
 ## Considered options (rejected)
 
 - **Keep หมวด in the code** (parse strings for everything) — the fragility we are removing. Rejected.
-- **`CategoryType.number` mandatory** — forces fabricating numbers for KRU, which has none. Rejected.
 - **SET always shown (`S01` for singles)** — `S` should mean "this is a set"; `S01` floating on every single book is noise. Rejected.
 - **SET in code only, no field** — reintroduces string parsing for set size. Rejected; `setSize` field is source of truth, code is generated.
 

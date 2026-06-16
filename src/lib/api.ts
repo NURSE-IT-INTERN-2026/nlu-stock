@@ -37,7 +37,6 @@ export interface CategoryOption {
   id: string;
   name: string;
   category: string;
-  number?: string | null;
   description?: string | null;
   sortOrder?: number;
   _count?: { items: number };

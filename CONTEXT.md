@@ -63,14 +63,13 @@ Top-level classification of items. Four enum values with distinct rules.
 
 ## หมวดย่อย (CategoryType)
 
-Granular sub-category under a top-level Category. Stored as `CategoryType` rows; `Item.categoryId` points to one. **Not embedded in the item code.**
+Granular sub-category under a top-level Category. Stored as `CategoryType` rows; `Item.categoryId` points to one. **Not embedded in the item code.** Identified by **name** only (no number field — the code uses a running `NNN`, not a หมวด number).
 
-`CategoryType.number` is **optional (nullable)** — present only where the domain uses canonical numbers:
-- BOOK: 001-013 (numbered + named)
-- TOY: 014 (single)
-- KRU: 12 named types, **no number** (we don't fabricate one)
-- ELE: types are 1:1 with items — no separate row; the running code already serves as the type number
-- CON / DUR / MED / KIT: flat, no หมวดย่อย — but **future-ready**: adding one = insert rows + set `categoryId`, no schema change.
+- BOOK: 13 หมวด (named)
+- TOY: 1 (สื่อการสอน/ของเล่น)
+- KRU: 12 named types
+- ELE: types are 1:1 with items — no separate row; the running code serves as the type number
+- CON / DUR / MED / KIT: flat — but **future-ready**: adding a หมวดย่อย = insert rows + set `categoryId`, no schema change.
 
 ## Copy (C{NN})
 
