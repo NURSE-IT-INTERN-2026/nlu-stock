@@ -70,6 +70,23 @@ function extractSetSize(oldCode: string): number {
   return m ? parseInt(m[1], 10) : 1;
 }
 
+// Canonical BOOK หมวด names (CSV col is unreliable/empty); number comes from the code.
+const BOOK_CAT_NAMES: Record<string, string> = {
+  "001": "ชุดส่งเสริมสุขภาพ",
+  "002": "ชุดส่งเสริมสุขภาพและสุขอนามัย",
+  "003": "ชุดส่งเสริมด้านสังคม",
+  "004": "ชุดส่งเสริมด้านคุณธรรม",
+  "005": "ด้านสติปัญญา ความคิด ความรู้ทั่วไป",
+  "006": "ด้านสติปัญญา ตัวเลข ภาษา สี",
+  "007": "ส่งเสริมการเรียนรู้ ด้านประสาทสัมผัส",
+  "008": "ส่งเสริมภาษา",
+  "009": "ส่งเสริมด้านคุณธรรม (นิทาน)",
+  "010": "แนวการเล่น ส่งเสริมกล้ามเนื้อมัดเล็ก",
+  "011": "นิทานเล่มใหญ่",
+  "012": "หนังสือสำหรับเยาวชน",
+  "013": "คู่มือสำหรับใช้อ้างอิง",
+};
+
 // Extract NLU code prefix for grouping
 // "NLU-KRU-001-001" → "NLU-KRU-001"
 // "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001-S02" (keep set, strip copy)
@@ -417,7 +434,7 @@ async function main() {
     const setSize = extractSetSize(group.codes[0]);
     const หมวดNum = (group.codes[0].split("-")[2] || "").trim();
     const bookCatId = หมวดNum
-      ? await ensureSubCategory("BOOK", group.category || `หมวด ${หมวดNum}`, หมวดNum)
+      ? await ensureSubCategory("BOOK", BOOK_CAT_NAMES[หมวดNum] || group.category || `หมวด ${หมวดNum}`, หมวดNum)
       : catBook.id;
 
     const item = await prisma.item.create({

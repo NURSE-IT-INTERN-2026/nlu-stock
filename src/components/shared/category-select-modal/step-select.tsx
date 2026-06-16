@@ -110,7 +110,10 @@ export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, al
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground">{cat.name}</div>
+                  <div className="text-sm font-medium text-foreground">
+                    {cat.number && <span className="font-mono text-muted-foreground mr-1.5">{cat.number}</span>}
+                    {cat.name}
+                  </div>
                   <div className="mt-1 flex items-center gap-2">
                     <Badge
                       variant="outline"
