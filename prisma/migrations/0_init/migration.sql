@@ -1,5 +1,8 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
-CREATE TYPE "Category" AS ENUM ('CONSUMABLE', 'DURABLE', 'FIXED_ASSET', 'BOOK');
+CREATE TYPE "Category" AS ENUM ('KRU', 'ELE', 'BOOK', 'TOY', 'DUR', 'CON', 'MED', 'KIT');
 
 -- CreateEnum
 CREATE TYPE "ItemStatus" AS ENUM ('AVAILABLE', 'CHECKED_OUT', 'DAMAGED', 'UNDER_REPAIR', 'LOST', 'PENDING_MAINTENANCE', 'DISPOSED');
@@ -15,6 +18,12 @@ CREATE TYPE "MaintenanceType" AS ENUM ('PREVENTIVE', 'CORRECTIVE');
 
 -- CreateEnum
 CREATE TYPE "MaintenanceResult" AS ENUM ('AVAILABLE', 'NEEDS_MORE_REPAIR', 'DISPOSED');
+
+-- CreateEnum
+CREATE TYPE "ItemCondition" AS ENUM ('NEW', 'OLD', 'USABLE', 'FAIR', 'UNUSABLE', 'DAMAGED');
+
+-- CreateEnum
+CREATE TYPE "UsageType" AS ENUM ('COURSE', 'ACTIVITY', 'OTHER');
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -36,29 +45,28 @@ CREATE TABLE "categories" (
     "category" "Category" NOT NULL,
     "description" TEXT,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "number" TEXT,
 
     CONSTRAINT "categories_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "subjects" (
+CREATE TABLE "locations" (
     "id" TEXT NOT NULL,
-    "code" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "building" TEXT NOT NULL,
+    "floor" TEXT NOT NULL,
+    "room" TEXT NOT NULL,
+    "detail" TEXT,
 
-    CONSTRAINT "subjects_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "locations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "locations" (
+CREATE TABLE "units" (
     "id" TEXT NOT NULL,
-    "room" TEXT NOT NULL,
-    "cabinet" TEXT,
-    "shelf" TEXT,
+    "name" TEXT NOT NULL,
 
-    CONSTRAINT "locations_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "units_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -66,28 +74,34 @@ CREATE TABLE "items" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "nameTh" TEXT,
+    "nameEn" TEXT,
     "categoryId" TEXT NOT NULL,
     "trackIndividually" BOOLEAN NOT NULL DEFAULT false,
     "status" "ItemStatus" NOT NULL DEFAULT 'AVAILABLE',
-    "issueUnit" TEXT NOT NULL,
-    "subUnit" TEXT NOT NULL,
+    "issueUnitId" TEXT NOT NULL,
+    "subUnitId" TEXT NOT NULL,
     "conversionFactor" INTEGER NOT NULL DEFAULT 1,
     "minThreshold" INTEGER NOT NULL DEFAULT 0,
     "locationId" TEXT,
     "imageUrl" TEXT,
+    "images" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "description" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "embedding" vector(768),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "totalQty" INTEGER NOT NULL DEFAULT 0,
     "availableQty" INTEGER NOT NULL DEFAULT 0,
-    "serialNumber" TEXT,
+    "storageRequirements" TEXT,
+    "setSize" INTEGER NOT NULL DEFAULT 1,
+    "borrowable" BOOLEAN NOT NULL DEFAULT false,
     "model" TEXT,
     "purchaseDate" TIMESTAMP(3),
     "purchasePrice" DOUBLE PRECISION,
-    "vendor" TEXT,
-    "warrantyEndDate" TIMESTAMP(3),
+    "vendorCompany" TEXT,
+    "vendorContact" TEXT,
+    "vendorPhone" TEXT,
+    "warrantyMonths" INTEGER NOT NULL DEFAULT 0,
     "maintenanceCycleMonths" INTEGER NOT NULL DEFAULT 12,
     "lastMaintenanceDate" TIMESTAMP(3),
     "nextMaintenanceDate" TIMESTAMP(3),
@@ -101,8 +115,10 @@ CREATE TABLE "sub_items" (
     "id" TEXT NOT NULL,
     "itemId" TEXT NOT NULL,
     "subCode" TEXT NOT NULL,
+    "name" TEXT,
     "status" "ItemStatus" NOT NULL DEFAULT 'AVAILABLE',
-    "condition" TEXT,
+    "condition" "ItemCondition",
+    "serialNumber" TEXT,
     "notes" TEXT,
     "imageUrl" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -117,7 +133,8 @@ CREATE TABLE "lots" (
     "itemId" TEXT NOT NULL,
     "lotNumber" TEXT NOT NULL,
     "expiryDate" TIMESTAMP(3),
-    "quantity" INTEGER NOT NULL DEFAULT 0,
+    "receivedQty" INTEGER NOT NULL DEFAULT 0,
+    "remainingQty" INTEGER NOT NULL DEFAULT 0,
     "receivedDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -133,7 +150,8 @@ CREATE TABLE "dispense_records" (
     "lotId" TEXT,
     "quantity" INTEGER NOT NULL,
     "quantitySub" INTEGER NOT NULL,
-    "subjectId" TEXT,
+    "usageType" "UsageType",
+    "usageNote" TEXT,
     "staffId" TEXT NOT NULL,
     "dispensedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "returnedAt" TIMESTAMP(3),
@@ -159,6 +177,8 @@ CREATE TABLE "receive_records" (
 CREATE TABLE "stock_adjustments" (
     "id" TEXT NOT NULL,
     "itemId" TEXT NOT NULL,
+    "lotId" TEXT,
+    "delta" INTEGER NOT NULL DEFAULT 0,
     "previousQty" INTEGER NOT NULL,
     "newQty" INTEGER NOT NULL,
     "reason" "AdjustmentReason" NOT NULL,
@@ -189,6 +209,19 @@ CREATE TABLE "maintenance_records" (
 );
 
 -- CreateTable
+CREATE TABLE "kit_components" (
+    "id" TEXT NOT NULL,
+    "kitId" TEXT NOT NULL,
+    "itemId" TEXT,
+    "name" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 1,
+    "unit" TEXT NOT NULL,
+    "isStockItem" BOOLEAN NOT NULL DEFAULT false,
+
+    CONSTRAINT "kit_components_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "item_status_logs" (
     "id" TEXT NOT NULL,
     "itemId" TEXT NOT NULL,
@@ -210,10 +243,10 @@ CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 CREATE UNIQUE INDEX "categories_name_key" ON "categories"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "subjects_code_key" ON "subjects"("code");
+CREATE UNIQUE INDEX "locations_building_floor_room_detail_key" ON "locations"("building", "floor", "room", "detail");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "locations_room_cabinet_shelf_key" ON "locations"("room", "cabinet", "shelf");
+CREATE UNIQUE INDEX "units_name_key" ON "units"("name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "items_code_key" ON "items"("code");
@@ -246,13 +279,25 @@ CREATE INDEX "dispense_records_itemId_dispensedAt_idx" ON "dispense_records"("it
 CREATE INDEX "dispense_records_staffId_dispensedAt_idx" ON "dispense_records"("staffId", "dispensedAt");
 
 -- CreateIndex
+CREATE INDEX "dispense_records_usageType_dispensedAt_idx" ON "dispense_records"("usageType", "dispensedAt");
+
+-- CreateIndex
 CREATE INDEX "receive_records_itemId_receivedAt_idx" ON "receive_records"("itemId", "receivedAt");
 
 -- CreateIndex
 CREATE INDEX "stock_adjustments_itemId_adjustedAt_idx" ON "stock_adjustments"("itemId", "adjustedAt");
 
+-- CreateIndex
+CREATE INDEX "kit_components_kitId_idx" ON "kit_components"("kitId");
+
 -- AddForeignKey
 ALTER TABLE "items" ADD CONSTRAINT "items_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "categories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "items" ADD CONSTRAINT "items_issueUnitId_fkey" FOREIGN KEY ("issueUnitId") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "items" ADD CONSTRAINT "items_subUnitId_fkey" FOREIGN KEY ("subUnitId") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "items" ADD CONSTRAINT "items_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "locations"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -273,9 +318,6 @@ ALTER TABLE "dispense_records" ADD CONSTRAINT "dispense_records_subItemId_fkey" 
 ALTER TABLE "dispense_records" ADD CONSTRAINT "dispense_records_lotId_fkey" FOREIGN KEY ("lotId") REFERENCES "lots"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "dispense_records" ADD CONSTRAINT "dispense_records_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "subjects"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "dispense_records" ADD CONSTRAINT "dispense_records_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -291,6 +333,9 @@ ALTER TABLE "receive_records" ADD CONSTRAINT "receive_records_receivedBy_fkey" F
 ALTER TABLE "stock_adjustments" ADD CONSTRAINT "stock_adjustments_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "stock_adjustments" ADD CONSTRAINT "stock_adjustments_lotId_fkey" FOREIGN KEY ("lotId") REFERENCES "lots"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "stock_adjustments" ADD CONSTRAINT "stock_adjustments_adjustedBy_fkey" FOREIGN KEY ("adjustedBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -300,6 +345,12 @@ ALTER TABLE "maintenance_records" ADD CONSTRAINT "maintenance_records_itemId_fke
 ALTER TABLE "maintenance_records" ADD CONSTRAINT "maintenance_records_performedBy_fkey" FOREIGN KEY ("performedBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "kit_components" ADD CONSTRAINT "kit_components_kitId_fkey" FOREIGN KEY ("kitId") REFERENCES "items"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "kit_components" ADD CONSTRAINT "kit_components_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "item_status_logs" ADD CONSTRAINT "item_status_logs_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -307,3 +358,4 @@ ALTER TABLE "item_status_logs" ADD CONSTRAINT "item_status_logs_subItemId_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "item_status_logs" ADD CONSTRAINT "item_status_logs_changedBy_fkey" FOREIGN KEY ("changedBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+

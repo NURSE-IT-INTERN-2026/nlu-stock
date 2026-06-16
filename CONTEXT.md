@@ -161,8 +161,8 @@ Full rationale in [ADR-0001](./docs/adr/0001-nlu-code-scheme.md) and [ADR-0002](
 - **Item code = `NLU-{PREFIX}-{NNN}`** (+ optional `-{SNN}` set for BOOK/TOY; copy `-{CNN}` lives on SubItem). หมวดย่อย NOT in code.
 - **Copy = `C{NN}` uniform** across KRU/ELE/BOOK/TOY (was lowercase `-c1` for books, bare `001` for KRU).
 - **SET shown only for sets** (`-S{NN}`); single book/toy omits it. `setSize` stored as a field (source of truth), mirrored in code.
-- **Lot = `receivedQty` (immutable) + `remainingQty`**; corrections via `StockAdjustment` (gains `lotId`). Never edit `receivedQty`.
-- **`availableQty` derived** from `sum(lot.remainingQty)` (consumables) or `totalQty − unreturned dispenses` (durables) — no maintained counter.
+- **Lot = `receivedQty` (cumulative, top-ups allowed) + `remainingQty`**; corrections via `StockAdjustment` (gains `lotId` + `delta`). Never edit `receivedQty` to fix a mistake.
+- **`availableQty`/`totalQty` maintained counters** today (derivation deferred — see ADR-0002).
 
 ## Import Data Sources
 
