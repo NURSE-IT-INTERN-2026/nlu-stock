@@ -55,11 +55,18 @@ interface CategoryType {
   _count: { items: number };
 }
 
+function dispenseTypeLabel(cat: string): string {
+  if (["CON", "MED", "KIT"].includes(cat)) return "ใช้แล้วทิ้ง";
+  if (cat === "DUR") return "ยืม-คืน (นับจำนวน)";
+  return "ยืม-คืน (รายชิ้น)"; // KRU, ELE, BOOK, TOY
+}
+
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
     <TableRow>
       <TableCell className="font-medium">{cat.name}</TableCell>
       <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(cat.category)}</TableCell>
       <TableCell>{cat._count.items}</TableCell>
       <TableCell>
         <TooltipProvider>
@@ -200,13 +207,14 @@ export function CategoriesTab() {
             <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
               <TableHead>ชื่อหมวดหมู่</TableHead>
               <TableHead>ประเภท</TableHead>
+              <TableHead>ประเภทการเบิกจ่าย</TableHead>
               <TableHead>จำนวน</TableHead>
               <TableHead className="w-[100px]">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="py-12">
+              <TableRow><TableCell colSpan={5} className="py-12">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <Tag className="h-8 w-8 text-muted-foreground/40" />
                   <div>
