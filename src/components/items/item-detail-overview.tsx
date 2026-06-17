@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
-import { updateItemStatus, returnItem, uploadFile, updateItem } from "@/lib/api";
+import { updateItemStatus, returnItem, getItemHistory, uploadFile, updateItem } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
