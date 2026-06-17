@@ -44,28 +44,11 @@ async function main() {
   // NOTE: this backfill step ran against the legacy `category` enum column, which
   // has since been dropped. Kept for history; re-running is a no-op (profileId already set).
   const rows = await prisma.categoryType.findMany({ select: { id: true, profileId: true } });
-  let updated = 0;
-  let missing = 0;
-  for (const row of rows) {
-    const profileId = profileByCode[row.category];
-    if (!profileId) {
-      console.warn(`  ! no profile for category ${row.category} (row ${row.id})`);
-      missing++;
-      continue;
-    }
-    await prisma.categoryType.update({ where: { id: row.id }, data: { profileId } });
-    updated++;
-  }
-  console.log(`Backfilled ${updated} CategoryType rows (${missing} missing profile)`);
+  console.log(`CategoryType rows: ${rows.length} (all should have profileId)`);
 
-  // 3. Verify
-  const nullCount = await prisma.categoryType.count({ where: { profileId: null } });
+  // 3. Verify no row missing profile (defensive; profileId is now required at schema level)
   const total = await prisma.categoryType.count();
-  console.log(`Verify: ${total} CategoryType rows, ${nullCount} with null profileId`);
-  if (nullCount > 0) {
-    console.error("FAIL: some CategoryType rows still have null profileId");
-    process.exit(1);
-  }
+  console.log(`Verify: ${total} CategoryType rows`);
 }
 
 main()

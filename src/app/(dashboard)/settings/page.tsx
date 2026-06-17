@@ -6,10 +6,12 @@ import { LocationsTab } from "@/components/settings/locations-tab";
 import { ItemsMasterTab } from "@/components/settings/items-master-tab";
 import { UsersTab } from "@/components/settings/users-tab";
 import { ImportTab } from "@/components/settings/import-tab";
-import { Package, Tag, MapPin, Users, Upload } from "lucide-react";
+import { ProfilesTab } from "@/components/settings/profiles-tab";
+import { Package, Tag, MapPin, Users, Upload, Layers } from "lucide-react";
 
 const TABS = [
   { value: "items", label: "รายการพัสดุ", icon: Package, component: ItemsMasterTab },
+  { value: "profiles", label: "ประเภท", icon: Layers, component: ProfilesTab },
   { value: "categories", label: "หมวดหมู่", icon: Tag, component: CategoriesTab },
   { value: "locations", label: "สถานที่", icon: MapPin, component: LocationsTab },
   { value: "users", label: "ผู้ใช้งาน", icon: Users, component: UsersTab },

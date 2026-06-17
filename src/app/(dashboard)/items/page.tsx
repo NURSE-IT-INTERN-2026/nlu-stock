@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, Fragment } from "react";
+import { Suspense, useState, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, ChevronLeft, ChevronRight, ChevronDown, QrCode, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Progress, ProgressTrack, ProgressIndicator } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/components/layout/auth-guard";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { useAlerts } from "@/hooks/use-alerts";
@@ -23,7 +24,7 @@ import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { usePagination } from "@/hooks/use-pagination";
 import { locationLabel } from "@/lib/constants";
 import { getItems, getSubItems } from "@/lib/api";
-import type { CategoryOption, LocationOption } from "@/lib/api";
+import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
 
 interface UnitType { id: string; name: string }
@@ -108,10 +109,23 @@ function ItemsContent() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
+  const [filterProfile, setFilterProfile] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState(searchParams.get("status") ?? "");
   const [filterLocation, setFilterLocation] = useState("");
   const [presetFilter, setPresetFilter] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+
+  // derive profiles from categories (each carries full profile) instead of a separate getProfiles() call.
+  const profiles = useMemo<ProfileOption[]>(() => {
+    const map = new Map<string, ProfileOption>();
+    for (const c of categories) if (c.profile) map.set(c.profile.id, c.profile);
+    return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [categories]);
+
+  const scopedCategories = useMemo(
+    () => (filterProfile ? categories.filter((c) => c.profile?.id === filterProfile) : categories),
+    [categories, filterProfile],
+  );
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [subItemsMap, setSubItemsMap] = useState<Record<string, SubItemRecord[]>>({});
 
@@ -146,6 +160,7 @@ function ItemsContent() {
     setLoading(true);
     const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
     if (search) params.search = search;
+    if (filterProfile) params.profileId = filterProfile;
     if (filterCategory) params.categoryId = filterCategory;
     if (filterStatus) params.status = filterStatus;
     if (filterLocation) params.locationId = filterLocation;
@@ -155,7 +170,7 @@ function ItemsContent() {
     setItems((data.items || []) as ItemRecord[]);
     setTotal(data.total || 0);
     setLoading(false);
-  }, [page, perPage, search, filterCategory, filterStatus, filterLocation, presetFilter]);
+  }, [page, perPage, search, filterProfile, filterCategory, filterStatus, filterLocation, presetFilter]);
 
   useEffect(() => {
     const low = searchParams.get("lowStock");
@@ -171,6 +186,23 @@ function ItemsContent() {
   return (
     <div className="space-y-6">
       <Card className="p-3 space-y-3">
+        {/* Row 0: profile tabs */}
+        <Tabs
+          value={filterProfile || "__all__"}
+          onValueChange={(v) => {
+            setFilterProfile(v === "__all__" ? "" : v);
+            setFilterCategory("");
+            setPage(1);
+          }}
+        >
+          <TabsList className="w-full h-auto justify-start overflow-x-auto flex-nowrap">
+            <TabsTrigger value="__all__" className="flex-none">ทุกประเภท</TabsTrigger>
+            {profiles.map((p) => (
+              <TabsTrigger key={p.id} value={p.id} className="flex-none">{p.name}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
         {/* Row 1: search + scan + dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px]">
@@ -187,17 +219,17 @@ function ItemsContent() {
           </Button>
           <Select value={filterCategory || "__all__"} onValueChange={(v) => { setFilterCategory(!v || v === "__all__" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="ทุกหมวดหมู่">
+              <SelectValue placeholder="ทุกหมวดหมู่ย่อย">
                 {(value: string | null) => {
-                  if (!value) return "ทุกหมวดหมู่";
-                  const cat = categories.find((c) => c.id === value);
-                  return cat?.name ?? "ทุกหมวดหมู่";
+                  if (!value) return "ทุกหมวดหมู่ย่อย";
+                  const cat = scopedCategories.find((c) => c.id === value);
+                  return cat?.name ?? "ทุกหมวดหมู่ย่อย";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">ทุกหมวดหมู่</SelectItem>
-              {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              <SelectItem value="__all__">ทุกหมวดหมู่ย่อย</SelectItem>
+              {scopedCategories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterLocation || "__all__"} onValueChange={(v) => { setFilterLocation(!v || v === "__all__" ? "" : v); setPage(1); }}>
