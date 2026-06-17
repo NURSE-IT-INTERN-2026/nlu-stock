@@ -215,6 +215,29 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-10">
       {/* ═══ LEFT COLUMN ═══ */}
       <div className="space-y-10">
+        {/* ── Item info — flat divider rows (shown first: most-wanted on entry) ── */}
+        <section className="animate-in fade-in slide-in-from-2 duration-300">
+          <SectionHeading eyebrow="Item info" title="Specification" />
+          <dl className="divide-y divide-border">
+            <SpecRow icon={Hash} label="Code" value={<span className="font-mono">{item.code}</span>} />
+            <SpecRow icon={Tag} label="Category" value={item.category.profile?.name ?? item.category.name} />
+            <SpecRow icon={Layers} label="Issue unit" value={item.issueUnit.name} />
+            {item.subUnit && (
+              <SpecRow icon={Layers} label="Sub unit" value={`${item.subUnit.name} (1 ${item.issueUnit.name} = ${item.conversionFactor} ${item.subUnit.name})`} />
+            )}
+            <SpecRow icon={MapPin} label="Location" value={locationStr} />
+            {item.storageRequirements && (
+              <SpecRow icon={ClipboardList} label="Storage" value={item.storageRequirements} />
+            )}
+            {item.trackIndividually && item.subItems.length === 1 && item.subItems[0].serialNumber && (
+              <SpecRow icon={Hash} label="Serial No." value={<span className="font-mono">{item.subItems[0].serialNumber}</span>} />
+            )}
+            {item.trackIndividually && item.subItems.length === 1 && item.subItems[0].condition && (
+              <SpecRow icon={ClipboardList} label="Condition" value={item.subItems[0].condition} />
+            )}
+          </dl>
+        </section>
+
         {/* ── Image uploader ── */}
         {(allImages.length > 0 || canAct) && (
           <section className="animate-in fade-in slide-in-from-2 duration-300">
@@ -297,29 +320,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
             </div>
           </section>
         )}
-
-        {/* ── Item info — flat divider rows ── */}
-        <section className="animate-in fade-in slide-in-from-2 duration-300" style={{ animationDelay: "50ms" }}>
-          <SectionHeading eyebrow="Item info" title="Specification" />
-          <dl className="divide-y divide-border">
-            <SpecRow icon={Hash} label="Code" value={<span className="font-mono">{item.code}</span>} />
-            <SpecRow icon={Tag} label="Category" value={item.category.profile?.name ?? item.category.name} />
-            <SpecRow icon={Layers} label="Issue unit" value={item.issueUnit.name} />
-            {item.subUnit && (
-              <SpecRow icon={Layers} label="Sub unit" value={`${item.subUnit.name} (1 ${item.issueUnit.name} = ${item.conversionFactor} ${item.subUnit.name})`} />
-            )}
-            <SpecRow icon={MapPin} label="Location" value={locationStr} />
-            {item.storageRequirements && (
-              <SpecRow icon={ClipboardList} label="Storage" value={item.storageRequirements} />
-            )}
-            {item.trackIndividually && item.subItems.length === 1 && item.subItems[0].serialNumber && (
-              <SpecRow icon={Hash} label="Serial No." value={<span className="font-mono">{item.subItems[0].serialNumber}</span>} />
-            )}
-            {item.trackIndividually && item.subItems.length === 1 && item.subItems[0].condition && (
-              <SpecRow icon={ClipboardList} label="Condition" value={item.subItems[0].condition} />
-            )}
-          </dl>
-        </section>
 
         {/* ── Status summary ── */}
         {statusSummary && (
