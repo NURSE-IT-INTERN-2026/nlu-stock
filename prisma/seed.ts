@@ -160,12 +160,11 @@ async function main() {
   const catToy = await prisma.categoryType.create({ data: { name: "ของเล่น", category: "TOY", sortOrder: 4 } });
   const catDur = await prisma.categoryType.create({ data: { name: "วัสดุคงทน", category: "DUR", sortOrder: 5 } });
   const catCon = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CON", sortOrder: 6 } });
-  const catMed = await prisma.categoryType.create({ data: { name: "ยา", category: "MED", sortOrder: 7 } });
-  const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", category: "KIT", sortOrder: 8 } });
+  const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", category: "KIT", sortOrder: 7 } });
 
   // Granular หมวดย่อย (CategoryType rows beyond the 8 top-level).
   // BOOK: 13 numbered หมวด; TOY: single 014; KRU: one row per named type (number null).
-  // ELE/CON/MED/DUR/KIT stay top-level (ELE is 1:1 with items; others are flat).
+  // ELE/CON/DUR/KIT stay top-level (ELE is 1:1 with items; others are flat).
   const subCatCache = new Map<string, string>();
   let subSort = 100;
   async function ensureSubCategory(category: string, name: string): Promise<string> {

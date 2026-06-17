@@ -61,7 +61,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
   if (!item) return null;
 
   const categoryType = item.category.category as CartItem["categoryType"];
-  const isConsumable = categoryType === "CON" || categoryType === "MED";
+  const isConsumable = categoryType === "CON";
   const isTracked = item.trackIndividually && item.subItems.length > 1;
 
   const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;

@@ -56,7 +56,7 @@ interface CategoryType {
 }
 
 function dispenseTypeLabel(cat: string): string {
-  if (["CON", "MED", "KIT"].includes(cat)) return "ใช้แล้วทิ้ง";
+  if (["CON", "KIT"].includes(cat)) return "ใช้แล้วทิ้ง";
   if (cat === "DUR") return "ยืม-คืน (นับจำนวน)";
   return "ยืม-คืน (รายชิ้น)"; // KRU, ELE, BOOK, TOY
 }
@@ -194,7 +194,6 @@ export function CategoriesTab() {
             <SelectItem value="TOY">ของเล่น</SelectItem>
             <SelectItem value="DUR">วัสดุคงทน</SelectItem>
             <SelectItem value="CON">วัสดุสิ้นเปลือง</SelectItem>
-            <SelectItem value="MED">ยา</SelectItem>
             <SelectItem value="KIT">ชุด</SelectItem>
           </SelectContent>
         </Select>
@@ -252,7 +251,6 @@ export function CategoriesTab() {
                   <SelectItem value="TOY">ของเล่น/อุปกรณ์การศึกษา</SelectItem>
                   <SelectItem value="DUR">คงทน</SelectItem>
                   <SelectItem value="CON">สิ้นเปลือง</SelectItem>
-                  <SelectItem value="MED">เวชภัณฑ์</SelectItem>
                   <SelectItem value="KIT">ชุดวัสดุ</SelectItem>
                 </SelectContent>
               </Select>

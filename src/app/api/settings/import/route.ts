@@ -103,7 +103,7 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
 
 async function importCategories(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = { imported: 0, errors: [] };
-  const validCategories = ["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "MED", "KIT"];
+  const validCategories = ["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "KIT"];
 
   const validRows: Prisma.CategoryTypeCreateInput[] = [];
 
@@ -121,7 +121,7 @@ async function importCategories(rows: ImportRow[]): Promise<ImportResult> {
 
     validRows.push({
       name: row.name,
-      category: row.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "MED" | "KIT",
+      category: row.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "KIT",
       description: row.description || null,
       sortOrder: parseInt(row.sortOrder) || 0,
     });

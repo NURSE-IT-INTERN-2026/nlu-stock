@@ -42,7 +42,7 @@ export type ItemUpdateInput = z.infer<typeof itemUpdateSchema>;
 // Category → forced trackIndividually value. undefined = user choice (DUR, KIT).
 export function forcedTrackIndividually(categoryEnum: string): boolean | undefined {
   if (categoryEnum === "KRU" || categoryEnum === "ELE" || categoryEnum === "BOOK" || categoryEnum === "TOY") return true;
-  if (categoryEnum === "CON" || categoryEnum === "MED") return false;
+  if (categoryEnum === "CON") return false;
   return undefined; // DUR, KIT — user choice
 }
 

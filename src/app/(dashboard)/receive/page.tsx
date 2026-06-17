@@ -122,7 +122,7 @@ export default function ReceivePage() {
     if (rows.length === 0) { toast.error("เพิ่มพัสดุอย่างน้อย 1 รายการ"); return; }
     for (const row of rows) {
       if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.code}`); return; }
-      const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
+      const isConsumable = row.item.category.category === "CON";
       if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุ Lot Number: ${row.item.code}`); return; }
     }
     setSubmitting(true);
@@ -131,7 +131,7 @@ export default function ReceivePage() {
         items: rows.map((r) => ({
           itemId: r.item.id,
           quantity: r.quantity,
-          lotNumber: (r.item.category.category === "CON" || r.item.category.category === "MED") ? r.lotNumber || null : null,
+          lotNumber: r.item.category.category === "CON" ? r.lotNumber || null : null,
           expiryDate: r.expiryDate || null,
           subCodes: r.item.trackIndividually && r.subCodes.length > 0 ? r.subCodes : null,
         })),
@@ -275,7 +275,7 @@ export default function ReceivePage() {
         ) : (
           <div className="space-y-2 pb-2">
             {rows.map((row) => {
-              const isConsumable = row.item.category.category === "CON" || row.item.category.category === "MED";
+              const isConsumable = row.item.category.category === "CON";
               return (
                 <Card key={row.id} className="border shadow-none">
                   <CardContent className="pt-3 pb-3 space-y-3">

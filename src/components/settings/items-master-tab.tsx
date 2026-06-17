@@ -207,7 +207,7 @@ export function ItemsMasterTab() {
   // ── Suggest code whenever relevant fields change ─────────────
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
   const prefix = selectedCategory?.category ?? "";
-  const FLAT = ["DUR", "CON", "MED", "KIT"];
+  const FLAT = ["DUR", "CON", "KIT"];
   const COPY_TRACK = ["BOOK", "TOY"];
 
   const fetchSuggestedCode = useCallback(async () => {
@@ -344,11 +344,11 @@ export function ItemsMasterTab() {
   }
 
   const isFixedAsset = selectedCategory?.category === "KRU" || selectedCategory?.category === "ELE";
-  const isConsumable = selectedCategory?.category === "CON" || selectedCategory?.category === "MED";
+  const isConsumable = selectedCategory?.category === "CON";
   const isBook = selectedCategory?.category === "BOOK";
   const trackForced = selectedCategory ? (
     ["KRU", "ELE", "BOOK", "TOY"].includes(selectedCategory.category) ? true
-    : ["CON", "MED"].includes(selectedCategory.category) ? false
+    : selectedCategory.category === "CON" ? false
     : undefined
   ) : undefined;
 
@@ -733,7 +733,7 @@ export function ItemsMasterTab() {
                       const cat = categories.find((c) => c.id === v);
                       const forced = cat ? (
                         ["KRU", "ELE", "BOOK", "TOY"].includes(cat.category) ? true
-                        : ["CON", "MED"].includes(cat.category) ? false
+                        : cat.category === "CON" ? false
                         : undefined
                       ) : undefined;
                       setForm({ ...form, categoryId: v ?? "", code: "", setSize: 1, ...(forced !== undefined ? { trackIndividually: forced } : {}) });

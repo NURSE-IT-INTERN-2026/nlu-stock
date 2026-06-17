@@ -148,8 +148,8 @@ function DispenseContent() {
   };
 
   const handleAdd = (item: SearchItem) => {
-    const categoryType = item.category.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "MED" | "KIT";
-    const isConsumable = categoryType === "CON" || categoryType === "MED";
+    const categoryType = item.category.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "KIT";
+    const isConsumable = categoryType === "CON";
     const isTracked = item.trackIndividually && item.subItems.length > 0;
 
     const loc = item.location ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail } : null;

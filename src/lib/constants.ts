@@ -11,7 +11,6 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   TOY: "ของเล่น",
   DUR: "วัสดุคงทน",
   CON: "วัสดุสิ้นเปลือง",
-  MED: "ยา",
   KIT: "อุปกรณ์ประกอบวิชา",
 };
 
@@ -22,7 +21,6 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   BOOK: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   ELE: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
   TOY: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
-  MED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   KIT: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
 };
 

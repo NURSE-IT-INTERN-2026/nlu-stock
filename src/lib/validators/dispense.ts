@@ -5,7 +5,7 @@ export const cartItemSchema = z.object({
   itemCode: z.string(),
   itemName: z.string(),
   categoryName: z.string(),
-  categoryType: z.enum(["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "MED", "KIT"]),
+  categoryType: z.enum(["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "KIT"]),
   trackIndividually: z.boolean(),
   issueUnit: z.string(),
   subUnit: z.string(),

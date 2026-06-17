@@ -14,7 +14,6 @@ enum Category {
   TOY
   DUR
   CON
-  MED
   KIT
 }
 
@@ -157,7 +156,7 @@ model Item {
   totalQty     Int @default(0)
   availableQty Int @default(0)
 
-  // Consumable fields (used when category = CON, MED)
+  // Consumable fields (used when category = CON)
   storageRequirements String?
 
   // Book/Toy set + borrowing (see ADR-0001)

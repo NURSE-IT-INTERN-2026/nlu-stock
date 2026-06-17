@@ -41,7 +41,7 @@ interface StepCategoryUnitsProps {
   categoryType?: string;
   onCodeMetaChange?: (meta: CodeMeta) => void;
   initialCodeMeta?: CodeMeta | null;
-  /** Initial stock quantity for flat types (CON/DUR/MED/KIT) */
+  /** Initial stock quantity for flat types (CON/DUR/KIT) */
   initialQty?: number;
   onInitialQtyChange?: (q: number) => void;
 }

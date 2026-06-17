@@ -196,7 +196,7 @@ export function AddItemModal({
       codeMeta: selfManaged.includes(cat.category) ? null : s.codeMeta,
     }));
 
-    // Auto-generate code only for flat types (CON, DUR, MED, KIT) — builders handle themselves
+    // Auto-generate code only for flat types (CON, DUR, KIT) — builders handle themselves
     if (!selfManaged.includes(cat.category)) {
       try {
         const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(cat.category)}`);
@@ -249,7 +249,7 @@ export function AddItemModal({
     } else if (state.step === "summary") {
       setState((s) => ({ ...s, isSubmitting: true }));
       try {
-        const isFlat = ["CON", "DUR", "MED", "KIT"].includes(state.form.categoryType);
+        const isFlat = ["CON", "DUR", "KIT"].includes(state.form.categoryType);
         const created = await quickCreateItem({
           code: state.form.code,
           name: state.form.name,
