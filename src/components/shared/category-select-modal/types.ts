@@ -1,5 +1,4 @@
-import type { CategoryOption } from "@/lib/api";
-import type { Category } from "@/lib/constants";
+import type { CategoryOption, ProfileOption } from "@/lib/api";
 
 export type WizardStep = "select" | "confirm-existing" | "create-name" | "create-confirm";
 
@@ -9,15 +8,20 @@ export interface CategorySelectModalProps {
   onSelect: (category: CategoryOption) => void;
   /** Title shown in header. Defaults to "เลือกหมวดหมู่" */
   title?: string;
-  /** Only show categories matching these types. If omitted, show all. */
-  allowedCategoryTypes?: Category[];
+  /** Only show categories whose profile id is in this list. If omitted, show all. */
+  allowedProfileIds?: string[];
 }
 
 export interface WizardState {
   step: WizardStep;
   selectedExisting: CategoryOption | null;
   newCategoryName: string;
-  newCategoryType: string;
+  newCategoryProfileId: string;
   newCategoryDescription: string;
   isSubmitting: boolean;
+}
+
+export interface ProfilePick {
+  profile: ProfileOption;
+  /** optional label override */
 }

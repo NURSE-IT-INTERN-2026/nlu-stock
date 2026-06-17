@@ -48,7 +48,7 @@ export function CategorySelectModal({
   onClose,
   onSelect,
   title = "เลือกหมวดหมู่",
-  allowedCategoryTypes,
+  allowedProfileIds,
 }: CategorySelectModalProps) {
   const [isDesktop, setIsDesktop] = useState(false);
 
@@ -64,7 +64,7 @@ export function CategorySelectModal({
     step: "select",
     selectedExisting: null,
     newCategoryName: "",
-    newCategoryType: "CON",
+    newCategoryProfileId: "",
     newCategoryDescription: "",
     isSubmitting: false,
   });
@@ -74,7 +74,7 @@ export function CategorySelectModal({
       step: "select",
       selectedExisting: null,
       newCategoryName: "",
-      newCategoryType: "CON",
+      newCategoryProfileId: "",
       newCategoryDescription: "",
       isSubmitting: false,
     });
@@ -97,7 +97,7 @@ export function CategorySelectModal({
       step: "create-name",
       selectedExisting: null,
       newCategoryName: "",
-      newCategoryType: "CON",
+      newCategoryProfileId: "",
     }));
   }, []);
 
@@ -117,7 +117,7 @@ export function CategorySelectModal({
     try {
       const created = await createCategory({
         name: state.newCategoryName,
-        category: state.newCategoryType,
+        profileId: state.newCategoryProfileId,
         description: state.newCategoryDescription || undefined,
       });
       toast.success("สร้างหมวดหมู่สำเร็จ");
@@ -127,13 +127,13 @@ export function CategorySelectModal({
       toast.error(e instanceof Error ? e.message : "สร้างหมวดหมู่ไม่สำเร็จ");
       setState((s) => ({ ...s, isSubmitting: false }));
     }
-  }, [state.newCategoryName, state.newCategoryType, state.newCategoryDescription, onSelect, handleClose]);
+  }, [state.newCategoryName, state.newCategoryProfileId, state.newCategoryDescription, onSelect, handleClose]);
 
   // ── Validation ──────────────────────────────────────────────
 
   const canNext =
     state.step === "confirm-existing" ||
-    (state.step === "create-name" && state.newCategoryName.trim() !== "" && state.newCategoryType) ||
+    (state.step === "create-name" && state.newCategoryName.trim() !== "" && state.newCategoryProfileId) ||
     state.step === "create-confirm";
 
   const handleBack = useCallback(() => {
@@ -208,7 +208,7 @@ export function CategorySelectModal({
             selectedId={state.selectedExisting?.id ?? null}
             onSelectExisting={handleSelectExisting}
             onSelectCreateNew={handleSelectCreateNew}
-            allowedCategoryTypes={allowedCategoryTypes}
+            allowedProfileIds={allowedProfileIds}
           />
         )}
         {state.step === "confirm-existing" && state.selectedExisting && (
@@ -218,15 +218,15 @@ export function CategorySelectModal({
           <StepCreateName
             name={state.newCategoryName}
             onNameChange={(n) => setState((s) => ({ ...s, newCategoryName: n }))}
-            categoryType={state.newCategoryType}
-            onCategoryTypeChange={(t) => setState((s) => ({ ...s, newCategoryType: t }))}
+            profileId={state.newCategoryProfileId}
+            onProfileChange={(id) => setState((s) => ({ ...s, newCategoryProfileId: id }))}
             onSelectSimilar={handleSelectSimilar}
           />
         )}
         {state.step === "create-confirm" && (
           <StepCreateConfirm
             name={state.newCategoryName}
-            categoryType={state.newCategoryType}
+            profileId={state.newCategoryProfileId}
             description={state.newCategoryDescription}
             onDescriptionChange={(d) => setState((s) => ({ ...s, newCategoryDescription: d }))}
           />

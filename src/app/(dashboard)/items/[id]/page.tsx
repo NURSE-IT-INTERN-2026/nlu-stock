@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/components/layout/auth-guard";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS } from "@/lib/constants";
+import { locationLabel } from "@/lib/constants";
 import { getItem } from "@/lib/api";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailSubcodes } from "@/components/items/item-detail-subcodes";
@@ -156,7 +156,7 @@ export default function ItemDetailPage() {
         <div className="flex flex-col lg:flex-row lg:items-end gap-6 lg:gap-10 pb-6 border-b border-border">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <BadgePill label={CATEGORY_LABELS[item.category.category as Category] ?? item.category.category} />
+              <BadgePill label={item.category.profile?.name ?? item.category.name} />
               <span>·</span>
               <span className="font-mono">{item.code}</span>
               {/* Live status dot */}

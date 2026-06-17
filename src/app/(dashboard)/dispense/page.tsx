@@ -9,7 +9,7 @@ import { Plus, Minus, Search, QrCode, Package } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
-import { Category, locationLabel, CATEGORY_COLORS } from "@/lib/constants";
+import { locationLabel } from "@/lib/constants";
 import { searchDispenseItems } from "@/lib/api";
 import { useCart } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
@@ -81,7 +81,7 @@ interface SearchItem {
   subUnit: { id: string; name: string };
   conversionFactor: number;
   trackIndividually: boolean;
-  category: { name: string; category: string };
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; isComposite: boolean; color: string } };
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;
@@ -148,8 +148,8 @@ function DispenseContent() {
   };
 
   const handleAdd = (item: SearchItem) => {
-    const categoryType = item.category.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "KIT";
-    const isConsumable = categoryType === "CON";
+    const dispenseType = item.category.profile.dispenseType;
+    const isConsumable = dispenseType === "CONSUMABLE";
     const isTracked = item.trackIndividually && item.subItems.length > 0;
 
     const loc = item.location ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail } : null;
@@ -163,7 +163,7 @@ function DispenseContent() {
         itemName: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        categoryType,
+        dispenseType,
         trackIndividually: false,
         issueUnit: item.issueUnit.name,
         subUnit: item.subUnit.name,
@@ -193,7 +193,7 @@ function DispenseContent() {
         itemName: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        categoryType,
+        dispenseType,
         trackIndividually: true,
         issueUnit: item.issueUnit.name,
         subUnit: item.subUnit.name,
@@ -222,7 +222,7 @@ function DispenseContent() {
         itemName: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        categoryType,
+        dispenseType,
         trackIndividually: false,
         issueUnit: item.issueUnit.name,
         subUnit: item.subUnit.name,
@@ -345,7 +345,7 @@ return (
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-sm text-muted-foreground">{item.code}</span>
-                    <Badge className={`text-xs shrink-0 ${CATEGORY_COLORS[item.category.category as Category] ?? ""}`}>
+                    <Badge className={`text-xs shrink-0 ${item.category.profile.color ?? ""}`}>
                       {item.category.name}
                     </Badge>
                   </div>

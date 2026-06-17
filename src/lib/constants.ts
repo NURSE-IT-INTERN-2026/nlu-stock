@@ -1,28 +1,11 @@
 // Re-export enums from Prisma generated client — single source of truth
-export { Category, ItemStatus, Role, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
-import type { Category, ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
+export { ItemStatus, Role, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
+import type { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
 
 // ─── Category ───
-
-export const CATEGORY_LABELS: Record<Category, string> = {
-  KRU: "ครุภัณฑ์",
-  ELE: "อุปกรณ์อิเล็กทรอนิกส์",
-  BOOK: "หนังสือ",
-  TOY: "ของเล่น",
-  DUR: "วัสดุคงทน",
-  CON: "วัสดุสิ้นเปลือง",
-  KIT: "อุปกรณ์ประกอบวิชา",
-};
-
-export const CATEGORY_COLORS: Record<Category, string> = {
-  CON: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  DUR: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  KRU: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  BOOK: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  ELE: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-  TOY: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
-  KIT: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
-};
+// NOTE: ประเภท (CategoryProfile) เป็น data แล้ว — label/color/icon อ่านจาก profile row ตรงๆ
+// (profile.name, profile.color, profile.icon). ไม่มี CATEGORY_LABELS/COLORS map อีก.
+// Icon name → component registry อยู่ใน src/lib/profile-icons.ts
 
 // ─── Usage Type ───
 

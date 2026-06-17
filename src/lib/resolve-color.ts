@@ -62,17 +62,3 @@ export function useThemeColor(cssVar: string): string {
   const dark = useIsDark();
   return useMemo(() => resolveToHex(cssVar), [cssVar, dark]);
 }
-
-/**
- * Resolve multiple CSS custom properties at once.
- * Returns a Record<cssVar, hex>.
- */
-export function useThemeColors(cssVars: string[]): Record<string, string> {
-  const dark = useIsDark();
-  const key = cssVars.join(",");
-  return useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const v of cssVars) map[v] = resolveToHex(v);
-    return map;
-  }, [key, dark]);
-}

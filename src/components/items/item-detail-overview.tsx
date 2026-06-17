@@ -14,7 +14,7 @@ import {
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS } from "@/lib/constants";
+
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { updateItemStatus, returnItem, getItemHistory, uploadFile, updateItem } from "@/lib/api";
 
@@ -26,7 +26,7 @@ interface SubItemRecord {
   serialNumber: string | null;
 }
 
-interface CategoryType { id: string; name: string; category: string }
+interface CategoryType { id: string; name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; name: string } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
 interface ItemData {
@@ -303,7 +303,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <SectionHeading eyebrow="Item info" title="Specification" />
           <dl className="divide-y divide-border">
             <SpecRow icon={Hash} label="Code" value={<span className="font-mono">{item.code}</span>} />
-            <SpecRow icon={Tag} label="Category" value={CATEGORY_LABELS[item.category.category as Category] ?? item.category.category} />
+            <SpecRow icon={Tag} label="Category" value={item.category.profile?.name ?? item.category.name} />
             <SpecRow icon={Layers} label="Issue unit" value={item.issueUnit.name} />
             {item.subUnit && (
               <SpecRow icon={Layers} label="Sub unit" value={`${item.subUnit.name} (1 ${item.issueUnit.name} = ${item.conversionFactor} ${item.subUnit.name})`} />
@@ -366,7 +366,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               <ActionTile icon={Flag} label="Report damage" tone="destructive" onClick={onReportDamage} />
             </div>
 
-            {!item.trackIndividually && item.category.category !== "CON" && item.availableQty < item.totalQty && (
+            {!item.trackIndividually && item.category.profile?.dispenseType !== "CONSUMABLE" && item.availableQty < item.totalQty && (
               <Button variant="outline" className="mt-3 w-full" onClick={handleReturnQty}>
                 <Undo2 className="h-4 w-4 mr-1" />Return Qty
               </Button>

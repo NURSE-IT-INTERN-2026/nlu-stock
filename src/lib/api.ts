@@ -36,10 +36,26 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export interface CategoryOption {
   id: string;
   name: string;
-  category: string;
+  profile?: ProfileOption | null;
   description?: string | null;
   sortOrder?: number;
   _count?: { items: number };
+}
+
+export interface ProfileOption {
+  id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  assetTracking: boolean;
+  setTracking: boolean;
+  isComposite: boolean;
+  icon: string;
+  color: string;
+  sortOrder: number;
+  isActive: boolean;
+  _count?: { subCategories: number; items: number };
 }
 
 export interface LocationOption {
@@ -96,7 +112,7 @@ export function getPublicCategories() {
   return request<CategoryOption[]>("/api/categories");
 }
 
-export function createCategory(data: { name: string; category: string; description?: string }) {
+export function createCategory(data: { name: string; profileId: string; description?: string }) {
   return request<CategoryOption>("/api/settings/categories", {
     method: "POST",
     body: JSON.stringify(data),
@@ -112,6 +128,12 @@ export function updateCategory(id: string, data: Record<string, unknown>) {
 
 export function deleteCategory(id: string) {
   return request<void>(`/api/settings/categories/${id}`, { method: "DELETE" });
+}
+
+// ─── Category Profiles (ประเภท) ───
+
+export function getProfiles() {
+  return request<ProfileOption[]>("/api/settings/profiles");
 }
 
 // ─── Locations ───
@@ -398,17 +420,6 @@ export function getAlerts() {
 }
 
 // ─── Import ───
-
-export function importData(type: string) {
-  return request<unknown[]>(`/api/settings/import?type=${type}`);
-}
-
-export function uploadImport(data: FormData) {
-  return fetch("/api/settings/import", { method: "POST", body: data }).then(async (res) => {
-    if (!res.ok) throw new ApiError(res.status, "Import failed");
-    return res.json();
-  });
-}
 
 export function importRows(type: string, rows: Record<string, string>[]) {
   return request<{ imported: number; errors?: unknown[] }>("/api/settings/import", {

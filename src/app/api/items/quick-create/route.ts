@@ -31,10 +31,10 @@ export async function POST(request: NextRequest) {
   const existing = await prisma.item.findUnique({ where: { code: data.code } });
   if (existing) return error("Item code already exists");
 
-  const cat = await prisma.categoryType.findUnique({ where: { id: data.categoryId } });
+  const cat = await prisma.categoryType.findUnique({ where: { id: data.categoryId }, include: { profile: true } });
   if (!cat) return error("Category not found");
 
-  const trackIndividually = forcedTrackIndividually(cat.category) ?? false;
+  const trackIndividually = forcedTrackIndividually(cat.profile);
 
   // Build sub-items for individually tracked items — subCode is the copy part (C01, C02…);
   // full reference = item.code + "-" + subCode (see ADR-0001).
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       availableQty: trackIndividually ? data.copyCount : data.initialQty,
     },
     include: {
-      category: true,
+      category: { include: { profile: true } },
       issueUnit: true,
       subUnit: true,
       location: true,

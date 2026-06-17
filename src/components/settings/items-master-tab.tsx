@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { SubCodesManager } from "./sub-codes-manager";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
-import { Category, CATEGORY_LABELS, locationLabel, STATUS_PILLS, STATUS_LABELS } from "@/lib/constants";
+import { locationLabel, STATUS_PILLS, STATUS_LABELS } from "@/lib/constants";
 import { getSettingsItems, getUnits, deleteSettingsItem, saveSettingsItem } from "@/lib/api";
 import { AddItemModal } from "@/components/shared/add-item-modal";
 import type { CategoryOption, LocationOption, UnitOption } from "@/lib/api";
@@ -206,9 +206,10 @@ export function ItemsMasterTab() {
 
   // ── Suggest code whenever relevant fields change ─────────────
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
-  const prefix = selectedCategory?.category ?? "";
-  const FLAT = ["DUR", "CON", "KIT"];
-  const COPY_TRACK = ["BOOK", "TOY"];
+  const profile = selectedCategory?.profile ?? null;
+  const prefix = profile?.code ?? "";
+  const isFlat = profile ? profile.dispenseType !== "ITEM" : false;
+  const isSetTracked = profile?.setTracking ?? false;
 
   const fetchSuggestedCode = useCallback(async () => {
     if (!prefix || editing) return; // don't auto-suggest when editing
@@ -219,7 +220,7 @@ export function ItemsMasterTab() {
       const nnn = data.nextNumber ?? "001";
       // Uniform scheme: NLU-PREFIX-NNN[-SNN] for BOOK/TOY sets; copy -CNN lives on SubItem.
       let code = `NLU-${prefix}-${nnn}`;
-      if (COPY_TRACK.includes(prefix) && form.setSize > 1) {
+      if (isSetTracked && form.setSize > 1) {
         code += `-S${String(form.setSize).padStart(2, "0")}`;
       }
       setSuggestedCode(code);
@@ -241,7 +242,7 @@ export function ItemsMasterTab() {
 
   // ── Name duplicate check for FLAT categories ──────────────
   useEffect(() => {
-    if (!FLAT.includes(prefix) || editing || !form.name.trim()) {
+    if (!isFlat || editing || !form.name.trim()) {
       setNameDuplicates([]);
       return;
     }
@@ -343,13 +344,12 @@ export function ItemsMasterTab() {
     setDeleteTarget(null);
   }
 
-  const isFixedAsset = selectedCategory?.category === "KRU" || selectedCategory?.category === "ELE";
-  const isConsumable = selectedCategory?.category === "CON";
-  const isBook = selectedCategory?.category === "BOOK";
-  const trackForced = selectedCategory ? (
-    ["KRU", "ELE", "BOOK", "TOY"].includes(selectedCategory.category) ? true
-    : selectedCategory.category === "CON" ? false
-    : undefined
+  const isFixedAsset = profile?.assetTracking ?? false;
+  const isConsumable = profile?.dispenseType === "CONSUMABLE";
+  const isBook = profile?.setTracking ?? false;
+  const trackForced = profile ? (
+    profile.dispenseType === "ITEM" ? true
+    : false
   ) : undefined;
 
   const DIALOG_TABS = [
@@ -523,7 +523,7 @@ export function ItemsMasterTab() {
                     </div>
                     {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="text-xs mt-0.5">ติดตาม ({item._count.subItems})</Badge>}
                   </TableCell>
-                  <TableCell><Badge variant="outline">{CATEGORY_LABELS[item.category.category as Category] || item.category.name}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
                   <TableCell>
                     <StockBar available={item.availableQty} total={item.totalQty} threshold={item.minThreshold} />
                   </TableCell>
@@ -710,7 +710,7 @@ export function ItemsMasterTab() {
                       <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="text-gray-900 bg-muted/50 border-transparent shadow-none font-mono" placeholder="NLU-..." />
                     </div>
                   )}
-                  {COPY_TRACK.includes(prefix) && (
+                  {isSetTracked && (
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-medium text-muted-foreground">จำนวนในชุด (set) — มากกว่า 1 = เป็นชุด</Label>
                       <Input type="number" min={1} value={form.setSize}
@@ -731,11 +731,9 @@ export function ItemsMasterTab() {
                   ) : (
                     <Select value={form.categoryId} onValueChange={(v) => {
                       const cat = categories.find((c) => c.id === v);
-                      const forced = cat ? (
-                        ["KRU", "ELE", "BOOK", "TOY"].includes(cat.category) ? true
-                        : cat.category === "CON" ? false
-                        : undefined
-                      ) : undefined;
+                      const forced = cat?.profile
+                        ? (cat.profile.dispenseType === "ITEM")
+                        : undefined;
                       setForm({ ...form, categoryId: v ?? "", code: "", setSize: 1, ...(forced !== undefined ? { trackIndividually: forced } : {}) });
                       setCodeLocked(true); setSuggestedCode("");
                     }}>

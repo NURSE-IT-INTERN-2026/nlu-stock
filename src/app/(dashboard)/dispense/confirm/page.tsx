@@ -136,7 +136,7 @@ export default function ConfirmDispensePage() {
   };
 
   const isConsumable = (item: typeof items[number]) =>
-    item.categoryType === "CON";
+    item.dispenseType === "CONSUMABLE";
 
   // Empty state
   if (items.length === 0) {

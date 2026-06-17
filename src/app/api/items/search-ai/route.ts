@@ -15,7 +15,7 @@ async function textSearch(q: string, limit: number) {
       ],
     },
     take: limit,
-    include: { category: { select: { name: true, category: true } } },
+    include: { category: { select: { name: true, profile: { select: { dispenseType: true, color: true } } } } },
   });
 
   return items.map((r) => ({
@@ -23,7 +23,7 @@ async function textSearch(q: string, limit: number) {
     code: r.code,
     name: r.name,
     categoryName: r.category?.name ?? "",
-    categoryType: r.category?.category ?? "",
+    categoryType: r.category?.profile?.dispenseType ?? "",
     similarity: 1,
   }));
 }

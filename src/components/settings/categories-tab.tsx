@@ -30,8 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Category, CATEGORY_LABELS } from "@/lib/constants";
-import { getCategories, updateCategory, deleteCategory } from "@/lib/api";
+import { getCategories, updateCategory, deleteCategory, getProfiles } from "@/lib/api";
+import type { ProfileOption } from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,24 +49,25 @@ import { CategorySelectModal } from "@/components/shared/category-select-modal";
 interface CategoryType {
   id: string;
   name: string;
-  category: string;
+  profile: ProfileOption | null;
   description: string | null;
   sortOrder: number;
   _count: { items: number };
 }
 
-function dispenseTypeLabel(cat: string): string {
-  if (["CON", "KIT"].includes(cat)) return "ใช้แล้วทิ้ง";
-  if (cat === "DUR") return "ยืม-คืน (นับจำนวน)";
-  return "ยืม-คืน (รายชิ้น)"; // KRU, ELE, BOOK, TOY
+function dispenseTypeLabel(p: ProfileOption | null): string {
+  if (!p) return "—";
+  if (p.dispenseType === "CONSUMABLE") return "ใช้แล้วทิ้ง";
+  if (p.dispenseType === "COUNT") return "ยืม-คืน (นับจำนวน)";
+  return "ยืม-คืน (รายชิ้น)";
 }
 
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
     <TableRow>
       <TableCell className="font-medium">{cat.name}</TableCell>
-      <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
-      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(cat.category)}</TableCell>
+      <TableCell><Badge variant="outline" className={cat.profile?.color}>{cat.profile?.name ?? "—"}</Badge></TableCell>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(cat.profile)}</TableCell>
       <TableCell>{cat._count.items}</TableCell>
       <TableCell>
         <TooltipProvider>
@@ -92,12 +93,13 @@ function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c:
 
 export function CategoriesTab() {
   const [categories, setCategories] = useState<CategoryType[]>([]);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
-  const [filterType, setFilterType] = useState<string>("ALL");
-  const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
+  const [filterProfile, setFilterProfile] = useState<string>("ALL");
+  const [form, setForm] = useState({ name: "", profileId: "" as string, description: "" });
   const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
 
   const fetchCategories = useCallback(async () => {
@@ -111,7 +113,10 @@ export function CategoriesTab() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+  useEffect(() => {
+    fetchCategories();
+    getProfiles().then(setProfiles).catch(() => setProfiles([]));
+  }, [fetchCategories]);
 
   function openCreate() {
     setSelectModalOpen(true);
@@ -119,7 +124,7 @@ export function CategoriesTab() {
 
   function openEdit(cat: CategoryType) {
     setEditing(cat);
-    setForm({ name: cat.name, category: cat.category, description: cat.description || "" });
+    setForm({ name: cat.name, profileId: cat.profile?.id ?? "", description: cat.description || "" });
     setDialogOpen(true);
   }
 
@@ -127,7 +132,7 @@ export function CategoriesTab() {
     if (!editing) return;
     const payload = {
       name: form.name,
-      category: form.category,
+      profileId: form.profileId,
       description: form.description || undefined,
     };
 
@@ -157,7 +162,7 @@ export function CategoriesTab() {
     setDeleteTarget(null);
   }
 
-  const filtered = filterType === "ALL" ? categories : categories.filter((c) => c.category === filterType);
+  const filtered = filterProfile === "ALL" ? categories : categories.filter((c) => c.profile?.id === filterProfile);
 
   if (loading) return (
     <div className="space-y-4">
@@ -184,17 +189,13 @@ export function CategoriesTab() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
-        <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "ALL")}>
+        <Select value={filterProfile} onValueChange={(v) => setFilterProfile(v ?? "ALL")}>
           <SelectTrigger className="w-[200px]"><SelectValue placeholder="ทุกประเภท" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">ทุกประเภท</SelectItem>
-            <SelectItem value="KRU">ครุภัณฑ์</SelectItem>
-            <SelectItem value="ELE">อิเล็กทรอนิกส์</SelectItem>
-            <SelectItem value="BOOK">หนังสือ</SelectItem>
-            <SelectItem value="TOY">ของเล่น</SelectItem>
-            <SelectItem value="DUR">วัสดุคงทน</SelectItem>
-            <SelectItem value="CON">วัสดุสิ้นเปลือง</SelectItem>
-            <SelectItem value="KIT">ชุด</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
@@ -242,16 +243,12 @@ export function CategoriesTab() {
             </div>
             <div>
               <Label htmlFor="cat-type">ประเภท</Label>
-              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v! })}>
-                <SelectTrigger><SelectValue>{CATEGORY_LABELS[form.category as Category] || form.category}</SelectValue></SelectTrigger>
+              <Select value={form.profileId} onValueChange={(v) => setForm({ ...form, profileId: v! })}>
+                <SelectTrigger><SelectValue placeholder="เลือกประเภท">{profiles.find((p) => p.id === form.profileId)?.name ?? "เลือกประเภท"}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="KRU">ครุภัณฑ์</SelectItem>
-                  <SelectItem value="ELE">ครุภัณฑ์อิเล็กทรอนิกส์</SelectItem>
-                  <SelectItem value="BOOK">หนังสือ</SelectItem>
-                  <SelectItem value="TOY">ของเล่น/อุปกรณ์การศึกษา</SelectItem>
-                  <SelectItem value="DUR">คงทน</SelectItem>
-                  <SelectItem value="CON">สิ้นเปลือง</SelectItem>
-                  <SelectItem value="KIT">ชุดวัสดุ</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

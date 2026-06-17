@@ -1,8 +1,6 @@
 "use client";
 
 import { USAGE_OPTIONS } from "./types";
-import { CATEGORY_LABELS } from "@/lib/constants";
-import type { Category } from "@/lib/constants";
 import type { CodeMeta } from "./code-builder";
 
 interface StepSummaryProps {
@@ -31,9 +29,6 @@ export function StepSummary({
   initialQty = 0,
 }: StepSummaryProps) {
   const usageLabel = USAGE_OPTIONS.find((o) => o.id === usageType)?.title ?? "—";
-  const categoryTypeLabel = categoryType
-    ? (CATEGORY_LABELS[categoryType as Category] ?? categoryType)
-    : null;
 
   return (
     <div className="space-y-4">

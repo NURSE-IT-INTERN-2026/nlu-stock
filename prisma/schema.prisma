@@ -7,14 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Category {
-  KRU
-  ELE
-  BOOK
-  TOY
-  DUR
-  CON
-  KIT
+// Dispense behavior of a CategoryProfile (ประเภท). The only fixed enum.
+// CONSUMABLE = ใช้แล้วทิ้ง (lot tracking, นับ remaining)
+// COUNT      = ยืม-คืน นับจำนวน (track how many out)
+// ITEM       = ยืม-คืน รายชิ้น (subItems, builder code)
+enum DispenseType {
+  CONSUMABLE
+  COUNT
+  ITEM
 }
 
 enum ItemStatus {
@@ -90,13 +90,37 @@ model User {
 model CategoryType {
   id          String   @id @default(cuid())
   name        String   @unique
-  category    Category
   description String?
   sortOrder   Int      @default(0)
+
+  // ประเภท (profile) — กำหนด dispense/track behavior
+  profileId String
+  profile   CategoryProfile @relation(fields: [profileId], references: [id])
 
   items Item[]
 
   @@map("categories")
+}
+
+// ประเภท (CategoryProfile) — addable from UI. behavior อยู่ใน dispenseType + flags.
+// icon/color/name/desc = cosmetic. code = prefix สำหรับ NLU-{code}-NNN.
+model CategoryProfile {
+  id             String       @id @default(cuid())
+  name           String       @unique
+  code           String       @unique
+  description    String?
+  dispenseType   DispenseType
+  assetTracking  Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
+  setTracking    Boolean      @default(false) // โชว์ setSize/borrowable (BOOK/TOY)
+  isComposite    Boolean      @default(false) // dispense → deduct component stock (KIT)
+  icon           String       @default("Package")
+  color          String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
+  sortOrder      Int          @default(0)
+  isActive       Boolean      @default(true)
+
+  subCategories CategoryType[]
+
+  @@map("category_profiles")
 }
 
 // --- Locations ---

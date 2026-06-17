@@ -15,6 +15,22 @@ function readCsv(filename: string) {
   }) as string[][];
 }
 
+// ── Profile spec (synced with scripts/migrate-profiles.ts) ──
+type ProfileSpec = {
+  code: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  assetTracking: boolean; setTracking: boolean; isComposite: boolean;
+  icon: string; color: string;
+};
+const PROFILE_SPEC: ProfileSpec[] = [
+  { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, isComposite: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, isComposite: true, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, setTracking: false, isComposite: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, setTracking: false, isComposite: false, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
+  { code: "ELE", name: "อุปกรณ์อิเล็กทรอนิกส์", dispenseType: "ITEM", assetTracking: true, setTracking: false, isComposite: false, icon: "Monitor", color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200" },
+  { code: "BOOK", name: "หนังสือ", dispenseType: "ITEM", assetTracking: false, setTracking: true, isComposite: false, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  { code: "TOY", name: "ของเล่น", dispenseType: "ITEM", assetTracking: false, setTracking: true, isComposite: false, icon: "Puzzle", color: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200" },
+];
+
 // Map Thai condition → ItemCondition enum
 function mapCondition(th: string): string {
   const t = (th || "").trim();
@@ -117,6 +133,7 @@ async function main() {
   await prisma.item.deleteMany();
   await prisma.location.deleteMany();
   await prisma.categoryType.deleteMany();
+  await prisma.categoryProfile.deleteMany();
   await prisma.unit.deleteMany();
   await prisma.user.deleteMany();
 
@@ -152,27 +169,36 @@ async function main() {
   }
 
   // ============================================================
-  // CategoryTypes — 8 categories, 1:1 with enum
+  // CategoryProfiles (ประเภท) + CategoryTypes (หมวด)
   // ============================================================
-  const catKru = await prisma.categoryType.create({ data: { name: "ครุภัณฑ์", category: "KRU", sortOrder: 1 } });
-  const catEle = await prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", category: "ELE", sortOrder: 2 } });
-  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", category: "BOOK", sortOrder: 3 } });
-  const catToy = await prisma.categoryType.create({ data: { name: "ของเล่น", category: "TOY", sortOrder: 4 } });
-  const catDur = await prisma.categoryType.create({ data: { name: "วัสดุคงทน", category: "DUR", sortOrder: 5 } });
-  const catCon = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CON", sortOrder: 6 } });
-  const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", category: "KIT", sortOrder: 7 } });
+  const profileByCode: Record<string, string> = {};
+  for (let i = 0; i < PROFILE_SPEC.length; i++) {
+    const spec = PROFILE_SPEC[i];
+    const p = await prisma.categoryProfile.create({ data: { ...spec, sortOrder: i } });
+    profileByCode[spec.code] = p.id;
+  }
 
-  // Granular หมวดย่อย (CategoryType rows beyond the 8 top-level).
-  // BOOK: 13 numbered หมวด; TOY: single 014; KRU: one row per named type (number null).
+  const catKru = await prisma.categoryType.create({ data: { name: "ครุภัณฑ์", profileId: profileByCode.KRU, sortOrder: 1 } });
+  const catEle = await prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", profileId: profileByCode.ELE, sortOrder: 2 } });
+  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", profileId: profileByCode.BOOK, sortOrder: 3 } });
+  const catToy = await prisma.categoryType.create({ data: { name: "ของเล่น", profileId: profileByCode.TOY, sortOrder: 4 } });
+  const catDur = await prisma.categoryType.create({ data: { name: "วัสดุคงทน", profileId: profileByCode.DUR, sortOrder: 5 } });
+  const catCon = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", profileId: profileByCode.CON, sortOrder: 6 } });
+  const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", profileId: profileByCode.KIT, sortOrder: 7 } });
+
+  // Granular หมวดย่อย (CategoryType rows beyond the 7 top-level).
+  // BOOK: 13 numbered หมวด; TOY: single 014; KRU: one row per named type.
   // ELE/CON/DUR/KIT stay top-level (ELE is 1:1 with items; others are flat).
   const subCatCache = new Map<string, string>();
   let subSort = 100;
-  async function ensureSubCategory(category: string, name: string): Promise<string> {
-    const key = `${category}|${name}`;
+  async function ensureSubCategory(profileCode: string, name: string): Promise<string> {
+    const key = `${profileCode}|${name}`;
     const cached = subCatCache.get(key);
     if (cached) return cached;
+    const profileId = profileByCode[profileCode];
+    if (!profileId) throw new Error(`No profile for code ${profileCode}`);
     const row = await prisma.categoryType.create({
-      data: { name, category: category as any, sortOrder: subSort++ },
+      data: { name, profileId, sortOrder: subSort++ },
     });
     subCatCache.set(key, row.id);
     return row.id;
@@ -678,7 +704,7 @@ async function main() {
   const day = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
 
   const demoConsumables = await prisma.item.findMany({
-    where: { category: { category: "CON" } },
+    where: { category: { profile: { code: "CON" } } },
     take: 5,
   });
 
@@ -777,7 +803,7 @@ async function main() {
 
   // Low-stock alert
   const lowStockItem = await prisma.item.findFirst({
-    where: { category: { category: "CON" }, totalQty: { gt: 0 } },
+    where: { category: { profile: { code: "CON" } }, totalQty: { gt: 0 } },
     orderBy: { totalQty: "asc" },
   });
   if (lowStockItem) {

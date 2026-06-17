@@ -2,16 +2,15 @@
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/constants";
 import type { CategoryOption } from "@/lib/api";
-import { CATEGORY_ICONS } from "./constants";
+import { profileIcon } from "@/lib/profile-icons";
 
 interface StepConfirmExistingProps {
   category: CategoryOption;
 }
 
 export function StepConfirmExisting({ category }: StepConfirmExistingProps) {
-  const Icon = CATEGORY_ICONS[category.category as Category] ?? CATEGORY_ICONS.CON;
+  const Icon = profileIcon(category.profile?.icon);
 
   return (
     <div className="space-y-4">
@@ -31,9 +30,9 @@ export function StepConfirmExisting({ category }: StepConfirmExistingProps) {
             <div className="flex items-center gap-2">
               <Badge
                 variant="outline"
-                className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[category.category as Category])}
+                className={cn("text-[10px] px-1.5 py-0", category.profile?.color ?? "")}
               >
-                {CATEGORY_LABELS[category.category as Category] ?? category.category}
+                {category.profile?.name ?? "—"}
               </Badge>
               {category._count != null && (
                 <span className="text-xs text-muted-foreground">
