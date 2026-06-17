@@ -122,7 +122,7 @@
 
 :root {
   /* Page background */
-  --background: oklch(94% 0.003 264);
+  --background: oklch(97% 0.003 264);
   --foreground: oklch(20% 0.003 264);
 
   /* Cards & popups */

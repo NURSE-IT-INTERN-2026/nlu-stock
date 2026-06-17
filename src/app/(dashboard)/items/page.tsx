@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, ChevronLeft, ChevronRight, ChevronDown, QrCode, X } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ChevronDown, QrCode, X, Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Progress, ProgressTrack, ProgressIndicator } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/components/layout/auth-guard";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { useAlerts } from "@/hooks/use-alerts";
@@ -88,6 +87,11 @@ const PRESET_CHIPS = [
   { value: "nearExpiry", label: "ใกล้หมดอายุ", alertKey: "nearExpiry" as const, color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
   { value: "overdueMaint", label: "บำรุเกินกำหนด", alertKey: "overdueMaintenance" as const, color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
 ] as const;
+
+// Map profile.icon string → lucide component. Unknown → Boxes fallback.
+const PROFILE_ICONS: Record<string, LucideIcon> = {
+  Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes,
+};
 
 export default function ItemsPage() {
   return (
@@ -187,21 +191,39 @@ function ItemsContent() {
     <div className="space-y-6">
       <Card className="p-3 space-y-3">
         {/* Row 0: profile tabs */}
-        <Tabs
-          value={filterProfile || "__all__"}
-          onValueChange={(v) => {
-            setFilterProfile(v === "__all__" ? "" : v);
-            setFilterCategory("");
-            setPage(1);
-          }}
-        >
-          <TabsList className="w-full h-auto justify-start overflow-x-auto flex-nowrap">
-            <TabsTrigger value="__all__" className="flex-none">ทุกประเภท</TabsTrigger>
-            {profiles.map((p) => (
-              <TabsTrigger key={p.id} value={p.id} className="flex-none">{p.name}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-xl bg-muted/40 border border-border/60">
+          <button
+            type="button"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+              !filterProfile
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
+            }`}
+            onClick={() => { setFilterProfile(""); setFilterCategory(""); setPage(1); }}
+          >
+            <Boxes className="h-4 w-4" />
+            ทุกประเภท
+          </button>
+          {profiles.map((p) => {
+            const active = filterProfile === p.id;
+            const Icon = PROFILE_ICONS[p.icon ?? ""] ?? Boxes;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-all ${
+                  active
+                    ? `${p.color} font-semibold shadow-sm ring-1 ring-black/5`
+                    : "text-muted-foreground hover:bg-background hover:text-foreground"
+                }`}
+                onClick={() => { setFilterProfile(p.id); setFilterCategory(""); setPage(1); }}
+              >
+                <Icon className="h-4 w-4" />
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Row 1: search + scan + dropdowns */}
         <div className="flex flex-wrap items-center gap-2">

@@ -137,6 +137,8 @@ export default function ItemDetailPage() {
     stockStatus.label = "Out";
   }
 
+  const coverSrc = item.imageUrl ?? item.images?.[0] ?? null;
+
   return (
     <div>
       {/* ── Back nav + code breadcrumb (replaces redundant page header) ── */}
@@ -152,8 +154,16 @@ export default function ItemDetailPage() {
       </div>
 
       <div className="max-w-5xl">
-        {/* ── Title + Stock at-a-glance ── */}
-        <div className="flex flex-col lg:flex-row lg:items-end gap-6 lg:gap-10 pb-6 border-b border-border">
+        {/* ── Cover image + Title + Stock at-a-glance ── */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 pb-6 border-b border-border">
+          {coverSrc && (
+            <div className="relative w-full sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
+              <img src={coverSrc} alt={item.name} className="size-full object-cover" />
+              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                Cover
+              </span>
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
               <BadgePill label={item.category.profile?.name ?? item.category.name} />
