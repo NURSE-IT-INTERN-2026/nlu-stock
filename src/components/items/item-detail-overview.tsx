@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
-import { updateItemStatus, returnItem, getItemHistory, uploadFile, updateItem } from "@/lib/api";
+import { updateItemStatus, returnItem, uploadFile, updateItem } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
@@ -516,66 +516,5 @@ function ActionTile({ icon: Icon, label, tone, onClick }: {
       </span>
       <span className="text-sm font-semibold">{label}</span>
     </button>
-  );
-}
-
-// ── Recent events ──
-function RecentEvents({ itemId }: { itemId: string }) {
-  const [events, setEvents] = useState<{ type: string; description: string; date: string; user: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getItemHistory(itemId, "perPage=3")
-      .then((d) => { setEvents((d.events || []) as { type: string; description: string; date: string; user: string }[]); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [itemId]);
-
-  if (loading) {
-    return (
-      <ol className="relative pl-5 space-y-5">
-        <span className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
-        {[0, 1, 2].map((i) => (
-          <li key={i} className="space-y-1">
-            <div className="h-4 w-32 rounded bg-muted animate-pulse" />
-            <div className="h-3 w-48 rounded bg-muted animate-pulse" />
-          </li>
-        ))}
-      </ol>
-    );
-  }
-
-  if (events.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-        <ClipboardList className="size-8 opacity-40" />
-        <span className="text-sm">No recent events</span>
-      </div>
-    );
-  }
-
-  const dotColor = (type: string) => {
-    if (type === "RECEIVE") return "bg-success";
-    if (type === "DISPENSE") return "bg-primary";
-    if (type === "MAINTENANCE") return "bg-info-400";
-    if (type === "ADJUSTMENT") return "bg-warning";
-    return "bg-muted-foreground";
-  };
-
-  return (
-    <ol className="relative pl-5 space-y-5">
-      <span className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
-      {events.map((e, i) => (
-        <li key={i} className="relative animate-in fade-in slide-in-from-2 duration-200" style={{ animationDelay: `${i * 80}ms` }}>
-          <span className={cn(
-            "absolute -left-[18px] top-1.5 size-3 rounded-full ring-4 ring-background",
-            dotColor(e.type),
-          )} />
-          <div className="text-sm font-medium">{e.description}</div>
-          <div className="text-xs text-muted-foreground">
-            {e.user} · {new Date(e.date).toLocaleDateString("th-TH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-          </div>
-        </li>
-      ))}
-    </ol>
   );
 }
