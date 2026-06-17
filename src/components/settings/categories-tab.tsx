@@ -294,7 +294,7 @@ export function CategoriesTab() {
   );
 }
 
-function FilterPill({ active, onClick, color, children }: {
+function FilterPill({ active, onClick, children }: {
   active: boolean;
   onClick: () => void;
   color?: string;
@@ -305,12 +305,10 @@ function FilterPill({ active, onClick, color, children }: {
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
         active
-          ? "bg-primary text-primary-foreground"
-          : color
-            ? cn("hover:opacity-80", color)
-            : "bg-muted text-muted-foreground hover:bg-accent",
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-accent/40",
       )}
     >
       {children}
