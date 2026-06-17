@@ -1,26 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/constants";
-import { CATEGORY_ICONS } from "./constants";
+import { getProfiles } from "@/lib/api";
+import type { ProfileOption } from "@/lib/api";
+import { profileIcon } from "@/lib/profile-icons";
 
 interface StepCreateConfirmProps {
   name: string;
-  categoryType: string;
+  profileId: string;
   description: string;
   onDescriptionChange: (desc: string) => void;
 }
 
 export function StepCreateConfirm({
   name,
-  categoryType,
+  profileId,
   description,
   onDescriptionChange,
 }: StepCreateConfirmProps) {
-  const Icon = CATEGORY_ICONS[categoryType as Category] ?? CATEGORY_ICONS.CON;
+  const [profile, setProfile] = useState<ProfileOption | null>(null);
+  useEffect(() => {
+    getProfiles()
+      .then((ps) => setProfile(ps.find((p) => p.id === profileId) ?? null))
+      .catch(() => setProfile(null));
+  }, [profileId]);
+  const Icon = profileIcon(profile?.icon);
 
   return (
     <div className="space-y-6">
@@ -55,9 +63,9 @@ export function StepCreateConfirm({
               <dd>
                 <Badge
                   variant="outline"
-                  className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[categoryType as Category])}
+                  className={cn("text-[10px] px-1.5 py-0", profile?.color ?? "")}
                 >
-                  {CATEGORY_LABELS[categoryType as Category] ?? categoryType}
+                  {profile?.name ?? "—"}
                 </Badge>
               </dd>
             </div>

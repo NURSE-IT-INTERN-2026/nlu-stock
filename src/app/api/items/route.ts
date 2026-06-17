@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       take,
       orderBy: { code: "asc" },
       include: {
-        category: true,
+        category: { include: { profile: true } },
         location: true,
         issueUnit: true,
         subUnit: true,

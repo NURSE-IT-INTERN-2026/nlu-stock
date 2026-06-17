@@ -40,14 +40,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (existing) return error("Item code already exists");
   }
 
-  // Enforce trackIndividually based on category
+  // Enforce trackIndividually based on profile
   if (data.categoryId !== undefined || data.trackIndividually !== undefined) {
     const catId = data.categoryId ?? (await prisma.item.findUnique({ where: { id }, select: { categoryId: true } }))?.categoryId;
     if (catId) {
-      const cat = await prisma.categoryType.findUnique({ where: { id: catId } });
-      if (cat) {
-        const forced = forcedTrackIndividually(cat.category);
-        if (forced !== undefined) data.trackIndividually = forced;
+      const cat = await prisma.categoryType.findUnique({ where: { id: catId }, include: { profile: true } });
+      if (cat?.profile) {
+        data.trackIndividually = forcedTrackIndividually(cat.profile);
       }
     }
   }
@@ -56,7 +55,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const item = await prisma.item.update({
       where: { id },
       data,
-      include: { category: true, location: true, issueUnit: true, subUnit: true },
+      include: { category: { include: { profile: true } }, location: true, issueUnit: true, subUnit: true },
     });
     return json(item);
   } catch {

@@ -15,9 +15,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getUnits } from "@/lib/api";
 import type { CategoryOption, UnitOption } from "@/lib/api";
-import type { Category } from "@/lib/constants";
 import { CodeBuilder } from "./code-builder";
 import type { CodeMeta } from "./code-builder";
+import type { FormProfile } from "./types";
 
 interface StepCategoryUnitsProps {
   code: string;
@@ -25,8 +25,8 @@ interface StepCategoryUnitsProps {
   categoryId: string;
   categoryName: string;
   onCategorySelect: (cat: CategoryOption) => void;
-  /** Filter categories to only these types */
-  allowedCategoryTypes?: Category[];
+  /** Filter categories by dispenseType */
+  allowedDispenseType?: "CONSUMABLE" | "COUNT" | "ITEM";
   issueUnitId: string;
   issueUnitName?: string;
   subUnitId: string;
@@ -37,8 +37,10 @@ interface StepCategoryUnitsProps {
   onConversionFactorChange: (factor: number) => void;
   /** Opens inline category selection step */
   onOpenCategorySelect: () => void;
-  /** Category type code (e.g. "CON", "KRU"). Used to determine if code input should be disabled */
+  /** Category type code (profile.code) — used as code prefix */
   categoryType?: string;
+  /** Profile flags driving builder/field visibility */
+  profile?: FormProfile | null;
   onCodeMetaChange?: (meta: CodeMeta) => void;
   initialCodeMeta?: CodeMeta | null;
   /** Initial stock quantity for flat types (CON/DUR/KIT) */
@@ -52,7 +54,7 @@ export function StepCategoryUnits({
   categoryId,
   categoryName,
   onCategorySelect,
-  allowedCategoryTypes,
+  allowedDispenseType,
   issueUnitId,
   issueUnitName: issueUnitNameProp = "",
   subUnitId,
@@ -63,6 +65,7 @@ export function StepCategoryUnits({
   onConversionFactorChange,
   onOpenCategorySelect,
   categoryType,
+  profile,
   onCodeMetaChange,
   initialCodeMeta,
   initialQty = 1,
@@ -127,9 +130,10 @@ export function StepCategoryUnits({
         <Label htmlFor="item-code">รหัสพัสดุ</Label>
         {!categoryType ? (
           <Input id="item-code" placeholder="—" disabled className="bg-card text-muted-foreground" />
-        ) : categoryType === "BOOK" || categoryType === "TOY" || categoryType === "KRU" || categoryType === "ELE" ? (
+        ) : profile?.dispenseType === "ITEM" ? (
           <CodeBuilder
             prefix={categoryType}
+            canSet={profile.setTracking}
             value={code}
             onChange={onCodeChange}
             copyCount={initialCodeMeta?.copyCount ?? 1}

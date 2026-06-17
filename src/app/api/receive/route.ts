@@ -34,12 +34,12 @@ export async function POST(req: NextRequest) {
       for (const ri of items) {
         const item = await tx.item.findUnique({
           where: { id: ri.itemId },
-          include: { category: true },
+          include: { category: { include: { profile: true } } },
         });
 
         if (!item) throw new Error(`Item ${ri.itemId} not found`);
 
-        const isConsumable = item.category.category === "CON";
+        const isConsumable = item.category.profile?.dispenseType === "CONSUMABLE";
 
         // Enforce lotNumber for consumable
         if (isConsumable && !ri.lotNumber?.trim()) {

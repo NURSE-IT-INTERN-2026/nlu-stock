@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Package, Repeat, ListChecks } from "lucide-react";
-import type { Category } from "@/lib/constants";
+import type { DispenseType } from "@/generated/prisma/enums";
 
 export type WizardStep =
   | "details"
@@ -18,14 +18,22 @@ export interface UsageOption {
   icon: LucideIcon;
   title: string;
   desc: string;
-  categories: Category[];
+  dispenseType: DispenseType;
 }
 
 export const USAGE_OPTIONS: UsageOption[] = [
-  { id: "consumable", icon: Package, title: "ใช้แล้วทิ้ง", desc: "เบิกไปแล้วหมดไป — ระบบนับของที่เหลือในสต็อก", categories: ["CON", "KIT"] },
-  { id: "borrow-count", icon: Repeat, title: "ยืม-คืน แบบนับจำนวน", desc: "ยืมไปแล้วต้องคืน — ระบบนับว่าตอนนี้ถูกยืมไปกี่ชิ้น", categories: ["DUR"] },
-  { id: "borrow-item", icon: ListChecks, title: "ยืม-คืน รายชิ้น", desc: "ของมีค่าที่ต้องติดตามทีละตัว — แต่ละชิ้นมีสถานะว่าอยู่กับใคร", categories: ["KRU", "ELE", "BOOK", "TOY"] },
+  { id: "consumable", icon: Package, title: "ใช้แล้วทิ้ง", desc: "เบิกไปแล้วหมดไป — ระบบนับของที่เหลือในสต็อก", dispenseType: "CONSUMABLE" },
+  { id: "borrow-count", icon: Repeat, title: "ยืม-คืน แบบนับจำนวน", desc: "ยืมไปแล้วต้องคืน — ระบบนับว่าตอนนี้ถูกยืมไปกี่ชิ้น", dispenseType: "COUNT" },
+  { id: "borrow-item", icon: ListChecks, title: "ยืม-คืน รายชิ้น", desc: "ของมีค่าที่ต้องติดตามทีละตัว — แต่ละชิ้นมีสถานะว่าอยู่กับใคร", dispenseType: "ITEM" },
 ];
+
+/** Subset of CategoryProfile carried in the form to drive behavior/code-gen. */
+export interface FormProfile {
+  code: string;
+  dispenseType: DispenseType;
+  assetTracking: boolean;
+  setTracking: boolean;
+}
 
 export interface ItemFormState {
   name: string;
@@ -33,7 +41,10 @@ export interface ItemFormState {
   code: string;
   categoryId: string;
   categoryName: string;
+  /** profile.code — used as code prefix (NLU-{code}-NNN) */
   categoryType: string;
+  /** profile flags driving builder/field visibility */
+  profile: FormProfile | null;
   issueUnitId: string;
   issueUnitName: string;
   subUnitId: string;
@@ -45,7 +56,7 @@ export interface SimilarItem {
   id: string;
   code: string;
   name: string;
-  category: { name: string; category: string };
+  category: { name: string; profile: { dispenseType: DispenseType } };
 }
 
 export interface AddItemModalProps {
@@ -61,7 +72,7 @@ export interface AddItemModalProps {
 export interface CategoryWizardState {
   selectedExisting: import("@/lib/api").CategoryOption | null;
   newCategoryName: string;
-  newCategoryType: string;
+  newCategoryProfileId: string;
   newCategoryDescription: string;
   isSubmitting: boolean;
 }

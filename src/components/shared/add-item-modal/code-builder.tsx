@@ -10,10 +10,8 @@ export interface CodeMeta {
   setSize: number;
 }
 
-const HIDE_SET = ["KRU", "ELE"];
-
 interface CodeBuilderProps {
-  /** Category prefix: KRU | ELE | BOOK | TOY */
+  /** Profile code prefix */
   prefix: string;
   value: string;
   onChange: (code: string) => void;
@@ -22,6 +20,8 @@ interface CodeBuilderProps {
   onMetaChange?: (meta: CodeMeta) => void;
   /** Restore state when navigating back */
   initialMeta?: CodeMeta | null;
+  /** Allow set/build mode (BOOK/TOY). Default true. */
+  canSet?: boolean;
 }
 
 export function CodeBuilder({
@@ -32,8 +32,8 @@ export function CodeBuilder({
   onCopyCountChange,
   onMetaChange,
   initialMeta,
+  canSet = true,
 }: CodeBuilderProps) {
-  const canSet = !HIDE_SET.includes(prefix);
   const [running, setRunning] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isSet, setIsSet] = useState(initialMeta?.isSet ?? false);
@@ -128,7 +128,7 @@ export function CodeBuilder({
             <Label htmlFor="copy-count" className="text-sm">จำนวนชิ้น (copy)</Label>
             {copyCount > 1 && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {prefix === "KRU" || prefix === "ELE"
+                {!canSet
                   ? "แต่ละชิ้นคือทรัพย์สินคนละตัว"
                   : `C01 ถึง C${String(copyCount).padStart(2, "0")}`}
               </p>

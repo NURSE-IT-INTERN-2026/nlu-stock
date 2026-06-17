@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { CATEGORY_COLORS } from "@/lib/constants";
 import { searchItemsAI } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { UsageType } from "./types";
@@ -56,7 +55,7 @@ export function StepItemDetails({
         id: r.id,
         code: r.code,
         name: r.name,
-        category: { name: r.categoryName, category: r.categoryType },
+        category: { name: r.categoryName, profile: { dispenseType: r.categoryType as "CONSUMABLE" | "COUNT" | "ITEM" } },
       }));
       setSimilar(items);
     } catch {
@@ -120,7 +119,7 @@ export function StepItemDetails({
                           <span className="text-xs text-muted-foreground">{item.code}</span>
                           <Badge
                           variant="outline"
-                          className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[item.category?.category as keyof typeof CATEGORY_COLORS] ?? "")}
+                          className="text-[10px] px-1.5 py-0"
                         >
                           {item.category?.name}
                         </Badge>

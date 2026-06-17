@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { Category, AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
+import type { ProfileLike } from "@/lib/category-profile";
+import { isItemTracked } from "@/lib/category-profile";
 
 const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
@@ -39,11 +41,9 @@ export const itemUpdateSchema = itemBaseSchema.partial();
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
 export type ItemUpdateInput = z.infer<typeof itemUpdateSchema>;
 
-// Category → forced trackIndividually value. undefined = user choice (DUR, KIT).
-export function forcedTrackIndividually(categoryEnum: string): boolean | undefined {
-  if (categoryEnum === "KRU" || categoryEnum === "ELE" || categoryEnum === "BOOK" || categoryEnum === "TOY") return true;
-  if (categoryEnum === "CON") return false;
-  return undefined; // DUR, KIT — user choice
+// Profile → forced trackIndividually. ITEM → true, else false (OPTIONAL dead).
+export function forcedTrackIndividually(profile: ProfileLike | null | undefined): boolean {
+  return isItemTracked(profile);
 }
 
 export const stockAdjustSchema = z.object({

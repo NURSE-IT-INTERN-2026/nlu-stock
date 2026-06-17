@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const item = await prisma.item.findUnique({
     where: { id },
     include: {
-      category: true,
+      category: { include: { profile: true } },
       location: true,
       issueUnit: true,
       subUnit: true,

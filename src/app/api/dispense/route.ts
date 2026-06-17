@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         const item = await tx.item.findUnique({
           where: { id: di.itemId },
           include: {
-            category: true,
+            category: { include: { profile: true } },
             lots: { where: { id: di.lotId ?? undefined } },
             subItems: { where: { id: di.subItemId ?? undefined } },
             issueUnit: true,
@@ -108,8 +108,8 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // KIT: deduct stock from linked component items
-        if (item.category.category === "KIT") {
+        // Composite (KIT): deduct stock from linked component items
+        if (item.category.profile?.isComposite) {
           const components = await tx.kitComponent.findMany({
             where: { kitId: item.id, isStockItem: true, itemId: { not: null } },
           });

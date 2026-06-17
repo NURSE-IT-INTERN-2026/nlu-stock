@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NLU-Stock — DB Summary</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --card2:#0f1626; --line:#1f2a40;
+    --txt:#e6edf7; --mut:#8b98b5; --acc:#6ea8fe; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"IBM Plex Sans Thai",system-ui,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+  h2{font-size:18px;margin:36px 0 12px;color:var(--acc);font-weight:650;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:24px}
+  .meta{color:var(--mut);font-size:12px}
+  .grid{display:grid;gap:12px}
+  .cards{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .card .n{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .card .l{color:var(--mut);font-size:12px;margin-top:2px}
+  .tbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:13.5px}
+  .tbl th,.tbl td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  .tbl th{background:var(--card2);color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl td.num,.tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tbl tbody tr:hover{background:rgba(110,168,254,.05)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;font-family:ui-monospace,Menlo,monospace}
+  .ok{background:rgba(52,211,153,.15);color:var(--ok)}
+  .warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  .bad{background:rgba(248,113,113,.15);color:var(--bad)}
+  .violet{background:rgba(167,139,250,.15);color:var(--violet)}
+  code{background:var(--card2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;font-size:12.5px;color:var(--acc);font-family:ui-monospace,Menlo,monospace}
+  .callout{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:12px;padding:16px 18px;margin:12px 0}
+  .callout.v{border-left-color:var(--violet)}
+  .callout.w{border-left-color:var(--warn)}
+  .callout b{color:#fff}
+  .kv{display:grid;grid-template-columns:200px 1fr;gap:6px 16px;font-size:13.5px}
+  .kv dt{color:var(--mut)}
+  .mono{font-family:ui-monospace,Menlo,monospace}
+  a{color:var(--acc)}
+  .bar-wrap{background:var(--card2);border-radius:6px;height:8px;overflow:hidden;min-width:80px}
+  .bar{height:100%;background:linear-gradient(90deg,var(--acc),var(--violet));border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>NLU-Stock · Database Summary</h1>
+  <div class="sub">Prisma + PostgreSQL 16 (pgvector) · <span class="meta">snapshot</span> · หมวด enum + ประเภทย่อย (categories)</div>
+
+  <!-- OVERVIEW CARDS -->
+  <div class="grid cards">
+    <div class="card"><div class="n">929</div><div class="l">Items (items)</div></div>
+    <div class="card"><div class="n">1,131</div><div class="l">Sub-items (sub_items)</div></div>
+    <div class="card"><div class="n">37</div><div class="l">ประเภท (categories)</div></div>
+    <div class="card"><div class="n">37</div><div class="l">สถานที่ (locations)</div></div>
+    <div class="card"><div class="n">15,653</div><div class="l">ยอดรวม totalQty</div></div>
+    <div class="card"><div class="n">29</div><div class="l">เบิกจ่าย (dispense)</div></div>
+    <div class="card"><div class="n">5</div><div class="l">รับเข้า (receive)</div></div>
+    <div class="card"><div class="n">3</div><div class="l">users</div></div>
+  </div>
+
+  <!-- REF CODE CHECK -->
+  <h2>① เช็ค Ref Code ที่ "ประเภท" — ได้ใช้มั้ย?</h2>
+  <div class="callout v">
+    <p style="margin:0 0 8px"><b>สรุป:</b> รหัสสินค้า (<code>code</code>) ใช้ <b>หมวด enum</b> (7 ค่า) เป็น prefix — <b>ไม่ได้</b>ใช้ "ประเภท" (CategoryType / ตาราง <code>categories</code>)</p>
+    <p style="margin:0;font-size:13px;color:var(--mut)">ฟอร์แมต = <code>NLU-{ENUM}-{NNN}</code> (+ optional <code>-SNN</code> สำหรับ set BOOK/TOY)<br>
+    ENUM ∈ <code>KRU | ELE | BOOK | TOY | DUR | CON | KIT</code> &nbsp;·&nbsp; logic อยู่ที่ <code>src/app/api/items/suggest-code/route.ts</code></p>
+  </div>
+  <p style="color:var(--mut);font-size:13px">ดังนั้น: หากอยากให้ ref code อิง "ประเภท" (เช่น <code>หุ่นทางสูติศาสตร์</code>) ต้องเพิ่มฟิลด์ <code>code</code>/<code>prefix</code> ในตาราง <code>categories</code> ก่อน — ตอนนี้ตาราง categories <b>ไม่มีฟิลด์รหัส</b> (มีแค่ id/name/category/description/sortOrder)</p>
+
+  <table class="tbl" style="margin-top:8px">
+    <thead><tr><th>หมวด (enum)</th><th class="num">items</th><th>prefix จริง</th><th class="num">NNN min</th><th class="num">NNN max</th><th>สถานะลำดับ</th></tr></thead>
+    <tbody>
+      <tr><td>KRU</td><td class="num">150</td><td class="mono">NLU-KRU</td><td class="num">1</td><td class="num">150</td><td><span class="pill ok">ต่อเนื่อง 1–150</span></td></tr>
+      <tr><td>ELE</td><td class="num">16</td><td class="mono">NLU-ELE</td><td class="num">1</td><td class="num">16</td><td><span class="pill ok">1–16</span></td></tr>
+      <tr><td>BOOK</td><td class="num">169</td><td class="mono">NLU-BOOK</td><td class="num">1</td><td class="num">169</td><td><span class="pill ok">1–169</span></td></tr>
+      <tr><td>TOY</td><td class="num">136</td><td class="mono">NLU-TOY</td><td class="num">1</td><td class="num">136</td><td><span class="pill ok">1–136</span></td></tr>
+      <tr><td>DUR</td><td class="num">244</td><td class="mono">NLU-DUR</td><td class="num">1</td><td class="num">244</td><td><span class="pill ok">1–244</span></td></tr>
+      <tr><td>CON</td><td class="num">194</td><td class="mono">NLU-CON</td><td class="num">1</td><td class="num">194</td><td><span class="pill ok">1–194</span></td></tr>
+      <tr><td>KIT</td><td class="num">20</td><td class="mono">NLU-KIT</td><td class="num">1</td><td class="num">20</td><td><span class="pill ok">1–20</span></td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--mut);font-size:12.5px;margin-top:8px">✅ ไม่มีรหัสข้ามหมวดซ้ำ · ลำดับต่อเนื่องทุกหมวด · ทุก item มี code (929/929)</p>
+
+  <!-- TABLE COUNTS -->
+  <h2>② ตารางทั้งหมด (14 ตาราง)</h2>
+  <table class="tbl">
+    <thead><tr><th>ตาราง</th><th class="num">rows</th><th>หน้าที่</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">users</td><td class="num">3</td><td>ผู้ใช้ (ADMIN/STAFF/INSTRUCTOR)</td></tr>
+      <tr><td class="mono">categories</td><td class="num">37</td><td>ประเภทย่อย (อ้าง enum + name)</td></tr>
+      <tr><td class="mono">locations</td><td class="num">37</td><td>อาคาร/ชั้น/ห้อง/รายละเอียด</td></tr>
+      <tr><td class="mono">units</td><td class="num">27</td><td>หน่วย (เบิก/ย่อย + conversionFactor)</td></tr>
+      <tr><td class="mono">items</td><td class="num">929</td><td>สินค้าหลัก</td></tr>
+      <tr><td class="mono">sub_items</td><td class="num">1,131</td><td>เลขคุมแยกชิ้น (trackIndividually)</td></tr>
+      <tr><td class="mono">lots</td><td class="num">6</td><td>ล็อต/วันหมดอายุ (CON)</td></tr>
+      <tr><td class="mono">dispense_records</td><td class="num">29</td><td>เบิกจ่าย</td></tr>
+      <tr><td class="mono">receive_records</td><td class="num">5</td><td>รับเข้า</td></tr>
+      <tr><td class="mono">stock_adjustments</td><td class="num">0</td><td>ปรับสต็อก (ว่าง)</td></tr>
+      <tr><td class="mono">maintenance_records</td><td class="num">8</td><td>บำรุงรักษา</td></tr>
+      <tr><td class="mono">kit_components</td><td class="num">44</td><td>องค์ประกอบชุด (KIT)</td></tr>
+      <tr><td class="mono">item_status_logs</td><td class="num">0</td><td>log เปลี่ยนสถานะ (ว่าง)</td></tr>
+      <tr><td class="mono">_prisma_migrations</td><td class="num">—</td><td>ระบบ migration</td></tr>
+    </tbody>
+  </table>
+
+  <!-- DATA HEALTH -->
+  <h2>③ Data Health</h2>
+  <div class="grid cards" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
+    <div class="card"><div class="n" style="color:var(--ok)">0</div><div class="l">items ไม่มีหมวด</div></div>
+    <div class="card"><div class="n" style="color:var(--ok)">0</div><div class="l">items ไม่มี code</div></div>
+    <div class="card"><div class="n" style="color:var(--ok)">0</div><div class="l">inactive items</div></div>
+    <div class="card"><div class="n" style="color:var(--warn)">25</div><div class="l">totalQty = 0</div></div>
+    <div class="card"><div class="n" style="color:var(--bad)">5</div><div class="l">ต่ำกว่า minThreshold</div></div>
+    <div class="card"><div class="n" style="color:var(--warn)">3</div><div class="l">ประเภทว่าง (0 items)</div></div>
+  </div>
+  <div class="callout w" style="margin-top:12px">
+    <b>ประเภทที่ว่างเปล่า (ควรลบ/รวม):</b>
+    <code>BOOK › หนังสือ</code> · <code>TOY › ของเล่น</code> · <code>CON › ยา</code>
+    <div style="color:var(--mut);font-size:12px;margin-top:4px">หมายเหตุ: "ยา" (MED) เพิ่งถูกรวมเข้า CON ใน commit <span class="mono">f558c8f</span></div>
+  </div>
+
+  <!-- CATEGORY BREAKDOWN -->
+  <h2>④ Items ต่อหมวดใหญ่</h2>
+  <table class="tbl">
+    <thead><tr><th>หมวด</th><th class="num">items</th><th class="num">sub_items</th><th style="width:40%">สัดส่วน</th></tr></thead>
+    <tbody>
+      <tr><td>DUR · วัสดุคงทน</td><td class="num">244</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:100%"></div></div></td></tr>
+      <tr><td>CON · วัสดุสิ้นเปลือง</td><td class="num">194</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:80%"></div></div></td></tr>
+      <tr><td>BOOK · หนังสือ/สื่อ</td><td class="num">169</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:69%"></div></div></td></tr>
+      <tr><td>KRU · ครุภัณฑ์</td><td class="num">150</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:61%"></div></div></td></tr>
+      <tr><td>TOY · ของเล่น</td><td class="num">136</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:56%"></div></div></td></tr>
+      <tr><td>KIT · อุปกรณ์ประกอบวิชา</td><td class="num">20</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:8%"></div></div></td></tr>
+      <tr><td>ELE · อิเล็กทรอนิกส์</td><td class="num">16</td><td class="num">—</td><td><div class="bar-wrap"><div class="bar" style="width:7%"></div></div></td></tr>
+    </tbody>
+  </table>
+
+  <!-- SAMPLE -->
+  <h2>⑤ ตัวอย่างการเบิกล่าสุด</h2>
+  <table class="tbl">
+    <thead><tr><th>วันที่</th><th>รหัส</th><th class="num">จำนวน</th><th>การใช้งาน</th><th>ผู้เบิก</th></tr></thead>
+    <tbody>
+      <tr><td>2026-06-15</td><td class="mono">NLU-CON-003</td><td class="num">6</td><td><span class="pill violet">COURSE</span></td><td>Admin User</td></tr>
+      <tr><td>2026-06-15</td><td class="mono">NLU-KRU-008</td><td class="num">9</td><td><span class="pill ok">ACTIVITY</span></td><td>Admin User</td></tr>
+      <tr><td>2026-06-15</td><td class="mono">NLU-KRU-006</td><td class="num">19</td><td><span class="pill ok">ACTIVITY</span></td><td>Admin User</td></tr>
+      <tr><td>2026-06-15</td><td class="mono">NLU-KRU-003</td><td class="num">28</td><td><span class="pill ok">ACTIVITY</span></td><td>Admin User</td></tr>
+      <tr><td>2026-06-15</td><td class="mono">NLU-KRU-010</td><td class="num">11</td><td><span class="pill violet">COURSE</span></td><td>Admin User</td></tr>
+    </tbody>
+  </table>
+
+  <p class="meta" style="margin-top:36px">เชื่อม: <code>postgresql://localhost:5433/nlu_stock</code> · สร้างจาก live query ผ่าน docker exec psql</p>
+</div>
+</body>
+</html>

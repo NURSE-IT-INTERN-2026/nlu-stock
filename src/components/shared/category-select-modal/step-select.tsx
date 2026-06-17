@@ -6,21 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/constants";
 import { getCategories } from "@/lib/api";
 import type { CategoryOption } from "@/lib/api";
-import { CATEGORY_ICONS } from "./constants";
+import { profileIcon } from "@/lib/profile-icons";
 
 interface StepSelectProps {
   /** Currently selected category (if user went back from Step 2a) */
   selectedId: string | null;
   onSelectExisting: (cat: CategoryOption) => void;
   onSelectCreateNew: () => void;
-  /** Only show categories matching these types. If omitted, show all. */
-  allowedCategoryTypes?: Category[];
+  /** Only show categories whose profile id is in this list. If omitted, show all. */
+  allowedProfileIds?: string[];
+  /** Only show categories whose profile has this dispenseType. If omitted, show all. */
+  allowedDispenseType?: "CONSUMABLE" | "COUNT" | "ITEM";
 }
 
-export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, allowedCategoryTypes }: StepSelectProps) {
+export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, allowedProfileIds, allowedDispenseType }: StepSelectProps) {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -39,7 +40,8 @@ export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, al
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
   const filtered = categories
-    .filter((c) => !allowedCategoryTypes || allowedCategoryTypes.includes(c.category as Category))
+    .filter((c) => !allowedProfileIds || (c.profile?.id && allowedProfileIds.includes(c.profile.id)))
+    .filter((c) => !allowedDispenseType || c.profile?.dispenseType === allowedDispenseType)
     .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -82,7 +84,7 @@ export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, al
         <div className="space-y-2">
           {/* Existing categories */}
           {filtered.map((cat) => {
-            const Icon = CATEGORY_ICONS[cat.category as Category] ?? Tag;
+            const Icon = profileIcon(cat.profile?.icon);
             const active = selectedId === cat.id;
             return (
               <button
@@ -116,9 +118,9 @@ export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, al
                   <div className="mt-1 flex items-center gap-2">
                     <Badge
                       variant="outline"
-                      className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[cat.category as Category])}
+                      className={cn("text-[10px] px-1.5 py-0", cat.profile?.color ?? "")}
                     >
-                      {CATEGORY_LABELS[cat.category as Category] ?? cat.category}
+                      {cat.profile?.name ?? "—"}
                     </Badge>
                     {cat._count != null && (
                       <span className="text-xs text-muted-foreground">

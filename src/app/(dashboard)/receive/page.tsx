@@ -11,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_COLORS } from "@/lib/constants";
 import {
   searchDispenseItems,
   createReceive,
@@ -28,7 +27,7 @@ interface SearchItem {
   conversionFactor: number;
   trackIndividually: boolean;
   availableQty: number;
-  category: { name: string; category: string };
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; color: string } };
   location: { building: string; floor: string; room: string; detail: string | null } | null;
   imageUrl?: string | null;
   images?: string[];
@@ -66,7 +65,7 @@ export default function ReceivePage() {
       id: string; code: string; name: string; nameEn: string | null;
       issueUnit: { id: string; name: string }; subUnit: { id: string; name: string };
       conversionFactor: number; trackIndividually: boolean;
-      category: { name: string; category: string };
+      category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; color: string } };
       location: { building: string; floor: string; room: string; detail: string | null } | null;
     };
     const newItem: SearchItem = {
@@ -122,7 +121,7 @@ export default function ReceivePage() {
     if (rows.length === 0) { toast.error("เพิ่มพัสดุอย่างน้อย 1 รายการ"); return; }
     for (const row of rows) {
       if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.code}`); return; }
-      const isConsumable = row.item.category.category === "CON";
+      const isConsumable = row.item.category.profile.dispenseType === "CONSUMABLE";
       if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุ Lot Number: ${row.item.code}`); return; }
     }
     setSubmitting(true);
@@ -131,7 +130,7 @@ export default function ReceivePage() {
         items: rows.map((r) => ({
           itemId: r.item.id,
           quantity: r.quantity,
-          lotNumber: r.item.category.category === "CON" ? r.lotNumber || null : null,
+          lotNumber: r.item.category.profile.dispenseType === "CONSUMABLE" ? r.lotNumber || null : null,
           expiryDate: r.expiryDate || null,
           subCodes: r.item.trackIndividually && r.subCodes.length > 0 ? r.subCodes : null,
         })),
@@ -275,7 +274,7 @@ export default function ReceivePage() {
         ) : (
           <div className="space-y-2 pb-2">
             {rows.map((row) => {
-              const isConsumable = row.item.category.category === "CON";
+              const isConsumable = row.item.category.profile.dispenseType === "CONSUMABLE";
               return (
                 <Card key={row.id} className="border shadow-none">
                   <CardContent className="pt-3 pb-3 space-y-3">
@@ -286,7 +285,7 @@ export default function ReceivePage() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {row.item.code}
                           {" · "}
-                          <Badge className={cn("text-[10px] align-middle", CATEGORY_COLORS[row.item.category.category as Category] ?? "")}>
+                          <Badge className={cn("text-[10px] align-middle", row.item.category.profile.color ?? "")}>
                             {row.item.category.name}
                           </Badge>
                         </p>

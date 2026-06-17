@@ -73,7 +73,7 @@ export function Header({ title, user }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-3 px-6 h-14 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-30 flex items-center gap-3 px-6 h-20 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
       {/* Left: breadcrumb */}
       <Breadcrumb title={title} />
 
@@ -81,19 +81,19 @@ export function Header({ title, user }: HeaderProps) {
       <span className="flex-1" />
 
       {/* Right: actions */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Cart */}
         <button
           type="button"
           aria-label="ดูตะกร้า"
           onClick={() => router.push("/dispense/confirm")}
-          className="relative flex items-center justify-center size-8 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+          className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
         >
-          <ShoppingBasket className="size-4" />
+          <ShoppingBasket className="size-5" />
           {itemCount > 0 && (
             <Badge
               key={itemCount}
-              className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[9px]"
+              className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-[10px]"
             >
               {itemCount}
             </Badge>
@@ -104,10 +104,10 @@ export function Header({ title, user }: HeaderProps) {
         <button
           type="button"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="relative flex items-center justify-center size-8 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+          className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
         >
-          <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <Sun className="size-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute size-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           <span className="sr-only">Toggle theme</span>
         </button>
 
@@ -117,13 +117,13 @@ export function Header({ title, user }: HeaderProps) {
             <div
               role="button"
               tabIndex={0}
-              className="flex items-center gap-2 rounded-full bg-white pl-3 pr-1 py-1 hover:bg-gray-50 transition-all cursor-pointer"
+              className="flex items-center gap-2.5 rounded-full border border-border bg-card p-0 sm:pl-4 sm:pr-1.5 hover:bg-accent transition-all cursor-pointer"
             >
               <div className="hidden sm:flex flex-col items-end min-w-0">
-                <p className="text-xs font-medium truncate max-w-[80px] leading-tight">{user.name}</p>
-                <p className="text-[10px] text-muted-foreground leading-tight">{user.role}</p>
+                <p className="text-base font-semibold truncate max-w-[120px] leading-tight">{user.name}</p>
+                <p className="text-xs text-muted-foreground leading-tight">{user.role}</p>
               </div>
-              <div className="size-7 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">
+              <div className="size-12 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-base font-bold text-primary-foreground shrink-0">
                 {user.name.charAt(0).toUpperCase()}
               </div>
             </div>

@@ -21,7 +21,7 @@ import { QrScanner } from "@/components/shared/qr-scanner";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { usePagination } from "@/hooks/use-pagination";
-import { Category, CATEGORY_LABELS, locationLabel } from "@/lib/constants";
+import { locationLabel } from "@/lib/constants";
 import { getItems, getSubItems } from "@/lib/api";
 import type { CategoryOption, LocationOption } from "@/lib/api";
 
@@ -358,7 +358,7 @@ function ItemsContent() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{CATEGORY_LABELS[item.category.category as Category] || item.category.name}</Badge>
+                        <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
                       </TableCell>
                       <TableCell>
                         <StockBar available={item.availableQty} total={item.totalQty} threshold={item.minThreshold} />

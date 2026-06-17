@@ -7,39 +7,42 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/constants";
-import { searchCategories } from "@/lib/api";
-import type { CategoryOption } from "@/lib/api";
+import { searchCategories, getProfiles } from "@/lib/api";
+import type { CategoryOption, ProfileOption } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
-import { CATEGORY_ICONS } from "./constants";
+import { profileIcon } from "@/lib/profile-icons";
 
 interface StepCreateNameProps {
   name: string;
   onNameChange: (name: string) => void;
-  categoryType: string;
-  onCategoryTypeChange: (type: string) => void;
+  profileId: string;
+  onProfileChange: (id: string) => void;
   onSelectSimilar: (cat: CategoryOption) => void;
 }
-
-const ALL_TYPES = Object.keys(CATEGORY_LABELS) as Category[];
 
 export function StepCreateName({
   name,
   onNameChange,
-  categoryType,
-  onCategoryTypeChange,
+  profileId,
+  onProfileChange,
   onSelectSimilar,
 }: StepCreateNameProps) {
   const [similar, setSimilar] = useState<CategoryOption[]>([]);
   const [similarLoading, setSimilarLoading] = useState(false);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const debouncedName = useDebounce(name, 300);
+
+  useEffect(() => {
+    getProfiles()
+      .then((ps) => setProfiles(ps.filter((p) => p.isActive)))
+      .catch(() => setProfiles([]));
+  }, []);
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) { setSimilar([]); return; }
     setSimilarLoading(true);
     try {
       const results = await searchCategories(q);
-      // Filter out exact matches of what user is typing
       setSimilar(results.filter((r) => r.name.toLowerCase() !== q.toLowerCase()));
     } catch {
       setSimilar([]);
@@ -80,7 +83,7 @@ export function StepCreateName({
               </div>
               <div className="space-y-1.5">
                 {similar.slice(0, 3).map((cat) => {
-                  const Icon = CATEGORY_ICONS[cat.category as Category] ?? Tag;
+                  const Icon = profileIcon(cat.profile?.icon);
                   return (
                     <button
                       key={cat.id}
@@ -92,9 +95,9 @@ export function StepCreateName({
                       <span className="flex-1 font-medium text-foreground">{cat.name}</span>
                       <Badge
                         variant="outline"
-                        className={cn("text-[10px] px-1.5 py-0", CATEGORY_COLORS[cat.category as Category])}
+                        className={cn("text-[10px] px-1.5 py-0", cat.profile?.color ?? "")}
                       >
-                        {CATEGORY_LABELS[cat.category as Category]}
+                        {cat.profile?.name ?? "—"}
                       </Badge>
                       <span className="text-[10px] text-primary whitespace-nowrap">ใช้อันนี้</span>
                     </button>
@@ -106,7 +109,7 @@ export function StepCreateName({
         </div>
       )}
 
-      {/* Type picker */}
+      {/* Profile picker */}
       <div className="space-y-3">
         <div>
           <Label>ประเภท <span className="text-destructive">*</span></Label>
@@ -114,44 +117,50 @@ export function StepCreateName({
             เลือกประเภทหมวดหมู่เพื่อกำหนดวิธีจัดการ
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          {ALL_TYPES.map((type) => {
-            const Icon = CATEGORY_ICONS[type];
-            const active = categoryType === type;
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => onCategoryTypeChange(type)}
-                className={cn(
-                  "group flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all",
-                  active
-                    ? "border-primary bg-primary/5 shadow-sm"
-                    : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02]",
-                )}
-              >
-                <div
+        {profiles.length === 0 ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Skeleton className="h-3 w-3 rounded-full" /> กำลังโหลดประเภท...
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {profiles.map((p) => {
+              const Icon = profileIcon(p.icon);
+              const active = profileId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onProfileChange(p.id)}
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                    "group flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all",
                     active
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground group-hover:bg-accent group-hover:text-accent-foreground",
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02]",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-foreground">
-                    {CATEGORY_LABELS[type]}
+                  <div
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground group-hover:bg-accent group-hover:text-accent-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
                   </div>
-                </div>
-                {active && (
-                  <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-foreground">
+                      {p.name}
+                    </div>
+                  </div>
+                  {active && (
+                    <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

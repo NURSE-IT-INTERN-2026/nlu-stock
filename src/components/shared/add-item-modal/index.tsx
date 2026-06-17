@@ -49,7 +49,7 @@ const MAIN_STEPS = [
 const INITIAL_CAT_WIZARD: CategoryWizardState = {
   selectedExisting: null,
   newCategoryName: "",
-  newCategoryType: "",
+  newCategoryProfileId: "",
   newCategoryDescription: "",
   isSubmitting: false,
 };
@@ -91,6 +91,7 @@ export function AddItemModal({
       categoryId: "",
       categoryName: "",
       categoryType: "",
+          profile: null,
       issueUnitId: "",
       issueUnitName: "",
       subUnitId: "",
@@ -113,6 +114,7 @@ export function AddItemModal({
         categoryId: "",
         categoryName: "",
         categoryType: "",
+          profile: null,
         issueUnitId: "",
         issueUnitName: "",
         subUnitId: "",
@@ -144,6 +146,7 @@ export function AddItemModal({
           categoryId: "",
           categoryName: "",
           categoryType: "",
+          profile: null,
           issueUnitId: "",
           issueUnitName: "",
           subUnitId: "",
@@ -174,13 +177,17 @@ export function AddItemModal({
 
   // ── Helpers ─────────────────────────────────────────────────
 
-  const allowedCategoryTypes = state.form.usageType
-    ? USAGE_OPTIONS.find((o) => o.id === state.form.usageType)?.categories
+  const allowedProfileIds = state.form.usageType
+    ? undefined // filtering now happens by dispenseType in the wizard; kept for API parity
+    : undefined;
+  const allowedDispenseType = state.form.usageType
+    ? USAGE_OPTIONS.find((o) => o.id === state.form.usageType)?.dispenseType
     : undefined;
 
   /** Apply a selected/created category, fetch suggested code, return to category-units step */
   const applyCategory = useCallback(async (cat: CategoryOption) => {
-    const selfManaged = ["BOOK", "TOY", "KRU", "ELE"];
+    const profile = cat.profile;
+    const isItemTracked = profile?.dispenseType === "ITEM";
     setState((s) => ({
       ...s,
       step: "category-units",
@@ -188,18 +195,19 @@ export function AddItemModal({
         ...s.form,
         categoryId: cat.id,
         categoryName: cat.name,
-        categoryType: cat.category,
-        // Reset code — let the builder component generate it
-        code: selfManaged.includes(cat.category) ? "" : s.form.code,
+        categoryType: profile?.code ?? "",
+        profile: profile ? { code: profile.code, dispenseType: profile.dispenseType, assetTracking: profile.assetTracking, setTracking: profile.setTracking } : null,
+        // Reset code — let the builder component generate it for ITEM types
+        code: isItemTracked ? "" : s.form.code,
       },
       catWizard: { ...INITIAL_CAT_WIZARD },
-      codeMeta: selfManaged.includes(cat.category) ? null : s.codeMeta,
+      codeMeta: isItemTracked ? null : s.codeMeta,
     }));
 
-    // Auto-generate code only for flat types (CON, DUR, KIT) — builders handle themselves
-    if (!selfManaged.includes(cat.category)) {
+    // Auto-generate code only for flat types — builders handle themselves
+    if (!isItemTracked && profile?.code) {
       try {
-        const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(cat.category)}`);
+        const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(profile.code)}`);
         if (res.ok) {
           const data = await res.json();
           if (data.suggestedCode) {
@@ -222,7 +230,7 @@ export function AddItemModal({
       state.form.issueUnitId !== "" &&
       state.form.subUnitId !== "") ||
     state.step === "summary" ||
-    (state.step === "cat-create-name" && state.catWizard.newCategoryName.trim() !== "" && state.catWizard.newCategoryType !== "") ||
+    (state.step === "cat-create-name" && state.catWizard.newCategoryName.trim() !== "" && state.catWizard.newCategoryProfileId !== "") ||
     state.step === "cat-create-confirm";
 
   const handleBack = useCallback(() => {
@@ -249,7 +257,7 @@ export function AddItemModal({
     } else if (state.step === "summary") {
       setState((s) => ({ ...s, isSubmitting: true }));
       try {
-        const isFlat = ["CON", "DUR", "KIT"].includes(state.form.categoryType);
+        const isFlat = state.form.profile?.dispenseType !== "ITEM";
         const created = await quickCreateItem({
           code: state.form.code,
           name: state.form.name,
@@ -276,7 +284,7 @@ export function AddItemModal({
       try {
         const cat = await createCategory({
           name: state.catWizard.newCategoryName,
-          category: state.catWizard.newCategoryType,
+          profileId: state.catWizard.newCategoryProfileId,
           description: state.catWizard.newCategoryDescription || undefined,
         });
         applyCategory(cat);
@@ -425,7 +433,8 @@ export function AddItemModal({
             onCategorySelect={(cat: CategoryOption) =>
               setState((s) => ({ ...s, form: { ...s.form, categoryId: cat.id, categoryName: cat.name } }))
             }
-            allowedCategoryTypes={allowedCategoryTypes}
+            allowedProfileIds={undefined}
+            allowedDispenseType={allowedDispenseType}
             issueUnitId={state.form.issueUnitId}
             issueUnitName={state.form.issueUnitName}
             subUnitId={state.form.subUnitId}
@@ -436,6 +445,7 @@ export function AddItemModal({
             onConversionFactorChange={(f) => setState((s) => ({ ...s, form: { ...s.form, conversionFactor: f } }))}
             onOpenCategorySelect={() => setState((s) => ({ ...s, step: "cat-select" }))}
             categoryType={state.form.categoryType}
+            profile={state.form.profile}
             onCodeMetaChange={handleCodeMetaChange}
             initialCodeMeta={state.codeMeta}
             initialQty={state.initialQty}
@@ -465,15 +475,16 @@ export function AddItemModal({
               applyCategory(cat);
             }}
             onSelectCreateNew={() => setState((s) => ({ ...s, step: "cat-create-name" }))}
-            allowedCategoryTypes={allowedCategoryTypes}
+            allowedProfileIds={undefined}
+            allowedDispenseType={allowedDispenseType}
           />
         )}
         {state.step === "cat-create-name" && (
           <StepCreateName
             name={state.catWizard.newCategoryName}
             onNameChange={(n) => setCatWizard((prev) => ({ ...prev, newCategoryName: n }))}
-            categoryType={state.catWizard.newCategoryType}
-            onCategoryTypeChange={(t) => setCatWizard((prev) => ({ ...prev, newCategoryType: t }))}
+            profileId={state.catWizard.newCategoryProfileId}
+            onProfileChange={(id) => setCatWizard((prev) => ({ ...prev, newCategoryProfileId: id }))}
             onSelectSimilar={(cat) => {
               setCatWizard((prev) => ({ ...prev, selectedExisting: cat }));
               setState((s) => ({ ...s, step: "cat-confirm-existing" }));
@@ -483,7 +494,7 @@ export function AddItemModal({
         {state.step === "cat-create-confirm" && (
           <StepCreateConfirm
             name={state.catWizard.newCategoryName}
-            categoryType={state.catWizard.newCategoryType}
+            profileId={state.catWizard.newCategoryProfileId}
             description={state.catWizard.newCategoryDescription}
             onDescriptionChange={(d) => setCatWizard((prev) => ({ ...prev, newCategoryDescription: d }))}
           />

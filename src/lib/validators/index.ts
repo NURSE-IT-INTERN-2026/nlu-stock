@@ -1,4 +1,5 @@
 export * from "./category";
+export * from "./profile";
 export * from "./location";
 export * from "./item";
 export * from "./sub-item";

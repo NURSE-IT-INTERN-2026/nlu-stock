@@ -156,7 +156,7 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
   };
 
   const isConsumable = (item: typeof items[number]) =>
-    item.categoryType === "CON";
+    item.dispenseType === "CONSUMABLE";
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
