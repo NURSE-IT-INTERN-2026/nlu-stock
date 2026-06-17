@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
   const categoryId = params.get("categoryId");
   if (categoryId) where.categoryId = categoryId;
 
+  const profileId = params.get("profileId");
+  if (profileId) where.category = { profileId };
+
   const status = params.get("status") as Prisma.EnumItemStatusFilter;
   if (status) where.status = status;
 

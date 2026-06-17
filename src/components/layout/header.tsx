@@ -117,13 +117,13 @@ export function Header({ title, user }: HeaderProps) {
             <div
               role="button"
               tabIndex={0}
-              className="flex items-center gap-2.5 rounded-full border border-border bg-card p-0 sm:pl-4 sm:pr-1.5 hover:bg-accent transition-all cursor-pointer"
+              className="flex items-center gap-2.5 h-12 w-12 sm:w-auto rounded-full border border-border bg-card p-0 sm:pl-4 sm:pr-1.5 sm:py-1 hover:bg-accent transition-all cursor-pointer"
             >
               <div className="hidden sm:flex flex-col items-end min-w-0">
                 <p className="text-base font-semibold truncate max-w-[120px] leading-tight">{user.name}</p>
                 <p className="text-xs text-muted-foreground leading-tight">{user.role}</p>
               </div>
-              <div className="size-12 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-base font-bold text-primary-foreground shrink-0">
+              <div className="size-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-bold text-primary-foreground shrink-0">
                 {user.name.charAt(0).toUpperCase()}
               </div>
             </div>

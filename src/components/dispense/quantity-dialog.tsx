@@ -27,7 +27,7 @@ interface ItemData {
   code: string;
   name: string;
   imageUrl: string | null;
-  category: { name: string; category: string };
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
   trackIndividually: boolean;
   issueUnit: { id: string; name: string };
   subUnit: { id: string; name: string };
@@ -60,8 +60,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
 
   if (!item) return null;
 
-  const categoryType = item.category.category as CartItem["categoryType"];
-  const isConsumable = categoryType === "CON";
+  const isConsumable = item.category.profile.dispenseType === "CONSUMABLE";
   const isTracked = item.trackIndividually && item.subItems.length > 1;
 
   const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;
@@ -78,7 +77,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         itemName: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        categoryType,
+        dispenseType: item.category.profile.dispenseType,
         trackIndividually: isTracked,
         issueUnit: item.issueUnit.name,
         subUnit: item.subUnit.name,
@@ -100,7 +99,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
           itemName: item.name,
           imageUrl: item.imageUrl,
           categoryName: item.category.name,
-          categoryType,
+          dispenseType: item.category.profile.dispenseType,
           trackIndividually: true,
           issueUnit: item.issueUnit.name,
           subUnit: item.subUnit.name,
@@ -121,7 +120,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         itemName: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        categoryType,
+        dispenseType: item.category.profile.dispenseType,
         trackIndividually: false,
         issueUnit: item.issueUnit.name,
         subUnit: item.subUnit.name,

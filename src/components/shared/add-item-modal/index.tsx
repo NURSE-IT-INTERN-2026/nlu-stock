@@ -433,7 +433,6 @@ export function AddItemModal({
             onCategorySelect={(cat: CategoryOption) =>
               setState((s) => ({ ...s, form: { ...s.form, categoryId: cat.id, categoryName: cat.name } }))
             }
-            allowedProfileIds={undefined}
             allowedDispenseType={allowedDispenseType}
             issueUnitId={state.form.issueUnitId}
             issueUnitName={state.form.issueUnitName}

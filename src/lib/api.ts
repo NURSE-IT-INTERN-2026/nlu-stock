@@ -136,6 +136,34 @@ export function getProfiles() {
   return request<ProfileOption[]>("/api/settings/profiles");
 }
 
+export function createProfile(data: {
+  name: string;
+  code: string;
+  dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  assetTracking?: boolean;
+  setTracking?: boolean;
+  isComposite?: boolean;
+  icon?: string;
+  color: string;
+  description?: string;
+}) {
+  return request<ProfileOption>("/api/settings/profiles", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProfile(id: string, data: Record<string, unknown>) {
+  return request<ProfileOption>(`/api/settings/profiles/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteProfile(id: string) {
+  return request<void>(`/api/settings/profiles/${id}`, { method: "DELETE" });
+}
+
 // ─── Locations ───
 
 export function getLocations() {

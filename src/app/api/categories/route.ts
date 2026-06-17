@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const categories = await prisma.categoryType.findMany({
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, category: true },
+    select: { id: true, name: true, profile: { select: { id: true, name: true, dispenseType: true, color: true } } },
   });
 
   return json(categories);
