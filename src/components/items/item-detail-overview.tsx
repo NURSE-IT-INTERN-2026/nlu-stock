@@ -216,7 +216,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       {/* ═══ LEFT COLUMN ═══ */}
       <div className="space-y-10">
         {/* ── Image uploader ── */}
-        {canAct && (
+        {(allImages.length > 0 || canAct) && (
           <section className="animate-in fade-in slide-in-from-2 duration-300">
             <SectionHeading eyebrow="Media" title="Photos" hint={`${allImages.length}/8`} />
 
@@ -224,8 +224,8 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               "grid gap-3",
               allImages.length > 0 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-1",
             )}>
-              {/* Drop zone — hidden when full */}
-              {allImages.length < 8 && (
+              {/* Drop zone — staff only, hidden when full */}
+              {canAct && allImages.length < 8 && (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -277,14 +277,16 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                   className="relative group aspect-square rounded-2xl overflow-hidden border border-border bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:ring-2 hover:ring-primary/30 cursor-pointer"
                 >
                   <img src={src} alt={`Photo ${i + 1}`} className="size-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); removeImage(i); }}
-                    className="absolute top-2 right-2 size-7 grid place-items-center rounded-full bg-background/90 text-foreground shadow opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
-                    aria-label="Remove photo"
-                  >
-                    <X className="size-3.5" />
-                  </button>
+                  {canAct && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeImage(i); }}
+                      className="absolute top-2 right-2 size-7 grid place-items-center rounded-full bg-background/90 text-foreground shadow opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
+                      aria-label="Remove photo"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
                   {i === 0 && (
                     <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full">
                       Cover
