@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
-import { updateItemStatus, returnItem, getItemHistory, uploadFile, updateItem } from "@/lib/api";
+import { updateItemStatus, returnItem, uploadFile, updateItem } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
@@ -397,11 +397,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           </div>
         </section>
 
-        {/* ── Recent activity ── */}
-        <section className="animate-in fade-in slide-in-from-2 duration-300" style={{ animationDelay: "100ms" }}>
-          <SectionHeading eyebrow="Recent activity" title="Last events" />
-          <RecentEvents itemId={item.id} />
-        </section>
       </div>
 
       <QrPrintDialog open={printOpen} onClose={() => setPrintOpen(false)} items={printItems} />
