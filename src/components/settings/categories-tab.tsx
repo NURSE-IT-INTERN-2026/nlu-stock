@@ -2,24 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, GripVertical } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Plus, Pencil, Trash2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,41 +30,63 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Category, CATEGORY_LABELS } from "@/lib/constants";
-import { getCategories, createCategory, updateCategory, deleteCategory } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { getCategories, updateCategory, deleteCategory, getProfiles } from "@/lib/api";
+import type { ProfileOption } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CategorySelectModal } from "@/components/shared/category-select-modal";
 
 interface CategoryType {
   id: string;
   name: string;
-  category: string;
+  profile: ProfileOption | null;
   description: string | null;
   sortOrder: number;
   _count: { items: number };
 }
 
-function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
+function dispenseTypeLabel(p: ProfileOption | null): string {
+  if (!p) return "—";
+  if (p.dispenseType === "CONSUMABLE") return "ใช้แล้วทิ้ง";
+  if (p.dispenseType === "COUNT") return "ยืม-คืน (นับจำนวน)";
+  return "ยืม-คืน (รายชิ้น)";
+}
 
+function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
-    <TableRow ref={setNodeRef} style={style}>
-      <TableCell className="w-[40px]">
-        <button className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground" {...attributes} {...listeners}>
-          <GripVertical className="h-4 w-4" />
-        </button>
-      </TableCell>
+    <TableRow>
       <TableCell className="font-medium">{cat.name}</TableCell>
-      <TableCell><Badge variant="outline">{CATEGORY_LABELS[cat.category as Category] || cat.category}</Badge></TableCell>
+      <TableCell><Badge variant="outline" className={cat.profile?.color}>{cat.profile?.name ?? "—"}</Badge></TableCell>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(cat.profile)}</TableCell>
       <TableCell>{cat._count.items}</TableCell>
       <TableCell>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={() => onEdit(cat)}><Pencil className="h-3.5 w-3.5" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(cat)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
-        </div>
+        <TooltipProvider>
+          <div className="flex gap-1">
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => onEdit(cat)} aria-label="แก้ไข" />}>
+                <Pencil className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>แก้ไข</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => onDelete(cat)} aria-label="ลบ" />}>
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </TooltipTrigger>
+              <TooltipContent>ลบ</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </TableCell>
     </TableRow>
   );
@@ -89,15 +94,14 @@ function SortableRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c:
 
 export function CategoriesTab() {
   const [categories, setCategories] = useState<CategoryType[]>([]);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryType | null>(null);
-  const [form, setForm] = useState({ name: "", category: "CON" as string, description: "" });
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const [filterProfile, setFilterProfile] = useState<string>("ALL");
+  const [form, setForm] = useState({ name: "", profileId: "" as string, description: "" });
+  const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
@@ -105,138 +109,211 @@ export function CategoriesTab() {
       const data = await getCategories();
       setCategories(data as CategoryType[]);
     } catch {
-      toast.error("Failed to load categories");
+      toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+  useEffect(() => {
+    fetchCategories();
+    getProfiles().then(setProfiles).catch(() => setProfiles([]));
+  }, [fetchCategories]);
 
   function openCreate() {
-    setEditing(null);
-    setForm({ name: "", category: "CON", description: "" });
-    setDialogOpen(true);
+    setSelectModalOpen(true);
   }
 
   function openEdit(cat: CategoryType) {
     setEditing(cat);
-    setForm({ name: cat.name, category: cat.category, description: cat.description || "" });
+    setForm({ name: cat.name, profileId: cat.profile?.id ?? "", description: cat.description || "" });
     setDialogOpen(true);
   }
 
   async function handleSave() {
-    const payload = { name: form.name, category: form.category, description: form.description || undefined };
+    if (!editing) return;
+    const payload = {
+      name: form.name,
+      profileId: form.profileId,
+      description: form.description || undefined,
+    };
 
     try {
-      if (editing) {
-        await updateCategory(editing.id, payload);
-        toast.success("Category updated");
-      } else {
-        await createCategory(payload);
-        toast.success("Category created");
-      }
+      await updateCategory(editing.id, payload);
+      toast.success("อัปเดตหมวดหมู่สำเร็จ");
       setDialogOpen(false);
       fetchCategories();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save");
+      toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     }
   }
 
   async function handleDelete(cat: CategoryType) {
-    if (!confirm(`Delete "${cat.name}"?`)) return;
+    setDeleteTarget(cat);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await deleteCategory(cat.id);
-      toast.success("Category deleted");
+      await deleteCategory(deleteTarget.id);
+      toast.success("ลบหมวดหมู่สำเร็จ");
       fetchCategories();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete");
+      toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
+    setDeleteTarget(null);
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  const filtered = filterProfile === "ALL" ? categories : categories.filter((c) => c.profile?.id === filterProfile);
 
-    const oldIndex = categories.findIndex((c) => c.id === active.id);
-    const newIndex = categories.findIndex((c) => c.id === over.id);
-    const reordered = arrayMove(categories, oldIndex, newIndex);
-    setCategories(reordered);
-
-    const updates = reordered.map((c, i) => updateCategory(c.id, { sortOrder: i + 1 }));
-    await Promise.all(updates);
-  }
-
-  if (loading) return <div className="text-muted-foreground">Loading...</div>;
-
-  return (
+  if (loading) return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Categories</h3>
-        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />Add</Button>
+        <Skeleton className="h-6 w-28" />
+        <Skeleton className="h-8 w-16" />
+      </div>
+      <div className="rounded-2xl border overflow-hidden bg-card">
+        <div className="divide-y divide-border">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-4 w-8" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <FilterPill active={filterProfile === "ALL"} onClick={() => setFilterProfile("ALL")}>
+            ทุกประเภท
+          </FilterPill>
+          {profiles.map((p) => (
+            <FilterPill key={p.id} active={filterProfile === p.id} onClick={() => setFilterProfile(p.id)} color={p.color}>
+              {p.name}
+            </FilterPill>
+          ))}
+        </div>
+        <Button size="sm" onClick={openCreate} className="shrink-0"><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[40px]" />
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No categories</TableCell></TableRow>
-                ) : categories.map((cat) => (
-                  <SortableRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </SortableContext>
-      </DndContext>
+      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+        <Table>
+          <TableHeader>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+              <TableHead>ชื่อหมวดหมู่</TableHead>
+              <TableHead>ประเภท</TableHead>
+              <TableHead>ประเภทการเบิกจ่าย</TableHead>
+              <TableHead>จำนวน</TableHead>
+              <TableHead className="w-[100px]">การดำเนินการ</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="py-12">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <Tag className="h-8 w-8 text-muted-foreground/40" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">ไม่มีหมวดหมู่</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">ลองเปลี่ยนตัวกรอง หรือสร้างใหม่</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มหมวดหมู่</Button>
+                </div>
+              </TableCell></TableRow>
+            ) : filtered.map((cat) => (
+              <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDelete} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Category" : "Add Category"}</DialogTitle>
+            <DialogTitle>{editing ? "แก้ไขหมวดหมู่" : "เพิ่มหมวดหมู่"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
+              <Input id="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label>Type</Label>
-              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v! })}>
-                <SelectTrigger><SelectValue>{CATEGORY_LABELS[form.category as Category] || form.category}</SelectValue></SelectTrigger>
+              <Label htmlFor="cat-type">ประเภท</Label>
+              <Select value={form.profileId} onValueChange={(v) => setForm({ ...form, profileId: v! })}>
+                <SelectTrigger><SelectValue placeholder="เลือกประเภท">{profiles.find((p) => p.id === form.profileId)?.name ?? "เลือกประเภท"}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="KRU">ครุภัณฑ์</SelectItem>
-                  <SelectItem value="ELE">ครุภัณฑ์อิเล็กทรอนิกส์</SelectItem>
-                  <SelectItem value="BOOK">หนังสือ</SelectItem>
-                  <SelectItem value="TOY">ของเล่น/อุปกรณ์การศึกษา</SelectItem>
-                  <SelectItem value="DUR">คงทน</SelectItem>
-                  <SelectItem value="CON">สิ้นเปลือง</SelectItem>
-                  <SelectItem value="MED">เวชภัณฑ์</SelectItem>
-                  <SelectItem value="KIT">ชุดวัสดุ</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Description</Label>
-              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <Label htmlFor="cat-desc">รายละเอียด</Label>
+              <Textarea id="cat-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!form.name}>{editing ? "Update" : "Create"}</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={handleSave} disabled={!form.name}>{editing ? "บันทึก" : "สร้าง"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ลบหมวดหมู่</AlertDialogTitle>
+            <AlertDialogDescription>
+              ต้องการลบหมวดหมู่ &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>ลบ</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <CategorySelectModal
+        open={selectModalOpen}
+        onClose={() => setSelectModalOpen(false)}
+        onSelect={() => {
+          fetchCategories();
+          setSelectModalOpen(false);
+        }}
+        title="เพิ่มหมวดหมู่"
+      />
     </div>
+  );
+}
+
+function FilterPill({ active, onClick, color, children }: {
+  active: boolean;
+  onClick: () => void;
+  color?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-xs font-medium transition-all whitespace-nowrap",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : color
+            ? cn(color, "border-current/30 hover:border-current/60")
+            : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-accent/40",
+      )}
+    >
+      {children}
+    </button>
   );
 }

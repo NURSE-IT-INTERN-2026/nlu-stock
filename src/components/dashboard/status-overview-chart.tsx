@@ -1,45 +1,29 @@
 "use client";
 
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip,
 } from "recharts";
-import { useMemo } from "react";
+import type { StatusData } from "@/lib/dashboard-types";
+import { STATUS_COLORS, STATUS_LABELS } from "@/lib/constants";
 
-const STATUS_VAR_MAP: Record<string, string> = {
-  AVAILABLE: "--chart-2",
-  CHECKED_OUT: "--chart-1",
-  DAMAGED: "--chart-4",
-  UNDER_REPAIR: "--chart-3",
-  LOST: "--chart-5",
-  PENDING_MAINTENANCE: "--chart-5",
-  DISPOSED: "--muted",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  AVAILABLE: "Available",
-  CHECKED_OUT: "Checked Out",
-  DAMAGED: "Damaged",
-  UNDER_REPAIR: "Under Repair",
-  LOST: "Lost",
-  PENDING_MAINTENANCE: "Pending Maint.",
-  DISPOSED: "Disposed",
-};
-
-function resolveToHex(cssVar: string): string {
-  if (typeof window === "undefined") return "#888";
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-  if (!raw) return "#888";
-  if (raw.startsWith("#")) return raw;
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) return "#888";
-  ctx.fillStyle = raw;
-  return ctx.fillStyle;
+interface StatusTooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: number; payload: { name: string } }>;
 }
 
-interface StatusData {
-  status: string;
-  count: number;
+function StatusTooltip({ active, payload }: StatusTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
+      <p className="font-medium text-foreground">{d.payload.name}</p>
+      <p className="text-muted-foreground">
+        จำนวน: <span className="font-semibold text-foreground">{d.value.toLocaleString("th-TH")}</span> รายการ
+      </p>
+    </div>
+  );
 }
 
 interface StatusOverviewChartProps {
@@ -47,13 +31,38 @@ interface StatusOverviewChartProps {
 }
 
 export function StatusOverviewChart({ data }: StatusOverviewChartProps) {
-  const colorMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const [status, cssVar] of Object.entries(STATUS_VAR_MAP)) {
-      map[status] = resolveToHex(cssVar);
-    }
-    return map;
+  const donutRef = useRef<HTMLDivElement>(null);
+  const [donutSize, setDonutSize] = useState({ width: 0, height: 160 });
+  const rafRef = useRef<number>(0);
+
+  const handleResize = useCallback((entries: ResizeObserverEntry[]) => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      const { width, height } = entries[0].contentRect;
+      const w = Math.round(width);
+      const h = Math.round(height);
+      setDonutSize((prev) => {
+        if (w === prev.width && h === prev.height) return prev;
+        return { width: w, height: h };
+      });
+    });
   }, []);
+
+  useEffect(() => {
+    const el = donutRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [handleResize]);
+
+  // Radius scales with container — 40% of smaller dimension, inner = 58% of outer
+  const minDim = Math.min(donutSize.width, donutSize.height);
+  const outerRadius = Math.max(24, minDim * 0.4);
+  const innerRadius = Math.max(12, outerRadius * 0.58);
 
   const chartData = data.map((d) => ({
     name: STATUS_LABELS[d.status] || d.status,
@@ -61,47 +70,74 @@ export function StatusOverviewChart({ data }: StatusOverviewChartProps) {
     status: d.status,
   }));
 
+  const total = chartData.reduce((sum, d) => sum + d.value, 0);
+
   return (
-    <Card className="h-full">
+    <Card className="h-full w-full">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold text-foreground">
-          Status Overview
+          สถานะภาพรวม
         </CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No data</p>
+          <p className="text-sm text-muted-foreground text-center py-8">ไม่มีข้อมูล</p>
         ) : (
-          <div className="flex flex-col items-center gap-3">
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={38}
-                  outerRadius={65}
-                  dataKey="value"
-                >
-                  {chartData.map((entry, i) => (
-                    <Cell key={i} fill={colorMap[entry.status] || colorMap["DISPOSED"]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <ul className="grid grid-cols-2 gap-x-3 gap-y-1 w-full px-2">
+          <div className="status-layout">
+          <div className="status-layout-inner flex flex-col items-center gap-3" role="img" aria-label={`Item status breakdown: ${chartData.map((e) => `${e.name}: ${e.value}`).join(", ")}`}>
+            <div ref={donutRef} className="status-donut w-full shrink-0 relative" style={{ height: 160 }}>
+              {donutSize.width > 0 && (
+                <PieChart width={donutSize.width} height={donutSize.height}>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={innerRadius}
+                    outerRadius={outerRadius}
+                    dataKey="value"
+                    animationDuration={400}
+                    animationEasing="ease-out"
+                  >
+                    {chartData.map((entry, i) => (
+                      <Cell key={i} fill={STATUS_COLORS[entry.status] ?? STATUS_COLORS.DISPOSED} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<StatusTooltip />} />
+                </PieChart>
+              )}
+              {/* Center label — scales with donut */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="font-bold text-foreground" style={{ fontSize: Math.max(12, innerRadius * 0.55) }}>
+                  {total.toLocaleString("th-TH")}
+                </span>
+                <span className="text-muted-foreground" style={{ fontSize: Math.max(8, innerRadius * 0.25) }}>
+                  รายการ
+                </span>
+              </div>
+            </div>
+            <ul className="status-legend flex flex-col gap-0.5 w-full px-2">
               {chartData.map((entry) => (
-                <li key={entry.status} className="flex items-center gap-1.5 text-xs">
+                <li
+                  key={entry.status}
+                  className="flex items-center gap-1.5 text-xs rounded px-1.5 py-1 transition-colors hover:bg-muted/50"
+                >
                   <span
                     className="inline-block h-2 w-2 rounded-full shrink-0"
-                    style={{ backgroundColor: colorMap[entry.status] || colorMap["DISPOSED"] }}
+                    style={{ backgroundColor: STATUS_COLORS[entry.status] ?? STATUS_COLORS.DISPOSED }}
                   />
-                  <span className="truncate text-foreground/80">{entry.name}</span>
-                  <span className="text-foreground font-semibold ml-auto">{entry.value}</span>
+                  <span className="text-foreground/80">{entry.name}</span>
+                  <span className="text-foreground font-semibold ml-auto">
+                    {entry.value}
+                    {donutSize.width > 200 && (
+                      <span className="text-muted-foreground font-normal ml-0.5">
+                        ({total > 0 ? Math.round((entry.value / total) * 100) : 0}%)
+                      </span>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>
+          </div>
           </div>
         )}
       </CardContent>

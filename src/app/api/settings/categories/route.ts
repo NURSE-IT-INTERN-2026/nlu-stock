@@ -1,15 +1,19 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, error, parseBody } from "@/lib/api-utils";
+import { requireAdmin, requireAuth, json, error, parseBody } from "@/lib/api-utils";
 import { categoryCreateSchema } from "@/lib/validators";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
 
+  const q = request.nextUrl.searchParams.get("q");
+  const where = q ? { name: { contains: q, mode: "insensitive" as const } } : {};
+
   const categories = await prisma.categoryType.findMany({
+    where,
     orderBy: { sortOrder: "asc" },
-    include: { _count: { select: { items: true } } },
+    include: { profile: true, _count: { select: { items: true } } },
   });
 
   return json(categories);

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         const item = await tx.item.findUnique({
           where: { id: di.itemId },
           include: {
-            category: true,
+            category: { include: { profile: true } },
             lots: { where: { id: di.lotId ?? undefined } },
             subItems: { where: { id: di.subItemId ?? undefined } },
             issueUnit: true,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         } else if (di.lotId) {
           const lot = item.lots[0];
           if (!lot) throw new Error(`Lot ${di.lotId} not found`);
-          if (lot.quantity < di.quantity) throw new Error(`Lot ${lot.lotNumber} has only ${lot.quantity} ${item.issueUnit.name}, requested ${di.quantity}`);
+          if (lot.remainingQty < di.quantity) throw new Error(`Lot ${lot.lotNumber} has only ${lot.remainingQty} ${item.issueUnit.name}, requested ${di.quantity}`);
         } else if (!item.trackIndividually) {
           if (item.availableQty < di.quantity) throw new Error(`${item.code} has only ${item.availableQty} available, requested ${di.quantity}`);
         }
@@ -89,12 +89,12 @@ export async function POST(req: NextRequest) {
         } else if (di.lotId) {
           // Consumable with lot: deduct lot + item availableQty (optimistic lock)
           const updated = await tx.lot.updateMany({
-            where: { id: di.lotId, quantity: { gte: di.quantity } },
-            data: { quantity: { decrement: di.quantity } },
+            where: { id: di.lotId, remainingQty: { gte: di.quantity } },
+            data: { remainingQty: { decrement: di.quantity } },
           });
           if (updated.count === 0) {
             const lot = await tx.lot.findUnique({ where: { id: di.lotId } });
-            throw new Error(`Lot ${lot?.lotNumber ?? di.lotId} has only ${lot?.quantity ?? 0} ${item.issueUnit.name}, requested ${di.quantity}`);
+            throw new Error(`Lot ${lot?.lotNumber ?? di.lotId} has only ${lot?.remainingQty ?? 0} ${item.issueUnit.name}, requested ${di.quantity}`);
           }
           await tx.item.update({
             where: { id: di.itemId },
@@ -108,8 +108,8 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // KIT: deduct stock from linked component items
-        if (item.category.category === "KIT") {
+        // Composite (KIT): deduct stock from linked component items
+        if (item.category.profile?.isComposite) {
           const components = await tx.kitComponent.findMany({
             where: { kitId: item.id, isStockItem: true, itemId: { not: null } },
           });

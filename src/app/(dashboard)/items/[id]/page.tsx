@@ -2,18 +2,19 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Info, Hash, Clock, Wrench,
-  CheckCircle2, AlertTriangle, XCircle,
+  CheckCircle2, AlertTriangle, XCircle, ImageIcon,
 } from "lucide-react";
 import { useSession } from "@/components/layout/auth-guard";
+import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
-import { Category, CATEGORY_LABELS } from "@/lib/constants";
+import { locationLabel } from "@/lib/constants";
 import { getItem } from "@/lib/api";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
+import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailSubcodes } from "@/components/items/item-detail-subcodes";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
@@ -21,10 +22,10 @@ import { StockAdjustmentDialog } from "@/components/items/stock-adjustment-dialo
 import { ReportDamageDialog } from "@/components/items/report-damage-dialog";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 
-interface CategoryType { id: string; name: string; category: string }
+interface CategoryType { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 interface SubItemType { id: string; subCode: string; name: string | null; status: string; condition: string | null; serialNumber: string | null; notes: string | null }
-interface LotType { id: string; lotNumber: string; expiryDate: string | null; quantity: number }
+interface LotType { id: string; lotNumber: string; expiryDate: string | null; receivedQty: number; remainingQty: number }
 
 interface ItemData {
   id: string;
@@ -64,7 +65,7 @@ interface ItemData {
   adjustments: unknown[];
 }
 
-type TabKey = "overview" | "subcodes" | "history" | "maintenance";
+type TabKey = "overview" | "subcodes" | "history" | "maintenance" | "media";
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -90,10 +91,12 @@ export default function ItemDetailPage() {
 
   useEffect(() => { fetchItem(); }, [fetchItem]);
 
-  const isFixedAsset = useMemo(
-    () => item?.category.category === "KRU" || item?.category.category === "ELE",
-    [item?.category.category],
-  );
+  // Push item code up to the layout Header breadcrumb
+  const { setDetail } = usePageHeader();
+  useEffect(() => {
+    setDetail(item?.code ?? null);
+    return () => setDetail(null);
+  }, [item?.code, setDetail]);
 
   const canAct = useMemo(
     () => user?.role === "ADMIN" || user?.role === "STAFF",
@@ -101,11 +104,12 @@ export default function ItemDetailPage() {
   );
 
   const tabs: { key: TabKey; label: string; icon: typeof Info; show: boolean }[] = useMemo(() => [
-    { key: "overview", label: "Overview", icon: Info, show: true },
-    { key: "subcodes", label: `Sub-codes${item?.subItems.length ? ` (${item.subItems.length})` : ""}`, icon: Hash, show: !!(item?.trackIndividually && item.subItems.length > 1) },
-    { key: "history", label: "History", icon: Clock, show: true },
-    { key: "maintenance", label: "Maintenance", icon: Wrench, show: !!isFixedAsset },
-  ], [item?.trackIndividually, item?.subItems.length, isFixedAsset]);
+    { key: "overview", label: "ข้อมูลทั่วไป", icon: Info, show: true },
+    { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(item?.imageUrl || (item?.images?.length ?? 0) > 0) || !!canAct },
+    { key: "subcodes", label: `รหัสย่อย${item?.subItems.length ? ` (${item.subItems.length})` : ""}`, icon: Hash, show: !!(item?.trackIndividually && item.subItems.length > 1) },
+    { key: "history", label: "ประวัติ", icon: Clock, show: true },
+    { key: "maintenance", label: "การซ่อมบำรุง", icon: Wrench, show: true },
+  ], [item?.trackIndividually, item?.subItems.length, item?.imageUrl, item?.images?.length, canAct]);
 
   if (loading) {
     return (
@@ -122,9 +126,9 @@ export default function ItemDetailPage() {
         <div className="grid place-items-center size-16 rounded-2xl bg-muted text-muted-foreground">
           <XCircle className="size-8" />
         </div>
-        <p className="text-muted-foreground font-medium">Item not found</p>
+        <p className="text-muted-foreground font-medium">ไม่พบพัสดุ</p>
         <Button variant="outline" onClick={() => router.push("/items")}>
-          <ArrowLeft className="h-4 w-4 mr-1" />Back to Items
+          <ArrowLeft className="h-4 w-4 mr-1" />กลับสู่รายการพัสดุ
         </Button>
       </div>
     );
@@ -133,37 +137,73 @@ export default function ItemDetailPage() {
   // ── Live status indicator ──
   const stockStatus = item.minThreshold > 0
     ? item.availableQty < item.minThreshold
-      ? { color: "bg-warning", label: "Low" }
-      : { color: "bg-success", label: "OK" }
-    : { color: "bg-success", label: "OK" };
+      ? { color: "bg-warning", label: "ต่ำ" }
+      : { color: "bg-success", label: "ปกติ" }
+    : { color: "bg-success", label: "ปกติ" };
 
   if (item.availableQty === 0) {
     stockStatus.color = "bg-destructive";
-    stockStatus.label = "Out";
+    stockStatus.label = "หมด";
   }
 
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* ── Sticky top bar ── */}
-      <header className="h-16 border-b border-border bg-background">
-        <div className="h-full max-w-[1400px] mx-auto px-4 sm:px-6 flex items-center gap-3">
-          <Link
-            href="/items"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" /> All items
-          </Link>
-          <span className="text-muted-foreground/50">/</span>
-          <span className="text-sm font-medium truncate font-mono">{item.code}</span>
-        </div>
-      </header>
+  const coverSrc = item.imageUrl ?? item.images?.[0] ?? null;
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
-        {/* ── Title + Stock at-a-glance ── */}
-        <div className="flex flex-col lg:flex-row lg:items-end gap-6 lg:gap-10 pb-6 border-b border-border">
+  // ── Lot expiry alert ──
+  const now = new Date();
+  const expiredLots: { lotNumber: string; expiryDate: string }[] = [];
+  const soonLots: { lotNumber: string; days: number }[] = [];
+  for (const l of item.lots ?? []) {
+    if (!l.expiryDate) continue;
+    const days = Math.floor((new Date(l.expiryDate).getTime() - now.getTime()) / 86_400_000);
+    if (days < 0) expiredLots.push({ lotNumber: l.lotNumber, expiryDate: l.expiryDate });
+    else if (days <= 60) soonLots.push({ lotNumber: l.lotNumber, days });
+  }
+  const hasExpiryAlert = expiredLots.length > 0 || soonLots.length > 0;
+
+  return (
+    <div>
+      <div className="max-w-5xl">
+        {/* ── Expiry alert ── */}
+        {hasExpiryAlert && (
+          <div className="mb-6 space-y-2">
+            {expiredLots.length > 0 && (
+              <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+                <XCircle className="size-5 text-destructive shrink-0 mt-0.5" />
+                <div className="text-sm min-w-0">
+                  <span className="font-semibold text-destructive">หมดอายุแล้ว ({expiredLots.length})</span>
+                  <span className="text-muted-foreground ml-2">
+                    {expiredLots.map((l) => `Lot ${l.lotNumber} · ${new Date(l.expiryDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}`).join("  ·  ")}
+                  </span>
+                </div>
+              </div>
+            )}
+            {soonLots.length > 0 && (
+              <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
+                <AlertTriangle className="size-5 text-warning shrink-0 mt-0.5" />
+                <div className="text-sm min-w-0">
+                  <span className="font-semibold text-warning">ใกล้หมดอายุ ({soonLots.length})</span>
+                  <span className="text-muted-foreground ml-2">
+                    {soonLots.map((l) => `Lot ${l.lotNumber} · ใน ${l.days} วัน`).join("  ·  ")}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Cover image + Title + Stock at-a-glance ── */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 pb-6 border-b border-border">
+          {coverSrc && (
+            <div className="relative w-full sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
+              <img src={coverSrc} alt={item.name} className="size-full object-cover" />
+              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                Cover
+              </span>
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <BadgePill label={CATEGORY_LABELS[item.category.category as Category] ?? item.category.category} />
+              <BadgePill label={item.category.profile?.name ?? item.category.name} />
               <span>·</span>
               <span className="font-mono">{item.code}</span>
               {/* Live status dot */}
@@ -209,6 +249,14 @@ export default function ItemDetailPage() {
             />
           )}
 
+          {tab === "media" && (
+            <ItemDetailMedia
+              item={{ id: item.id, imageUrl: item.imageUrl, images: item.images }}
+              canAct={!!canAct}
+              onRefresh={fetchItem}
+            />
+          )}
+
           {tab === "subcodes" && item.trackIndividually && item.subItems.length > 1 && (
             <ItemDetailSubcodes subItems={item.subItems} itemId={item.id} canAct={!!canAct} onRefresh={fetchItem} />
           )}
@@ -217,7 +265,7 @@ export default function ItemDetailPage() {
             <ItemDetailHistory itemId={item.id} />
           )}
 
-          {tab === "maintenance" && isFixedAsset && (
+          {tab === "maintenance" && (
             <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} onRecordMaintenance={() => setMaintOpen(true)} />
           )}
         </div>
@@ -230,6 +278,7 @@ export default function ItemDetailPage() {
         itemId={item.id}
         availableQty={item.availableQty}
         totalQty={item.totalQty}
+        lots={item.lots?.map((l) => ({ id: l.id, lotNumber: l.lotNumber, remainingQty: l.remainingQty, expiryDate: l.expiryDate }))}
         checkedOutCount={item.trackIndividually
           ? item.subItems.filter(s => s.status === "CHECKED_OUT").length
           : item.totalQty - item.availableQty}
@@ -245,14 +294,13 @@ export default function ItemDetailPage() {
         onSuccess={fetchItem}
       />
 
-      {isFixedAsset && (
-        <MaintenanceFormDialog
-          open={maintOpen}
-          onOpenChange={setMaintOpen}
-          itemId={item.id}
-          onSuccess={fetchItem}
-        />
-      )}
+      <MaintenanceFormDialog
+        open={maintOpen}
+        onOpenChange={setMaintOpen}
+        itemId={item.id}
+        maintenanceCycleMonths={item.maintenanceCycleMonths}
+        onSuccess={fetchItem}
+      />
     </div>
   );
 }
@@ -310,7 +358,7 @@ function StockSummary({ available, total, unit, minThreshold }: {
       ? <AlertTriangle className="size-3 text-warning" />
       : <CheckCircle2 className="size-3 text-success" />;
 
-  const statusLabel = isOut ? "Out of stock" : isLow ? "Low stock" : "In stock";
+  const statusLabel = isOut ? "หมดสต็อก" : isLow ? "เหลือน้อย" : "มีในสต็อก";
 
   return (
     <div className="shrink-0 min-w-[220px]">
@@ -334,7 +382,7 @@ function StockSummary({ available, total, unit, minThreshold }: {
         />
       </div>
       <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-        <span>Stock level</span>
+        <span>ระดับสต็อก</span>
         <span className="tabular-nums">{pct}%</span>
       </div>
     </div>

@@ -7,15 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Category {
-  KRU
-  ELE
-  BOOK
-  TOY
-  DUR
-  CON
-  MED
-  KIT
+// Dispense behavior of a CategoryProfile (ประเภท). The only fixed enum.
+// CONSUMABLE = ใช้แล้วทิ้ง (lot tracking, นับ remaining)
+// COUNT      = ยืม-คืน นับจำนวน (track how many out)
+// ITEM       = ยืม-คืน รายชิ้น (subItems, builder code)
+enum DispenseType {
+  CONSUMABLE
+  COUNT
+  ITEM
 }
 
 enum ItemStatus {
@@ -91,13 +90,37 @@ model User {
 model CategoryType {
   id          String   @id @default(cuid())
   name        String   @unique
-  category    Category
   description String?
   sortOrder   Int      @default(0)
+
+  // ประเภท (profile) — กำหนด dispense/track behavior
+  profileId String
+  profile   CategoryProfile @relation(fields: [profileId], references: [id])
 
   items Item[]
 
   @@map("categories")
+}
+
+// ประเภท (CategoryProfile) — addable from UI. behavior อยู่ใน dispenseType + flags.
+// icon/color/name/desc = cosmetic. code = prefix สำหรับ NLU-{code}-NNN.
+model CategoryProfile {
+  id             String       @id @default(cuid())
+  name           String       @unique
+  code           String       @unique
+  description    String?
+  dispenseType   DispenseType
+  assetTracking  Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
+  setTracking    Boolean      @default(false) // โชว์ setSize/borrowable (BOOK/TOY)
+  isComposite    Boolean      @default(false) // dispense → deduct component stock (KIT)
+  icon           String       @default("Package")
+  color          String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
+  sortOrder      Int          @default(0)
+  isActive       Boolean      @default(true)
+
+  subCategories CategoryType[]
+
+  @@map("category_profiles")
 }
 
 // --- Locations ---
@@ -147,6 +170,9 @@ model Item {
   images            String[]     @default([])
   description       String?
   isActive          Boolean      @default(true)
+
+  // AI embedding (pgvector)
+  embedding         Unsupported("vector(768)")?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -154,8 +180,12 @@ model Item {
   totalQty     Int @default(0)
   availableQty Int @default(0)
 
-  // Consumable fields (used when category = CON, MED)
+  // Consumable fields (used when category = CON)
   storageRequirements String?
+
+  // Book/Toy set + borrowing (see ADR-0001)
+  setSize     Int     @default(1) // volumes per set; 1 = single
+  borrowable  Boolean @default(false)
 
   // Fixed Asset fields (nullable, used when category = KRU, ELE)
   model                  String?
@@ -219,13 +249,15 @@ model Lot {
   item         Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   lotNumber    String
   expiryDate   DateTime?
-  quantity     Int       @default(0)
-  receivedDate DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  receivedQty  Int      @default(0) // immutable: how much entered this lot
+  remainingQty Int      @default(0) // decremented on dispense; see ADR-0002
+  receivedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   dispenseRecords DispenseRecord[]
   receiveRecords  ReceiveRecord[]
+  adjustments     StockAdjustment[]
 
   @@unique([itemId, lotNumber])
   @@index([itemId, expiryDate])
@@ -279,6 +311,9 @@ model StockAdjustment {
   id            String           @id @default(cuid())
   itemId        String
   item          Item             @relation(fields: [itemId], references: [id])
+  lotId         String?
+  lot           Lot?             @relation(fields: [lotId], references: [id])
+  delta         Int              @default(0) // signed change applied to Lot.remainingQty
   previousQty   Int
   newQty        Int
   reason        AdjustmentReason

@@ -5,6 +5,9 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { StockSummaryChart } from "./charts/stock-summary-chart";
+import { TopDispenseChart } from "@/components/dashboard/top-dispense-chart";
+import { UsageBySubjectChart } from "@/components/dashboard/usage-by-subject-chart";
+import { useTopDispense, useUsageBySubject } from "@/hooks/use-dashboard-queries";
 import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { categories: true };
@@ -29,6 +32,9 @@ export function StockSummaryTab() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterValues>({});
 
+  const topQuery = useTopDispense(filters.categoryId);
+  const usageQuery = useUsageBySubject(filters.categoryId);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = {};
@@ -49,6 +55,10 @@ export function StockSummaryTab() {
         <ExportButtons reportType="stock-summary" filters={filters} />
       </div>
       <StockSummaryChart data={data} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <TopDispenseChart data={topQuery.data ?? []} />
+        <UsageBySubjectChart data={usageQuery.data ?? []} />
+      </div>
       <ReportDataTable columns={columns} data={data} loading={loading} />
     </div>
   );

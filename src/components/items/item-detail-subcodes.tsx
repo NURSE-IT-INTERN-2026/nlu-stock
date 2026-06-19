@@ -130,6 +130,7 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
           if (chip.value !== "ALL" && count === 0) return null;
           return (
             <button
+              type="button"
               key={chip.value}
               className={cn(
                 "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
@@ -255,7 +256,7 @@ function SubItemRowGroup({
         )}
         <TableCell>
           {expandable ? (
-            <button onClick={onToggleExpand} className="text-muted-foreground hover:text-foreground transition-colors">
+            <button type="button" aria-label={expanded ? "ย่อ" : "ขยาย"} onClick={onToggleExpand} className="text-muted-foreground hover:text-foreground transition-colors">
               {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           ) : (

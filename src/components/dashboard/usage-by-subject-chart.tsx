@@ -5,24 +5,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { PieChart } from "lucide-react";
-import { useMemo } from "react";
-
-function resolveToHex(cssVar: string): string {
-  if (typeof window === "undefined") return "#888";
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-  if (!raw) return "#888";
-  if (raw.startsWith("#")) return raw;
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) return "#888";
-  ctx.fillStyle = raw;
-  return ctx.fillStyle;
-}
-
-interface UsageByTypeData {
-  usageType: string | null;
-  label: string;
-  totalQuantity: number;
-}
+import { useThemeColor } from "@/lib/resolve-color";
+import type { UsageByTypeData } from "@/lib/dashboard-types";
 
 interface UsageBySubjectChartProps {
   data: UsageByTypeData[];
@@ -46,8 +30,26 @@ function UsageByTypeEmpty() {
   );
 }
 
+interface ChartTooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: number; payload: { name: string } }>;
+}
+
+function ChartTooltip({ active, payload }: ChartTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
+      <p className="font-medium text-foreground">{d.payload.name}</p>
+      <p className="text-muted-foreground">
+        จำนวน: <span className="font-semibold text-foreground">{d.value.toLocaleString("th-TH")}</span> ชิ้น
+      </p>
+    </div>
+  );
+}
+
 export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
-  const fillColor = useMemo(() => resolveToHex("--chart-2"), []);
+  const fillColor = useThemeColor("--chart-2");
 
   const chartData = data.map((d) => ({
     name: d.label,
@@ -55,24 +57,26 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
   }));
 
   return (
-    <Card className="flex flex-col h-full overflow-hidden pb-0 pt-0 gap-0">
+    <Card className="flex flex-col md:h-full overflow-hidden pb-0 pt-0 gap-0">
       <CardHeader className="py-3 shrink-0">
         <CardTitle className="text-xs font-semibold text-foreground whitespace-nowrap font-sans">
-          Usage by Type This Month
+          สัดส่วนการใช้งานเดือนนี้
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col !p-0 min-h-[240px] [&>div]:h-full">
+      <CardContent className="flex-1 flex flex-col !p-0 min-h-0 [&>div]:flex-1">
         {chartData.length === 0 ? (
           <UsageByTypeEmpty />
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={chartData} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="totalQuantity" fill={fillColor} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex-1 min-h-[260px]" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="totalQuantity" fill={fillColor} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </CardContent>
     </Card>

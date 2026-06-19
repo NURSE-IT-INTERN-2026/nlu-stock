@@ -36,10 +36,26 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export interface CategoryOption {
   id: string;
   name: string;
-  category: string;
+  profile?: ProfileOption | null;
   description?: string | null;
   sortOrder?: number;
   _count?: { items: number };
+}
+
+export interface ProfileOption {
+  id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  assetTracking: boolean;
+  setTracking: boolean;
+  isComposite: boolean;
+  icon: string;
+  color: string;
+  sortOrder: number;
+  isActive: boolean;
+  _count?: { subCategories: number; items: number };
 }
 
 export interface LocationOption {
@@ -87,11 +103,16 @@ export function getCategories() {
   return request<CategoryOption[]>("/api/settings/categories");
 }
 
+export function searchCategories(q: string) {
+  const qs = new URLSearchParams({ q }).toString();
+  return request<CategoryOption[]>(`/api/settings/categories?${qs}`);
+}
+
 export function getPublicCategories() {
   return request<CategoryOption[]>("/api/categories");
 }
 
-export function createCategory(data: { name: string; category: string; description?: string }) {
+export function createCategory(data: { name: string; profileId: string; description?: string }) {
   return request<CategoryOption>("/api/settings/categories", {
     method: "POST",
     body: JSON.stringify(data),
@@ -107,6 +128,40 @@ export function updateCategory(id: string, data: Record<string, unknown>) {
 
 export function deleteCategory(id: string) {
   return request<void>(`/api/settings/categories/${id}`, { method: "DELETE" });
+}
+
+// ─── Category Profiles (ประเภท) ───
+
+export function getProfiles() {
+  return request<ProfileOption[]>("/api/settings/profiles");
+}
+
+export function createProfile(data: {
+  name: string;
+  code: string;
+  dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  assetTracking?: boolean;
+  setTracking?: boolean;
+  isComposite?: boolean;
+  icon?: string;
+  color: string;
+  description?: string;
+}) {
+  return request<ProfileOption>("/api/settings/profiles", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProfile(id: string, data: Record<string, unknown>) {
+  return request<ProfileOption>(`/api/settings/profiles/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteProfile(id: string) {
+  return request<void>(`/api/settings/profiles/${id}`, { method: "DELETE" });
 }
 
 // ─── Locations ───
@@ -146,6 +201,38 @@ export function deleteLocation(id: string) {
 
 export function getUnits() {
   return request<UnitOption[]>("/api/settings/units");
+}
+
+// ─── Quick-create item (ADMIN + STAFF) ───
+
+export interface QuickCreateItemPayload {
+  code: string;
+  name: string;
+  categoryId: string;
+  issueUnitId: string;
+  subUnitId: string;
+  conversionFactor: number;
+  copyCount?: number;
+  setSize?: number;
+  initialQty?: number;
+}
+
+export function quickCreateItem(data: QuickCreateItemPayload) {
+  return request<{
+    id: string;
+    code: string;
+    name: string;
+    nameEn: string | null;
+    trackIndividually: boolean;
+    conversionFactor: number;
+    category: { name: string; category: string };
+    issueUnit: { id: string; name: string };
+    subUnit: { id: string; name: string };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+  }>("/api/items/quick-create", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // ─── Users ───
@@ -211,13 +298,33 @@ export function searchDispenseItems(params: {
   categoryId?: string;
   locationId?: string;
   limit?: string;
+  page?: string;
 }) {
   const qs = new URLSearchParams(
     Object.entries(params)
       .filter(([, v]) => v)
       .map(([k, v]) => [k, v!]),
   ).toString();
-  return request<{ items: unknown[] }>(`/api/dispense/items?${qs}`);
+  return request<{ items: unknown[]; total: number }>(`/api/dispense/items?${qs}`);
+}
+
+export function searchItemsAI(params: { q: string; limit?: number }) {
+  const qs = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)]),
+  ).toString();
+  return request<{
+    items: Array<{
+      id: string;
+      code: string;
+      name: string;
+      categoryName: string;
+      categoryType: string;
+      similarity: number;
+    }>;
+    total: number;
+  }>(`/api/items/search-ai?${qs}`);
 }
 
 export function createDispense(data: Record<string, unknown>) {
@@ -240,7 +347,14 @@ export function createReceive(data: Record<string, unknown>) {
 
 export function adjustStock(
   itemId: string,
-  data: { shelfCount: number; reason: string; notes?: string | null; imageEvidence?: string | null },
+  data: {
+    shelfCount?: number;
+    lotId?: string | null;
+    lotCount?: number;
+    reason: string;
+    notes?: string | null;
+    imageEvidence?: string | null;
+  },
 ) {
   return request<unknown>(`/api/items/${itemId}/adjust`, {
     method: "POST",
@@ -317,26 +431,23 @@ export function uploadFile(formData: FormData) {
   });
 }
 
+// ─── Maintenance ───
+
+export function getMaintenanceSummary() {
+  return request<{ overdue: number; dueSoon: number; completedThisMonth: number }>(
+    "/api/maintenance/summary",
+  );
+}
+
 // ─── Alerts ───
 
 export function getAlerts() {
-  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; total: number }>(
+  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; total: number; totalItems: number; onLoan: number }>(
     "/api/alerts",
   );
 }
 
 // ─── Import ───
-
-export function importData(type: string) {
-  return request<unknown[]>(`/api/settings/import?type=${type}`);
-}
-
-export function uploadImport(data: FormData) {
-  return fetch("/api/settings/import", { method: "POST", body: data }).then(async (res) => {
-    if (!res.ok) throw new ApiError(res.status, "Import failed");
-    return res.json();
-  });
-}
 
 export function importRows(type: string, rows: Record<string, string>[]) {
   return request<{ imported: number; errors?: unknown[] }>("/api/settings/import", {
@@ -351,6 +462,14 @@ export function getDashboardStatusOverview() {
   return request<unknown>("/api/dashboard/status-overview");
 }
 
+export function getDashboardDispenseMonthly() {
+  return request<unknown[]>("/api/dashboard/dispense-monthly");
+}
+
+export function getDashboardProfileSummary() {
+  return request<unknown[]>("/api/dashboard/profile-summary");
+}
+
 export function getDashboardRecentDispense() {
   return request<unknown[]>("/api/dashboard/recent-dispense");
 }
@@ -359,12 +478,12 @@ export function getDashboardRecentReceive() {
   return request<unknown[]>("/api/dashboard/recent-receive");
 }
 
-export function getDashboardTopDispense() {
-  return request<unknown[]>("/api/dashboard/top-dispense");
+export function getDashboardTopDispense(categoryId?: string) {
+  return request<unknown[]>(`/api/dashboard/top-dispense${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`);
 }
 
-export function getDashboardUsageBySubject() {
-  return request<unknown[]>("/api/dashboard/usage-by-subject");
+export function getDashboardUsageBySubject(categoryId?: string) {
+  return request<unknown[]>(`/api/dashboard/usage-by-subject${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`);
 }
 
 // ─── Reports ───
