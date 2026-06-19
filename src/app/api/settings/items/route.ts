@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
 import { itemCreateSchema, forcedTrackIndividually } from "@/lib/validators";
+import { sanitizeItemByProfile } from "@/lib/category-profile";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
   const cat = await prisma.categoryType.findUnique({ where: { id: data.categoryId }, include: { profile: true } });
   if (cat?.profile) {
     data.trackIndividually = forcedTrackIndividually(cat.profile);
+    sanitizeItemByProfile(cat.profile, data);
   }
 
   const item = await prisma.item.create({

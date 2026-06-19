@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { itemUpdateSchema, forcedTrackIndividually } from "@/lib/validators";
+import { sanitizeItemByProfile } from "@/lib/category-profile";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -40,14 +41,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (existing) return error("Item code already exists");
   }
 
-  // Enforce trackIndividually based on profile
-  if (data.categoryId !== undefined || data.trackIndividually !== undefined) {
-    const catId = data.categoryId ?? (await prisma.item.findUnique({ where: { id }, select: { categoryId: true } }))?.categoryId;
-    if (catId) {
-      const cat = await prisma.categoryType.findUnique({ where: { id: catId }, include: { profile: true } });
-      if (cat?.profile) {
-        data.trackIndividually = forcedTrackIndividually(cat.profile);
-      }
+  // Enforce profile rules: trackIndividually + flag-gated fields (D4).
+  const catId = data.categoryId ?? (await prisma.item.findUnique({ where: { id }, select: { categoryId: true } }))?.categoryId;
+  if (catId) {
+    const cat = await prisma.categoryType.findUnique({ where: { id: catId }, include: { profile: true } });
+    if (cat?.profile) {
+      data.trackIndividually = forcedTrackIndividually(cat.profile);
+      sanitizeItemByProfile(cat.profile, data);
     }
   }
 
