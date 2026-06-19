@@ -18,7 +18,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { getItems, getSubItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, EMPTY_FILTER, type FilterState } from "@/components/items/items-filter-bar";
-
+import { cn } from "@/lib/utils";
 
 interface UnitType { id: string; name: string }
 
@@ -46,17 +46,34 @@ interface ItemRecord {
   minThreshold: number;
   location: LocationOption | null;
   _count: { subItems: number };
+  alertTypes: string[];
 }
 
-export default function ItemsPage() {
+type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "onLoan";
+
+const ALERT_BADGE: Record<string, string> = {
+  lowStock: "bg-orange-500/15 text-orange-600 border-orange-500/30",
+  nearExpiry: "bg-warning/15 text-warning border-warning/30",
+  overdueMaint: "bg-destructive/15 text-destructive border-destructive/30",
+  onLoan: "bg-blue-500/15 text-blue-600 border-blue-500/30",
+};
+
+const ALERT_LABEL: Record<string, string> = {
+  lowStock: "สต็อกต่ำ",
+  nearExpiry: "ใกล้หมดอายุ",
+  overdueMaint: "เกินกำหนดซ่อม",
+  onLoan: "ยืมอยู่",
+};
+
+export default function AlertsPage() {
   return (
     <Suspense fallback={<div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-96 w-full" /></div>}>
-      <ItemsContent />
+      <AlertsContent />
     </Suspense>
   );
 }
 
-function ItemsContent() {
+function AlertsContent() {
   const { user } = useSession();
   const alerts = useAlerts();
   const router = useRouter();
@@ -67,20 +84,22 @@ function ItemsContent() {
   const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
   const [loading, setLoading] = useState(true);
 
-  // derive profiles from categories (each carries full profile) instead of a separate getProfiles() call.
   const profiles = useMemo<ProfileOption[]>(() => {
     const map = new Map<string, ProfileOption>();
     for (const c of categories) if (c.profile) map.set(c.profile.id, c.profile);
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
 
-  // Initial filter from URL params (runs once).
+  // Initial alert-type filter from URL params (?lowStock=true etc.), default "all" = union.
+  const [alertType, setAlertType] = useState<AlertTypeKey>(() => {
+    if (searchParams.get("lowStock") === "true") return "lowStock";
+    if (searchParams.get("nearExpiry") === "true") return "nearExpiry";
+    if (searchParams.get("overdueMaint") === "true") return "overdueMaint";
+    if (searchParams.get("onLoan") === "true") return "onLoan";
+    return "all";
+  });
+
   const [filter, setFilter] = useState<FilterState>(() => {
-    const preset = searchParams.get("lowStock") === "true" ? "lowStock"
-      : searchParams.get("nearExpiry") === "true" ? "nearExpiry"
-      : searchParams.get("overdueMaint") === "true" ? "overdueMaint"
-      : searchParams.get("onLoan") === "true" ? "onLoan"
-      : null;
     const statusParam = searchParams.get("status");
     return {
       query: "",
@@ -88,7 +107,7 @@ function ItemsContent() {
       categoryId: searchParams.get("category"),
       status: statusParam ? statusParam.split(",").filter(Boolean) : [],
       location: {},
-      preset,
+      preset: null,
     };
   });
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); }, [setPage]);
@@ -130,7 +149,9 @@ function ItemsContent() {
     if (filter.profileId) params.profileId = filter.profileId;
     if (filter.categoryId) params.categoryId = filter.categoryId;
     if (filter.status.length) params.status = filter.status.join(",");
-    if (filter.preset) params[filter.preset] = "true";
+    // union (all) vs single preset
+    if (alertType === "all") params.alerts = "true";
+    else params[alertType] = "true";
     if (filter.location.building) params.building = filter.location.building;
     if (filter.location.floor) params.floor = filter.location.floor;
     if (filter.location.room) params.room = filter.location.room;
@@ -140,9 +161,17 @@ function ItemsContent() {
     setItems((data.items || []) as ItemRecord[]);
     setTotal(data.total || 0);
     setLoading(false);
-  }, [page, perPage, filter, setTotal]);
+  }, [page, perPage, filter, alertType, setTotal]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const alertChips: { key: AlertTypeKey; label: string; count: number }[] = [
+    { key: "all", label: "ทั้งหมด", count: alerts.total },
+    { key: "lowStock", label: "สต็อกต่ำ", count: alerts.lowStock },
+    { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
+    { key: "overdueMaint", label: "เกินกำหนดซ่อม", count: alerts.overdueMaintenance },
+    { key: "onLoan", label: "ยืมอยู่", count: alerts.onLoan },
+  ];
 
   return (
     <div className="space-y-6">
@@ -158,8 +187,38 @@ function ItemsContent() {
         hideAlertPicker
       />
 
+      {/* Alert-type chips (single-select; "all" = union) */}
+      <div className="flex flex-wrap items-center gap-2">
+        {alertChips.map((c) => {
+          const active = alertType === c.key;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => { setAlertType(c.key); setPage(1); }}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap",
+                active
+                  ? c.key === "all"
+                    ? "bg-primary text-primary-foreground border-transparent shadow-sm"
+                    : ALERT_BADGE[c.key]
+                  : "bg-background text-foreground/80 border-border hover:bg-muted",
+              )}
+            >
+              {c.label}
+              {c.count > 0 && (
+                <span className={cn(
+                  "inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[10px] font-bold tabular-nums",
+                  active ? (c.key === "all" ? "bg-white/25" : "bg-background/60") : "bg-muted text-muted-foreground",
+                )}>{c.count > 9 ? "9+" : c.count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="rounded-2xl border overflow-hidden bg-card">
-        <div className="overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-300px)]">
+        <div className="overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
           <Table>
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -167,6 +226,7 @@ function ItemsContent() {
                 <TableHead>รหัสพัสดุ</TableHead>
                 <TableHead>ชื่อ</TableHead>
                 <TableHead>ประเภท</TableHead>
+                <TableHead>การแจ้งเตือน</TableHead>
                 <TableHead>คงเหลือ</TableHead>
                 <TableHead>สถานที่</TableHead>
                 <TableHead>สถานะ</TableHead>
@@ -176,15 +236,15 @@ function ItemsContent() {
               {loading ? (
                 Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No items found
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    ไม่มีรายการแจ้งเตือน
                   </TableCell>
                 </TableRow>
               ) : items.map((item, idx) => {
@@ -218,14 +278,18 @@ function ItemsContent() {
                           <span className="font-medium">{item.name}</span>
                           {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
                         </div>
-                        {item.trackIndividually && item._count.subItems > 1 && (
-                          <Badge variant="outline" className="text-xs mt-0.5 bg-orange-50 text-orange-700 border-orange-200">
-                            Tracked ({item._count.subItems})
-                          </Badge>
-                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {item.alertTypes.map((t) => (
+                            <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
+                              {ALERT_LABEL[t] ?? t}
+                            </span>
+                          ))}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm tabular-nums">
                         {item.totalQty === 0 ? (
@@ -257,6 +321,7 @@ function ItemsContent() {
                           <span className="text-orange-300/80 mr-1.5">└</span>{sub.subCode}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{sub.name || sub.notes || "-"}</TableCell>
+                        <TableCell></TableCell>
                         <TableCell></TableCell>
                         <TableCell></TableCell>
                         <TableCell className="text-sm text-muted-foreground">

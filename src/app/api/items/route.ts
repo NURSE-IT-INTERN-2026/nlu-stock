@@ -77,7 +77,22 @@ export async function GET(request: NextRequest) {
     where.nextMaintenanceDate = { lt: new Date() };
   }
 
-  const [items, total] = await Promise.all([
+  // Union mode: items matching ANY alert condition (used by /alerts page).
+  const alerts = params.get("alerts");
+  if (alerts === "true") {
+    const lowStockIds = (await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
+    `).map((r) => r.id);
+    const in30DaysUnion = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    where.OR = [
+      { id: { in: lowStockIds } },
+      { lots: { some: { expiryDate: { gte: new Date(), lte: in30DaysUnion } } } },
+      { dispenseRecords: { some: { returnedAt: null } } },
+      { nextMaintenanceDate: { lt: new Date() } },
+    ];
+  }
+
+  const [rawItems, total] = await Promise.all([
     prisma.item.findMany({
       where,
       skip,
@@ -94,10 +109,23 @@ export async function GET(request: NextRequest) {
           orderBy: { expiryDate: "asc" },
           take: 1,
         },
+        dispenseRecords: { where: { returnedAt: null }, select: { id: true }, take: 1 },
       },
     }),
     prisma.item.count({ where }),
   ]);
+
+  // Derive per-item alert types for the /alerts page (badge column).
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const items = rawItems.map((item) => {
+    const types: string[] = [];
+    if (item.availableQty < item.minThreshold) types.push("lowStock");
+    if (item.lots.some((l) => l.expiryDate && new Date(l.expiryDate) >= now && new Date(l.expiryDate) <= in30Days)) types.push("nearExpiry");
+    if (item.nextMaintenanceDate && new Date(item.nextMaintenanceDate) < now) types.push("overdueMaint");
+    if ((item.dispenseRecords?.length ?? 0) > 0) types.push("onLoan");
+    return { ...item, alertTypes: types };
+  });
 
   return json({ items, page, perPage, total });
 }

@@ -14,13 +14,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAlerts } from "@/hooks/use-alerts";
 import type { SessionUser } from "@/types";
 
 const navItems = [
   { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard },
   { href: "/items", label: "รายการพัสดุ", icon: Package },
+  { href: "/alerts", label: "การแจ้งเตือน", icon: Bell },
   { href: "/dispense", label: "เบิก-จ่าย", icon: ShoppingCart },
   { href: "/receive", label: "รับเข้าพัสดุ", icon: Truck },
   { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench },
@@ -36,6 +39,7 @@ interface SidebarProps {
 
 export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const alerts = useAlerts();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -108,6 +112,11 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
               {!collapsed && (
                 <>
                   <span className="flex-1">{item.label}</span>
+                  {item.href === "/alerts" && alerts.total > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold tabular-nums">
+                      {alerts.total > 9 ? "9+" : alerts.total}
+                    </span>
+                  )}
                   <ChevronRight className={cn("h-3.5 w-3.5", active ? "text-white/70" : "text-muted-foreground/40")} />
                 </>
               )}

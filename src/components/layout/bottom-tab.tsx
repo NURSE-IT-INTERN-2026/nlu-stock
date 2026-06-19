@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/lib/api";
 import {
@@ -17,6 +17,7 @@ import { useAlerts } from "@/hooks/use-alerts";
 const tabs = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/items", label: "Items", icon: Package },
+  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/dispense", label: "Dispense", icon: ShoppingCart },
   { href: "/receive", label: "Receive", icon: Truck },
 ];
@@ -44,7 +45,7 @@ export function BottomTab({ user }: BottomTabProps) {
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const showBadge = tab.href === "/" && alerts.total > 0;
+          const showBadge = tab.href === "/alerts" && alerts.total > 0;
           return (
             <Link
               key={tab.href}
