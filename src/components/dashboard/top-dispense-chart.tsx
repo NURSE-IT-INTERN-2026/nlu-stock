@@ -88,7 +88,7 @@ export function TopDispenseChart({ data }: TopDispenseChartProps) {
         {chartData.length === 0 ? (
           <TopDispenseEmpty />
         ) : (
-          <div className="flex-1 min-h-[200px] md:min-h-0" role="img" aria-label={`รายการเบิกมากที่สุด: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
+          <div className="flex-1 min-h-[260px]" role="img" aria-label={`รายการเบิกมากที่สุด: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 24, bottom: 5, left: 4 }}>
                 <XAxis type="number" tick={{ fontSize: 12 }} />

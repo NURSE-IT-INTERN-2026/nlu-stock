@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, ItemStatus } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -27,11 +27,29 @@ export async function GET(request: NextRequest) {
   const profileId = params.get("profileId");
   if (profileId) where.category = { profileId };
 
-  const status = params.get("status") as Prisma.EnumItemStatusFilter;
-  if (status) where.status = status;
+  const status = params.get("status");
+  if (status) {
+    const list = status.split(",").filter(Boolean);
+    if (list.length === 1) where.status = list[0] as ItemStatus;
+    else if (list.length > 1) where.status = { in: list as ItemStatus[] };
+  }
 
   const locationId = params.get("locationId");
   if (locationId) where.locationId = locationId;
+
+  // Location level filter (cascade): filter every record under a building/floor/room/detail node.
+  const building = params.get("building");
+  const floor = params.get("floor");
+  const room = params.get("room");
+  const detail = params.get("detail");
+  if (building || floor || room || detail) {
+    where.location = {
+      ...(building && { building }),
+      ...(floor && { floor }),
+      ...(room && { room }),
+      ...(detail && { detail }),
+    };
+  }
 
   const lowStock = params.get("lowStock");
   if (lowStock === "true") {
@@ -43,10 +61,15 @@ export async function GET(request: NextRequest) {
 
   const nearExpiry = params.get("nearExpiry");
   if (nearExpiry === "true") {
-    const in90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     where.lots = {
-      some: { expiryDate: { gte: new Date(), lte: in90Days } },
+      some: { expiryDate: { gte: new Date(), lte: in30Days } },
     };
+  }
+
+  const onLoan = params.get("onLoan");
+  if (onLoan === "true") {
+    where.dispenseRecords = { some: { returnedAt: null } };
   }
 
   const overdueMaint = params.get("overdueMaint");

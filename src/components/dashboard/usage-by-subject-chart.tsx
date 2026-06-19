@@ -67,7 +67,7 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
         {chartData.length === 0 ? (
           <UsageByTypeEmpty />
         ) : (
-          <div className="flex-1 min-h-[200px] md:min-h-0" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
+          <div className="flex-1 min-h-[260px]" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
