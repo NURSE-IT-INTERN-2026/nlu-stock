@@ -83,16 +83,6 @@ export const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destruct
   PENDING_MAINTENANCE: "secondary",
 };
 
-export const STATUS_CHIPS = [
-  { value: "AVAILABLE", label: "พร้อมใช้", color: "bg-success/15 text-success hover:bg-success/25 border-success/30" },
-  { value: "CHECKED_OUT", label: "เบิกแล้ว", color: "bg-info-500/15 text-info-500 hover:bg-info-500/25 border-info-500/30" },
-  { value: "DAMAGED", label: "ชำรุด", color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
-  { value: "UNDER_REPAIR", label: "ซ่อมบำรุง", color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
-  { value: "LOST", label: "สูญหาย", color: "bg-purple-500/15 text-purple-500 hover:bg-purple-500/25 border-purple-500/30" },
-  { value: "DISPOSED", label: "จำหน่าย", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
-  { value: "PENDING_MAINTENANCE", label: "รอบำรุง", color: "bg-cyan-500/15 text-cyan-600 hover:bg-cyan-500/25 border-cyan-500/30" },
-] as const;
-
 // ─── Location label helper ───
 
 export function locationLabel(loc: { building: string; floor: string; room: string; detail?: string | null }) {
