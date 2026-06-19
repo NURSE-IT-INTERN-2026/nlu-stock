@@ -45,7 +45,7 @@ export function RecentReceiveTable({ data }: RecentReceiveTableProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="border-b py-3">
         <CardTitle className="text-base font-semibold text-foreground">
           รายการรับเข้าล่าสุด
         </CardTitle>

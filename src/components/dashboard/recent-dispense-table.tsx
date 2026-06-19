@@ -46,7 +46,7 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="border-b py-3">
         <CardTitle className="text-base font-semibold text-foreground">
           รายการเบิกล่าสุด
         </CardTitle>

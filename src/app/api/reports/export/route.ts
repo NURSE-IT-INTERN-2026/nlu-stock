@@ -131,11 +131,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       const now = new Date();
-      const in90Days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
       const nearExpiry = await prisma.lot.findMany({
         where: {
-          expiryDate: { gte: now, lte: in90Days },
+          expiryDate: { gte: now, lte: in30Days },
           item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
         },
         include: { item: { select: { code: true, name: true } } },

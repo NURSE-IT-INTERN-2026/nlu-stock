@@ -2,18 +2,19 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Info, Hash, Clock, Wrench,
-  CheckCircle2, AlertTriangle, XCircle,
+  CheckCircle2, AlertTriangle, XCircle, ImageIcon,
 } from "lucide-react";
 import { useSession } from "@/components/layout/auth-guard";
+import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { locationLabel } from "@/lib/constants";
 import { getItem } from "@/lib/api";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
+import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailSubcodes } from "@/components/items/item-detail-subcodes";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
@@ -64,7 +65,7 @@ interface ItemData {
   adjustments: unknown[];
 }
 
-type TabKey = "overview" | "subcodes" | "history" | "maintenance";
+type TabKey = "overview" | "subcodes" | "history" | "maintenance" | "media";
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -90,6 +91,13 @@ export default function ItemDetailPage() {
 
   useEffect(() => { fetchItem(); }, [fetchItem]);
 
+  // Push item code up to the layout Header breadcrumb
+  const { setDetail } = usePageHeader();
+  useEffect(() => {
+    setDetail(item?.code ?? null);
+    return () => setDetail(null);
+  }, [item?.code, setDetail]);
+
   const canAct = useMemo(
     () => user?.role === "ADMIN" || user?.role === "STAFF",
     [user?.role],
@@ -97,10 +105,11 @@ export default function ItemDetailPage() {
 
   const tabs: { key: TabKey; label: string; icon: typeof Info; show: boolean }[] = useMemo(() => [
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info, show: true },
+    { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(item?.imageUrl || (item?.images?.length ?? 0) > 0) || !!canAct },
     { key: "subcodes", label: `รหัสย่อย${item?.subItems.length ? ` (${item.subItems.length})` : ""}`, icon: Hash, show: !!(item?.trackIndividually && item.subItems.length > 1) },
     { key: "history", label: "ประวัติ", icon: Clock, show: true },
     { key: "maintenance", label: "การซ่อมบำรุง", icon: Wrench, show: true },
-  ], [item?.trackIndividually, item?.subItems.length]);
+  ], [item?.trackIndividually, item?.subItems.length, item?.imageUrl, item?.images?.length, canAct]);
 
   if (loading) {
     return (
@@ -117,9 +126,9 @@ export default function ItemDetailPage() {
         <div className="grid place-items-center size-16 rounded-2xl bg-muted text-muted-foreground">
           <XCircle className="size-8" />
         </div>
-        <p className="text-muted-foreground font-medium">Item not found</p>
+        <p className="text-muted-foreground font-medium">ไม่พบพัสดุ</p>
         <Button variant="outline" onClick={() => router.push("/items")}>
-          <ArrowLeft className="h-4 w-4 mr-1" />Back to Items
+          <ArrowLeft className="h-4 w-4 mr-1" />กลับสู่รายการพัสดุ
         </Button>
       </div>
     );
@@ -128,32 +137,60 @@ export default function ItemDetailPage() {
   // ── Live status indicator ──
   const stockStatus = item.minThreshold > 0
     ? item.availableQty < item.minThreshold
-      ? { color: "bg-warning", label: "Low" }
-      : { color: "bg-success", label: "OK" }
-    : { color: "bg-success", label: "OK" };
+      ? { color: "bg-warning", label: "ต่ำ" }
+      : { color: "bg-success", label: "ปกติ" }
+    : { color: "bg-success", label: "ปกติ" };
 
   if (item.availableQty === 0) {
     stockStatus.color = "bg-destructive";
-    stockStatus.label = "Out";
+    stockStatus.label = "หมด";
   }
 
   const coverSrc = item.imageUrl ?? item.images?.[0] ?? null;
 
+  // ── Lot expiry alert ──
+  const now = new Date();
+  const expiredLots: { lotNumber: string; expiryDate: string }[] = [];
+  const soonLots: { lotNumber: string; days: number }[] = [];
+  for (const l of item.lots ?? []) {
+    if (!l.expiryDate) continue;
+    const days = Math.floor((new Date(l.expiryDate).getTime() - now.getTime()) / 86_400_000);
+    if (days < 0) expiredLots.push({ lotNumber: l.lotNumber, expiryDate: l.expiryDate });
+    else if (days <= 60) soonLots.push({ lotNumber: l.lotNumber, days });
+  }
+  const hasExpiryAlert = expiredLots.length > 0 || soonLots.length > 0;
+
   return (
     <div>
-      {/* ── Back nav + code breadcrumb (replaces redundant page header) ── */}
-      <div className="flex items-center gap-2 text-sm mb-6">
-        <Link
-          href="/items"
-          className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-4" /> รายการทั้งหมด
-        </Link>
-        <span className="text-muted-foreground/50">/</span>
-        <span className="font-medium font-mono">{item.code}</span>
-      </div>
-
       <div className="max-w-5xl">
+        {/* ── Expiry alert ── */}
+        {hasExpiryAlert && (
+          <div className="mb-6 space-y-2">
+            {expiredLots.length > 0 && (
+              <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+                <XCircle className="size-5 text-destructive shrink-0 mt-0.5" />
+                <div className="text-sm min-w-0">
+                  <span className="font-semibold text-destructive">หมดอายุแล้ว ({expiredLots.length})</span>
+                  <span className="text-muted-foreground ml-2">
+                    {expiredLots.map((l) => `Lot ${l.lotNumber} · ${new Date(l.expiryDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}`).join("  ·  ")}
+                  </span>
+                </div>
+              </div>
+            )}
+            {soonLots.length > 0 && (
+              <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
+                <AlertTriangle className="size-5 text-warning shrink-0 mt-0.5" />
+                <div className="text-sm min-w-0">
+                  <span className="font-semibold text-warning">ใกล้หมดอายุ ({soonLots.length})</span>
+                  <span className="text-muted-foreground ml-2">
+                    {soonLots.map((l) => `Lot ${l.lotNumber} · ใน ${l.days} วัน`).join("  ·  ")}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Cover image + Title + Stock at-a-glance ── */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 pb-6 border-b border-border">
           {coverSrc && (
@@ -208,6 +245,14 @@ export default function ItemDetailPage() {
               userRole={user?.role || ""}
               onAdjust={() => setAdjustOpen(true)}
               onReportDamage={() => setDamageOpen(true)}
+              onRefresh={fetchItem}
+            />
+          )}
+
+          {tab === "media" && (
+            <ItemDetailMedia
+              item={{ id: item.id, imageUrl: item.imageUrl, images: item.images }}
+              canAct={!!canAct}
               onRefresh={fetchItem}
             />
           )}
@@ -313,7 +358,7 @@ function StockSummary({ available, total, unit, minThreshold }: {
       ? <AlertTriangle className="size-3 text-warning" />
       : <CheckCircle2 className="size-3 text-success" />;
 
-  const statusLabel = isOut ? "Out of stock" : isLow ? "Low stock" : "In stock";
+  const statusLabel = isOut ? "หมดสต็อก" : isLow ? "เหลือน้อย" : "มีในสต็อก";
 
   return (
     <div className="shrink-0 min-w-[220px]">
@@ -337,7 +382,7 @@ function StockSummary({ available, total, unit, minThreshold }: {
         />
       </div>
       <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-        <span>Stock level</span>
+        <span>ระดับสต็อก</span>
         <span className="tabular-nums">{pct}%</span>
       </div>
     </div>

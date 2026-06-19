@@ -2,28 +2,22 @@
 
 import { Suspense, useState, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, ChevronLeft, ChevronRight, ChevronDown, QrCode, X, Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card } from "@/components/ui/card";
-import { STATUS_PILLS, STATUS_VARIANTS, STATUS_LABELS } from "@/lib/constants";
+import { STATUS_PILLS, STATUS_LABELS, locationLabel } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Progress, ProgressTrack, ProgressIndicator } from "@/components/ui/progress";
 import { useSession } from "@/components/layout/auth-guard";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { usePagination } from "@/hooks/use-pagination";
-import { locationLabel } from "@/lib/constants";
 import { getItems, getSubItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
+import { ItemsFilterBar, EMPTY_FILTER, type FilterState } from "@/components/items/items-filter-bar";
 
 
 interface UnitType { id: string; name: string }
@@ -54,45 +48,6 @@ interface ItemRecord {
   _count: { subItems: number };
 }
 
-function StockBar({ available, total, threshold }: { available: number; total: number; threshold: number }) {
-  if (total === 0) return <span className="text-xs text-muted-foreground">-</span>;
-  const pct = Math.round((available / total) * 100);
-  const barColor = available < threshold
-    ? "bg-destructive" : pct < 50
-    ? "bg-warning" : "bg-success";
-  return (
-    <div className="flex items-center gap-2 min-w-[100px]">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className={`text-xs tabular-nums whitespace-nowrap ${available < threshold ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-        {available}/{total}
-      </span>
-    </div>
-  );
-}
-
-const STATUS_CHIPS = [
-  { value: "AVAILABLE", label: "มีอยู่", color: "bg-success/15 text-success hover:bg-success/25 border-success/30" },
-  { value: "CHECKED_OUT", label: "ถูกยืม", color: "bg-info-500/15 text-info-500 hover:bg-info-500/25 border-info-500/30" },
-  { value: "DAMAGED", label: "ชำรุด", color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
-  { value: "UNDER_REPAIR", label: "ซ่อมอยู่", color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
-  { value: "LOST", label: "สูญหาย", color: "bg-purple-500/15 text-purple-500 hover:bg-purple-500/25 border-purple-500/30" },
-  { value: "DISPOSED", label: "จำหน่ายแล้ว", color: "bg-muted text-muted-foreground hover:bg-muted/80 border-border" },
-  { value: "PENDING_MAINTENANCE", label: "รอบำรุง", color: "bg-cyan-500/15 text-cyan-600 hover:bg-cyan-500/25 border-cyan-500/30" },
-] as const;
-
-const PRESET_CHIPS = [
-  { value: "lowStock", label: "สต๊อกต่ำ", alertKey: "lowStock" as const, color: "bg-orange-500/15 text-orange-500 hover:bg-orange-500/25 border-orange-500/30" },
-  { value: "nearExpiry", label: "ใกล้หมดอายุ", alertKey: "nearExpiry" as const, color: "bg-warning/15 text-warning-foreground hover:bg-warning/25 border-warning/30" },
-  { value: "overdueMaint", label: "บำรุเกินกำหนด", alertKey: "overdueMaintenance" as const, color: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30" },
-] as const;
-
-// Map profile.icon string → lucide component. Unknown → Boxes fallback.
-const PROFILE_ICONS: Record<string, LucideIcon> = {
-  Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes,
-};
-
 export default function ItemsPage() {
   return (
     <Suspense fallback={<div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-96 w-full" /></div>}>
@@ -111,13 +66,6 @@ function ItemsContent() {
   const { locations } = useLocations();
   const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
-  const [filterProfile, setFilterProfile] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState(searchParams.get("status") ?? "");
-  const [filterLocation, setFilterLocation] = useState("");
-  const [presetFilter, setPresetFilter] = useState<string | null>(null);
-  const [scannerOpen, setScannerOpen] = useState(false);
 
   // derive profiles from categories (each carries full profile) instead of a separate getProfiles() call.
   const profiles = useMemo<ProfileOption[]>(() => {
@@ -126,12 +74,28 @@ function ItemsContent() {
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
 
-  const scopedCategories = useMemo(
-    () => (filterProfile ? categories.filter((c) => c.profile?.id === filterProfile) : categories),
-    [categories, filterProfile],
-  );
+  // Initial filter from URL params (runs once).
+  const [filter, setFilter] = useState<FilterState>(() => {
+    const preset = searchParams.get("lowStock") === "true" ? "lowStock"
+      : searchParams.get("nearExpiry") === "true" ? "nearExpiry"
+      : searchParams.get("overdueMaint") === "true" ? "overdueMaint"
+      : searchParams.get("onLoan") === "true" ? "onLoan"
+      : null;
+    const statusParam = searchParams.get("status");
+    return {
+      query: "",
+      profileId: "",
+      categoryId: searchParams.get("category"),
+      status: statusParam ? statusParam.split(",").filter(Boolean) : [],
+      location: {},
+      preset,
+    };
+  });
+  const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); }, [setPage]);
+
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [subItemsMap, setSubItemsMap] = useState<Record<string, SubItemRecord[]>>({});
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleQrScan = async (code: string) => {
     setScannerOpen(false);
@@ -143,8 +107,7 @@ function ItemsContent() {
         return;
       }
     } catch {}
-    setSearch(code);
-    setPage(1);
+    handleFilterChange({ ...filter, query: code });
   };
 
   const toggleExpand = async (itemId: string) => {
@@ -163,214 +126,63 @@ function ItemsContent() {
   const fetchItems = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
-    if (search) params.search = search;
-    if (filterProfile) params.profileId = filterProfile;
-    if (filterCategory) params.categoryId = filterCategory;
-    if (filterStatus) params.status = filterStatus;
-    if (filterLocation) params.locationId = filterLocation;
-    if (presetFilter) params[presetFilter] = "true";
+    if (filter.query) params.search = filter.query;
+    if (filter.profileId) params.profileId = filter.profileId;
+    if (filter.categoryId) params.categoryId = filter.categoryId;
+    if (filter.status.length) params.status = filter.status.join(",");
+    if (filter.preset) params[filter.preset] = "true";
+    if (filter.location.building) params.building = filter.location.building;
+    if (filter.location.floor) params.floor = filter.location.floor;
+    if (filter.location.room) params.room = filter.location.room;
+    if (filter.location.detail) params.detail = filter.location.detail;
 
     const data = await getItems(params);
     setItems((data.items || []) as ItemRecord[]);
     setTotal(data.total || 0);
     setLoading(false);
-  }, [page, perPage, search, filterProfile, filterCategory, filterStatus, filterLocation, presetFilter]);
-
-  useEffect(() => {
-    const low = searchParams.get("lowStock");
-    const near = searchParams.get("nearExpiry");
-    const over = searchParams.get("overdueMaint");
-    if (low === "true") setPresetFilter("lowStock");
-    else if (near === "true") setPresetFilter("nearExpiry");
-    else if (over === "true") setPresetFilter("overdueMaint");
-  }, [searchParams]);
+  }, [page, perPage, filter, setTotal]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   return (
     <div className="space-y-6">
-      <Card className="p-3 space-y-3">
-        {/* Row 0: profile tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-xl bg-muted/40 border border-border/60">
-          <button
-            type="button"
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
-              !filterProfile
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-background hover:text-foreground"
-            }`}
-            onClick={() => { setFilterProfile(""); setFilterCategory(""); setPage(1); }}
-          >
-            <Boxes className="h-4 w-4" />
-            ทุกประเภท
-          </button>
-          {profiles.map((p) => {
-            const active = filterProfile === p.id;
-            const Icon = PROFILE_ICONS[p.icon ?? ""] ?? Boxes;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-all ${
-                  active
-                    ? `${p.color} font-semibold shadow-sm ring-1 ring-black/5`
-                    : "text-muted-foreground hover:bg-background hover:text-foreground"
-                }`}
-                onClick={() => { setFilterProfile(p.id); setFilterCategory(""); setPage(1); }}
-              >
-                <Icon className="h-4 w-4" />
-                {p.name}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Row 1: search + scan + dropdowns */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="ค้นหารหัส, ชื่อพัสดุ..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-8 text-gray-900"
-            />
-          </div>
-          <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} aria-label="สแกน QR Code" className="shrink-0">
-            <QrCode className="h-4 w-4" />
-          </Button>
-          <Select value={filterCategory || "__all__"} onValueChange={(v) => { setFilterCategory(!v || v === "__all__" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="ทุกหมวดหมู่ย่อย">
-                {(value: string | null) => {
-                  if (!value) return "ทุกหมวดหมู่ย่อย";
-                  const cat = scopedCategories.find((c) => c.id === value);
-                  return cat?.name ?? "ทุกหมวดหมู่ย่อย";
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">ทุกหมวดหมู่ย่อย</SelectItem>
-              {scopedCategories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterLocation || "__all__"} onValueChange={(v) => { setFilterLocation(!v || v === "__all__" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="ทุกสถานที่">
-                {(value: string | null) => {
-                  if (!value) return "ทุกสถานที่";
-                  const loc = locations.find((l) => l.id === value);
-                  return loc ? locationLabel(loc) : "ทุกสถานที่";
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">ทุกสถานที่</SelectItem>
-              {locations.map((loc) => (
-                <SelectItem key={loc.id} value={loc.id}>{locationLabel(loc)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Row 2: status quick-filter chips */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-muted-foreground mr-1">สถานะ:</span>
-          <button
-            type="button"
-            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-              !filterStatus
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-muted/50 text-foreground/70 border-border hover:bg-muted"
-            }`}
-            onClick={() => { setFilterStatus(""); setPage(1); }}
-          >
-            ทั้งหมด
-          </button>
-          {STATUS_CHIPS.map((chip) => {
-            const active = filterStatus === chip.value;
-            return (
-              <button
-                key={chip.value}
-                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                  active ? chip.color : "bg-muted/50 text-foreground/70 border-border hover:bg-muted"
-                }`}
-                onClick={() => { setFilterStatus(active ? "" : chip.value); setPage(1); }}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-
-          <span className="text-xs text-muted-foreground ml-3 mr-1">Alerts:</span>
-          <button
-            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-              !presetFilter
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-muted/50 text-foreground/70 border-border hover:bg-muted"
-            }`}
-            onClick={() => { setPresetFilter(null); setPage(1); }}
-          >
-            Off
-          </button>
-          {PRESET_CHIPS.map((chip) => {
-            const active = presetFilter === chip.value;
-            const count = alerts[chip.alertKey];
-            return (
-              <button
-                key={chip.value}
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                  active ? chip.color : "bg-muted/50 text-foreground/70 border-border hover:bg-muted"
-                }`}
-                onClick={() => { setPresetFilter(active ? null : chip.value); setPage(1); }}
-              >
-                {chip.label}
-                {count > 0 && (
-                  <span className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[20px] h-4 text-[10px] font-bold leading-none ${
-                    active
-                      ? chip.value === "lowStock" ? "bg-orange-300 text-orange-900"
-                        : chip.value === "nearExpiry" ? "bg-yellow-300 text-yellow-900"
-                        : "bg-purple-300 text-purple-900"
-                      : chip.value === "lowStock" ? "bg-orange-500 text-white"
-                        : chip.value === "nearExpiry" ? "bg-yellow-500 text-white"
-                        : "bg-purple-500 text-white"
-                  }`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </Card>
+      <ItemsFilterBar
+        profiles={profiles}
+        categories={categories}
+        locations={locations}
+        alerts={alerts}
+        value={filter}
+        onChange={handleFilterChange}
+        resultCount={total}
+        onScanQR={() => setScannerOpen(true)}
+      />
 
       <div className="rounded-2xl border overflow-hidden bg-card">
-        <div className="overflow-auto max-h-[calc(100vh-268px)]">
+        <div className="overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-300px)]">
           <Table>
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                 <TableHead className="w-10"></TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>รหัสพัสดุ</TableHead>
+                <TableHead>ชื่อ</TableHead>
+                <TableHead>ประเภท</TableHead>
+                <TableHead>คงเหลือ</TableHead>
+                <TableHead>สถานที่</TableHead>
+                <TableHead>สถานะ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No items found
                   </TableCell>
                 </TableRow>
@@ -414,10 +226,18 @@ function ItemsContent() {
                       <TableCell>
                         <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
                       </TableCell>
-                      <TableCell>
-                        <StockBar available={item.availableQty} total={item.totalQty} threshold={item.minThreshold} />
+                      <TableCell className="text-sm tabular-nums">
+                        {item.totalQty === 0 ? (
+                          <span className="text-muted-foreground">-</span>
+                        ) : (
+                          <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : "text-muted-foreground"}>
+                            {item.availableQty === item.totalQty
+                              ? item.availableQty
+                              : `${item.availableQty}/${item.totalQty}`}{" "}
+                            <span className="text-muted-foreground font-normal">{item.issueUnit.name}</span>
+                          </span>
+                        )}
                       </TableCell>
-                      <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
                       <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
@@ -436,7 +256,6 @@ function ItemsContent() {
                           <span className="text-orange-300/80 mr-1.5">└</span>{sub.subCode}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{sub.name || sub.notes || "-"}</TableCell>
-                        <TableCell></TableCell>
                         <TableCell></TableCell>
                         <TableCell></TableCell>
                         <TableCell className="text-sm text-muted-foreground">

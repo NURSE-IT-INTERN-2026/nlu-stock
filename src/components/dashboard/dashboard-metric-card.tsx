@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, Package, Wrench } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Package, Wrench, CalendarClock, Undo2 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   AlertTriangle,
   CheckCircle2,
   Package,
   Wrench,
+  CalendarClock,
+  Undo2,
 };
 
 const BADGE_BG: Record<string, string> = {

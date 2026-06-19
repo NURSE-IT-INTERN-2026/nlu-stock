@@ -1,53 +1,59 @@
 import { getAlertCounts } from "@/lib/alerts";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
-import { StatusOverviewWidget } from "@/components/dashboard/status-overview-widget";
+import { MonthlyDispenseWidget } from "@/components/dashboard/monthly-dispense-widget";
+import { ProfileSummaryWidget } from "@/components/dashboard/profile-summary-widget";
 import { DashboardTables } from "@/components/dashboard/dashboard-charts";
-import { DashboardBarCharts } from "@/components/dashboard/dashboard-bar-charts";
 import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 
 export default async function DashboardPage() {
-  const { lowStock, nearExpiry, overdueMaintenance: overdueMaint } = await getAlertCounts();
+  const { lowStock, nearExpiry, totalItems, onLoan } = await getAlertCounts();
 
   return (
     <div className="flex flex-col gap-6">
       <DashboardGreeting />
 
       {/* Metric cards — horizontal row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <DashboardMetricCard
-          title="สต๊อกต่ำ"
+          title="รายการพัสดุทั้งหมด"
+          value={totalItems}
+          subtitle="ทั้งหมด"
+          iconName="Package"
+          color="text-success"
+          href="/items"
+        />
+        <DashboardMetricCard
+          title="ใกล้หมด / ต่ำกว่าจุดสั่งซื้อ"
           value={lowStock}
-          subtitle={lowStock > 0 ? "ต่ำกว่าขั้นต่ำ" : undefined}
+          subtitle={lowStock > 0 ? "ต่ำกว่าจุดสั่งซื้อ" : undefined}
           iconName="AlertTriangle"
           color="text-orange-500"
           href="/items?lowStock=true"
         />
         <DashboardMetricCard
-          title="ใกล้หมดอายุ"
+          title="หมดอายุใน 30 วัน"
           value={nearExpiry}
-          subtitle={nearExpiry > 0 ? "หมดอายุใน 90 วัน" : undefined}
-          iconName="Package"
+          subtitle={nearExpiry > 0 ? "หมดอายุใน 30 วัน" : undefined}
+          iconName="CalendarClock"
           color="text-info-500"
           href="/items?nearExpiry=true"
         />
         <DashboardMetricCard
-          title="บำรุงเกินกำหนด"
-          value={overdueMaint}
-          subtitle={overdueMaint > 0 ? "เกินกำหนดแล้ว" : undefined}
-          iconName="Wrench"
+          title="ยืมอยู่ / ยังไม่คืน"
+          value={onLoan}
+          subtitle={onLoan > 0 ? "ยังไม่คืน" : undefined}
+          iconName="Undo2"
           color="text-danger-500"
-          href="/items?overdueMaint=true"
+          href="/items?onLoan=true"
         />
       </div>
 
-      {/* Charts + status overview */}
-      <div className="grid gap-4 lg:grid-cols-5 items-stretch">
-        <div className="lg:col-span-1 flex">
-          <StatusOverviewWidget />
+      {/* Monthly dispense + category breakdown */}
+      <div className="grid gap-4 lg:grid-cols-3 items-stretch">
+        <div className="lg:col-span-2">
+          <MonthlyDispenseWidget />
         </div>
-        <div className="lg:col-span-4">
-          <DashboardBarCharts />
-        </div>
+        <ProfileSummaryWidget />
       </div>
 
       {/* Full-width tables */}

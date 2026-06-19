@@ -10,6 +10,7 @@ import { useSession } from "@/components/layout/auth-guard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertProvider } from "@/hooks/use-alerts";
 import { CartProvider } from "@/components/dispense/cart-context";
+import { PageHeaderProvider } from "@/components/layout/page-header-context";
 
 const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
@@ -74,20 +75,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <QueryClientProvider client={queryClient}>
     <AlertProvider>
       <CartProvider>
-      <div className="flex h-screen overflow-hidden">
+      <PageHeaderProvider>
+        <div className="flex h-screen overflow-hidden">
         <Sidebar
           user={user}
           collapsed={sidebarCollapsed}
           onToggle={toggleSidebar}
         />
         <div className="flex flex-1 flex-col min-w-0">
-          <Header title={getTitle(pathname)} user={user} />
+          <Header title={getTitle(pathname)} user={user} sidebarCollapsed={sidebarCollapsed} />
           <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">
             {children}
           </main>
         </div>
         <BottomTab user={user} />
       </div>
+      </PageHeaderProvider>
       </CartProvider>
     </AlertProvider>
     </QueryClientProvider>

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const categoryId = params.get("categoryId") || undefined;
 
   const now = new Date();
-  const in90Days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   const itemWhere: Record<string, unknown> = { isActive: true };
   if (categoryId) itemWhere.categoryId = categoryId;
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.lot.findMany({
       where: {
-        expiryDate: { gte: now, lte: in90Days },
+        expiryDate: { gte: now, lte: in30Days },
         item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
       },
       include: {

@@ -442,7 +442,7 @@ export function getMaintenanceSummary() {
 // ─── Alerts ───
 
 export function getAlerts() {
-  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; total: number }>(
+  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; total: number; totalItems: number; onLoan: number }>(
     "/api/alerts",
   );
 }
@@ -462,6 +462,14 @@ export function getDashboardStatusOverview() {
   return request<unknown>("/api/dashboard/status-overview");
 }
 
+export function getDashboardDispenseMonthly() {
+  return request<unknown[]>("/api/dashboard/dispense-monthly");
+}
+
+export function getDashboardProfileSummary() {
+  return request<unknown[]>("/api/dashboard/profile-summary");
+}
+
 export function getDashboardRecentDispense() {
   return request<unknown[]>("/api/dashboard/recent-dispense");
 }
@@ -470,12 +478,12 @@ export function getDashboardRecentReceive() {
   return request<unknown[]>("/api/dashboard/recent-receive");
 }
 
-export function getDashboardTopDispense() {
-  return request<unknown[]>("/api/dashboard/top-dispense");
+export function getDashboardTopDispense(categoryId?: string) {
+  return request<unknown[]>(`/api/dashboard/top-dispense${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`);
 }
 
-export function getDashboardUsageBySubject() {
-  return request<unknown[]>("/api/dashboard/usage-by-subject");
+export function getDashboardUsageBySubject(categoryId?: string) {
+  return request<unknown[]>(`/api/dashboard/usage-by-subject${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`);
 }
 
 // ─── Reports ───
