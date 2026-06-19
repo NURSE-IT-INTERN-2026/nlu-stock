@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NLU Stock — Presentation Guide</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #fff;
+      --border: #e2e5ea;
+      --ink: #0f172a;
+      --ink2: #334155;
+      --muted: #64748b;
+      --accent: #f59e0b;
+      --accent-bg: #fffbeb;
+      --teal: #0d9488;
+      --teal-bg: #f0fdfa;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Sarabun', 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* NAV */
+    .top-bar {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(255,255,255,.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: .75rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .top-bar h1 { font-size: .95rem; font-weight: 700; color: var(--ink); }
+    .top-bar .sub { font-size: .72rem; color: var(--muted); font-weight: 500; }
+    .nav-pills { display: flex; gap: .3rem; flex-wrap: wrap; }
+    .nav-pills a {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 6px;
+      font-size: .72rem; font-weight: 600;
+      color: var(--muted); background: var(--surface);
+      border: 1px solid var(--border);
+      text-decoration: none; transition: all .15s;
+    }
+    .nav-pills a:hover, .nav-pills a:focus {
+      background: var(--accent); color: #fff; border-color: var(--accent);
+    }
+
+    /* SLIDE PAGE */
+    .slide-page {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      min-height: calc(100vh - 60px);
+      border-bottom: 2px solid var(--border);
+    }
+    .slide-page:nth-child(even) .slide-img-wrap { order: 2; }
+    .slide-page:nth-child(even) .slide-notes { order: 1; }
+
+    .slide-img-wrap {
+      background: #1e1e1e;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem;
+      position: relative;
+    }
+    .slide-img-wrap img {
+      max-width: 100%;
+      max-height: 85vh;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+    .slide-badge {
+      position: absolute; top: 1rem; left: 1rem;
+      background: var(--accent);
+      color: #fff; font-size: .7rem; font-weight: 700;
+      padding: .25rem .6rem; border-radius: 6px;
+    }
+
+    .slide-notes {
+      padding: 2.5rem 2rem;
+      display: flex; flex-direction: column; justify-content: center;
+      overflow-y: auto;
+      background: var(--surface);
+    }
+    .slide-number {
+      font-size: .65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--accent);
+      margin-bottom: .5rem;
+    }
+    .slide-title {
+      font-size: 1.4rem; font-weight: 800; color: var(--ink);
+      line-height: 1.3; margin-bottom: .35rem;
+    }
+    .slide-subtitle {
+      font-size: .85rem; color: var(--muted); margin-bottom: 1.25rem;
+      font-weight: 500;
+    }
+
+    /* SPEAKER CARD */
+    .speaker-card {
+      background: var(--accent-bg);
+      border: 1px solid #fde68a;
+      border-left: 4px solid var(--accent);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .speaker-card::before {
+      content: '🎤 คำบรรยาย';
+      display: block; font-weight: 700; font-size: .72rem;
+      text-transform: uppercase; letter-spacing: .05em;
+      color: #b45309; margin-bottom: .45rem;
+    }
+    .speaker-card ul { padding-left: 1.1rem; }
+    .speaker-card li { margin-bottom: .3rem; color: #78350f; font-size: .9rem; line-height: 1.65; }
+    .speaker-card li::marker { color: var(--accent); }
+    .speaker-card li strong { color: #92400e; }
+
+    /* KEY POINTS */
+    .key-points {
+      background: var(--teal-bg);
+      border: 1px solid #99f6e4;
+      border-left: 4px solid var(--teal);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+    }
+    .key-points::before {
+      content: '📌 จุดสำคัญ';
+      display: block; font-weight: 700; font-size: .72rem;
+      text-transform: uppercase; letter-spacing: .05em;
+      color: #0f766e; margin-bottom: .45rem;
+    }
+    .key-points ul { padding-left: 1.1rem; }
+    .key-points li { margin-bottom: .3rem; color: #134e4a; font-size: .85rem; line-height: 1.6; }
+    .key-points li::marker { color: var(--teal); }
+    .key-points code { background: #ccfbf1; padding: .1rem .35rem; border-radius: 4px; font-size: .8rem; }
+
+    /* TRANSITION */
+    .transition {
+      background: linear-gradient(135deg, #fef3c7, #fff7ed);
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: .6rem 1rem;
+      margin-top: 1rem;
+      font-size: .78rem;
+      color: #92400e;
+      font-style: italic;
+    }
+    .transition::before { content: '➡️ '; }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .slide-page {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+      .slide-page:nth-child(even) .slide-img-wrap { order: 0; }
+      .slide-page:nth-child(even) .slide-notes { order: 0; }
+      .slide-img-wrap { min-height: 40vh; }
+      .slide-notes { padding: 1.5rem; }
+      .slide-title { font-size: 1.15rem; }
+    }
+
+    /* PRINT */
+    @media print {
+      .top-bar { display: none; }
+      .slide-page { page-break-after: always; min-height: auto; }
+      .slide-img-wrap { background: #fff; }
+      .slide-img-wrap img { box-shadow: none; border: 1px solid #ccc; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV BAR -->
+<div class="top-bar">
+  <div>
+    <h1>NLU Stock — Presentation Guide</h1>
+    <div class="sub">นิเทศพยบ 01 — 15 หน้า (Slide 7–21)</div>
+  </div>
+  <div class="nav-pills">
+    <a href="#s7">7</a><a href="#s8">8</a><a href="#s9">9</a>
+    <a href="#s10">10</a><a href="#s11">11</a><a href="#s12">12</a>
+    <a href="#s13">13</a><a href="#s14">14</a><a href="#s15">15</a>
+    <a href="#s16">16</a><a href="#s17">17</a><a href="#s18">18</a>
+    <a href="#s19">19</a><a href="#s20">20</a><a href="#s21">21</a>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 7: TITLE / INTRO -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s7">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 7</span>
+    <img src="นิเทศพยบ 01 รวม /7.jpg" alt="Slide 7" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">NLU SYSTEM INTRO</div>
+    <div class="slide-title">ปกโปรเจกต์ — โปรแกรมจัดการสต็อกสินค้า</div>
+    <div class="slide-subtitle">NLU STOCK MANAGEMENT SYSTEM</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>สวัสดีครับ โครงการนี้คือ <strong>NLU Stock Management System</strong> — ระบบจัดการครุภัณฑ์และวัสดุ สำหรับสถาบันพยาบาลศาสตร์และผดุงครรภ์</li>
+        <li>วัตถุประสงค์หลัก: <strong>สร้าง/นำเข้าข้อมูลสินค้าเข้าสู่ระบบ แสดงข้อมูล และจัดการข้อมูลสินค้า</strong>ในระบบครบวงจร</li>
+        <li>ผมเป็น <strong>นักศึกษาปริญญาโท สาขาวิทยาการคอมพิวเตอร์ มหาวิทยาลัยเชียงใหม่</strong> ฝึกงานในตำแหน่ง Full Stack Developer Intern</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>Fullstack web application — frontend + backend ในโปรเจกต์เดียว</li>
+        <li>Tech stack: Next.js 16, React 19, TypeScript, Prisma ORM, PostgreSQL</li>
+        <li>ติดต่อ: <code>WUTTIPAT_T@CMU.AC.TH</code></li>
+      </ul>
+    </div>
+
+    <div class="transition">หน้าถัดไปจะแนะนำภาพรวมของระบบ — ฟีเจอร์หลักและ UI preview</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 8: SYSTEM OVERVIEW -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s8">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 8</span>
+    <img src="นิเทศพยบ 01 รวม /8.jpg" alt="Slide 8" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">NLU SYSTEM OVERVIEW</div>
+    <div class="slide-title">ภาพรวมระบบ — การพัฒนาระบบใช้งานจัดการสต็อกสินค้า</div>
+    <div class="slide-subtitle">Full Stack Developer Intern — NLU Stock Management System</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>ระบบนี้จัดการสต็อกสินค้าครบวงจร — ติดตาม <strong>ชื่อ, หมวดหมู่, จำนวน, สถานที่, สถานะ</strong>ของทุกรายการ</li>
+        <li>รองรับ <strong>serial number</strong> สำหรับครุภัณฑ์ที่ต้องติดตามทีละชิ้น</li>
+        <li>Import/Export ข้อมูลผ่าน <strong>Excel</strong> — ทำให้ย้ายข้อมูลจากระบบเก่าหรือส่งออกรายงานได้ง่าย</li>
+        <li>ฝั่งซ้ายเป็น <strong>UI preview</strong> ของหน้ารายการสินค้า — ตารางแสดง Code, Name, Category, Stock, Unit, Location, Status</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ขวามือ: หน้ารายละเอียดสินคะ — Overview, History, Photos + ปุ่ม Manage stock, Review</li>
+        <li>ระบบ track ทั้งครุภัณฑ์ (SubItem) และวัสดุสิ้นเปลือง (Lot + quantity)</li>
+      </ul>
+    </div>
+
+    <div class="transition">หน้าถัดไปจะอธิบาย User Roles และโครงสร้าง NLU ID</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 9: USER ROLES & NLU ID -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s9">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 9</span>
+    <img src="นิเทศพยบ 01 รวม /9.jpg" alt="Slide 9" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">USER ROLES & NLU ID</div>
+    <div class="slide-title">หนังสือและวัสดุ — บทบาทผู้ใช้ & โครงสร้าง NLU ID</div>
+    <div class="slide-subtitle">3 Roles + 8 Categories + ID Format</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>ADMIN</strong> — สร้าง แก้ไข ลบข้อมูลได้ทุกส่วน รวมถึงจัดการ Users</li>
+        <li><strong>STAFF</strong> — เพิ่ม แก้ไข ลบข้อมูลสินค้า เบิก-รับ-ปรับสต็อกได้ แต่จัดการ Users ไม่ได้</li>
+        <li><strong>INSTRUCTOR</strong> — ดูข้อมูลและรายงานได้อย่างเดียว (View Only)</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>โครงสร้าง NLU ID: <code>NLU-PREFIX-CODE-SUBCODE-SET-COPY</code></li>
+        <li>PREFIX 8 หมวด: <code>KRU</code> <code>ELE</code> <code>BOOK</code> <code>TOY</code> <code>DUR</code> <code>CON</code> <code>MED</code> <code>KIT</code></li>
+        <li>เช่น <code>NLU-KRU-001-A-1/1</code> = ครุภัณฑ์ รายการ 001 sub-code A set 1 copy 1</li>
+      </ul>
+    </div>
+
+    <div class="transition">จากนั้นดู Core System — สถาปัตยกรรมทั้ง 3 ส่วน</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 10: (รูป error — ข้าม แต่ใส่ note) -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s10">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 10</span>
+    <img src="นิเทศพยบ 01 รวม /10.jpg" alt="Slide 10" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">ARCHITECTURE OVERVIEW</div>
+    <div class="slide-title">สถาปัตยกรรมระบบ</div>
+    <div class="slide-subtitle">Frontend → Backend → Database</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>สถาปัตยกรรม <strong>3 ชั้น</strong>แบบ fullstack ใน framework เดียว</li>
+        <li><strong>Frontend</strong>: React 19 + Next.js 16 App Router — Server Components โดย default, Client Components เฉพาะที่ interactive</li>
+        <li><strong>Backend</strong>: Route Handlers + Prisma ORM 7.8 — type-safe query, migration versioned</li>
+        <li><strong>Database</strong>: PostgreSQL 16 รันใน Docker — port 5433, volume <code>pgdata</code> เก็บถาวร</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ไม่ต้อง setup API server แยก — Next.js ทำได้ทั้งหมด</li>
+        <li>Auth: <code>jose</code> JWT + <code>bcryptjs</code> แทน next-auth</li>
+        <li>UI: shadcn/ui + Tailwind v4 — copy-paste components ไม่ lock-in</li>
+      </ul>
+    </div>
+
+    <div class="transition">หน้าถัดไป: Core System แบ่งเป็น 3 หมวด</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 11: CORE SYSTEM -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s11">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 11</span>
+    <img src="นิเทศพยบ 01 รวม /11.jpg" alt="Slide 11" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">CORE SYSTEM</div>
+    <div class="slide-title">ระบบพื้นฐาน — Core System</div>
+    <div class="slide-subtitle">Foundation & Setup · Core Inventory · Utilities & Monitoring</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>Foundation & Setup</strong> — Docker + PostgreSQL + Prisma, DB Schema 12 models, JWT Auth, Sidebar Layout + Dark/Light Mode, Settings</li>
+        <li><strong>Core Inventory</strong> — All Items list, Dispense (QR scan + FIFO lot), Receive (สร้าง LOT ใหม่), Tracking, File Uploads</li>
+        <li><strong>Utilities & Monitoring</strong> — Dashboard widgets ปรับได้, Reports (CSV/PDF), QR Code สร้าง+อ่าน, Alerts แบบ real-time</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>แบ่งเป็น Milestone 0-12 — แต่ละส่วน develop แยกกัน ทดสอบแยกกัน</li>
+        <li>ทุกส่วนเชื่อมกันผ่าน Prisma ORM + Next.js Route Handlers</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไปดู System Flow ของแต่ละ workflow — เริ่มจาก Stock Level Control</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 12: INVENTORY / STOCK LEVEL -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s12">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 12</span>
+    <img src="นิเทศพยบ 01 รวม /12.jpg" alt="Slide 12" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">ระบบการจัดการ — ควบคุมระดับสต็อก + แจ้งเตือน</div>
+    <div class="slide-subtitle">Stock Level Control + Low Stock Alert</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>ซ้าย: <strong>ตารางรายการสินค้า</strong> — แสดง Code, Name, Category, Stock (เช่น 1/1, 3/5), Unit, Location, Status</li>
+        <li>มี <strong>Search + Filter</strong> ตามหมวดหมู่, สถานะ, สถานที่ตั้ง</li>
+        <li>ขวา: <strong>System Flow</strong> — Stock Levels → Filter & ค้นหา → Item Detail → QR Code Label → Auto Alerts</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ระบบแจ้งเตือนอัตโนมัติเมื่อ <strong>สต็อกต่ำ</strong>หรือ<strong>ใกล้หมดอายุ</strong></li>
+        <li>QR Code label สำหรับสินค้าทุกชิ้น — สแกนแล้วเข้าหน้ารายละเอียดได้ทันที</li>
+        <li>Location เก็บละเอียดถึง <code>อาคาร / ชั้น / ห้อง</code></li>
+      </ul>
+    </div>
+
+    <div class="transition">จากนั้นดู workflow การเบิกจ่าย</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 13: DISPENSE -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s13">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 13</span>
+    <img src="นิเทศพยบ 01 รวม /13.jpg" alt="Slide 13" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">เบิกจ่าย (DISPENSE)</div>
+    <div class="slide-subtitle">ครบข้อมูล เร็วทันใจ สะดวกอำนวยในการใช้</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>Step 1</strong> — ค้นหาหรือ <strong>QR Scan</strong>เพื่อหารายการสินค้า</li>
+        <li><strong>Step 2</strong> — เลือกรายการ + <strong>ใส่จำนวน</strong>ที่ต้องการเบิก</li>
+        <li><strong>Step 3</strong> — เลือก <strong>Lot แบบ FIFO</strong> (First-In First-Out) ระบบแนะนำลำดับ แต่พนักงานเลือกเองได้</li>
+        <li><strong>Step 4</strong> — สร้าง <strong>Dispense Record</strong> พร้อมอัปเดต Available Qty, SubItem Status, Lot Qty ทั้งหมดใน transaction เดียว</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ใช้ <code>CartProvider</code> context จัดการตะกร้า — เบิกได้หลายรายการพร้อมกัน</li>
+        <li><code>Prisma $transaction</code> dispense แบบ atomic — ไม่เสี่ยงข้อมูลไม่ตรง</li>
+        <li>บันทึก <strong>UsageType</strong>: COURSE / ACTIVITY / OTHER</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไป: workflow รับสินค้าเข้าคลัง</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 14: RECEIVE -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s14">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 14</span>
+    <img src="นิเทศพยบ 01 รวม /14.jpg" alt="Slide 14" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">รับสินค้า (RECEIVE)</div>
+    <div class="slide-subtitle">รับสินค้าเข้าคลังตามรายการสั่งซื้อ, จัดเก็บ LOT</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>Step 1</strong> — <strong>เลือกสินค้า</strong>จากรายการ มี Search bar ค้นหาได้</li>
+        <li><strong>Step 2</strong> — <strong>ระบุจำนวน</strong>ที่รับเข้า</li>
+        <li><strong>Step 3</strong> — กำหนด <strong>Lot Number + Expiry Date</strong> (สำคัญมากสำหรับวัสดุสิ้นเปลืองและยา)</li>
+        <li><strong>Step 4</strong> — กำหนด <strong>Sub-code</strong> สำหรับครุภัณฑ์ที่ต้อง track ทีละชิ้น</li>
+        <li><strong>Step 5</strong> — บันทึก <strong>ReceiveRecord</strong> อัปเดต stock ทันที</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ฝั่งซ้าย: UI mockup — ฟอร์มกรอก Lot Number, Expiry, Sub-code</li>
+        <li>ฝั่งขวา: Flowchart แสดง 5 ขั้นตอนชัดเจน</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไป: workflow บำรุงรักษา</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 15: MAINTENANCE -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s15">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 15</span>
+    <img src="นิเทศพยบ 01 รวม /15.jpg" alt="Slide 15" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">บันทึกการบำรุง (MAINTENANCE)</div>
+    <div class="slide-subtitle">Preventive & Corrective Maintenance Tracking</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>ซ้าย: <strong>Work In Progress</strong> dashboard — แสดงรายการบำรุงที่ค้างอยู่ พร้อมสถานะ Overdue / Due Soon</li>
+        <li>มี counter: <strong>กำลังดำเนินการ</strong>และ<strong>รอดำเนินการ</strong></li>
+        <li><strong>กิจกรรมล่าสุด</strong>แสดง log บันทึกการบำรุงที่ทำไปแล้ว</li>
+        <li>ขวา: Flowchart — ตรวจสอบข้อมูล → เลือกข้อมูล → บันทึก+จัด → บันทึก+ตรวจ → อัปเดต</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>สองประเภท: <code>PREVENTIVE</code> (ตามรอบ) และ <code>CORRECTIVE</code> (ซ่อมแก้ไข)</li>
+        <li>บันทึก <strong>ต้นทุน + attachmentUrls[]</strong> เก็บหลักฐานการซ่อม</li>
+        <li>ผลลัพธ์: AVAILABLE / NEEDS_MORE_REPAIR / DISPOSED</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไป: Stock Adjustment — ปรับปรุงสต็อกเมื่อมีเหตุการณ์</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 16: STOCK ADJUSTMENT -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s16">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 16</span>
+    <img src="นิเทศพยบ 01 รวม /16.jpg" alt="Slide 16" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">ปรับปรุงสต็อก (STOCK ADJUSTMENT)</div>
+    <div class="slide-subtitle">จัดการเมื่อสินค้าเสีย หาย หรือนับไม่ตรง</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>ใช้เมื่อ <strong>พบสินค้าเสีย, หาย, นับไม่ตรง หรือจำหน่าย</strong></li>
+        <li>ซ้าย: UI mockup — หน้ารายละเอียดสินคะ + ปุ่ม <strong>Adjust Stock</strong></li>
+        <li>ฟอร์ม Adjust Stock: กรอก <strong>จำนวนที่นับได้ (Count on shelf)</strong>, เลือก <strong>Reason</strong>, หมายเหตุ, แนบรูป Evidence</li>
+        <li>ขวา: Flowchart — พบเหตุการณ์ → เลือกปรับปรุง → ปรับปรุง → สร้าง StockAdjustment Record → อัปเดต Stock</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>AdjustmentReason: <code>LOST</code> <code>DAMAGED_PENDING_REPAIR</code> <code>COUNT_MISMATCH</code> <code>DISPOSAL</code> <code>OTHER</code></li>
+        <li>ทุก adjustment สร้าง <strong>audit trail</strong> — เก็บ previousQty + newQty</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไป: Reports — ระบบรายงาน 8 แท็บ</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 17: REPORTS -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s17">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 17</span>
+    <img src="นิเทศพยบ 01 รวม /17.jpg" alt="Slide 17" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">รายงาน (REPORTS)</div>
+    <div class="slide-subtitle">8 แท็บ + กราฟ + ตัวกรอง + Export PDF/Excel</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>ซ้าย: UI mockup — กราฟแท่ง <strong>Stock by Category</strong> แสดง Available vs Total</li>
+        <li>ตารางด้านล่างสรุปยอดตามหมวดหมู่ เช่น ของใช้ 136 รายการ, เครื่องมือ 169 รายการ, ยา 150 รายการ</li>
+        <li><strong>Step 1</strong> — เลือกหมวดหมู่รายงาน (8 tabs)</li>
+        <li><strong>Step 2</strong> — กำหนด Filter (วันที่ / หมวด / สถานะ)</li>
+        <li><strong>Step 3</strong> — ดูข้อมูล + การวิเคราะห์ (กราฟ + ตาราง)</li>
+        <li><strong>Step 4</strong> — Export เป็น <strong>PDF หรือ Excel</strong></li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>8 tabs: สรุปยอด, ประวัติเบิก, Usage/Subject, Near-Expiry, ต้นทุนปี, ชำรุด, Maint.Schedule, Maint.History</li>
+        <li>Export: <code>pdfkit</code> (PDF) + <code>xlsx</code> (Excel)</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไป: Settings — ตั้งค่าระบบ</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 18: SETTINGS -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s18">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 18</span>
+    <img src="นิเทศพยบ 01 รวม /18.jpg" alt="Slide 18" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">SYSTEM FLOW</div>
+    <div class="slide-title">ตั้งค่า: ระบบ (SETTINGS)</div>
+    <div class="slide-subtitle">Items Master · Categories · Locations · Users · Import CSV</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>ซ้าย: UI mockup — <strong>Items Master</strong> หน้าจัดการรายการสินคะ มี Search, ตาราง CRUD, progress bar แสดง stock level</li>
+        <li>ขวา: 5 หมวดตั้งค่าหลัก:</li>
+        <li><strong>Items Master</strong> — เพิ่ม/แก้ไข/ลบรายการสินคะ</li>
+        <li><strong>Categories & Locations</strong> — จัดการหมวดหมู่ + สถานที่ตั้ง</li>
+        <li><strong>User Management</strong> — จัดการบัญชีผู้ใช้ + roles</li>
+        <li><strong>Import CSV Bulk</strong> — นำเข้าข้อมูลเป็นกลุ่ม</li>
+        <li><strong>ยืนยัน + Validate</strong> — ตรวจสอบข้อมูลก่อนบันทึกด้วย Zod schema</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>Settings มี <strong>5 tabs</strong> สำหรับ admin จัดการข้อมูลหลัก</li>
+        <li>CSV Import รองรับ 7 แหล่งข้อมูล (ครุภัณฑ์, อิเล็กทรอนิกส์, หนังสือ, ของเล่น, วัสดุคงทน, วัสดุสิ้นเปลือง, อุปกรณ์ประกอบวิชา)</li>
+      </ul>
+    </div>
+
+    <div class="transition">ต่อไป: Roadmap — แผนแม่บทและขั้นตอนต่อไป</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 19: ROADMAP -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s19">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 19</span>
+    <img src="นิเทศพยบ 01 รวม /19.jpg" alt="Slide 19" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">ROADMAP & NEXT STEPS</div>
+    <div class="slide-title">แผนแม่บทและขั้นตอนต่อไป</div>
+    <div class="slide-subtitle">6 ช่วง — จาก Dashboard ถึง Test & Maintenance</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>Dashboard</strong> — สร้าง Dashboard 8 widgets สำหรับภาพรวมสต็อก ยอดเบิก สถานะ</li>
+        <li><strong>Import Data</strong> — นำเข้าข้อมูลจากระบบเก่าด้วย Seed Data + กรอก manual สำหรับรายการใหม่</li>
+        <li><strong>Guidebook</strong> — สร้างคู่มือการใช้งาน + เอกสาร architecture ของ NLU Stock</li>
+        <li><strong>Schema Overhaul</strong> — ปรับ DB schema แยก LOCATION ออกจาก product details</li>
+        <li><strong>ปรับปรุง UX/UI</strong> — เพิ่ม loading skeleton, refactor code, redesign dashboard/settings/receive/maintenance</li>
+        <li><strong>Test / Maintenance</strong> — ทดสอบระบบ + เก็บ user feedback เพื่อปรับปรุงต่อ</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ตอนนี้ทำเสร็จแล้ว <strong>M0-M8</strong> (9 milestones)</li>
+        <li>M9 Item Detail กำลังพัฒนา</li>
+        <li>เป้าหมาย: ระบบครบวงจรที่ลดงาน manual + เพิ่มความแม่นยำ</li>
+      </ul>
+    </div>
+
+    <div class="transition">หน้าถัดไป: Benefits — จุดเด่นของระบบและทีม</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 20: BENEFITS -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s20">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 20</span>
+    <img src="นิเทศพยบ 01 รวม /20.jpg" alt="Slide 20" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">BENEFITS</div>
+    <div class="slide-title">โดยทีมของเรา — Benefits</div>
+    <div class="slide-subtitle">ความสามารถ · การร่วมมือ · การพัฒนาต่อ</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>ความสามารถ (Capabilities)</strong></li>
+        <li>พัฒนาระบบจัดการสต็อกครบวงจรด้วย <strong>Next.js fullstack</strong> — frontend + backend ในโปรเจกต์เดียว</li>
+        <li>ออกแบบ database schema เอง รองรับทั้งครุภัณฑ์และวัสดุสิ้นเปลือง</li>
+        <li>ใช้ <strong>Docker</strong> containerized environment ทำให้ setup ง่ายและสะอาด</li>
+      </ul>
+    </div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>การร่วมมือและการจัดการโครงการ (Collaboration)</strong></li>
+        <li>ทำงานร่วมกับ stakeholder เพื่อกำหนด requirements ที่ตรงกับความต้องการจริง</li>
+        <li>ใช้ <strong>Git + GitHub</strong> สำหรับ version control</li>
+        <li>วางแผน มอบหมาย task ติดตามความคืบหน้าอย่างเป็นระบบ</li>
+      </ul>
+    </div>
+
+    <div class="speaker-card">
+      <ul>
+        <li><strong>การปรับปรุงและการพัฒนาต่อ (Future Development)</strong></li>
+        <li>ระบบออกแบบให้ <strong>ยืดหยุ่น</strong> ปรับเปลี่ยนตามความต้องการของผู้ใช้ได้</li>
+        <li>ศักยภาพขยายฟีเจอร์: analytics ขั้นสูง, mobile app, notification</li>
+        <li>พัฒนาอย่างต่อเนื่องโดยอิง <strong>user feedback</strong></li>
+      </ul>
+    </div>
+
+    <div class="transition">หน้าสุดท้าย: Q&A + ข้อมูลติดต่อ</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- SLIDE 21: Q&A / CLOSING -->
+<!-- ════════════════════════════════════════════ -->
+<div class="slide-page" id="s21">
+  <div class="slide-img-wrap">
+    <span class="slide-badge">Slide 21</span>
+    <img src="นิเทศพยบ 01 รวม /21.jpg" alt="Slide 21" />
+  </div>
+  <div class="slide-notes">
+    <div class="slide-number">Q&A / CLOSING</div>
+    <div class="slide-title">สรุปและ Q&A</div>
+    <div class="slide-subtitle">ขอบคุณที่รับฟัง</div>
+
+    <div class="speaker-card">
+      <ul>
+        <li>สรุปภาพรวม: <strong>NLU Stock Management System</strong> — ระบบจัดการครุภัณฑ์และวัสดุ สถาบันพยาบาลศาสตร์และผดุงครรภ์</li>
+        <li>ครอบคลุม <strong>8 workflow</strong> หลัก: รับเข้า, เบิกจ่าย, จัดการคลัง, บำรุงรักษา, ปรับสต็อก, Dashboard, รายงาน, ตั้งค่า</li>
+        <li>Tech stack ทันสมัย: Next.js 16 + React 19 + Prisma 7.8 + PostgreSQL 16</li>
+        <li>พัฒนาโดย <strong>นายวุฒิพัฒน์ ตั้งสุวรรณ</strong> — นักศึกษาปริญญาโท สาขาวิทยาการคอมพิวเตอร์ มหาวิทยาลัยเชียงใหม่</li>
+      </ul>
+    </div>
+
+    <div class="key-points">
+      <ul>
+        <li>ติดต่อ: <code>WUTTIPAT_T@CMU.AC.TH</code></li>
+        <li>Repository: NLU Stock Management System</li>
+        <li>สนใจสอบถามเพิ่มเติมได้เลยครับ — ขอบคุณครับ</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

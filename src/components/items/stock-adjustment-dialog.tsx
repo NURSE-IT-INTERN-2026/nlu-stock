@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,13 @@ import { FileUpload } from "@/components/shared/file-upload";
 import { ADJUSTMENT_REASON_OPTIONS } from "@/lib/constants";
 import { adjustStock } from "@/lib/api";
 
+export interface AdjustLot {
+  id: string;
+  lotNumber: string;
+  remainingQty: number;
+  expiryDate?: string | null;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -23,32 +30,49 @@ interface Props {
   availableQty: number;
   totalQty: number;
   checkedOutCount: number;
+  /** If provided and non-empty, the dialog corrects a specific lot (consumable). */
+  lots?: AdjustLot[];
   onSuccess: () => void;
 }
 
-export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty, totalQty, checkedOutCount, onSuccess }: Props) {
-  const [shelfCount, setShelfCount] = useState("");
+export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty, totalQty, checkedOutCount, lots, onSuccess }: Props) {
+  const lotMode = !!lots && lots.length > 0;
+  const [selectedLotId, setSelectedLotId] = useState("");
+  const [count, setCount] = useState("");
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
   const [imageEvidence, setImageEvidence] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const parsedShelf = shelfCount !== "" ? parseInt(shelfCount) : null;
-  const safeParsed = parsedShelf !== null && !isNaN(parsedShelf) ? parsedShelf : null;
-  const newAvailable = safeParsed ?? 0;
-  const newTotal = safeParsed !== null ? safeParsed + checkedOutCount : null;
+  // Default-select the first lot when entering lot mode
+  useEffect(() => {
+    if (open && lotMode && lots && !selectedLotId) setSelectedLotId(lots[0]?.id ?? "");
+    if (!open) { setCount(""); setReason(""); setNotes(""); setImageEvidence(null); }
+  }, [open, lotMode, lots, selectedLotId]);
+
+  const parsed = count !== "" ? parseInt(count) : null;
+  const safe = parsed !== null && !isNaN(parsed) ? parsed : null;
+  const selectedLot = lotMode ? lots?.find((l) => l.id === selectedLotId) : null;
+  const lotPrev = selectedLot?.remainingQty ?? 0;
+
+  // New item-level totals for preview
+  const newAvailable = lotMode
+    ? (safe !== null ? availableQty - lotPrev + safe : availableQty)
+    : (safe ?? 0);
+  const newTotal = lotMode ? null : (safe !== null ? safe + checkedOutCount : null);
 
   async function handleSave() {
-    if (safeParsed === null || !reason) return;
+    if (safe === null || !reason) return;
+    if (lotMode && !selectedLotId) return;
     setSaving(true);
     try {
-      await adjustStock(itemId, { shelfCount: safeParsed, reason, notes: notes || null, imageEvidence: imageEvidence || null });
-      toast.success("Stock adjusted");
+      if (lotMode) {
+        await adjustStock(itemId, { lotId: selectedLotId, lotCount: safe, reason, notes: notes || null, imageEvidence: imageEvidence || null });
+      } else {
+        await adjustStock(itemId, { shelfCount: safe, reason, notes: notes || null, imageEvidence: imageEvidence || null });
+      }
+      toast.success(lotMode ? "Lot adjusted" : "Stock adjusted");
       onOpenChange(false);
-      setShelfCount("");
-      setReason("");
-      setNotes("");
-      setImageEvidence(null);
       onSuccess();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to adjust stock");
@@ -56,36 +80,73 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
     setSaving(false);
   }
 
+  const noChange = lotMode ? safe === lotPrev : safe !== null && newTotal !== null && newTotal === totalQty;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Adjust Stock</DialogTitle>
+          <DialogTitle>{lotMode ? "แก้ยอด Lot" : "Adjust Stock"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {/* Lot picker — consumable mode */}
+          {lotMode && (
+            <div>
+              <Label>Lot *</Label>
+              <Select value={selectedLotId} onValueChange={(v) => { if (v) setSelectedLotId(v); }}>
+                <SelectTrigger><SelectValue placeholder="เลือก lot" /></SelectTrigger>
+                <SelectContent>
+                  {lots!.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.lotNumber} — เหลือ {l.remainingQty}
+                      {l.expiryDate ? ` (หมดอายุ ${new Date(l.expiryDate).toLocaleDateString()})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Total (system)</span>
-              <p className="font-medium">{totalQty}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Currently checked out</span>
-              <p className="font-medium">{checkedOutCount}</p>
-            </div>
+            {lotMode ? (
+              <>
+                <div>
+                  <span className="text-muted-foreground">Lot คงเหลือ (ระบบ)</span>
+                  <p className="font-medium">{lotPrev}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">รวมทั้งหมด (available)</span>
+                  <p className="font-medium">{availableQty}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <span className="text-muted-foreground">Total (system)</span>
+                  <p className="font-medium">{totalQty}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Currently checked out</span>
+                  <p className="font-medium">{checkedOutCount}</p>
+                </div>
+              </>
+            )}
           </div>
+
           <div>
-            <Label>Count on shelf *</Label>
+            <Label>{lotMode ? "นับจริงได้กี่ชิ้น (lot นี้) *" : "Count on shelf *"}</Label>
             <Input
               type="number"
               min="0"
-              value={shelfCount}
-              onChange={(e) => setShelfCount(e.target.value)}
-              placeholder="How many items did you count?"
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+              placeholder={lotMode ? "จำนวนจริงของ lot นี้" : "How many items did you count?"}
             />
-            {safeParsed !== null && newTotal !== null && (
-              <p className={`text-sm mt-1 ${newTotal > totalQty ? "text-green-600" : newTotal < totalQty ? "text-destructive" : "text-muted-foreground"}`}>
-                New total: {newTotal} ({newTotal > totalQty ? `+${newTotal - totalQty}` : newTotal < totalQty ? `${newTotal - totalQty}` : "no change"})
-                {checkedOutCount > 0 && ` = ${safeParsed} on shelf + ${checkedOutCount} checked out`}
+            {safe !== null && (
+              <p className={`text-sm mt-1 ${noChange ? "text-muted-foreground" : (lotMode ? (safe > lotPrev ? "text-green-600" : "text-destructive") : (newTotal! > totalQty ? "text-green-600" : "text-destructive"))}`}>
+                {lotMode
+                  ? `Lot: ${lotPrev} → ${safe} (${safe >= lotPrev ? "+" : ""}${safe - lotPrev})`
+                  : `New total: ${newTotal} (${newTotal! > totalQty ? `+${newTotal! - totalQty}` : `${newTotal! - totalQty}`})`}
               </p>
             )}
           </div>
@@ -116,7 +177,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || safeParsed === null || !reason}>
+          <Button onClick={handleSave} disabled={saving || safe === null || !reason || (lotMode && !selectedLotId)}>
             {saving ? "Saving..." : "Adjust"}
           </Button>
         </DialogFooter>

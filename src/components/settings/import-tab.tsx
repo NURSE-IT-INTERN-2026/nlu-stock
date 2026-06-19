@@ -17,6 +17,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type ImportType = "items" | "categories" | "locations" | "sub-items";
 
+const COLUMN_REF: Record<ImportType, { required: string[]; optional: string[]; sample: Record<string, string> }> = {
+  items: {
+    required: ["code", "name", "category"],
+    optional: ["nameEn", "trackIndividually", "issueUnit", "subUnit", "conversionFactor", "minThreshold", "building", "floor", "room", "detail", "description"],
+    sample: { code: "NLU-CON-001", name: "ปากกาลูกลื่น", category: "CON", issueUnit: "ชิ้น", conversionFactor: "1", minThreshold: "10" },
+  },
+  categories: {
+    required: ["name", "category"],
+    optional: ["description", "sortOrder"],
+    sample: { name: "วัสดุสิ้นเปลือง", category: "CON", sortOrder: "1" },
+  },
+  locations: {
+    required: ["building", "floor", "room"],
+    optional: ["detail"],
+    sample: { building: "อาคาร A", floor: "ชั้น 1", room: "ห้อง 101", detail: "ตู้ 1" },
+  },
+  "sub-items": {
+    required: ["itemCode", "subCode"],
+    optional: ["condition", "notes"],
+    sample: { itemCode: "ITM001", subCode: "ITM001-01", condition: "Good", notes: "" },
+  },
+};
+
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.trim().split("\n");
   if (lines.length < 2) return [];
@@ -92,50 +115,72 @@ export function ImportTab() {
   }
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Import Data</h3>
+    <div className="flex flex-col gap-5">
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">1. Select Type & Download Template</CardTitle>
+            <CardTitle className="text-sm">1. เลือกประเภทและดาวน์โหลดแม่แบบ</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <Label>Import Type</Label>
+              <Label>ประเภทข้อมูล</Label>
               <Select value={importType} onValueChange={(v) => { setImportType(v as ImportType); setPreview([]); setFile(null); setResult(null); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="items">Items</SelectItem>
-                  <SelectItem value="categories">Categories</SelectItem>
-                  <SelectItem value="locations">Locations</SelectItem>
-                  <SelectItem value="sub-items">Sub-codes</SelectItem>
+                  <SelectItem value="items">พัสดุ</SelectItem>
+                  <SelectItem value="categories">หมวดหมู่</SelectItem>
+                  <SelectItem value="locations">สถานที่</SelectItem>
+                  <SelectItem value="sub-items">รหัสย่อย</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
-              <Download className="h-4 w-4 mr-1" />Download Template
+              <Download className="h-4 w-4 mr-1" />ดาวน์โหลดแม่แบบ
             </Button>
+            {/* Column reference */}
+            {COLUMN_REF[importType] && (
+              <div className="rounded-lg bg-muted/40 border border-border/40 p-3 space-y-2 text-xs">
+                <p className="font-medium text-foreground">Columns ที่ต้องมี</p>
+                <div className="flex flex-wrap gap-1">
+                  {COLUMN_REF[importType].required.map((col) => (
+                    <code key={col} className="rounded bg-primary/10 text-primary px-1.5 py-0.5 font-mono text-[11px]">{col} *</code>
+                  ))}
+                  {COLUMN_REF[importType].optional.map((col) => (
+                    <code key={col} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{col}</code>
+                  ))}
+                </div>
+                <p className="text-muted-foreground">ตัวอย่าง: <code className="font-mono text-foreground/80">{Object.entries(COLUMN_REF[importType].sample).map(([k, v]) => `${k}:${v}`).join(", ")}</code></p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">2. Upload CSV</CardTitle>
+            <CardTitle className="text-sm">2. อัปโหลดไฟล์ CSV</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                className="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
-              />
-              {file && <p className="text-xs text-muted-foreground mt-1">{file.name} ({(file.size / 1024).toFixed(1)} KB)</p>}
+            <div className="space-y-2">
+              <label
+                htmlFor="csv-file-input"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/30 px-4 py-6 text-sm text-muted-foreground hover:border-primary/40 hover:bg-muted/50 transition-colors w-full justify-center"
+              >
+                <Upload className="h-4 w-4 shrink-0" />
+                <span>{file ? file.name : "คลิกเพื่อเลือกไฟล์ CSV"}</span>
+                <input
+                  id="csv-file-input"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+              </label>
+              {file && <p className="text-xs text-muted-foreground">{file.name} ({(file.size / 1024).toFixed(1)} KB)</p>}
             </div>
             <Button onClick={handleImport} disabled={!file || importing} size="sm">
               <Upload className="h-4 w-4 mr-1" />
-              {importing ? "Importing..." : "Import"}
+              {importing ? "กำลังนำเข้า..." : "นำเข้าข้อมูล"}
             </Button>
           </CardContent>
         </Card>
@@ -146,7 +191,7 @@ export function ImportTab() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              Preview (first {preview.length} rows)
+              Preview (ดูตัวอย่าง {preview.length} แถวแรก)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -177,23 +222,23 @@ export function ImportTab() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               {result.errors.length === 0
-                ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                : <AlertCircle className="h-4 w-4 text-yellow-600" />}
-              Import Result
+                ? <CheckCircle2 className="h-4 w-4 text-success" />
+                : <AlertCircle className="h-4 w-4 text-warning" />}
+              ผลการนำเข้าข้อมูล
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-3 mb-3">
-              <Badge variant="default" className="bg-green-600">Imported: {result.imported}</Badge>
-              {result.errors.length > 0 && <Badge variant="destructive">Errors: {result.errors.length}</Badge>}
+              <Badge variant="default" className="bg-success">นำเข้าแล้ว: {result.imported}</Badge>
+              {result.errors.length > 0 && <Badge variant="destructive">ผิดพลาด: {result.errors.length}</Badge>}
             </div>
             {result.errors.length > 0 && (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Row</TableHead>
-                      <TableHead>Error</TableHead>
+                      <TableHead>แถว</TableHead>
+                      <TableHead>ข้อผิดพลาด</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

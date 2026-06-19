@@ -1,24 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { StatusOverviewChart } from "./status-overview-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getDashboardStatusOverview } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { useStatusOverview } from "@/hooks/use-dashboard-queries";
 
 export function StatusOverviewWidget() {
-  const [data, setData] = useState<{ status: string; count: number }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, error, refetch } = useStatusOverview();
 
-  useEffect(() => {
-    getDashboardStatusOverview()
-      .then((d) => { setData(d as { status: string; count: number }[]); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <Card className="h-full">
+      <Card className="h-full w-full">
         <CardHeader>
           <Skeleton className="h-4 w-32" />
         </CardHeader>
@@ -29,5 +22,23 @@ export function StatusOverviewWidget() {
     );
   }
 
-  return <StatusOverviewChart data={data} />;
+  if (error) {
+    return (
+      <Card className="animate-fade-in h-full w-full">
+        <CardHeader>
+          <p className="text-sm font-semibold text-foreground">สถานะภาพรวม</p>
+        </CardHeader>
+        <CardContent className="text-center py-6">
+          <p className="text-sm text-destructive mb-2">{error.message}</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            โหลดใหม่
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <StatusOverviewChart data={data ?? []} />
+  );
 }

@@ -116,7 +116,7 @@ export function NearExpiryLowStockTab() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <Badge variant="secondary">{nearExpiry.length}</Badge>
-            Near Expiry Lots (90 days)
+            Near Expiry Lots (30 days)
           </CardTitle>
         </CardHeader>
         <CardContent>

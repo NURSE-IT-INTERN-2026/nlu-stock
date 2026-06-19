@@ -30,13 +30,13 @@ export async function GET(req: NextRequest) {
     prisma.item.findMany({
       where,
       include: {
-        category: { select: { name: true, category: true } },
+        category: { select: { name: true, profile: { select: { dispenseType: true, assetTracking: true, setTracking: true, isComposite: true, color: true } } } },
         issueUnit: { select: { id: true, name: true } },
         subUnit: { select: { id: true, name: true } },
         lots: {
-          where: { quantity: { gt: 0 } },
+          where: { remainingQty: { gt: 0 } },
           orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }],
-          select: { id: true, lotNumber: true, expiryDate: true, quantity: true },
+          select: { id: true, lotNumber: true, expiryDate: true, remainingQty: true },
         },
         subItems: {
           where: { status: "AVAILABLE" },

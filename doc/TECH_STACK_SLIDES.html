@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NLU Stock — Tech Stack Slides</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:           oklch(97.5% 0.006 80);
+      --surface:      oklch(100% 0 0);
+      --surface-2:    oklch(95.5% 0.008 80);
+      --surface-3:    oklch(92% 0.012 80);
+      --border:       oklch(87% 0.008 80);
+      --border-2:     oklch(78% 0.01 80);
+      --text:         oklch(18% 0.015 260);
+      --text-2:       oklch(40% 0.012 260);
+      --text-3:       oklch(62% 0.008 260);
+
+      --orange:       oklch(68% 0.2 45);
+      --orange-mid:   oklch(78% 0.15 55);
+      --orange-lt:    oklch(94% 0.06 75);
+      --orange-llt:   oklch(97% 0.03 80);
+
+      --teal:         oklch(60% 0.14 198);
+      --teal-mid:     oklch(72% 0.11 200);
+      --teal-lt:      oklch(93% 0.05 200);
+      --teal-llt:     oklch(97% 0.025 200);
+
+      --slate:        oklch(52% 0.04 255);
+      --slate-mid:    oklch(65% 0.03 255);
+      --slate-lt:     oklch(93% 0.015 255);
+
+      --shadow-sm:    0 1px 3px oklch(18% 0.01 260 / .07), 0 1px 2px oklch(18% 0.01 260 / .04);
+      --shadow:       0 2px 8px oklch(18% 0.01 260 / .08), 0 4px 16px oklch(18% 0.01 260 / .05);
+      --shadow-lg:    0 4px 16px oklch(18% 0.01 260 / .09), 0 12px 40px oklch(18% 0.01 260 / .07);
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Sarabun', system-ui, sans-serif; -webkit-font-smoothing:antialiased; font-size:16px; }
+
+    /* ─── DECK ─── */
+    .deck { width:100vw; height:100vh; position:relative; overflow:hidden; }
+
+    .slide {
+      position:absolute; inset:0;
+      display:flex; flex-direction:column;
+      padding:2.25rem 4.5rem 4.5rem;
+      opacity:0; pointer-events:none;
+      transform:translateX(48px) scale(.99);
+      transition:opacity .45s cubic-bezier(.4,0,.2,1), transform .45s cubic-bezier(.4,0,.2,1);
+      overflow:hidden;
+    }
+    .slide.active { opacity:1; pointer-events:auto; transform:translateX(0) scale(1); }
+    .slide.prev   { opacity:0; transform:translateX(-48px) scale(.99); }
+
+    /* ─── NAV ─── */
+    .nav-bar {
+      position:fixed; bottom:0; left:0; right:0;
+      height:3.25rem;
+      display:flex; align-items:center;
+      padding:0 1.5rem;
+      background:oklch(100% 0 0 / .88);
+      backdrop-filter:blur(16px);
+      border-top:1px solid var(--border);
+      gap:.75rem;
+      z-index:100;
+    }
+    .nav-btn {
+      display:flex; align-items:center; gap:.35rem;
+      padding:.38rem .9rem;
+      border-radius:7px;
+      border:1px solid var(--border);
+      background:var(--surface);
+      color:var(--text-2);
+      font-family:'DM Mono', monospace;
+      font-size:.75rem;
+      cursor:pointer;
+      transition:all .18s ease;
+      box-shadow:var(--shadow-sm);
+    }
+    .nav-btn:hover { background:var(--orange-lt); border-color:var(--orange-mid); color:var(--orange); }
+    .nav-btn:disabled { opacity:.35; cursor:default; }
+    .progress-wrap { flex:1; height:4px; background:var(--surface-3); border-radius:2px; overflow:hidden; }
+    .progress-bar  { height:100%; background:linear-gradient(90deg, var(--orange), var(--teal)); border-radius:2px; transition:width .4s cubic-bezier(.4,0,.2,1); }
+    .slide-counter { font-family:'DM Mono', monospace; font-size:.75rem; color:var(--text-3); white-space:nowrap; }
+
+    /* ─── SLIDE HEADER ─── */
+    .slide-eyebrow {
+      font-family:'DM Mono', monospace;
+      font-size:.72rem;
+      font-weight:500;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      color:var(--orange);
+      margin-bottom:.55rem;
+    }
+    .slide-title {
+      font-family:'Fraunces', Georgia, serif;
+      font-size:clamp(1.9rem, 3.5vw, 2.7rem);
+      font-weight:700;
+      letter-spacing:-.025em;
+      color:var(--text);
+      line-height:1.1;
+      margin-bottom:.3rem;
+    }
+    .slide-sub { font-size:.95rem; color:var(--text-3); font-weight:400; margin-bottom:1.5rem; }
+
+    .divider-line {
+      width:2.5rem; height:3px;
+      background:linear-gradient(90deg, var(--orange), var(--teal));
+      border-radius:2px; margin:.6rem 0 1.2rem;
+    }
+
+    /* ─── TAG / PILL ─── */
+    .tag {
+      display:inline-flex; align-items:center; gap:.3rem;
+      padding:.22rem .65rem; border-radius:5px;
+      font-family:'DM Mono', monospace;
+      font-size:.68rem; font-weight:500; border:1px solid;
+    }
+    .tag-o  { background:var(--orange-lt);  color:var(--orange); border-color:oklch(85% 0.1 55); }
+    .tag-t  { background:var(--teal-lt);    color:var(--teal);   border-color:oklch(82% 0.08 200); }
+    .tag-s  { background:var(--slate-lt);   color:var(--slate);  border-color:oklch(82% 0.02 255); }
+    .tag-g  { background:oklch(93% 0.05 150); color:oklch(40% 0.1 150); border-color:oklch(82% 0.08 150); }
+
+    /* ─── SCENE CARDS (workflow steps) ─── */
+    .scene-row {
+      display:flex; align-items:stretch;
+      gap:0; flex:1;
+      margin-top:auto;
+      min-height:0;
+    }
+    .scene {
+      flex:1; min-width:0;
+      position:relative;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:.9rem 1rem .85rem;
+      box-shadow:var(--shadow-sm);
+      display:flex; flex-direction:column;
+      transition:box-shadow .2s, border-color .2s, transform .2s;
+      overflow:hidden;
+      min-height:0;
+    }
+    .scene:hover { box-shadow:var(--shadow); border-color:var(--border-2); transform:translateY(-2px); }
+
+    /* connector between scenes */
+    .scene-connector {
+      display:flex; align-items:center;
+      padding:0 .5rem;
+      flex-shrink:0;
+      position:relative;
+      z-index:2;
+    }
+    .scene-connector svg { width:28px; height:28px; }
+
+    /* scene top: number + icon */
+    .scene-num {
+      position:absolute; top:.6rem; right:.7rem;
+      font-family:'Fraunces', serif;
+      font-size:2.4rem; font-weight:900;
+      line-height:1; color:var(--bg);
+      pointer-events:none; user-select:none;
+      letter-spacing:-.05em;
+    }
+    .scene-icon {
+      font-size:1.4rem; line-height:1;
+      margin-bottom:.35rem;
+      position:relative; z-index:1;
+    }
+    .scene-name {
+      font-family:'Sarabun', sans-serif;
+      font-size:1rem; font-weight:700;
+      color:var(--text); line-height:1.2;
+      margin-bottom:.25rem;
+      position:relative; z-index:1;
+    }
+    .scene-desc {
+      font-size:.8rem; color:var(--text-3);
+      line-height:1.6; flex:1;
+      position:relative; z-index:1;
+    }
+    .scene-detail {
+      margin-top:.45rem;
+      display:flex; flex-wrap:wrap; gap:.25rem;
+      position:relative; z-index:1;
+    }
+    .scene-pill {
+      font-size:.68rem; font-weight:600;
+      padding:.18rem .5rem; border-radius:4px;
+      font-family:'DM Mono', monospace;
+    }
+
+    /* colour variants for scene cards */
+    .scene-o  { border-color:oklch(88% 0.07 60); }
+    .scene-o .scene-num { color:var(--orange-llt); }
+    .scene-o .scene-name { color:var(--orange); }
+
+    .scene-t  { border-color:oklch(86% 0.06 200); }
+    .scene-t .scene-num { color:var(--teal-llt); }
+    .scene-t .scene-name { color:var(--teal); }
+
+    .scene-s  { border-color:oklch(86% 0.015 255); }
+    .scene-s .scene-num { color:var(--surface-3); }
+    .scene-s .scene-name { color:var(--slate); }
+
+    .scene-g  { border-color:oklch(86% 0.06 150); }
+    .scene-g .scene-num { color:oklch(97% 0.025 150); }
+    .scene-g .scene-name { color:oklch(42% 0.12 150); }
+
+    /* terminal scene */
+    .scene-end-o { background:var(--orange); border-color:var(--orange); }
+    .scene-end-o .scene-name, .scene-end-o .scene-desc { color:oklch(100% 0 0); }
+    .scene-end-o .scene-num { color:oklch(72% 0.18 48); }
+
+    .scene-end-t { background:var(--teal); border-color:var(--teal); }
+    .scene-end-t .scene-name, .scene-end-t .scene-desc { color:oklch(100% 0 0); }
+    .scene-end-t .scene-num { color:oklch(64% 0.12 200); }
+
+    .scene-end-s { background:var(--slate); border-color:var(--slate); }
+    .scene-end-s .scene-name, .scene-end-s .scene-desc { color:oklch(100% 0 0); }
+    .scene-end-s .scene-num { color:oklch(58% 0.03 255); }
+
+    .scene-end-g { background:oklch(44% 0.12 150); border-color:oklch(44% 0.12 150); }
+    .scene-end-g .scene-name, .scene-end-g .scene-desc { color:oklch(100% 0 0); }
+    .scene-end-g .scene-num { color:oklch(50% 0.1 150); }
+
+    /* ─── STAT CARDS ─── */
+    .stats-row { display:grid; grid-template-columns:repeat(6,1fr); gap:.75rem; margin-top:1.5rem; }
+    .stat-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; padding:1.4rem 1rem 1.1rem;
+      text-align:center; box-shadow:var(--shadow-sm);
+      transition:box-shadow .2s, transform .2s;
+    }
+    .stat-card:hover { box-shadow:var(--shadow); transform:translateY(-2px); }
+    .stat-n { font-family:'Fraunces',serif; font-size:2.6rem; font-weight:900; line-height:1; letter-spacing:-.04em; }
+    .stat-l { font-family:'DM Mono',monospace; font-size:.68rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-3); margin-top:.3rem; }
+    .stat-card:nth-child(1) .stat-n { color:var(--orange); }
+    .stat-card:nth-child(2) .stat-n { color:var(--teal); }
+    .stat-card:nth-child(3) .stat-n { color:oklch(44% 0.12 150); }
+    .stat-card:nth-child(4) .stat-n { color:var(--slate); }
+    .stat-card:nth-child(5) .stat-n { color:oklch(60% 0.14 30); }
+    .stat-card:nth-child(6) .stat-n { color:oklch(50% 0.13 285); }
+
+    /* ─── ARCHITECTURE ─── */
+    .arch-band {
+      display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+      padding:1rem 1.25rem;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; box-shadow:var(--shadow-sm);
+    }
+    .arch-node {
+      display:flex; align-items:center; gap:.4rem;
+      padding:.5rem 1rem; border-radius:8px;
+      font-size:.85rem; font-weight:600; border:1px solid;
+    }
+    .arch-node img { width:16px; height:16px; }
+    .an-fe { background:var(--teal-lt);   color:var(--teal);   border-color:oklch(84% 0.07 200); }
+    .an-be { background:var(--orange-lt); color:var(--orange); border-color:oklch(86% 0.09 60); }
+    .an-db { background:oklch(93% 0.05 150); color:oklch(42% 0.12 150); border-color:oklch(84% 0.08 150); }
+    .an-au { background:var(--slate-lt);  color:var(--slate);  border-color:oklch(82% 0.02 255); }
+    .arch-arr { color:var(--text-3); font-size:.9rem; }
+
+    .adr-table { width:100%; border-collapse:collapse; font-size:.85rem; margin-top:1rem; }
+    .adr-table th { text-align:left; padding:.4rem .7rem; font-family:'DM Mono',monospace; font-size:.67rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-3); border-bottom:2px solid var(--border); }
+    .adr-table td { padding:.48rem .7rem; border-bottom:1px solid oklch(93% 0.005 80); color:var(--text-2); vertical-align:top; }
+    .adr-table td:first-child { font-family:'DM Mono',monospace; color:var(--orange); font-size:.78rem; white-space:nowrap; }
+    .adr-table tr:last-child td { border:none; }
+    .adr-table tr:hover td { background:var(--orange-llt); }
+
+    /* ─── WORKFLOW FULL SLIDE ─── */
+    .wf-header {
+      display:flex; align-items:center; gap:.75rem;
+      margin-bottom:.85rem;
+    }
+    .wf-icon-big {
+      width:2.4rem; height:2.4rem; border-radius:10px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.2rem; flex-shrink:0;
+    }
+    .wf-icon-big-o { background:var(--orange-lt); }
+    .wf-icon-big-t { background:var(--teal-lt); }
+    .wf-icon-big-s { background:var(--slate-lt); }
+    .wf-icon-big-g { background:oklch(93% 0.05 150); }
+
+    .wf-title-block { flex:1; }
+    .wf-eyebrow { font-family:'DM Mono',monospace; font-size:.65rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); }
+    .wf-name { font-family:'Sarabun',sans-serif; font-size:1.55rem; font-weight:700; letter-spacing:-.01em; color:var(--text); line-height:1.1; }
+    .wf-route { font-family:'DM Mono',monospace; font-size:.73rem; color:var(--teal); margin-top:.1rem; }
+
+    .scenes-wrap {
+      flex:1; display:flex; flex-direction:column;
+      gap:.55rem; min-height:0;
+    }
+
+    /* large horizontal row of scenes */
+    .scenes-main {
+      flex:1; min-height:190px; max-height:310px;
+      display:flex; align-items:stretch; gap:0;
+    }
+
+    /* sub-note below scenes */
+    .wf-note {
+      display:flex; align-items:center; gap:.5rem;
+      flex-wrap:wrap; padding:.5rem .9rem;
+      background:var(--surface-2); border:1px solid var(--border);
+      border-radius:8px; font-size:.8rem; color:var(--text-3);
+    }
+    .wf-note strong { color:var(--text-2); font-weight:600; }
+
+    /* ─── OTHER WORKFLOWS MINI STRIP ─── */
+    .other-wf {
+      display:grid; grid-template-columns:repeat(7,1fr); gap:.45rem;
+    }
+    .other-wf-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:9px; padding:.5rem .65rem;
+      display:flex; flex-direction:column; gap:.15rem;
+      box-shadow:var(--shadow-sm);
+      transition:border-color .18s, background .18s;
+      cursor:default;
+    }
+    .other-wf-card:hover { border-color:var(--border-2); background:var(--surface-2); }
+    .other-wf-card.active-wf { border-color:var(--orange-mid); background:var(--orange-llt); }
+    .other-wf-card.active-wf .owf-num { color:var(--orange); }
+    .owf-num { font-family:'DM Mono',monospace; font-size:.6rem; color:var(--text-3); letter-spacing:.06em; }
+    .owf-icon { font-size:1.05rem; line-height:1; }
+    .owf-name { font-family:'Sarabun',sans-serif; font-size:.8rem; font-weight:700; color:var(--text); line-height:1.2; }
+
+    /* ─── STATUS LIFECYCLE ─── */
+    .status-flow {
+      display:flex; flex-direction:column; gap:1rem;
+      margin-top:1.25rem;
+    }
+    .status-row { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+    .status-node {
+      display:inline-flex; align-items:center; gap:.35rem;
+      padding:.45rem 1.1rem; border-radius:999px;
+      font-size:.88rem; font-weight:700; border:1.5px solid;
+    }
+    .sn-avail { background:oklch(93% 0.05 150); color:oklch(38% 0.14 150); border-color:oklch(80% 0.1 150); }
+    .sn-out   { background:var(--orange-lt); color:var(--orange); border-color:oklch(83% 0.12 55); }
+    .sn-dmg   { background:oklch(94% 0.06 30); color:oklch(45% 0.15 30); border-color:oklch(82% 0.12 30); }
+    .sn-rep   { background:var(--teal-lt); color:var(--teal); border-color:oklch(82% 0.08 200); }
+    .sn-dis   { background:var(--surface-3); color:var(--text-3); border-color:var(--border-2); }
+    .sn-lost  { background:oklch(92% 0.04 260); color:var(--slate); border-color:oklch(80% 0.04 260); }
+    .sn-disp  { background:oklch(94% 0.05 0); color:oklch(42% 0.14 12); border-color:oklch(80% 0.1 12); }
+    .status-arr { color:var(--text-3); font-size:.95rem; font-weight:300; }
+    .status-label { font-size:.65rem; color:var(--text-3); font-style:italic; }
+
+    /* ─── DB SCHEMA GRID ─── */
+    .schema-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.55rem; margin-top:1.25rem; }
+    .schema-model {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:9px; padding:.7rem .9rem;
+      box-shadow:var(--shadow-sm);
+      transition:border-color .2s, transform .2s;
+    }
+    .schema-model:hover { border-color:var(--border-2); transform:translateY(-1px); }
+    .schema-model.star { border-color:oklch(83% 0.12 55); background:var(--orange-llt); }
+    .sm-name { font-family:'Sarabun',sans-serif; font-size:.9rem; font-weight:700; color:var(--text); margin-bottom:.18rem; }
+    .schema-model.star .sm-name { color:var(--orange); }
+    .sm-fields { font-family:'DM Mono',monospace; font-size:.65rem; color:var(--text-3); line-height:1.5; }
+
+    .enum-section { margin-top:.9rem; }
+    .enum-row { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; margin-top:.35rem; }
+    .enum-label { font-family:'Sarabun',sans-serif; font-size:.82rem; font-weight:700; color:var(--text-2); min-width:7rem; }
+    .enum-val {
+      font-family:'DM Mono',monospace; font-size:.67rem;
+      background:var(--teal-lt); color:var(--teal);
+      border:1px solid oklch(85% 0.07 200);
+      border-radius:4px; padding:.1rem .38rem;
+    }
+
+    /* ─── MILESTONES ─── */
+    .ms-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.55rem; margin-top:1.25rem; }
+    .ms-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:10px; padding:.75rem 1rem;
+      display:flex; gap:.65rem; align-items:flex-start;
+      box-shadow:var(--shadow-sm);
+    }
+    .ms-card.wip { border-color:oklch(83% 0.12 55); background:var(--orange-llt); }
+    .ms-dot { width:9px; height:9px; border-radius:50%; margin-top:.28rem; flex-shrink:0; }
+    .dot-done { background:oklch(54% 0.15 150); box-shadow:0 0 0 3px oklch(93% 0.06 150); }
+    .dot-wip  { background:var(--orange); box-shadow:0 0 0 3px var(--orange-lt); }
+    .dot-plan { background:var(--border-2); box-shadow:0 0 0 3px var(--surface-3); }
+    .ms-body-title { font-family:'Sarabun',sans-serif; font-size:.9rem; font-weight:700; color:var(--text); line-height:1.3; }
+    .ms-body-desc  { font-size:.78rem; color:var(--text-3); margin-top:.1rem; }
+
+    /* ─── TECH GRID ─── */
+    .tech-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; margin-top:1.25rem; }
+    .tech-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; padding:1.1rem 1.25rem;
+      box-shadow:var(--shadow-sm);
+      transition:box-shadow .2s, border-color .2s;
+    }
+    .tech-card:hover { box-shadow:var(--shadow); border-color:var(--border-2); }
+    .tc-head { display:flex; align-items:center; gap:.5rem; margin-bottom:.6rem; }
+    .tc-head img { width:18px; height:18px; }
+    .tc-name { font-family:'Sarabun',sans-serif; font-size:1rem; font-weight:700; color:var(--text); }
+    .tc-ver  { font-family:'DM Mono',monospace; font-size:.66rem; color:var(--text-3); margin-left:auto; }
+    .tc-body { list-style:none; font-size:.82rem; color:var(--text-2); line-height:1.65; }
+    .tc-body li::before { content:'› '; color:var(--orange); font-weight:700; }
+
+    /* ─── TITLE SLIDE ─── */
+    #s1 { justify-content:center; }
+    .title-huge {
+      font-family:'Sarabun', sans-serif;
+      font-size:clamp(3rem, 6.5vw, 5.5rem);
+      font-weight:800;
+      letter-spacing:-.03em;
+      line-height:.95;
+      color:var(--text);
+      margin-bottom:.5rem;
+    }
+    .title-accent { color:var(--orange); }
+    .title-sub { font-size:1.1rem; color:var(--text-3); font-weight:400; max-width:50ch; margin:.75rem 0 2rem; }
+    .chips-row { display:flex; flex-wrap:wrap; gap:.45rem; }
+    .chip {
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.35rem .85rem; border-radius:8px;
+      background:var(--surface); border:1px solid var(--border);
+      font-size:.83rem; font-weight:600; color:var(--text-2);
+      box-shadow:var(--shadow-sm);
+      transition:border-color .18s, color .18s, background .18s;
+    }
+    .chip:hover { border-color:var(--orange-mid); color:var(--orange); background:var(--orange-llt); }
+    .chip img { width:15px; height:15px; }
+    .bg-word {
+      position:absolute; right:-1rem; bottom:-2rem;
+      font-family:'Fraunces',serif; font-size:20rem; font-weight:900;
+      color:oklch(94% 0.008 80); line-height:1;
+      pointer-events:none; user-select:none; letter-spacing:-.06em;
+    }
+
+    /* ─── COVER STRIPE ─── */
+    .cover-stripe {
+      position:absolute; top:0; left:0; bottom:0;
+      width:6px;
+      background:linear-gradient(180deg, var(--orange) 0%, var(--teal) 100%);
+    }
+
+    /* ─── END SLIDE ─── */
+    #s-end { justify-content:center; align-items:center; text-align:center; }
+    .end-huge {
+      font-family:'Sarabun',sans-serif;
+      font-size:clamp(3.5rem, 8vw, 7rem);
+      font-weight:800; letter-spacing:-.04em; line-height:.9;
+      background:linear-gradient(135deg, var(--orange) 0%, var(--teal) 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+      margin-bottom:1.25rem;
+    }
+
+    @media (max-width:900px) {
+      .slide { padding:2rem 2rem 3.5rem; }
+      .stats-row { grid-template-columns:repeat(3,1fr); }
+      .schema-grid, .tech-grid, .ms-grid { grid-template-columns:repeat(2,1fr); }
+      .scene-row, .scenes-main { flex-direction:column; }
+      .scene-connector { display:none; }
+    }
+  </style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<!-- ══════════════════════ SLIDE 1 — TITLE ══════════════════════ -->
+<div class="slide active" id="s1">
+  <div class="cover-stripe"></div>
+  <div style="position:relative; z-index:1;">
+    <div style="font-family:'DM Mono',monospace; font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; color:var(--orange); margin-bottom:1.5rem;">Tech Stack Report · 2026</div>
+    <div class="title-huge">NLU<br><span class="title-accent">Stock</span><br>System</div>
+    <p class="title-sub">ระบบจัดการครุภัณฑ์และวัสดุ สถาบันพยาบาลศาสตร์และผดุงครรภ์</p>
+    <div class="chips-row">
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" />Next.js 16</span>
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" />React 19</span>
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg" alt="" />TypeScript 5</span>
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prisma/prisma-original.svg" alt="" />Prisma 7.8</span>
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" alt="" />PostgreSQL 16</span>
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/tailwindcss/tailwindcss-original.svg" alt="" />Tailwind v4</span>
+      <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg" alt="" />Docker</span>
+      <span class="chip"><img src="https://cdn.simpleicons.org/shadcnui/18181b" alt="" />shadcn/ui 4</span>
+      <span class="chip"><img src="https://cdn.simpleicons.org/zod/3068b7" alt="" />Zod 4</span>
+    </div>
+  </div>
+  <div class="bg-word">NLU</div>
+</div>
+
+<!-- ══════════════════════ SLIDE 2 — STATS ══════════════════════ -->
+<div class="slide" id="s2">
+  <div class="slide-eyebrow">Project at a Glance</div>
+  <div class="slide-title">ตัวเลขสำคัญ</div>
+  <div class="divider-line"></div>
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-n">107</div><div class="stat-l">Source Files</div></div>
+    <div class="stat-card"><div class="stat-n">2,688</div><div class="stat-l">Graph Nodes</div></div>
+    <div class="stat-card"><div class="stat-n">4,084</div><div class="stat-l">Graph Edges</div></div>
+    <div class="stat-card"><div class="stat-n">78</div><div class="stat-l">Communities</div></div>
+    <div class="stat-card"><div class="stat-n">366K</div><div class="stat-l">คำในโปรเจกต์</div></div>
+    <div class="stat-card"><div class="stat-n">30+</div><div class="stat-l">API Routes</div></div>
+  </div>
+  <div style="margin-top:1.75rem; display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.1rem 1.4rem; box-shadow:var(--shadow-sm);">
+      <div style="font-family:'DM Mono',monospace; font-size:.6rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-3); margin-bottom:.6rem;">Core Stack</div>
+      <div style="display:flex; gap:.4rem; flex-wrap:wrap;">
+        <span class="tag tag-t">Next.js 16 App Router</span>
+        <span class="tag tag-t">React 19 RSC</span>
+        <span class="tag tag-o">Prisma 7.8 ORM</span>
+        <span class="tag tag-o">PostgreSQL 16</span>
+        <span class="tag tag-s">jose JWT Auth</span>
+        <span class="tag tag-s">Zod 4 Validation</span>
+        <span class="tag tag-g">Tailwind v4</span>
+        <span class="tag tag-g">shadcn/ui 4</span>
+      </div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.1rem 1.4rem; box-shadow:var(--shadow-sm);">
+      <div style="font-family:'DM Mono',monospace; font-size:.6rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-3); margin-bottom:.6rem;">8 Workflows · 3 Roles</div>
+      <div style="display:flex; gap:.4rem; flex-wrap:wrap;">
+        <span class="tag tag-o">รับเข้า</span><span class="tag tag-o">เบิกจ่าย</span><span class="tag tag-o">จัดการคลัง</span>
+        <span class="tag tag-t">บำรุงรักษา</span><span class="tag tag-t">ปรับปรุงสต็อก</span><span class="tag tag-t">Dashboard</span>
+        <span class="tag tag-s">รายงาน</span><span class="tag tag-s">ตั้งค่า</span>
+      </div>
+      <div style="margin-top:.65rem; display:flex; gap:.35rem;">
+        <span class="tag tag-o" style="font-size:.63rem;">ADMIN</span>
+        <span class="tag tag-s" style="font-size:.63rem;">STAFF</span>
+        <span class="tag tag-t" style="font-size:.63rem;">INSTRUCTOR</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 3 — ARCHITECTURE ══════════════════════ -->
+<div class="slide" id="s3">
+  <div class="slide-eyebrow">System Architecture</div>
+  <div class="slide-title">สถาปัตยกรรมระบบ</div>
+  <div class="divider-line"></div>
+  <div style="display:flex; flex-direction:column; gap:.65rem;">
+    <div>
+      <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.5rem;">Request Flow</div>
+      <div class="arch-band">
+        <div class="arch-node an-fe"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt=""/>React 19</div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node an-fe"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt=""/>Next.js 16 RSC</div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node an-be">Route Handlers</div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node an-be"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prisma/prisma-original.svg" alt=""/>Prisma 7.8</div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node an-db"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" alt=""/>PostgreSQL 16</div>
+      </div>
+    </div>
+    <div>
+      <div class="arch-band">
+        <div class="arch-node an-au">jose JWT Auth</div>
+        <span class="arch-arr">↔</span>
+        <div class="arch-node an-be">Middleware</div>
+        <span class="arch-arr">+</span>
+        <div class="arch-node an-fe">Zod 4 Validation</div>
+        <span class="arch-arr">+</span>
+        <div class="arch-node an-fe">shadcn/ui + Tailwind v4</div>
+        <span class="arch-arr">+</span>
+        <div class="arch-node an-fe">Recharts 3</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:1.25rem;">
+    <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.4rem;">Key Architecture Decisions</div>
+    <table class="adr-table">
+      <tr><th>Decision</th><th>Rationale</th></tr>
+      <tr><td>ไม่ใช้ next-auth</td><td>jose JWT เบากว่า — 3 roles เท่านั้น ไม่ต้อง OAuth / social login</td></tr>
+      <tr><td>ไม่ใช้ Redux</td><td>React Context เพียงพอ — cart + filters ไม่ซับซ้อน bundle เล็กกว่า</td></tr>
+      <tr><td>Prisma > raw SQL</td><td>type-safe queries, auto-complete, versioned migration, $transaction</td></tr>
+      <tr><td>PostgreSQL > MySQL</td><td>array fields (images[]), enum types, JSON queries, composite unique</td></tr>
+      <tr><td>shadcn/ui > MUI</td><td>copy-paste ไม่ lock-in, Tailwind-native, ปรับแก้เต็มที่</td></tr>
+      <tr><td>Dual Tracking Model</td><td>ครุภัณฑ์ → SubItem/subCode, วัสดุ → quantity + Lot, schema เดียว</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 4 — WF: รับเข้า ══════════════════════ -->
+<div class="slide" id="s4">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-o">📦</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 1 of 8</div>
+      <div class="wf-name">รับเข้า (Receiving)</div>
+      <div class="wf-route">/receive</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-o">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">🔍</div>
+        <div class="scene-name">เลือกพัสดุ</div>
+        <div class="scene-desc">ค้นหาและเลือกรายการที่จะรับเข้า จากระบบคลัง พร้อมดูข้อมูลสต็อกปัจจุบัน</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">ค้นหาด้วยชื่อ/รหัส</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">🔢</div>
+        <div class="scene-name">ระบุจำนวน</div>
+        <div class="scene-desc">กรอกจำนวนที่รับเข้า ทั้งหน่วยเบิกและหน่วยย่อย ตาม conversionFactor ของรายการ</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">quantity + quantitySub</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">🏷️</div>
+        <div class="scene-name">ติด Lot / Expiry</div>
+        <div class="scene-desc">สำหรับ <strong>วัสดุสิ้นเปลือง (CON)</strong> และ <strong>ยา (MED)</strong> — กำหนด Lot Number และวันหมดอายุ</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">CON · MED เท่านั้น</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">🏷️</div>
+        <div class="scene-name">กำหนด Sub-Code</div>
+        <div class="scene-desc">สำหรับ <strong>ครุภัณฑ์ (KRU/ELE)</strong> — สร้าง subCode ต่อชิ้น เช่น KRU-001-001</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">KRU · ELE · BOOK · TOY</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-o">
+        <div class="scene-num">05</div>
+        <div class="scene-icon">✅</div>
+        <div class="scene-name">บันทึก ReceiveRecord</div>
+        <div class="scene-desc">สร้าง ReceiveRecord · อัปเดต totalQty + availableQty · สร้าง Lot หรือ SubItem</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(72% 0.18 48 / .3); color:#fff; border:none">POST /api/receive</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>Prisma $transaction</strong> — ทุกการเปลี่ยนแปลงของ stock เป็น atomic operation
+      <span class="tag tag-o" style="margin-left:auto;">ReceiveRecord</span>
+      <span class="tag tag-t">Lot</span>
+      <span class="tag tag-s">SubItem</span>
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card active-wf"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 5 — WF: เบิกจ่าย ══════════════════════ -->
+<div class="slide" id="s5">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-t">🛒</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 2 of 8</div>
+      <div class="wf-name">เบิกจ่าย (Dispensing)</div>
+      <div class="wf-route">/dispense → /dispense/confirm</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+    <span class="tag tag-t">INSTRUCTOR</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-t">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">📷</div>
+        <div class="scene-name">ค้นหา / QR Scan</div>
+        <div class="scene-desc">ค้นหาด้วยชื่อ หรือสแกน QR code ด้วย html5-qrcode จากป้ายที่ติดบนพัสดุ</div>
+        <div class="scene-detail"><span class="scene-pill tag-t">GET /api/dispense/items</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-t">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">🗂️</div>
+        <div class="scene-name">เลือก + ใส่ตะกร้า</div>
+        <div class="scene-desc">เลือกรายการ ระบุจำนวน แล้วเพิ่มลง CartContext (useCart hook) ทบทวนใน CartDrawer Sheet</div>
+        <div class="scene-detail"><span class="scene-pill tag-t">CartProvider · CartContext</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-t">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">🔖</div>
+        <div class="scene-name">เลือก Lot (FIFO)</div>
+        <div class="scene-desc">ระบบแนะนำ Lot ที่เก่าสุดก่อน <strong>Manual FIFO</strong> (ADR-004) — เจ้าหน้าที่เลือกเองได้ตามสถานการณ์</div>
+        <div class="scene-detail"><span class="scene-pill tag-t">Manual FIFO · ADR-004</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-t">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">📋</div>
+        <div class="scene-name">ยืนยัน + เหตุผล</div>
+        <div class="scene-desc">หน้า /confirm ระบุ UsageType: <strong>COURSE</strong> (วิชา), <strong>ACTIVITY</strong> (กิจกรรม), หรือ <strong>OTHER</strong></div>
+        <div class="scene-detail"><span class="scene-pill tag-t">COURSE · ACTIVITY · OTHER</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-t">
+        <div class="scene-num">05</div>
+        <div class="scene-icon">⚡</div>
+        <div class="scene-name">$transaction Atomic</div>
+        <div class="scene-desc">สร้าง DispenseRecord · ลด availableQty · อัปเดต SubItem status → CHECKED_OUT · ลด Lot qty</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(60% 0.14 198 / .3); color:#fff; border:none">POST /api/dispense</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>Dual Tracking:</strong> ครุภัณฑ์ → track ทีละ SubItem · วัสดุ → ลด Lot quantity
+      <span class="tag tag-t" style="margin-left:auto;">DispenseRecord</span>
+      <span class="tag tag-s">SubItem status</span>
+      <span class="tag tag-o">Lot qty</span>
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 6 — WF: จัดการคลัง ══════════════════════ -->
+<div class="slide" id="s6">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-s">🗄️</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 3 of 8</div>
+      <div class="wf-name">จัดการคลัง (Inventory)</div>
+      <div class="wf-route">/items · /items/[id]</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-s">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">📊</div>
+        <div class="scene-name">ดู Stock Levels</div>
+        <div class="scene-desc">หน้ารายการครุภัณฑ์/วัสดุ แสดง totalQty, availableQty, สถานะ, และ minThreshold</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">GET /api/items</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-s">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">🔎</div>
+        <div class="scene-name">Filter & ค้นหา</div>
+        <div class="scene-desc">กรองตามหมวด (KRU/CON/MED...), สถานะ (AVAILABLE/DAMAGED...), สถานที่ (building/room)</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">getSearchParams()</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-s">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">📋</div>
+        <div class="scene-name">ดู Item Detail</div>
+        <div class="scene-desc">ดูรายละเอียดแต่ละชิ้น — Sub-items, Lots, ประวัติการเบิก, การบำรุงรักษา, รูปภาพ</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">GET /api/items/[id]</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-s">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">📱</div>
+        <div class="scene-name">QR Code Label</div>
+        <div class="scene-desc">พิมพ์ QR Code ต่อชิ้น (QRPrintDialog) เพื่อ scan ตอนเบิกจ่าย สร้างด้วย qrcode library</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">QRPrintDialog</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-s">
+        <div class="scene-num">05</div>
+        <div class="scene-icon">🔔</div>
+        <div class="scene-name">Auto Alerts</div>
+        <div class="scene-desc">ระบบแจ้งเตือนอัตโนมัติ — <strong>Low Stock</strong> (qty &lt; minThreshold), <strong>Near-Expiry</strong>, <strong>Overdue Maintenance</strong></div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(52% 0.04 255 / .3); color:#fff; border:none">GET /api/alerts</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>useAlerts</strong> hook ดึงข้อมูล alerts จาก server · แสดงผลบน Header ทุกหน้า
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 7 — WF: บำรุงรักษา ══════════════════════ -->
+<div class="slide" id="s7">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-o">🔧</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 4 of 8</div>
+      <div class="wf-name">บำรุงรักษา (Maintenance)</div>
+      <div class="wf-route">/items/[id] · /api/items/[id]/maintenance</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-o">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">📅</div>
+        <div class="scene-name">วางแผนตามรอบ</div>
+        <div class="scene-desc">ดูตาราง Maintenance Schedule ในหน้า Reports — รายการที่ถึงกำหนดบำรุงรักษา</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">PREVENTIVE · รอบประจำ</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">📝</div>
+        <div class="scene-name">เปลี่ยนสถานะ</div>
+        <div class="scene-desc">อัปเดตสถานะ SubItem เป็น <strong>PENDING_MAINTENANCE</strong> หรือ <strong>DAMAGED</strong> พร้อมบันทึก ItemStatusLog</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">PATCH /status</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">🛠️</div>
+        <div class="scene-name">บันทึกงาน + ซ่อม</div>
+        <div class="scene-desc">สร้าง MaintenanceRecord ระบุ type (PREVENTIVE/CORRECTIVE), รายละเอียด, ต้นทุน, ไฟล์แนบ</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">cost · attachmentUrls[]</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">💰</div>
+        <div class="scene-name">บันทึกผล + ต้นทุน</div>
+        <div class="scene-desc">ระบุ MaintenanceResult: AVAILABLE, NEEDS_MORE_REPAIR, หรือ DISPOSED พร้อมต้นทุนรวม</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">ต้นทุนสะสมในรายงานปี</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-o">
+        <div class="scene-num">05</div>
+        <div class="scene-icon">✅</div>
+        <div class="scene-name">อัปเดตสถานะ</div>
+        <div class="scene-desc">SubItem กลับเป็น <strong>AVAILABLE</strong> (ซ่อมเสร็จ), <strong>DISPOSED</strong> (จำหน่าย), หรือ ส่งซ่อมต่อ</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(72% 0.18 48 / .3); color:#fff; border:none">ItemStatusLog</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>2 ประเภท:</strong> PREVENTIVE (ตามรอบ) · CORRECTIVE (แก้ปัญหาเฉพาะหน้า) — ดูประวัติได้ใน Reports
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 8 — WF: ปรับปรุงสต็อก ══════════════════════ -->
+<div class="slide" id="s8">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-g">📝</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 5 of 8</div>
+      <div class="wf-name">ปรับปรุงสต็อก (Stock Adjustment)</div>
+      <div class="wf-route">POST /api/items/[id]/adjust</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-g">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">⚠️</div>
+        <div class="scene-name">เหตุการณ์เกิดขึ้น</div>
+        <div class="scene-desc">พัสดุหาย, เสีย, นับไม่ตรง, หรือตัดจำหน่าย — ต้องปรับยอดในระบบให้ตรงความจริง</div>
+        <div class="scene-detail"><span class="scene-pill tag-g">Discrepancy detected</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="oklch(44% 0.12 150)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-g">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">📋</div>
+        <div class="scene-name">เลือกเหตุผล</div>
+        <div class="scene-desc">ระบุ AdjustmentReason: <strong>LOST</strong> · <strong>DAMAGED</strong> · <strong>COUNT_MISMATCH</strong> · <strong>DISPOSAL</strong> · OTHER</div>
+        <div class="scene-detail"><span class="scene-pill tag-g">Zod validated</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="oklch(44% 0.12 150)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-g">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">🔢</div>
+        <div class="scene-name">ปรับจำนวน</div>
+        <div class="scene-desc">กรอก newQty ที่ถูกต้อง ระบบบันทึก previousQty ไว้เปรียบเทียบ ใน StockAdjustment record</div>
+        <div class="scene-detail"><span class="scene-pill tag-g">previousQty → newQty</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="oklch(44% 0.12 150)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-g">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">🔒</div>
+        <div class="scene-name">Audit Trail</div>
+        <div class="scene-desc">สร้าง StockAdjustment record — บันทึก who, when, why, how much เพื่อ accountability</div>
+        <div class="scene-detail"><span class="scene-pill tag-g">Full audit history</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="oklch(44% 0.12 150)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-g">
+        <div class="scene-num">05</div>
+        <div class="scene-icon">✅</div>
+        <div class="scene-name">อัปเดต Stock</div>
+        <div class="scene-desc">อัปเดต availableQty ใน Item · บันทึก ItemStatusLog · ข้อมูลสะท้อนใน Dashboard ทันที</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(44% 0.12 150 / .3); color:#fff; border:none">Atomic update</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>ทุกการปรับมีหลักฐาน</strong> — StockAdjustment + ItemStatusLog เก็บ trail ครบ ดูได้ในรายงาน
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 9 — WF: Dashboard ══════════════════════ -->
+<div class="slide" id="s9">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-t">📊</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 6 of 8</div>
+      <div class="wf-name">Dashboard</div>
+      <div class="wf-route">/ (root page)</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+    <span class="tag tag-t">INSTRUCTOR</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-t">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">🔐</div>
+        <div class="scene-name">เข้าสู่ระบบ</div>
+        <div class="scene-desc">jose JWT verify ผ่าน Next.js Middleware → redirect ตาม role ไปยัง dashboard</div>
+        <div class="scene-detail"><span class="scene-pill tag-t">Middleware guard</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-t">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">🚨</div>
+        <div class="scene-name">Metric Cards</div>
+        <div class="scene-desc"><strong>Low Stock</strong>, <strong>Near-Expiry</strong>, <strong>Overdue Maintenance</strong> — MetricCard components พร้อม Skeleton loading</div>
+        <div class="scene-detail"><span class="scene-pill tag-t">GET /api/alerts</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-t">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">📈</div>
+        <div class="scene-name">Charts (Recharts 3)</div>
+        <div class="scene-desc">Bar chart การเบิกสูงสุด, กราฟ usage by subject, Pie chart สถานะ stock — Responsive + animated</div>
+        <div class="scene-detail"><span class="scene-pill tag-t">top-dispense · usage · status</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-t">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">🕐</div>
+        <div class="scene-name">Recent Transactions</div>
+        <div class="scene-desc">ตารางการเบิกจ่ายและรับเข้าล่าสุด ดูภาพรวม activity ของคลังแบบ real-time</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(60% 0.14 198 / .3); color:#fff; border:none">recent-dispense · recent-receive</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>React Server Components</strong> fetch ข้อมูล 5 endpoints พร้อมกัน · Skeleton loading state ทุก section
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 10 — WF: รายงาน ══════════════════════ -->
+<div class="slide" id="s10">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-s">📋</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 7 of 8</div>
+      <div class="wf-name">รายงาน (Reports)</div>
+      <div class="wf-route">/reports — 8 แท็บ</div>
+    </div>
+    <span class="tag tag-o">ADMIN</span>
+    <span class="tag tag-s">STAFF</span>
+    <span class="tag tag-t">INSTRUCTOR</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-s">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">🗂️</div>
+        <div class="scene-name">เลือกแท็บรายงาน</div>
+        <div class="scene-desc">8 แท็บ — สรุปยอด · ประวัติเบิก · Usage/Subject · Near-Expiry · ต้นทุนปี · ชำรุด · Maint.Schedule · Maint.History</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">8 report tabs</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-s">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">🎛️</div>
+        <div class="scene-name">กำหนด Filter</div>
+        <div class="scene-desc">กรองด้วย ช่วงวันที่, หมวดหมู่ (KRU/CON...), สถานะ, สถานที่ — ผ่าน getSearchParams()</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">Date · Category · Status</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-s">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">📊</div>
+        <div class="scene-name">ดูข้อมูล + กราฟ</div>
+        <div class="scene-desc">DataTable + Recharts charts แสดงผล — ปรับ filter ได้แบบ real-time โหลดด้วย Suspense</div>
+        <div class="scene-detail"><span class="scene-pill tag-s">DataTable · Charts</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--slate)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-s">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">📤</div>
+        <div class="scene-name">Export PDF / Excel</div>
+        <div class="scene-desc">ส่งออกด้วย <strong>pdfkit</strong> (PDF) หรือ <strong>xlsx</strong> (Excel) — export-utils.ts จัดการ format</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(52% 0.04 255 / .3); color:#fff; border:none">GET /api/reports/export</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>8 tabs:</strong> สรุปยอด · ประวัติเบิก · Usage/Subject · Near-Expiry · ต้นทุนปี · ชำรุด · Maint.Schedule · Maint.History
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 11 — WF: ตั้งค่า ══════════════════════ -->
+<div class="slide" id="s11">
+  <div class="wf-header">
+    <div class="wf-icon-big wf-icon-big-o">⚙️</div>
+    <div class="wf-title-block">
+      <div class="wf-eyebrow">Workflow 8 of 8</div>
+      <div class="wf-name">ตั้งค่า (Settings)</div>
+      <div class="wf-route">/settings — 5 แท็บ</div>
+    </div>
+    <span class="tag tag-o">ADMIN เท่านั้น</span>
+  </div>
+  <div class="scenes-wrap">
+    <div class="scenes-main">
+      <div class="scene scene-o">
+        <div class="scene-num">01</div>
+        <div class="scene-icon">📦</div>
+        <div class="scene-name">จัดการ Items Master</div>
+        <div class="scene-desc">CRUD รายการพัสดุ — สร้าง/แก้ไข/ลบ กำหนด category, unit, minThreshold, รูปภาพ</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">CRUD /api/settings/items</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">02</div>
+        <div class="scene-icon">🏷️</div>
+        <div class="scene-name">Categories & Locations</div>
+        <div class="scene-desc">CRUD หมวดหมู่ (KRU/ELE...) และสถานที่จัดเก็บ (building/floor/room) ใช้ทั่วระบบ</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">categories · locations</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">03</div>
+        <div class="scene-icon">👥</div>
+        <div class="scene-name">User Management</div>
+        <div class="scene-desc">CRUD users — กำหนด role (ADMIN/STAFF/INSTRUCTOR), เปิด/ปิด account, bcryptjs hash password</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">ADMIN only · requireAdmin()</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-o">
+        <div class="scene-num">04</div>
+        <div class="scene-icon">📥</div>
+        <div class="scene-name">Import CSV Bulk</div>
+        <div class="scene-desc">นำเข้าข้อมูลจาก CSV (csv-parse library) — 7 แหล่งข้อมูล: ครุภัณฑ์, อิเล็กทรอนิกส์, หนังสือ, ของเล่น...</div>
+        <div class="scene-detail"><span class="scene-pill tag-o">POST /api/settings/import</span></div>
+      </div>
+      <div class="scene-connector">
+        <svg viewBox="0 0 28 28" fill="none"><path d="M6 14h16M16 8l6 6-6 6" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="scene scene-end-o">
+        <div class="scene-num">05</div>
+        <div class="scene-icon">✅</div>
+        <div class="scene-name">บันทึก + Validate</div>
+        <div class="scene-desc">ทุก input ผ่าน Zod schema validation ก่อน save — react-hook-form จัดการ form state + error messages</div>
+        <div class="scene-detail"><span class="scene-pill" style="background:oklch(72% 0.18 48 / .3); color:#fff; border:none">Zod · react-hook-form</span></div>
+      </div>
+    </div>
+    <div class="wf-note">
+      <strong>requireAdmin()</strong> guard ทุก settings API · STAFF ไม่สามารถเข้า /settings/users ได้
+    </div>
+    <div class="other-wf">
+      <div class="other-wf-card"><div class="owf-num">01</div><div class="owf-icon">📦</div><div class="owf-name">รับเข้า</div></div>
+      <div class="other-wf-card"><div class="owf-num">02</div><div class="owf-icon">🛒</div><div class="owf-name">เบิกจ่าย</div></div>
+      <div class="other-wf-card"><div class="owf-num">03</div><div class="owf-icon">🗄️</div><div class="owf-name">จัดการคลัง</div></div>
+      <div class="other-wf-card"><div class="owf-num">04</div><div class="owf-icon">🔧</div><div class="owf-name">บำรุงรักษา</div></div>
+      <div class="other-wf-card"><div class="owf-num">05</div><div class="owf-icon">📝</div><div class="owf-name">ปรับสต็อก</div></div>
+      <div class="other-wf-card"><div class="owf-num">06</div><div class="owf-icon">📊</div><div class="owf-name">Dashboard</div></div>
+      <div class="other-wf-card"><div class="owf-num">07</div><div class="owf-icon">📋</div><div class="owf-name">รายงาน</div></div>
+      <div class="other-wf-card active-wf"><div class="owf-num">08</div><div class="owf-icon">⚙️</div><div class="owf-name">ตั้งค่า</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 12 — STATUS LIFECYCLE ══════════════════════ -->
+<div class="slide" id="s12">
+  <div class="slide-eyebrow">Domain Model</div>
+  <div class="slide-title">Item Status Lifecycle</div>
+  <div class="divider-line"></div>
+  <div class="status-flow">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1.5rem 2rem; box-shadow:var(--shadow-sm);">
+      <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.75rem;">Normal Operation Loop</div>
+      <div class="status-row">
+        <div class="status-node sn-avail">✅ AVAILABLE</div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:.1rem;">
+          <span style="font-size:.65rem; color:var(--text-3); font-family:'DM Mono',monospace;">── เบิก ──▶</span>
+          <span style="font-size:.65rem; color:var(--text-3); font-family:'DM Mono',monospace;">◀── คืน ──</span>
+        </div>
+        <div class="status-node sn-out">🔄 CHECKED_OUT</div>
+        <span style="color:var(--text-3); font-size:.8rem; margin-left:.25rem;">DispenseRecord บันทึก dispensedAt / returnedAt</span>
+      </div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1.5rem 2rem; box-shadow:var(--shadow-sm);">
+      <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.75rem;">Damage & Repair Path</div>
+      <div class="status-row">
+        <div class="status-node sn-avail">AVAILABLE</div>
+        <span class="status-arr">→</span>
+        <div class="status-node sn-dmg">⚠️ DAMAGED</div>
+        <span class="status-arr">→</span>
+        <div class="status-node sn-rep">🔧 UNDER_REPAIR</div>
+        <span class="status-arr">→</span>
+        <div style="display:flex; flex-direction:column; gap:.4rem;">
+          <div class="status-row" style="margin:0;"><div class="status-node sn-avail">✅ AVAILABLE</div><span class="status-label">ซ่อมเสร็จ</span></div>
+          <div class="status-row" style="margin:0;"><div class="status-node sn-disp">🗑️ DISPOSED</div><span class="status-label">จำหน่าย</span></div>
+          <div class="status-row" style="margin:0;"><div class="status-node sn-dis">⏳ PENDING_MAINT</div><span class="status-label">รอซ่อมต่อ</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.65rem;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1rem 1.25rem; box-shadow:var(--shadow-sm);">
+        <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.5rem;">Terminal States (ไม่กลับมา)</div>
+        <div class="status-row">
+          <div class="status-node sn-lost">🔍 LOST</div>
+          <span class="status-arr" style="opacity:.5">—</span>
+          <div class="status-node sn-disp">🗑️ DISPOSED</div>
+        </div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1rem 1.25rem; box-shadow:var(--shadow-sm);">
+        <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.5rem;">ทุกการเปลี่ยนสถานะบันทึก</div>
+        <div style="display:flex; align-items:center; gap:.5rem;">
+          <span class="tag tag-s" style="font-family:'DM Mono',monospace; font-size:.63rem;">ItemStatusLog</span>
+          <span style="font-size:.72rem; color:var(--text-3);">who · when · why · from → to</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 13 — DB SCHEMA ══════════════════════ -->
+<div class="slide" id="s13">
+  <div class="slide-eyebrow">Data Layer</div>
+  <div class="slide-title">Database Schema — 12 Models · 8 Enums</div>
+  <div class="divider-line"></div>
+  <div class="schema-grid">
+    <div class="schema-model"><div class="sm-name">User</div><div class="sm-fields">email · name · role · isActive</div></div>
+    <div class="schema-model"><div class="sm-name">CategoryType</div><div class="sm-fields">name · category enum</div></div>
+    <div class="schema-model"><div class="sm-name">Location</div><div class="sm-fields">building · floor · room · detail?</div></div>
+    <div class="schema-model"><div class="sm-name">Unit</div><div class="sm-fields">name (issue + sub unit)</div></div>
+    <div class="schema-model star"><div class="sm-name">Item ★ Core</div><div class="sm-fields">code · name · category · trackIndividually · status · totalQty · availableQty · conversionFactor · minThreshold · images[]</div></div>
+    <div class="schema-model"><div class="sm-name">SubItem</div><div class="sm-fields">subCode · status · condition? · serialNumber?</div></div>
+    <div class="schema-model"><div class="sm-name">Lot</div><div class="sm-fields">lotNumber · expiryDate? · quantity · receivedDate</div></div>
+    <div class="schema-model"><div class="sm-name">DispenseRecord</div><div class="sm-fields">quantity · quantitySub · usageType? · dispensedAt · returnedAt?</div></div>
+    <div class="schema-model"><div class="sm-name">ReceiveRecord</div><div class="sm-fields">quantity · receivedBy · receivedAt</div></div>
+    <div class="schema-model"><div class="sm-name">StockAdjustment</div><div class="sm-fields">previousQty · newQty · reason · note?</div></div>
+    <div class="schema-model"><div class="sm-name">MaintenanceRecord</div><div class="sm-fields">type · result · cost? · attachmentUrls[]</div></div>
+    <div class="schema-model"><div class="sm-name">ItemStatusLog</div><div class="sm-fields">previousStatus → newStatus · reason? · changedBy</div></div>
+  </div>
+  <div class="enum-section">
+    <div style="font-family:'DM Mono',monospace; font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:.3rem;">Enums</div>
+    <div class="enum-row"><span class="enum-label">Category</span><span class="enum-val">KRU</span><span class="enum-val">ELE</span><span class="enum-val">BOOK</span><span class="enum-val">TOY</span><span class="enum-val">DUR</span><span class="enum-val">CON</span><span class="enum-val">MED</span><span class="enum-val">KIT</span></div>
+    <div class="enum-row"><span class="enum-label">ItemStatus</span><span class="enum-val">AVAILABLE</span><span class="enum-val">CHECKED_OUT</span><span class="enum-val">DAMAGED</span><span class="enum-val">UNDER_REPAIR</span><span class="enum-val">LOST</span><span class="enum-val">DISPOSED</span></div>
+    <div class="enum-row"><span class="enum-label">Role</span><span class="enum-val">ADMIN</span><span class="enum-val">STAFF</span><span class="enum-val">INSTRUCTOR</span><span class="enum-label" style="margin-left:.5rem;">AdjReason</span><span class="enum-val">LOST</span><span class="enum-val">DAMAGED</span><span class="enum-val">COUNT_MISMATCH</span><span class="enum-val">DISPOSAL</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 14 — MILESTONES ══════════════════════ -->
+<div class="slide" id="s14">
+  <div class="slide-eyebrow">Project Progress</div>
+  <div class="slide-title">Milestones</div>
+  <div style="display:flex; align-items:center; gap:1.25rem; margin:.4rem 0 1rem;">
+    <div style="display:flex; align-items:center; gap:.4rem; font-size:.72rem; color:var(--text-3);"><span class="ms-dot dot-done"></span>Done</div>
+    <div style="display:flex; align-items:center; gap:.4rem; font-size:.72rem; color:var(--text-3);"><span class="ms-dot dot-wip"></span>In Progress</div>
+    <div style="display:flex; align-items:center; gap:.4rem; font-size:.72rem; color:var(--text-3);"><span class="ms-dot dot-plan"></span>Planned</div>
+    <div style="margin-left:auto; font-family:'DM Mono',monospace; font-size:.7rem; color:var(--teal);">9 / 16 milestones complete</div>
+  </div>
+  <div class="ms-grid">
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M0 — Project Init</div><div class="ms-body-desc">Next.js 16, Prisma, Docker, shadcn/ui</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M1 — Database Schema</div><div class="ms-body-desc">12 models, 8 enums, migrations, seed CSV</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M2 — Auth & Layout</div><div class="ms-body-desc">jose JWT, middleware, sidebar, bottom tab</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M3 — Settings Items & Categories</div><div class="ms-body-desc">CRUD, sub-codes, import CSV</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M4 — Settings Locations/Units/Users</div><div class="ms-body-desc">CRUD settings ครบถ้วน</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M5 — Dispense Flow</div><div class="ms-body-desc">ระบบตะกร้า, ยืนยัน, Prisma $transaction</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M6 — Receive Flow</div><div class="ms-body-desc">รับรายการเข้า, สร้าง Lot</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M7 — Dashboard</div><div class="ms-body-desc">metrics, charts, Skeleton loading</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-done"></span><div><div class="ms-body-title">M8 — Reports</div><div class="ms-body-desc">8 แท็บ, filter, export PDF/Excel</div></div></div>
+    <div class="ms-card wip"><span class="ms-dot dot-wip"></span><div><div class="ms-body-title">M9 — Item Detail ← WIP</div><div class="ms-body-desc">overview, history, maintenance, sub-codes</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-plan"></span><div><div class="ms-body-title">M10 — Alerts & Email</div><div class="ms-body-desc">low stock, near-expiry, maintenance alerts</div></div></div>
+    <div class="ms-card"><span class="ms-dot dot-plan"></span><div><div class="ms-body-title">M11–16 — Polish, Kit/BOM, Category UI</div><div class="ms-body-desc">file uploads, testing, Kit/BOM structure</div></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SLIDE 15 — END ══════════════════════ -->
+<div class="slide" id="s-end">
+  <div class="cover-stripe"></div>
+  <div class="end-huge">Done.</div>
+  <p style="font-size:.95rem; color:var(--text-3); margin-bottom:2rem;">NLU Stock Management System · Tech Stack Report</p>
+  <div class="chips-row" style="justify-content:center;">
+    <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" />Next.js 16</span>
+    <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" />React 19</span>
+    <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prisma/prisma-original.svg" alt="" />Prisma 7.8</span>
+    <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" alt="" />PostgreSQL 16</span>
+    <span class="chip"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/tailwindcss/tailwindcss-original.svg" alt="" />Tailwind v4</span>
+  </div>
+  <div style="margin-top:2.5rem; font-family:'DM Mono',monospace; font-size:.65rem; color:var(--text-3);">
+    สร้างจาก graphify knowledge graph · graphify-out/GRAPH_REPORT.md
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- ─── NAV BAR ─── -->
+<div class="nav-bar">
+  <button class="nav-btn" id="prevBtn" onclick="navigate(-1)">← prev</button>
+  <button class="nav-btn" id="nextBtn" onclick="navigate(1)">next →</button>
+  <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+  <div class="slide-counter" id="counter">1 / 15</div>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total  = slides.length;
+  let current  = 0;
+
+  function update() {
+    slides.forEach((s, i) => {
+      s.classList.remove('active', 'prev');
+      if (i === current)    s.classList.add('active');
+      else if (i < current) s.classList.add('prev');
+    });
+    document.getElementById('counter').textContent    = `${current + 1} / ${total}`;
+    document.getElementById('progressBar').style.width = `${((current + 1) / total) * 100}%`;
+    document.getElementById('prevBtn').disabled = current === 0;
+    document.getElementById('nextBtn').disabled = current === total - 1;
+  }
+
+  function navigate(dir) {
+    const n = current + dir;
+    if (n < 0 || n >= total) return;
+    current = n;
+    update();
+  }
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); navigate(1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key))        { e.preventDefault(); navigate(-1); }
+    if (e.key === 'Home') { current = 0; update(); }
+    if (e.key === 'End')  { current = total - 1; update(); }
+  });
+
+  let tx = 0;
+  document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend',   e => {
+    const d = tx - e.changedTouches[0].clientX;
+    if (Math.abs(d) > 50) navigate(d > 0 ? 1 : -1);
+  });
+
+  update();
+</script>
+</body>
+</html>

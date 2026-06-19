@@ -25,7 +25,7 @@ function safeErrorMessage(e: unknown): string {
 
 async function importItems(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = { imported: 0, errors: [] };
-  const categories = await prisma.categoryType.findMany();
+  const categories = await prisma.categoryType.findMany({ include: { profile: true } });
   const locations = await prisma.location.findMany();
   const units = await prisma.unit.findMany();
 
@@ -76,11 +76,9 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         name: row.name,
         nameEn: row.nameEn || null,
         category: { connect: { id: category.id } },
-        trackIndividually: (() => {
-          const forced = forcedTrackIndividually(category.category);
-          if (forced !== undefined) return forced;
-          return row.trackIndividually === "true";
-        })(),
+        trackIndividually: category.profile
+          ? forcedTrackIndividually(category.profile)
+          : row.trackIndividually === "true",
         issueUnit: { connect: { id: issueUnit.id } },
         subUnit: { connect: { id: subUnit.id } },
         conversionFactor: parseInt(row.conversionFactor) || 1,
@@ -103,7 +101,8 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
 
 async function importCategories(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = { imported: 0, errors: [] };
-  const validCategories = ["KRU", "ELE", "BOOK", "TOY", "DUR", "CON", "MED", "KIT"];
+  const profiles = await prisma.categoryProfile.findMany();
+  const profileByCode = new Map(profiles.map((p) => [p.code, p]));
 
   const validRows: Prisma.CategoryTypeCreateInput[] = [];
 
@@ -114,14 +113,15 @@ async function importCategories(rows: ImportRow[]): Promise<ImportResult> {
       result.errors.push({ row: i + 1, message: "Name is required" });
       continue;
     }
-    if (!validCategories.includes(row.category)) {
-      result.errors.push({ row: i + 1, message: `Invalid category "${row.category}"` });
+    const profile = profileByCode.get((row.category || "").toUpperCase());
+    if (!profile) {
+      result.errors.push({ row: i + 1, message: `Invalid profile code "${row.category}"` });
       continue;
     }
 
     validRows.push({
       name: row.name,
-      category: row.category as "KRU" | "ELE" | "BOOK" | "TOY" | "DUR" | "CON" | "MED" | "KIT",
+      profile: { connect: { id: profile.id } },
       description: row.description || null,
       sortOrder: parseInt(row.sortOrder) || 0,
     });

@@ -6,22 +6,16 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
+import { STATUS_LABELS, STATUS_VARIANTS } from "@/lib/constants";
 
 const filterConfig: FilterConfig = {
   dateRange: true,
   statusOptions: [
-    { value: "DAMAGED", label: "Damaged" },
-    { value: "UNDER_REPAIR", label: "Under Repair" },
-    { value: "DISPOSED", label: "Disposed" },
-    { value: "LOST", label: "Lost" },
+    { value: "DAMAGED", label: "ชำรุด" },
+    { value: "UNDER_REPAIR", label: "ซ่อมบำรุง" },
+    { value: "DISPOSED", label: "จำหน่าย" },
+    { value: "LOST", label: "สูญหาย" },
   ],
-};
-
-const statusColors: Record<string, "destructive" | "secondary" | "default" | "outline"> = {
-  DAMAGED: "destructive",
-  UNDER_REPAIR: "secondary",
-  DISPOSED: "outline",
-  LOST: "destructive",
 };
 
 interface Row {
@@ -41,7 +35,7 @@ const columns: Column<Row>[] = [
   {
     key: "status",
     header: "Status",
-    render: (r) => <Badge variant={statusColors[r.status] ?? "default"}>{r.status.replace(/_/g, " ")}</Badge>,
+    render: (r) => <Badge variant={STATUS_VARIANTS[r.status] ?? "default"}>{STATUS_LABELS[r.status] ?? r.status.replace(/_/g, " ")}</Badge>,
   },
   { key: "categoryName", header: "Category" },
   { key: "location", header: "Location" },

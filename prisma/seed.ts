@@ -15,6 +15,23 @@ function readCsv(filename: string) {
   }) as string[][];
 }
 
+// ── Profile spec (synced with scripts/migrate-profiles.ts) ──
+type ProfileSpec = {
+  code: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  assetTracking: boolean; setTracking: boolean; isComposite: boolean;
+  icon: string; color: string;
+};
+const PROFILE_SPEC: ProfileSpec[] = [
+  { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, isComposite: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, isComposite: true, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, setTracking: false, isComposite: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, setTracking: false, isComposite: false, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
+  { code: "BAT", name: "หนังสือและของเล่น", dispenseType: "ITEM", assetTracking: false, setTracking: true, isComposite: false, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+];
+
+// Legacy enum codes that CSV imports still reference → map to current profile codes.
+const PROFILE_ALIASES: Record<string, string> = { ELE: "KRU", BOOK: "BAT", TOY: "BAT" };
+
 // Map Thai condition → ItemCondition enum
 function mapCondition(th: string): string {
   const t = (th || "").trim();
@@ -55,18 +72,50 @@ function parsePrice(raw: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+// Uniform code generator (ADR-0001): NLU-{PREFIX}-{NNN}[-S{NN}].
+// Per-prefix running counter; setSize>1 appends the set segment.
+const prefixCounters: Record<string, number> = {};
+function nextCode(prefix: string, setSize = 1): string {
+  prefixCounters[prefix] = (prefixCounters[prefix] ?? 0) + 1;
+  const nnn = String(prefixCounters[prefix]).padStart(3, "0");
+  return setSize > 1 ? `NLU-${prefix}-${nnn}-S${String(setSize).padStart(2, "0")}` : `NLU-${prefix}-${nnn}`;
+}
+
+// Extract set size from an old-format code (NLU-BOOK-013-001-S06 → 6), else 1.
+function extractSetSize(oldCode: string): number {
+  const m = oldCode.match(/-S(\d{2})$/);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
+// Canonical BOOK หมวด names (CSV col is unreliable/empty); number comes from the code.
+const BOOK_CAT_NAMES: Record<string, string> = {
+  "001": "ชุดส่งเสริมสุขภาพ",
+  "002": "ชุดส่งเสริมสุขภาพและสุขอนามัย",
+  "003": "ชุดส่งเสริมด้านสังคม",
+  "004": "ชุดส่งเสริมด้านคุณธรรม",
+  "005": "ด้านสติปัญญา ความคิด ความรู้ทั่วไป",
+  "006": "ด้านสติปัญญา ตัวเลข ภาษา สี",
+  "007": "ส่งเสริมการเรียนรู้ ด้านประสาทสัมผัส",
+  "008": "ส่งเสริมภาษา",
+  "009": "ส่งเสริมด้านคุณธรรม (นิทาน)",
+  "010": "แนวการเล่น ส่งเสริมกล้ามเนื้อมัดเล็ก",
+  "011": "นิทานเล่มใหญ่",
+  "012": "หนังสือสำหรับเยาวชน",
+  "013": "คู่มือสำหรับใช้อ้างอิง",
+};
+
 // Extract NLU code prefix for grouping
 // "NLU-KRU-001-001" → "NLU-KRU-001"
-// "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001"
-// "NLU-TOY-014-061-S02-C01" → "NLU-TOY-014-061"
+// "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001-S02" (keep set, strip copy)
+// "NLU-BOOK-005-008-S03" → "NLU-BOOK-005-008-S03" (keep set)
 function extractItemCode(fullCode: string, prefix: string): string {
   // For KRU/ELE: NLU-PREFIX-NNN-NNN → base = NLU-PREFIX-NNN
   if (prefix === "KRU" || prefix === "ELE") {
     const match = fullCode.match(/^(NLU-[A-Z]+-\d{3})-\d{3}/);
     return match ? match[1] : fullCode;
   }
-  // For BOOK/TOY: strip -S## and -C## suffixes to get base
-  return fullCode.replace(/-S\d+-C\d+$/, "").replace(/-C\d+$/, "");
+  // For BOOK/TOY: strip only -C## (copy) suffix, keep -S## (set)
+  return fullCode.replace(/-C\d+$/, "");
 }
 
 async function main() {
@@ -85,6 +134,7 @@ async function main() {
   await prisma.item.deleteMany();
   await prisma.location.deleteMany();
   await prisma.categoryType.deleteMany();
+  await prisma.categoryProfile.deleteMany();
   await prisma.unit.deleteMany();
   await prisma.user.deleteMany();
 
@@ -120,16 +170,39 @@ async function main() {
   }
 
   // ============================================================
-  // CategoryTypes — 8 categories, 1:1 with enum
+  // CategoryProfiles (ประเภท) + CategoryTypes (หมวด)
   // ============================================================
-  const catKru = await prisma.categoryType.create({ data: { name: "ครุภัณฑ์", category: "KRU", sortOrder: 1 } });
-  const catEle = await prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", category: "ELE", sortOrder: 2 } });
-  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", category: "BOOK", sortOrder: 3 } });
-  const catToy = await prisma.categoryType.create({ data: { name: "ของเล่น", category: "TOY", sortOrder: 4 } });
-  const catDur = await prisma.categoryType.create({ data: { name: "วัสดุคงทน", category: "DUR", sortOrder: 5 } });
-  const catCon = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", category: "CON", sortOrder: 6 } });
-  const catMed = await prisma.categoryType.create({ data: { name: "ยา", category: "MED", sortOrder: 7 } });
-  const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", category: "KIT", sortOrder: 8 } });
+  const profileByCode: Record<string, string> = {};
+  for (let i = 0; i < PROFILE_SPEC.length; i++) {
+    const spec = PROFILE_SPEC[i];
+    const p = await prisma.categoryProfile.create({ data: { ...spec, sortOrder: i } });
+    profileByCode[spec.code] = p.id;
+  }
+
+  const catKru = await prisma.categoryType.create({ data: { name: "ครุภัณฑ์", profileId: profileByCode.KRU, sortOrder: 1 } });
+  const catEle = await prisma.categoryType.create({ data: { name: "อุปกรณ์อิเล็กทรอนิกส์", profileId: profileByCode.KRU, sortOrder: 2 } });
+  const catBook = await prisma.categoryType.create({ data: { name: "หนังสือ", profileId: profileByCode.BAT, sortOrder: 3 } });
+  const catToy = await prisma.categoryType.create({ data: { name: "ของเล่น", profileId: profileByCode.BAT, sortOrder: 4 } });
+  const catDur = await prisma.categoryType.create({ data: { name: "วัสดุคงทน", profileId: profileByCode.DUR, sortOrder: 5 } });
+  const catCon = await prisma.categoryType.create({ data: { name: "วัสดุสิ้นเปลือง", profileId: profileByCode.CON, sortOrder: 6 } });
+  const catKit = await prisma.categoryType.create({ data: { name: "อุปกรณ์ประกอบวิชา", profileId: profileByCode.KIT, sortOrder: 7 } });
+
+  // Granular หมวดย่อย. Legacy CSV codes ELE/BOOK/TOY alias to KRU/BAT (see PROFILE_ALIASES).
+  const subCatCache = new Map<string, string>();
+  let subSort = 100;
+  async function ensureSubCategory(profileCode: string, name: string): Promise<string> {
+    const resolved = PROFILE_ALIASES[profileCode] ?? profileCode;
+    const key = `${resolved}|${name}`;
+    const cached = subCatCache.get(key);
+    if (cached) return cached;
+    const profileId = profileByCode[resolved];
+    if (!profileId) throw new Error(`No profile for code ${resolved}`);
+    const row = await prisma.categoryType.create({
+      data: { name, profileId, sortOrder: subSort++ },
+    });
+    subCatCache.set(key, row.id);
+    return row.id;
+  }
 
   // ============================================================
   // Locations — from CSV data
@@ -223,10 +296,10 @@ async function main() {
 
     const item = await prisma.item.create({
       data: {
-        code: group.nluCode,
+        code: nextCode("KRU"),
         name: stripTrailingNum(group.nameTh),
         nameEn: group.nameEn || null,
-        categoryId: catKru.id,
+        categoryId: group.subCategory ? await ensureSubCategory("KRU", group.subCategory) : catKru.id,
         trackIndividually: true,
         issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"), conversionFactor: 1,
         minThreshold: 1, locationId: locId,
@@ -242,7 +315,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: sub.nluCode,
+          subCode: `C${String(si + 1).padStart(2, "0")}`,
           name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
           status: mapStatus(sub.condition) as any,
           condition: mapCondition(sub.condition) as any,
@@ -322,7 +395,7 @@ async function main() {
 
     const item = await prisma.item.create({
       data: {
-        code: group.nluCode,
+        code: nextCode("ELE"),
         name: stripTrailingNum(group.nameTh),
         categoryId: catEle.id,
         trackIndividually: true,
@@ -340,7 +413,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: sub.nluCode,
+          subCode: `C${String(si + 1).padStart(2, "0")}`,
           name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
           status: mapStatus(sub.condition) as any,
           condition: mapCondition(sub.condition) as any,
@@ -383,13 +456,19 @@ async function main() {
   for (const [, group] of bookGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
+    const setSize = extractSetSize(group.codes[0]);
+    const หมวดNum = (group.codes[0].split("-")[2] || "").trim();
+    const bookCatId = หมวดNum
+      ? await ensureSubCategory("BOOK", BOOK_CAT_NAMES[หมวดNum] || group.category || `หมวด ${หมวดNum}`)
+      : catBook.id;
 
     const item = await prisma.item.create({
       data: {
-        code: `NLU-BOOK-${String(bookItemCount + 1).padStart(3, "0")}`,
+        code: nextCode("BOOK", setSize),
         name: stripTrailingNum(group.bookName),
-        categoryId: catBook.id,
+        categoryId: bookCatId,
         trackIndividually: true,
+        setSize,
         issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"), conversionFactor: 1,
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
@@ -401,7 +480,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: group.codes[ci],
+          subCode: `C${String(ci + 1).padStart(2, "0")}`,
           name: group.codes.length > 1 ? `${stripTrailingNum(group.bookName)} (${ci + 1})` : group.bookName,
           status: "AVAILABLE",
           condition: "NEW",
@@ -439,16 +518,19 @@ async function main() {
   }
 
   let toyItemCount = 0, toySubCount = 0;
+  const toyCatId = await ensureSubCategory("TOY", "สื่อการสอน/ของเล่นส่งเสริมพัฒนาการ");
   for (const [, group] of toyGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
+    const setSize = extractSetSize(group.codes[0]);
 
     const item = await prisma.item.create({
       data: {
-        code: `NLU-TOY-${String(toyItemCount + 1).padStart(3, "0")}`,
+        code: nextCode("TOY", setSize),
         name: stripTrailingNum(group.toyName),
-        categoryId: catToy.id,
+        categoryId: toyCatId,
         trackIndividually: true,
+        setSize,
         issueUnitId: unitId("ชิ้น"), subUnitId: unitId("ชิ้น"), conversionFactor: 1,
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
@@ -460,7 +542,7 @@ async function main() {
       await prisma.subItem.create({
         data: {
           itemId: item.id,
-          subCode: group.codes[ci],
+          subCode: `C${String(ci + 1).padStart(2, "0")}`,
           name: group.codes.length > 1 ? `${stripTrailingNum(group.toyName)} (${ci + 1})` : group.toyName,
           status: "AVAILABLE",
           condition: "NEW",
@@ -492,7 +574,7 @@ async function main() {
     const { name, nameEn } = parseName(nameRaw);
     const qty = parseInt(qtyStr) || 0;
     const unitName = parseUnit(unitRaw);
-    const code = (row[1] || "").trim() || `NLU-DUR-${String(durCount + 1).padStart(3, "0")}`;
+    const code = nextCode("DUR");
 
     await prisma.item.create({
       data: {
@@ -519,10 +601,10 @@ async function main() {
   for (let i = 3; i < conRows.length; i++) {
     const row = conRows[i];
     if (!row || row.length < 4) continue;
-    const code = (row[1] || "").trim();
+    const code = nextCode("CON");
     const nameRaw = (row[2] || "").trim();
     const room = (row[3] || "").trim();
-    if (!nameRaw || !code) continue;
+    if (!nameRaw) continue;
 
     // Stock = last คงเหลือ column (col 22 = มี.ค.-69)
     // Fallback chain: col 22 → col 16 → col 10 → col 4
@@ -573,7 +655,7 @@ async function main() {
 
       const qty = parseInt(qtyStr) || 1;
       const unitName = parseUnit(unitRaw);
-      const code = `NLU-KIT-${String(kitCount + 1).padStart(3, "0")}`;
+      const code = nextCode("KIT");
 
       const item = await prisma.item.create({
         data: {
@@ -622,7 +704,7 @@ async function main() {
   const day = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
 
   const demoConsumables = await prisma.item.findMany({
-    where: { category: { category: "CON" } },
+    where: { category: { profile: { code: "CON" } } },
     take: 5,
   });
 
@@ -630,7 +712,7 @@ async function main() {
     const lot = await prisma.lot.create({
       data: {
         itemId: item.id, lotNumber: `LOT-${item.code}`,
-        quantity: item.totalQty,
+        receivedQty: item.totalQty, remainingQty: item.totalQty,
         expiryDate: new Date(now.getTime() + (Math.random() * 365 + 30) * 24 * 60 * 60 * 1000),
         receivedDate: day(60),
       },
@@ -712,7 +794,7 @@ async function main() {
     await prisma.lot.create({
       data: {
         itemId: demoConsumables[0].id, lotNumber: "LOT-EXPIRE",
-        quantity: 5,
+        receivedQty: 5, remainingQty: 5,
         expiryDate: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000),
         receivedDate: day(120),
       },
@@ -721,7 +803,7 @@ async function main() {
 
   // Low-stock alert
   const lowStockItem = await prisma.item.findFirst({
-    where: { category: { category: "CON" }, totalQty: { gt: 0 } },
+    where: { category: { profile: { code: "CON" } }, totalQty: { gt: 0 } },
     orderBy: { totalQty: "asc" },
   });
   if (lowStockItem) {
@@ -730,6 +812,84 @@ async function main() {
       data: { minThreshold: lowStockItem.totalQty + 10 },
     });
   }
+
+  // ============================================================
+  // Maintenance demo data
+  // ============================================================
+  console.log("Creating maintenance demo data...");
+
+  const maintItems = await prisma.item.findMany({
+    where: { trackIndividually: true, isActive: true },
+    select: { id: true, code: true, name: true },
+    take: 20,
+  });
+
+  // --- Set nextMaintenanceDate on some items ---
+  // 3 overdue (past dates)
+  for (let i = 0; i < Math.min(3, maintItems.length); i++) {
+    await prisma.item.update({
+      where: { id: maintItems[i].id },
+      data: {
+        nextMaintenanceDate: day((i + 1) * 5),   // 5-15 days ago
+        lastMaintenanceDate: day(180 + i * 30),   // ~6-12 months ago
+        maintenanceCycleMonths: 6,
+      },
+    });
+  }
+
+  // 4 due-soon (within 30 days)
+  for (let i = 3; i < Math.min(7, maintItems.length); i++) {
+    await prisma.item.update({
+      where: { id: maintItems[i].id },
+      data: {
+        nextMaintenanceDate: new Date(now.getTime() + (i - 2) * 5 * 24 * 60 * 60 * 1000), // 5-25 days ahead
+        lastMaintenanceDate: day(200),
+        maintenanceCycleMonths: 12,
+      },
+    });
+  }
+
+  // 5 normal (far future)
+  for (let i = 7; i < Math.min(12, maintItems.length); i++) {
+    await prisma.item.update({
+      where: { id: maintItems[i].id },
+      data: {
+        nextMaintenanceDate: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
+        lastMaintenanceDate: day(30),
+        maintenanceCycleMonths: 12,
+      },
+    });
+  }
+
+  // --- Maintenance history records ---
+  const maintTypes = ["PREVENTIVE", "CORRECTIVE"] as const;
+  const maintResults = ["AVAILABLE", "AVAILABLE", "AVAILABLE", "NEEDS_MORE_REPAIR", "DISPOSED"] as const;
+
+  for (let i = 0; i < Math.min(8, maintItems.length); i++) {
+    await prisma.maintenanceRecord.create({
+      data: {
+        itemId: maintItems[i].id,
+        type: maintTypes[i % 2],
+        result: maintResults[i % maintResults.length],
+        performedAt: day((i + 1) * 7),
+        performedBy: admin.id,
+        issue: [
+          "ตรวจสอบสภาพปกติ บำรุงรักษาตามรอบ",
+          "สวิตช์เสีย เปลี่ยนใหม่",
+          "ทำความสะอาดตามรอบ",
+          "สายไฟขาด ซ่อมเสร็จ",
+          "เปลี่ยนถ่านสำรอง",
+          "จอภาพจาง ปรับแล้วใช้ได้",
+          "ตัวเครื่องมีรอด ทาสีใหม่",
+          "เสียงผิดปกติ ต้องเปลี่ยน motor",
+        ][i],
+        cost: [0, 500, 0, 1200, 150, 3500, 800, 4500][i],
+      },
+    });
+  }
+
+  console.log(`  ${Math.min(12, maintItems.length)} items with maintenance schedule`);
+  console.log(`  ${Math.min(8, maintItems.length)} maintenance records`);
 
   // ============================================================
   // Stats
