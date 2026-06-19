@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
   if (!cat) return error("Category not found");
 
   const trackIndividually = forcedTrackIndividually(cat.profile);
+  // setSize only applies to set-tracked profiles (BOOK/TOY); clamp otherwise (D4).
+  const setSize = cat.profile?.setTracking ? data.setSize : 1;
 
   // Build sub-items for individually tracked items — subCode is the copy part (C01, C02…);
   // full reference = item.code + "-" + subCode (see ADR-0001).
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
       subUnitId: data.subUnitId,
       conversionFactor: data.conversionFactor,
       trackIndividually,
-      setSize: data.setSize,
+      setSize,
       ...(subItems.length > 0
         ? { subItems: { createMany: { data: subItems } } }
         : {}),
