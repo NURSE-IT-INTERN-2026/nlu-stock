@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
     };
   }
 
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
   const lowStock = params.get("lowStock");
   if (lowStock === "true") {
     const lowStockItems = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -61,9 +64,8 @@ export async function GET(request: NextRequest) {
 
   const nearExpiry = params.get("nearExpiry");
   if (nearExpiry === "true") {
-    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     where.lots = {
-      some: { expiryDate: { gte: new Date(), lte: in30Days } },
+      some: { expiryDate: { gte: now, lte: in30Days } },
     };
   }
 
@@ -74,7 +76,7 @@ export async function GET(request: NextRequest) {
 
   const overdueMaint = params.get("overdueMaint");
   if (overdueMaint === "true") {
-    where.nextMaintenanceDate = { lt: new Date() };
+    where.nextMaintenanceDate = { lt: now };
   }
 
   // Union mode: items matching ANY alert condition (used by /alerts page).
@@ -83,12 +85,11 @@ export async function GET(request: NextRequest) {
     const lowStockIds = (await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
     `).map((r) => r.id);
-    const in30DaysUnion = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     where.OR = [
       { id: { in: lowStockIds } },
-      { lots: { some: { expiryDate: { gte: new Date(), lte: in30DaysUnion } } } },
+      { lots: { some: { expiryDate: { gte: now, lte: in30Days } } } },
       { dispenseRecords: { some: { returnedAt: null } } },
-      { nextMaintenanceDate: { lt: new Date() } },
+      { nextMaintenanceDate: { lt: now } },
     ];
   }
 
@@ -116,8 +117,6 @@ export async function GET(request: NextRequest) {
   ]);
 
   // Derive per-item alert types for the /alerts page (badge column).
-  const now = new Date();
-  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const items = rawItems.map((item) => {
     const types: string[] = [];
     if (item.availableQty < item.minThreshold) types.push("lowStock");

@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, Fragment, useMemo } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,27 +10,15 @@ import { STATUS_PILLS, STATUS_LABELS, locationLabel } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { useSession } from "@/components/layout/auth-guard";
-import { QrScanner } from "@/components/shared/qr-scanner";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { usePagination } from "@/hooks/use-pagination";
-import { getItems, getSubItems } from "@/lib/api";
+import { getItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
-import { ItemsFilterBar, EMPTY_FILTER, type FilterState } from "@/components/items/items-filter-bar";
+import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
 import { cn } from "@/lib/utils";
 
 interface UnitType { id: string; name: string }
-
-interface SubItemRecord {
-  id: string;
-  subCode: string;
-  name: string | null;
-  status: string;
-  condition: string | null;
-  notes: string | null;
-  dispenseRecords: { staff: { name: string } }[];
-}
 
 interface ItemRecord {
   id: string;
@@ -74,7 +62,6 @@ export default function AlertsPage() {
 }
 
 function AlertsContent() {
-  const { user } = useSession();
   const alerts = useAlerts();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,36 +99,6 @@ function AlertsContent() {
   });
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); }, [setPage]);
 
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [subItemsMap, setSubItemsMap] = useState<Record<string, SubItemRecord[]>>({});
-  const [scannerOpen, setScannerOpen] = useState(false);
-
-  const handleQrScan = async (code: string) => {
-    setScannerOpen(false);
-    try {
-      const data = await getItems({ search: code, perPage: "1" });
-      const match = (data.items as ItemRecord[])?.find((it: ItemRecord) => it.code === code);
-      if (match) {
-        router.push(`/items/${match.id}`);
-        return;
-      }
-    } catch {}
-    handleFilterChange({ ...filter, query: code });
-  };
-
-  const toggleExpand = async (itemId: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) { next.delete(itemId); return next; }
-      next.add(itemId);
-      return next;
-    });
-    if (!subItemsMap[itemId]) {
-      const data = await getSubItems(itemId);
-      setSubItemsMap((prev) => ({ ...prev, [itemId]: data as SubItemRecord[] }));
-    }
-  };
-
   const fetchItems = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
@@ -149,7 +106,6 @@ function AlertsContent() {
     if (filter.profileId) params.profileId = filter.profileId;
     if (filter.categoryId) params.categoryId = filter.categoryId;
     if (filter.status.length) params.status = filter.status.join(",");
-    // union (all) vs single preset
     if (alertType === "all") params.alerts = "true";
     else params[alertType] = "true";
     if (filter.location.building) params.building = filter.location.building;
@@ -183,8 +139,9 @@ function AlertsContent() {
         value={filter}
         onChange={handleFilterChange}
         resultCount={total}
-        onScanQR={() => setScannerOpen(true)}
+        onScanQR={() => {}}
         hideAlertPicker
+        hideScan
       />
 
       {/* Alert-type chips (single-select; "all" = union) */}
@@ -222,7 +179,6 @@ function AlertsContent() {
           <Table>
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <TableHead className="w-10"></TableHead>
                 <TableHead>รหัสพัสดุ</TableHead>
                 <TableHead>ชื่อ</TableHead>
                 <TableHead>ประเภท</TableHead>
@@ -236,109 +192,60 @@ function AlertsContent() {
               {loading ? (
                 Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     ไม่มีรายการแจ้งเตือน
                   </TableCell>
                 </TableRow>
-              ) : items.map((item, idx) => {
-                const expanded = expandedIds.has(item.id);
-                const subs = subItemsMap[item.id];
-                const hasSubItems = item.trackIndividually && item._count.subItems > 1;
-                return (
-                  <Fragment key={item.id}>
-                    <TableRow
-                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${expanded ? "bg-orange-50/50 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
-                      onClick={() => {
-                        if (hasSubItems) toggleExpand(item.id);
-                        else router.push(`/items/${item.id}`);
-                      }}
-                    >
-                      <TableCell>
-                        {hasSubItems && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
-                          >
-                            <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{item.code}</TableCell>
-                      <TableCell>
-                        <div>
-                          <span className="font-medium">{item.name}</span>
-                          {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {item.alertTypes.map((t) => (
-                            <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
-                              {ALERT_LABEL[t] ?? t}
-                            </span>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm tabular-nums">
-                        {item.totalQty === 0 ? (
-                          <span className="text-muted-foreground">-</span>
-                        ) : (
-                          <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : "text-muted-foreground"}>
-                            {item.availableQty === item.totalQty
-                              ? item.availableQty
-                              : `${item.availableQty}/${item.totalQty}`}{" "}
-                            <span className="text-muted-foreground font-normal">{item.issueUnit.name}</span>
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
-                          {STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ")}
+              ) : items.map((item, idx) => (
+                <TableRow
+                  key={item.id}
+                  className={`cursor-pointer hover:bg-muted/50 transition-colors ${idx % 2 === 1 ? "bg-muted/40" : ""}`}
+                  onClick={() => router.push(`/items/${item.id}`)}
+                >
+                  <TableCell className="font-mono text-sm">{item.code}</TableCell>
+                  <TableCell>
+                    <span className="font-medium">{item.name}</span>
+                    {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {item.alertTypes.map((t) => (
+                        <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
+                          {ALERT_LABEL[t] ?? t}
                         </span>
-                      </TableCell>
-                    </TableRow>
-                    {expanded && subs?.map((sub) => (
-                      <TableRow
-                        key={sub.id}
-                        className="bg-orange-50/40 dark:bg-orange-950/30 hover:bg-orange-50/60 dark:hover:bg-orange-950/40 cursor-pointer"
-                        onClick={() => router.push(`/items/${item.id}`)}
-                      >
-                        <TableCell></TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground pl-10">
-                          <span className="text-orange-300/80 mr-1.5">└</span>{sub.subCode}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{sub.name || sub.notes || "-"}</TableCell>
-                        <TableCell></TableCell>
-                        <TableCell></TableCell>
-                        <TableCell></TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {sub.status === "CHECKED_OUT" && sub.dispenseRecords?.[0]
-                            ? <span className="text-blue-600">→ {sub.dispenseRecords[0].staff.name}</span>
-                            : item.location ? locationLabel(item.location) : "-"}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[sub.status] || "bg-muted text-muted-foreground border-border"}`}>
-                            {STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </Fragment>
-                );
-              })}
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm tabular-nums">
+                    {item.totalQty === 0 ? (
+                      <span className="text-muted-foreground">-</span>
+                    ) : (
+                      <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : "text-muted-foreground"}>
+                        {item.availableQty === item.totalQty
+                          ? item.availableQty
+                          : `${item.availableQty}/${item.totalQty}`}{" "}
+                        <span className="text-muted-foreground font-normal">{item.issueUnit.name}</span>
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
+                      {STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ")}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>
@@ -390,12 +297,6 @@ function AlertsContent() {
           <span className="text-sm text-muted-foreground tabular-nums">{total} items</span>
         </div>
       </div>
-
-      <QrScanner
-        open={scannerOpen}
-        onClose={() => setScannerOpen(false)}
-        onScan={handleQrScan}
-      />
     </div>
   );
 }
