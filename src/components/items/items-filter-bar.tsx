@@ -59,6 +59,7 @@ export interface ItemsFilterBarProps {
   onScanQR: () => void;
   className?: string;
   hideAlertPicker?: boolean;
+  hideScan?: boolean;
 }
 
 const STATUS_KEYS = Object.keys(STATUS_LABELS);
@@ -70,7 +71,7 @@ const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpi
 ];
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker,
+  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
@@ -108,10 +109,12 @@ export function ItemsFilterBar({
             </button>
           )}
         </div>
-        <Button type="button" onClick={onScanQR} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
-          <QrCode className="size-5" />
-          <span className="font-medium">สแกน QR</span>
-        </Button>
+        {!hideScan && (
+          <Button type="button" onClick={onScanQR} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
+            <QrCode className="size-5" />
+            <span className="font-medium">สแกน QR</span>
+          </Button>
+        )}
       </div>
 
       {/* Filter pickers row */}
