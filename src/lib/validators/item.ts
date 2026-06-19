@@ -58,13 +58,9 @@ export const stockAdjustSchema = z.object({
   message: "Either shelfCount or (lotId + lotCount) is required",
 });
 
-export type StockAdjustInput = z.infer<typeof stockAdjustSchema>;
-
 export const statusChangeSchema = z.object({
   newStatus: z.nativeEnum(ItemStatus),
   subItemId: z.string().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   imageUrl: z.string().optional().nullable(),
 });
-
-export type StatusChangeInput = z.infer<typeof statusChangeSchema>;

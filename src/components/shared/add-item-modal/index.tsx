@@ -177,9 +177,6 @@ export function AddItemModal({
 
   // ── Helpers ─────────────────────────────────────────────────
 
-  const allowedProfileIds = state.form.usageType
-    ? undefined // filtering now happens by dispenseType in the wizard; kept for API parity
-    : undefined;
   const allowedDispenseType = state.form.usageType
     ? USAGE_OPTIONS.find((o) => o.id === state.form.usageType)?.dispenseType
     : undefined;
@@ -474,7 +471,6 @@ export function AddItemModal({
               applyCategory(cat);
             }}
             onSelectCreateNew={() => setState((s) => ({ ...s, step: "cat-create-name" }))}
-            allowedProfileIds={undefined}
             allowedDispenseType={allowedDispenseType}
           />
         )}

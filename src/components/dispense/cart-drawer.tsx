@@ -18,62 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCart } from "./cart-context";
-import { ShoppingBasket, Loader2, Minus, Plus, Package, Trash2, Pencil } from "lucide-react";
+import { useCart, useCartLineActions } from "./cart-context";
+import { EditableQty } from "./editable-qty";
+import { ShoppingBasket, Loader2, Minus, Plus, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
 import { createDispense } from "@/lib/api";
-
-function EditableQty({ value, max, unit, onChange }: {
-  value: number;
-  max?: number;
-  unit: string;
-  onChange: (v: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value));
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        type="number"
-        min={1}
-        max={max}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const v = parseInt(draft) || 1;
-          const clamped = Math.max(1, max ? Math.min(v, max) : v);
-          onChange(clamped);
-          setEditing(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            (e.target as HTMLInputElement).blur();
-          } else if (e.key === "Escape") {
-            setDraft(String(value));
-            setEditing(false);
-          }
-        }}
-        className="w-14 h-6 text-center text-sm font-medium tabular-nums bg-transparent border-0 px-1 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-      />
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      aria-label={`แก้ไขจำนวน ${value} ${unit}`}
-      className="flex items-center gap-0.5 w-14 justify-center group"
-      onClick={() => { setDraft(String(value)); setEditing(true); }}
-    >
-      <span className="text-sm font-medium tabular-nums">{value}</span>
-      <span className="text-xs text-muted-foreground">{unit}</span>
-      <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-colors" />
-    </button>
-  );
-}
 
 interface Props {
   open: boolean;
@@ -119,41 +69,7 @@ export function CartDrawer({ open, onClose, onDone }: Props) {
     }
   };
 
-  const adjustQty = (
-    item: typeof items[number],
-    delta: number
-  ) => {
-    const newQty = item.quantity + delta;
-    if (newQty < 1) return;
-    if (!item.trackIndividually && newQty > item.availableQty) return;
-    updateItem(item.itemId, { quantity: newQty }, item.lotId, item.subItemId);
-  };
-
-  const changeLot = (
-    item: typeof items[number],
-    newLotId: string | null
-  ) => {
-    if (!newLotId) return;
-    const lot = item.lots?.find((l) => l.id === newLotId);
-    if (!lot) return;
-    updateItem(item.itemId, {
-      lotId: lot.id,
-      lotNumber: lot.lotNumber,
-    }, item.lotId, item.subItemId);
-  };
-
-  const changeSubItem = (
-    item: typeof items[number],
-    newSubId: string | null
-  ) => {
-    if (!newSubId) return;
-    const sub = item.subItems?.find((s) => s.id === newSubId);
-    if (!sub) return;
-    updateItem(item.itemId, {
-      subItemId: sub.id,
-      subCode: sub.subCode,
-    }, item.lotId, item.subItemId);
-  };
+  const { adjustQty, changeLot, changeSubItem } = useCartLineActions();
 
   const isConsumable = (item: typeof items[number]) =>
     item.dispenseType === "CONSUMABLE";

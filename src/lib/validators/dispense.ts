@@ -50,5 +50,3 @@ export const dispenseRequestSchema = z.object({
   usageNote: z.string().max(500).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
 });
-
-export type DispenseRequest = z.infer<typeof dispenseRequestSchema>;

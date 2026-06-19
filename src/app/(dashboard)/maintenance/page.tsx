@@ -123,7 +123,6 @@ export default function MaintenancePage() {
           subtitle={summary.overdue > 0 ? "ต้องดำเนินการ" : undefined}
           iconName="Wrench"
           color="text-danger-500"
-          className=""
         />
         <DashboardMetricCard
           title="ใกล้ถึงรอบ"
@@ -131,7 +130,6 @@ export default function MaintenancePage() {
           subtitle={summary.dueSoon > 0 ? "ภายใน 30 วัน" : undefined}
           iconName="AlertTriangle"
           color="text-orange-500"
-          className=""
         />
         <DashboardMetricCard
           title="เสร็จเดือนนี้"
@@ -139,7 +137,6 @@ export default function MaintenancePage() {
           subtitle="รายการ"
           iconName="CheckCircle2"
           color="text-success"
-          className=""
         />
       </div>
 
