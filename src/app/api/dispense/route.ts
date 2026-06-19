@@ -96,33 +96,21 @@ export async function POST(req: NextRequest) {
             const lot = await tx.lot.findUnique({ where: { id: di.lotId } });
             throw new Error(`Lot ${lot?.lotNumber ?? di.lotId} has only ${lot?.remainingQty ?? 0} ${item.issueUnit.name}, requested ${di.quantity}`);
           }
-          await tx.item.update({
-            where: { id: di.itemId },
+          const itemUpdate = await tx.item.updateMany({
+            where: { id: di.itemId, availableQty: { gte: di.quantity } },
             data: { availableQty: { decrement: di.quantity } },
           });
+          if (itemUpdate.count === 0) {
+            throw new Error(`${item.code} available quantity underflow (counter out of sync with lots)`);
+          }
         } else {
-          // Non-tracked item: deduct item availableQty only
-          await tx.item.update({
-            where: { id: di.itemId },
+          // Non-tracked item: deduct item availableQty (optimistic lock — no negative)
+          const updated = await tx.item.updateMany({
+            where: { id: di.itemId, availableQty: { gte: di.quantity } },
             data: { availableQty: { decrement: di.quantity } },
           });
-        }
-
-        // Composite (KIT): deduct stock from linked component items
-        if (item.category.profile?.isComposite) {
-          const components = await tx.kitComponent.findMany({
-            where: { kitId: item.id, isStockItem: true, itemId: { not: null } },
-          });
-          for (const comp of components) {
-            if (comp.itemId) {
-              const stockItem = await tx.item.findUnique({ where: { id: comp.itemId } });
-              if (stockItem && stockItem.availableQty >= comp.quantity * di.quantity) {
-                await tx.item.update({
-                  where: { id: comp.itemId },
-                  data: { availableQty: { decrement: comp.quantity * di.quantity } },
-                });
-              }
-            }
+          if (updated.count === 0) {
+            throw new Error(`${item.code} has only ${item.availableQty} available, requested ${di.quantity}`);
           }
         }
       }

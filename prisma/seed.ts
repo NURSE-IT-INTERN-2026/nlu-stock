@@ -18,15 +18,15 @@ function readCsv(filename: string) {
 // ── Profile spec (synced with scripts/migrate-profiles.ts) ──
 type ProfileSpec = {
   code: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
-  assetTracking: boolean; setTracking: boolean; isComposite: boolean;
+  assetTracking: boolean; setTracking: boolean;
   icon: string; color: string;
 };
 const PROFILE_SPEC: ProfileSpec[] = [
-  { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, isComposite: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, isComposite: true, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
-  { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, setTracking: false, isComposite: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, setTracking: false, isComposite: false, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
-  { code: "BAT", name: "หนังสือและของเล่น", dispenseType: "ITEM", assetTracking: false, setTracking: true, isComposite: false, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, setTracking: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, setTracking: false, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
+  { code: "BAT", name: "หนังสือและของเล่น", dispenseType: "ITEM", assetTracking: false, setTracking: true, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
 ];
 
 // Legacy enum codes that CSV imports still reference → map to current profile codes.
@@ -130,7 +130,6 @@ async function main() {
   await prisma.receiveRecord.deleteMany();
   await prisma.lot.deleteMany();
   await prisma.subItem.deleteMany();
-  await prisma.kitComponent.deleteMany();
   await prisma.item.deleteMany();
   await prisma.location.deleteMany();
   await prisma.categoryType.deleteMany();
@@ -629,7 +628,7 @@ async function main() {
   console.log(`  ${conCount} items`);
 
   // ============================================================
-  // 7. Import อุปกรณ์นักศึกษายืมประกอบวิชา (KIT) — with KitComponent
+  // 7. Import อุปกรณ์นักศึกษายืมประกอบวิชา (KIT) — plain items (kit components: Phase 2)
   // ============================================================
   console.log("Importing อุปกรณ์ประกอบวิชา (KIT)...");
   const kitRows = readCsv("ข้อมูลทรัพย์สิน NLU - อุปกรณ์นักศึกษายืมประกอบวิชา.csv");
@@ -638,63 +637,38 @@ async function main() {
   // Sub:    0="", 1="", 2="", 3="", 4=ลำดับ, 5=ชื่อ, 6=จำนวน, 7=หน่วย, 8=หมายเหตุ
 
   let kitCount = 0;
-  let currentKitId: string | null = null;
 
   for (let i = 2; i < kitRows.length; i++) {
     const row = kitRows[i];
     if (!row || row.length < 2) continue;
     const seq = (row[0] || "").trim();
+    if (!seq) continue; // component sub-rows ignored — Kit feature removed (Phase 2)
 
-    if (seq) {
-      // Parent row
-      const nameRaw = (row[1] || "").trim();
-      const qtyStr = (row[2] || "").trim();
-      const unitRaw = (row[3] || "").trim();
-      const notes = (row[8] || row[4] || "").trim();
-      if (!nameRaw) continue;
+    // Parent row → plain item (อุปกรณ์ประกอบวิชา as consumable for now)
+    const nameRaw = (row[1] || "").trim();
+    const qtyStr = (row[2] || "").trim();
+    const unitRaw = (row[3] || "").trim();
+    const notes = (row[8] || row[4] || "").trim();
+    if (!nameRaw) continue;
 
-      const qty = parseInt(qtyStr) || 1;
-      const unitName = parseUnit(unitRaw);
-      const code = nextCode("KIT");
+    const qty = parseInt(qtyStr) || 1;
+    const unitName = parseUnit(unitRaw);
+    const code = nextCode("KIT");
 
-      const item = await prisma.item.create({
-        data: {
-          code, name: nameRaw,
-          categoryId: catKit.id,
-          trackIndividually: false,
-          issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
-          minThreshold: 0, locationId: defaultLocId,
-          totalQty: qty, availableQty: qty,
-          description: notes || null,
-        },
-      });
-      currentKitId = item.id;
-      kitCount++;
-    } else if (currentKitId) {
-      // Sub-item row (component)
-      const compName = (row[5] || "").trim();
-      const compQty = parseInt((row[6] || "").trim()) || 1;
-      const compUnit = (row[7] || "").trim() || "ชิ้น";
-      if (!compName) continue;
-
-      // Check if this component name matches an existing stock item
-      const matchingItem = await prisma.item.findFirst({
-        where: { name: { contains: compName }, isActive: true },
-      });
-
-      await prisma.kitComponent.create({
-        data: {
-          kitId: currentKitId,
-          itemId: matchingItem?.id || null,
-          name: compName,
-          quantity: compQty,
-          unit: compUnit,
-          isStockItem: !!matchingItem,
-        },
-      });
-    }
+    await prisma.item.create({
+      data: {
+        code, name: nameRaw,
+        categoryId: catKit.id,
+        trackIndividually: false,
+        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        minThreshold: 0, locationId: defaultLocId,
+        totalQty: qty, availableQty: qty,
+        description: notes || null,
+      },
+    });
+    kitCount++;
   }
-  console.log(`  ${kitCount} kit items with components`);
+  console.log(`  ${kitCount} kit items`);
 
   // ============================================================
   // Demo data for dashboard
@@ -896,7 +870,6 @@ async function main() {
   // ============================================================
   const totalItems = await prisma.item.count();
   const totalSubItems = await prisma.subItem.count();
-  const totalKitComps = await prisma.kitComponent.count();
   const totalCategories = await prisma.categoryType.count();
   const totalLocations = await prisma.location.count();
 
@@ -907,7 +880,6 @@ async function main() {
     locations: totalLocations,
     items: totalItems,
     subItems: totalSubItems,
-    kitComponents: totalKitComps,
   });
 
   await prisma.$disconnect();

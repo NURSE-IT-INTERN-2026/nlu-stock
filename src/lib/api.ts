@@ -50,7 +50,6 @@ export interface ProfileOption {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
-  isComposite: boolean;
   icon: string;
   color: string;
   sortOrder: number;
@@ -142,7 +141,6 @@ export function createProfile(data: {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking?: boolean;
   setTracking?: boolean;
-  isComposite?: boolean;
   icon?: string;
   color: string;
   description?: string;
