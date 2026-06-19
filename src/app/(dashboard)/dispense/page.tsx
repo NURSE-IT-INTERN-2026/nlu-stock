@@ -81,7 +81,7 @@ interface SearchItem {
   subUnit: { id: string; name: string };
   conversionFactor: number;
   trackIndividually: boolean;
-  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; isComposite: boolean; color: string } };
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; color: string } };
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;

@@ -11,7 +11,6 @@ export interface ProfileLike {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
-  isComposite: boolean;
 }
 
 function req(p: ProfileLike | null | undefined): ProfileLike {
@@ -31,11 +30,6 @@ export function isConsumable(p: ProfileLike | null | undefined): boolean {
 /** ยืม-คืน รายชิ้น → subItems. */
 export function isItemTracked(p: ProfileLike | null | undefined): boolean {
   return req(p).dispenseType === "ITEM";
-}
-
-/** KIT: dispense → deduct linked component stock. */
-export function isComposite(p: ProfileLike | null | undefined): boolean {
-  return req(p).isComposite;
 }
 
 // ── Display labels (server-side; client reads profile.name/icon/color directly) ──
