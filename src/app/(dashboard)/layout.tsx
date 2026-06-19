@@ -15,6 +15,7 @@ import { PageHeaderProvider } from "@/components/layout/page-header-context";
 const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
   "/items": "รายการพัสดุทั้งหมด",
+  "/alerts": "การแจ้งเตือน",
   "/dispense": "เบิกพัสดุ",
   "/receive": "รับพัสดุเข้า",
   "/maintenance": "การซ่อมบำรุง",

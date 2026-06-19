@@ -78,9 +78,9 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
   const alerts = useAlerts();
 
   const alertItems = [
-    { count: alerts.lowStock, label: "สต็อกต่ำ", href: "/items?lowStock=true" },
-    { count: alerts.nearExpiry, label: "ใกล้หมดอายุ", href: "/items?nearExpiry=true" },
-    { count: alerts.overdueMaintenance, label: "เกินกำหนดซ่อม", href: "/items?overdueMaint=true" },
+    { count: alerts.lowStock, label: "สต็อกต่ำ", href: "/alerts?lowStock=true" },
+    { count: alerts.nearExpiry, label: "ใกล้หมดอายุ", href: "/alerts?nearExpiry=true" },
+    { count: alerts.overdueMaintenance, label: "เกินกำหนดซ่อม", href: "/alerts?overdueMaint=true" },
   ].filter((a) => a.count > 0);
 
   async function handleLogout() {
