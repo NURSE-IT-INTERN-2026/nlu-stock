@@ -8,6 +8,3 @@ export const categoryCreateSchema = z.object({
 });
 
 export const categoryUpdateSchema = categoryCreateSchema.partial();
-
-export type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
-export type CategoryUpdateInput = z.infer<typeof categoryUpdateSchema>;

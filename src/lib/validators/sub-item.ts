@@ -23,4 +23,3 @@ export const subItemBatchCreateSchema = z.object({
 
 export type SubItemCreateInput = z.infer<typeof subItemCreateSchema>;
 export type SubItemUpdateInput = z.infer<typeof subItemUpdateSchema>;
-export type SubItemBatchCreateInput = z.infer<typeof subItemBatchCreateSchema>;

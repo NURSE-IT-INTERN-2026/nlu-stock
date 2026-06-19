@@ -8,8 +8,6 @@ export interface CategorySelectModalProps {
   onSelect: (category: CategoryOption) => void;
   /** Title shown in header. Defaults to "เลือกหมวดหมู่" */
   title?: string;
-  /** Only show categories whose profile id is in this list. If omitted, show all. */
-  allowedProfileIds?: string[];
 }
 
 export interface WizardState {

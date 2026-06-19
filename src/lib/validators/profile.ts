@@ -34,6 +34,3 @@ export const profileUpdateSchema = z.object({
   assetTracking: z.boolean().optional(),
   setTracking: z.boolean().optional(),
 });
-
-export type ProfileCreateInput = z.infer<typeof profileCreateSchema>;
-export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
