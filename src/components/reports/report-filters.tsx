@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -10,18 +10,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import {
+  CalendarDays, Layers, MapPin, Users, Activity, ListChecks,
+  CalendarRange, Wrench, X, Boxes, Package, Beaker, Hammer,
+  Building2, Monitor, BookOpen, Puzzle, type LucideIcon,
+} from "lucide-react";
 import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
-import { getPublicCategories, getPublicLocations, getUsers } from "@/lib/api";
+import {
+  getPublicCategories, getPublicLocations, getUsers, getProfiles,
+} from "@/lib/api";
+import type { ProfileOption } from "@/lib/api";
+
+// profile.icon string → lucide component (mirrors items-filter-bar)
+const PROFILE_ICONS: Record<string, LucideIcon> = {
+  Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes,
+};
 
 export interface FilterValues {
   dateFrom?: string;
   dateTo?: string;
+  profileId?: string;
   categoryId?: string;
   locationId?: string;
   staffId?: string;
   usageType?: string;
-  itemId?: string;
   status?: string;
   year?: string;
   maintenanceType?: string;
@@ -29,6 +41,7 @@ export interface FilterValues {
 
 export interface FilterConfig {
   dateRange?: boolean;
+  profiles?: boolean;
   categories?: boolean;
   locations?: boolean;
   staff?: boolean;
@@ -42,6 +55,7 @@ interface ReportFiltersProps {
   config: FilterConfig;
   values: FilterValues;
   onChange: (values: FilterValues) => void;
+  actions?: ReactNode;
 }
 
 interface Option {
@@ -50,230 +64,244 @@ interface Option {
   code?: string;
 }
 
-export function ReportFilters({ config, values, onChange }: ReportFiltersProps) {
-  const [categories, setCategories] = useState<Option[]>([]);
+interface CategoryLite extends Option {
+  profile?: { id: string } | null;
+}
+
+const dateInputCls = "h-9 w-[150px] rounded-lg border-border bg-background text-sm";
+
+function FilterSelect({
+  icon: Icon,
+  value,
+  placeholder,
+  onValueChange,
+  selectedLabel,
+  children,
+}: {
+  icon: LucideIcon;
+  value: string;
+  placeholder: string;
+  onValueChange: (v: string) => void;
+  selectedLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger className="h-9 min-w-[150px] gap-2 rounded-lg border-border bg-background">
+        <Icon className="size-4 text-muted-foreground shrink-0" />
+        {/* ponytail: pass explicit label as children — Base UI Select.Value falls back to the
+          raw value (id) when it can't resolve from unmounted popup items. Every other select
+          in the app does this; FilterSelect was the lone outlier showing ids. */}
+        <SelectValue placeholder={placeholder}>{selectedLabel ?? placeholder}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
+  );
+}
+
+export function ReportFilters({ config, values, onChange, actions }: ReportFiltersProps) {
+  const [categories, setCategories] = useState<CategoryLite[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [staff, setStaff] = useState<Option[]>([]);
-  const [subjects, setSubjects] = useState<Option[]>([]); // kept for compat but unused
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
 
   useEffect(() => {
-    if (config.categories) {
-      getPublicCategories()
-        .then((data) => setCategories(data))
+    if (config.profiles || config.categories) {
+      getPublicCategories().then(setCategories).catch(() => {});
+    }
+    if (config.profiles) {
+      getProfiles()
+        .then((data) => setProfiles([...data].sort((a, b) => a.sortOrder - b.sortOrder)))
         .catch(() => {});
     }
     if (config.locations) {
-      getPublicLocations()
-        .then((data) => setLocations(data as Option[]))
-        .catch(() => {});
+      getPublicLocations().then((data) => setLocations(data as Option[])).catch(() => {});
     }
     if (config.staff) {
-      getUsers()
-        .then((data) => setStaff(data as Option[]))
-        .catch(() => {});
+      getUsers().then((data) => setStaff(data as Option[])).catch(() => {});
     }
-    // usageTypes is static, no fetch needed
-  }, [config.categories, config.locations, config.staff]);
+  }, [config.profiles, config.categories, config.locations, config.staff]);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
 
+  const activeCount = [
+    values.dateFrom, values.dateTo, values.profileId, values.categoryId,
+    values.locationId, values.staffId, values.usageType, values.status,
+    values.maintenanceType,
+    values.year && values.year !== String(currentYear) ? values.year : undefined,
+  ].filter(Boolean).length;
+
+  const activeProfile = profiles.find((p) => p.id === values.profileId);
+  const ProfileIcon = activeProfile ? (PROFILE_ICONS[activeProfile.icon] ?? Boxes) : Layers;
+  const scopedCategories = values.profileId
+    ? categories.filter((c) => c.profile?.id === values.profileId)
+    : categories;
+
   return (
-    <div className="flex flex-wrap items-end gap-3 mb-4">
-      {config.dateRange && (
-        <>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">From</label>
+    <div className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {config.dateRange && (
+          <div className="flex items-center gap-1.5">
+            <CalendarDays className="size-4 text-muted-foreground shrink-0" />
             <Input
               type="date"
               value={values.dateFrom ?? ""}
               onChange={(e) => onChange({ ...values, dateFrom: e.target.value || undefined })}
-              className="h-9 w-36"
+              className={dateInputCls}
+              aria-label="จากวันที่"
             />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">To</label>
+            <span className="text-xs text-muted-foreground">ถึง</span>
             <Input
               type="date"
               value={values.dateTo ?? ""}
               onChange={(e) => onChange({ ...values, dateTo: e.target.value || undefined })}
-              className="h-9 w-36"
+              className={dateInputCls}
+              aria-label="ถึงวันที่"
             />
           </div>
-        </>
-      )}
+        )}
 
-      {config.categories && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Category</label>
-          <Select
+        {config.profiles && (
+          <FilterSelect
+            icon={ProfileIcon}
+            value={values.profileId ?? "all"}
+            placeholder="ทุกประเภท"
+            selectedLabel={values.profileId ? profiles.find((p) => p.id === values.profileId)?.name : undefined}
+            onValueChange={(v) =>
+              onChange({ ...values, profileId: v === "all" ? undefined : String(v), categoryId: undefined })
+            }
+          >
+            <SelectItem value="all">ทุกประเภท</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
+
+        {config.categories && (
+          <FilterSelect
+            icon={Layers}
             value={values.categoryId ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...values, categoryId: v === "all" ? undefined : String(v) })
-            }
+            placeholder="ทุกหมวดหมู่"
+            selectedLabel={values.categoryId ? scopedCategories.find((c) => c.id === values.categoryId)?.name : undefined}
+            onValueChange={(v) => onChange({ ...values, categoryId: v === "all" ? undefined : String(v) })}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            <SelectItem value="all">ทุกหมวดหมู่</SelectItem>
+            {scopedCategories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
 
-      {config.locations && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Location</label>
-          <Select
+        {config.locations && (
+          <FilterSelect
+            icon={MapPin}
             value={values.locationId ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...values, locationId: v === "all" ? undefined : String(v) })
-            }
+            placeholder="ทุกสถานที่"
+            selectedLabel={values.locationId ? locations.find((l) => l.id === values.locationId)?.name : undefined}
+            onValueChange={(v) => onChange({ ...values, locationId: v === "all" ? undefined : String(v) })}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {locations.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            <SelectItem value="all">ทุกสถานที่</SelectItem>
+            {locations.map((l) => (
+              <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
 
-      {config.staff && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Staff</label>
-          <Select
+        {config.staff && (
+          <FilterSelect
+            icon={Users}
             value={values.staffId ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...values, staffId: v === "all" ? undefined : String(v) })
-            }
+            placeholder="ผู้เบิก"
+            selectedLabel={values.staffId ? staff.find((s) => s.id === values.staffId)?.name : undefined}
+            onValueChange={(v) => onChange({ ...values, staffId: v === "all" ? undefined : String(v) })}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Staff</SelectItem>
-              {staff.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            <SelectItem value="all">ผู้เบิกทุกคน</SelectItem>
+            {staff.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
 
-      {config.usageTypes && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Usage Type</label>
-          <Select
+        {config.usageTypes && (
+          <FilterSelect
+            icon={Activity}
             value={values.usageType ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...values, usageType: v === "all" ? undefined : String(v) })
-            }
+            placeholder="ประเภทการใช้งาน"
+            selectedLabel={values.usageType ? USAGE_TYPE_OPTIONS.find((o) => o.value === values.usageType)?.label : undefined}
+            onValueChange={(v) => onChange({ ...values, usageType: v === "all" ? undefined : String(v) })}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {USAGE_TYPE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            <SelectItem value="all">ทุกประเภท</SelectItem>
+            {USAGE_TYPE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
 
-      {config.statusOptions && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Status</label>
-          <Select
+        {config.statusOptions && (
+          <FilterSelect
+            icon={ListChecks}
             value={values.status ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...values, status: v === "all" ? undefined : String(v) })
-            }
+            placeholder="สถานะ"
+            selectedLabel={values.status ? config.statusOptions?.find((o) => o.value === values.status)?.label : undefined}
+            onValueChange={(v) => onChange({ ...values, status: v === "all" ? undefined : String(v) })}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              {config.statusOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            <SelectItem value="all">ทุกสถานะ</SelectItem>
+            {config.statusOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
 
-      {config.year && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Year</label>
-          <Select
+        {config.year && (
+          <FilterSelect
+            icon={CalendarRange}
             value={values.year ?? String(currentYear)}
+            placeholder="ปี"
+            selectedLabel={values.year}
             onValueChange={(v) => onChange({ ...values, year: String(v) })}
           >
-            <SelectTrigger className="h-9 w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {years.map((y) => (
-                <SelectItem key={y} value={y}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            {years.map((y) => (
+              <SelectItem key={y} value={y}>{y}</SelectItem>
+            ))}
+          </FilterSelect>
+        )}
 
-      {config.maintenanceType && (
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Type</label>
-          <Select
+        {config.maintenanceType && (
+          <FilterSelect
+            icon={Wrench}
             value={values.maintenanceType ?? "all"}
-            onValueChange={(v) =>
-              onChange({ ...values, maintenanceType: v === "all" ? undefined : String(v) })
+            placeholder="ประเภท"
+            selectedLabel={
+              values.maintenanceType === "PREVENTIVE" ? "ป้องกัน (Preventive)"
+              : values.maintenanceType === "CORRECTIVE" ? "แก้ไข (Corrective)"
+              : undefined
             }
+            onValueChange={(v) => onChange({ ...values, maintenanceType: v === "all" ? undefined : String(v) })}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="PREVENTIVE">Preventive</SelectItem>
-              <SelectItem value="CORRECTIVE">Corrective</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            <SelectItem value="all">ทุกประเภท</SelectItem>
+            <SelectItem value="PREVENTIVE">ป้องกัน (Preventive)</SelectItem>
+            <SelectItem value="CORRECTIVE">แก้ไข (Corrective)</SelectItem>
+          </FilterSelect>
+        )}
 
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-9"
-        onClick={() => onChange({})}
-      >
-        <Search className="h-3.5 w-3.5 mr-1" />
-        Reset
-      </Button>
+        {/* Actions (export) + reset, pushed right */}
+        <div className="ml-auto flex items-center gap-2">
+          {actions}
+          {activeCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange({})}
+              className="h-9 text-primary hover:text-primary hover:bg-primary/10"
+            >
+              <X className="size-3.5" />
+              ล้างตัวกรอง
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
