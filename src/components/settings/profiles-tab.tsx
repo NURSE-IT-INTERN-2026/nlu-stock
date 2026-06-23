@@ -276,7 +276,7 @@ export function ProfilesTab() {
                 <Select value={form.icon} onValueChange={(v) => setForm({ ...form, icon: v ?? "Package" })}>
                   <SelectTrigger id="p-icon"><SelectValue>{form.icon}</SelectValue></SelectTrigger>
                   <SelectContent>
-                    {PROFILE_ICON_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.value}</SelectItem>)}
+                    {PROFILE_ICON_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
