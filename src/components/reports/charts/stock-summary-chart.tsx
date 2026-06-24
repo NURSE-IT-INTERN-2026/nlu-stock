@@ -2,9 +2,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
 } from "recharts";
 import { useMemo } from "react";
+import { ChartContainer } from "@/components/dashboard/chart-container";
 
 function resolveToHex(cssVar: string): string {
   if (typeof window === "undefined") return "#888";
@@ -51,16 +52,18 @@ export function StockSummaryChart({ data }: StockSummaryChartProps) {
         <CardTitle className="text-base font-semibold">Stock by Category</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={data}>
-            <XAxis dataKey="categoryName" tick={{ fontSize: 12 }} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="totalQty" name="Total" fill={color1} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="availableQty" name="Available" fill={color2} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <ChartContainer height={280}>
+          {({ width, height }) => (
+            <BarChart data={data} width={width} height={height}>
+              <XAxis dataKey="categoryName" tick={{ fontSize: 12 }} />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="totalQty" name="Total" fill={color1} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+              <Bar dataKey="availableQty" name="Available" fill={color2} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+            </BarChart>
+          )}
+        </ChartContainer>
       </CardContent>
     </Card>
   );

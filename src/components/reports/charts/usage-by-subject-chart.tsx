@@ -2,9 +2,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip,
 } from "recharts";
 import { useMemo } from "react";
+import { ChartContainer } from "@/components/dashboard/chart-container";
 
 function resolveToHex(cssVar: string): string {
   if (typeof window === "undefined") return "#888";
@@ -54,14 +55,16 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
         <CardTitle className="text-base font-semibold">Usage by Type</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={chartData} layout="vertical" margin={{ left: 10 }}>
-            <XAxis type="number" />
-            <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-            <Tooltip />
-            <Bar dataKey="totalQuantity" fill={fillColor} radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <ChartContainer height={280}>
+          {({ width, height }) => (
+            <BarChart data={chartData} width={width} height={height} layout="vertical" margin={{ left: 10 }}>
+              <XAxis type="number" />
+              <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="totalQuantity" fill={fillColor} radius={[0, 4, 4, 0]} animationDuration={400} animationEasing="ease-out" />
+            </BarChart>
+          )}
+        </ChartContainer>
       </CardContent>
     </Card>
   );
