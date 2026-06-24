@@ -2,11 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip,
 } from "recharts";
 import { PieChart } from "lucide-react";
 import { useThemeColor } from "@/lib/resolve-color";
 import type { UsageByTypeData } from "@/lib/dashboard-types";
+import { ChartContainer } from "./chart-container";
 
 interface UsageBySubjectChartProps {
   data: UsageByTypeData[];
@@ -68,14 +69,16 @@ export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
           <UsageByTypeEmpty />
         ) : (
           <div className="flex-1 min-h-[260px]" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="totalQuantity" fill={fillColor} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChartContainer>
+              {({ width, height }) => (
+                <BarChart data={chartData} width={width} height={height} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="totalQuantity" fill={fillColor} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+                </BarChart>
+              )}
+            </ChartContainer>
           </div>
         )}
       </CardContent>
