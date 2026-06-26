@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -515,7 +516,13 @@ function TabBtn({
     >
       <Icon className="size-4" />
       {children}
-      {active && <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-primary rounded-full" />}
+      {active && (
+        <motion.span
+          layoutId="item-detail-tab"
+          transition={{ type: "spring", stiffness: 450, damping: 35 }}
+          className="absolute -bottom-px left-2 right-2 h-0.5 bg-primary rounded-full"
+        />
+      )}
     </button>
   );
 }

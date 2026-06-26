@@ -25,6 +25,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion } from "motion/react";
 import { Separator } from "@/components/ui/separator";
 import { SubCodesManager } from "./sub-codes-manager";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
@@ -672,9 +673,18 @@ export function ItemsMasterTab() {
               {DIALOG_TABS.map((t) => {
                 const Icon = t.icon;
                 return (
-                  <TabsTrigger key={t.value} value={t.value} className="text-xs gap-1.5 data-active:!bg-primary/10 data-active:!text-primary data-active:!shadow-none">
-                    <Icon className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">{t.label}</span>
+                  <TabsTrigger key={t.value} value={t.value} className="text-xs gap-1.5 data-active:!text-primary data-active:!shadow-none">
+                    {t.value === dialogTab && (
+                      <motion.span
+                        layoutId="item-master-dialog-tab"
+                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                        className="absolute inset-0 rounded-md bg-primary/10"
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-1.5">
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{t.label}</span>
+                    </span>
                   </TabsTrigger>
                 );
               })}

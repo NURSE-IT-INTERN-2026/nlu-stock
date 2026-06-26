@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { motion } from "motion/react";
 import {
   Package, ShoppingCart, BookOpen, AlertTriangle, Wallet,
   Wrench, CalendarClock, History,
@@ -60,14 +61,21 @@ function ReportsContent() {
                 key={value}
                 type="button"
                 onClick={() => setActiveTab(value)}
-                className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium transition-colors ${
                   isActive
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {label}
+                {isActive && (
+                  <motion.span
+                    layoutId="reports-tab"
+                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                    className="absolute -bottom-[2px] left-0 right-0 h-0.5 bg-primary"
+                  />
+                )}
               </button>
             );
           })}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion } from "motion/react";
 import { logout } from "@/lib/api";
 import {
   Sheet,
@@ -60,6 +61,13 @@ export function BottomTab({ user }: BottomTabProps) {
                   : "text-muted-foreground"
               )}
             >
+              {isActive(tab.href) && (
+                <motion.span
+                  layoutId="bottom-tab-active"
+                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                  className="absolute top-0 left-1/2 -ml-4 h-1 w-8 rounded-full bg-primary"
+                />
+              )}
               <Icon className="h-6 w-6" />
               <span>{tab.label}</span>
               {showBadge && (

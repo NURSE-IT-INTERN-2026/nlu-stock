@@ -16,6 +16,7 @@ import {
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion, LayoutGroup } from "motion/react";
 import type { SessionUser } from "@/types";
 
 const navItems = [
@@ -79,6 +80,7 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className={cn("flex-1 space-y-1.5 mt-2", collapsed ? "px-2" : "px-3")}>
+        <LayoutGroup>
         {filteredNav.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -88,16 +90,23 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
               href={item.href}
               title={collapsed ? item.label : undefined}
               className={cn(
-                "flex items-center rounded-xl text-sm transition-colors",
+                "relative flex items-center rounded-xl text-sm transition-colors",
                 collapsed ? "justify-center p-2" : "gap-3 px-3 py-2.5",
                 active
-                  ? "bg-primary text-primary-foreground font-semibold"
+                  ? "text-primary-foreground font-semibold"
                   : "text-sidebar-foreground font-medium hover:bg-sidebar-accent"
               )}
             >
+              {active && (
+                <motion.div
+                  layoutId="sidebar-active"
+                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                  className="absolute inset-0 rounded-xl bg-primary"
+                />
+              )}
               <span
                 className={cn(
-                  "flex items-center justify-center shrink-0",
+                  "relative z-10 flex items-center justify-center shrink-0",
                   collapsed ? "h-8 w-8" : "h-8 w-8",
                   "rounded-lg",
                   active
@@ -108,14 +117,15 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
                 <Icon className={cn("h-4 w-4", active ? "text-white" : "text-primary")} />
               </span>
               {!collapsed && (
-                <>
-                  <span className="flex-1">{item.label}</span>
+                <div className="relative z-10 flex flex-1 items-center justify-between">
+                  <span>{item.label}</span>
                   <ChevronRight className={cn("h-3.5 w-3.5", active ? "text-white/70" : "text-muted-foreground/40")} />
-                </>
+                </div>
               )}
             </Link>
           );
         })}
+        </LayoutGroup>
       </nav>
 
     </aside>
