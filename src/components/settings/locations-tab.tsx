@@ -274,8 +274,10 @@ export function LocationsTab() {
 
   function openEdit(loc: Location) {
     setEditing(loc);
-    setForm({ building: loc.building, floor: loc.floor, room: loc.room, detail: loc.detail || "" });
-    setNoRoom(!loc.room);
+    // legacy room="" stored the spot in detail; migrate into room (new model) on edit.
+    const legacyNoRoom = !loc.room;
+    setForm({ building: loc.building, floor: loc.floor, room: legacyNoRoom ? (loc.detail || "") : loc.room, detail: legacyNoRoom ? "" : (loc.detail || "") });
+    setNoRoom(legacyNoRoom);
     setDialogOpen(true);
   }
 
@@ -283,7 +285,7 @@ export function LocationsTab() {
     const payload = {
       building: form.building,
       floor: form.floor,
-      room: noRoom ? "" : form.room,
+      room: form.room,
       detail: form.detail || null,
     };
 
@@ -389,22 +391,21 @@ export function LocationsTab() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loc-room">
-                  ห้อง {!noRoom && <span className="text-destructive">*</span>}
+                  {noRoom ? "ตำแหน่ง" : "ห้อง"} <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="loc-room"
-                  value={noRoom ? "" : form.room}
-                  disabled={noRoom}
+                  value={form.room}
                   onChange={(e) => setForm({ ...form, room: e.target.value })}
-                  placeholder="เช่น 402"
-                  className="bg-card disabled:opacity-50"
+                  placeholder={noRoom ? "เช่น ล็อคเกอร์หน้าห้อง 402" : "เช่น 402"}
+                  className="bg-card"
                 />
               </div>
             </div>
 
             <button
               type="button"
-              onClick={() => { const v = !noRoom; setNoRoom(v); if (v) setForm((f) => ({ ...f, room: "" })); }}
+              onClick={() => setNoRoom(!noRoom)}
               aria-pressed={noRoom}
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
@@ -419,14 +420,12 @@ export function LocationsTab() {
             </button>
 
             <div className="space-y-2">
-              <Label htmlFor="loc-detail">
-                {noRoom ? <>ตำแหน่ง <span className="text-destructive">*</span></> : "รายละเอียดเพิ่มเติม"}
-              </Label>
+              <Label htmlFor="loc-detail">รายละเอียดเพิ่มเติม</Label>
               <Input
                 id="loc-detail"
                 value={form.detail}
                 onChange={(e) => setForm({ ...form, detail: e.target.value })}
-                placeholder={noRoom ? "เช่น ล็อคเกอร์หน้าห้อง 402" : "ไม่จำเป็น"}
+                placeholder="ไม่จำเป็น เช่น ชั้นบนของตู้"
                 className="bg-card"
               />
             </div>
@@ -434,7 +433,7 @@ export function LocationsTab() {
 
           <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-4">
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-            <Button onClick={handleSave} disabled={!form.building || !form.floor || (noRoom ? !form.detail.trim() : !form.room.trim())} className="gap-1.5">
+            <Button onClick={handleSave} disabled={!form.building || !form.floor || !form.room.trim()} className="gap-1.5">
               <Check className="h-4 w-4" />
               {editing ? "บันทึก" : "สร้างสถานที่"}
             </Button>
