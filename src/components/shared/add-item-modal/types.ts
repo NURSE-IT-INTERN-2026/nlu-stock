@@ -47,9 +47,6 @@ export interface ItemFormState {
   profile: FormProfile | null;
   issueUnitId: string;
   issueUnitName: string;
-  subUnitId: string;
-  subUnitName: string;
-  conversionFactor: number;
 }
 
 export interface SimilarItem {

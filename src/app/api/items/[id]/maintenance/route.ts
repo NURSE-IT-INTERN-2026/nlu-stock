@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { recomputeItemCounts } from "@/lib/stock";
+import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
 
 const maintenanceSchema = z.object({
@@ -12,6 +14,7 @@ const maintenanceSchema = z.object({
   cost: z.number().min(0).optional().nullable(),
   nextMaintenanceAt: z.coerce.date().optional().nullable(),
   attachmentUrls: z.array(z.string()).default([]),
+  subItemId: z.string().optional().nullable(),
 });
 
 export async function POST(
@@ -43,8 +46,28 @@ export async function POST(
           cost: data.cost ?? undefined,
           attachmentUrls: data.attachmentUrls,
           nextMaintenanceAt: data.nextMaintenanceAt ?? undefined,
+          subItemId: data.subItemId ?? undefined,
         },
       });
+
+      // Maintenance completed on a specific sub-item → mark it AVAILABLE + log.
+      if (data.subItemId && data.result === "AVAILABLE") {
+        const sub = await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { status: true } });
+        if (sub && sub.status !== ItemStatus.AVAILABLE) {
+          await tx.subItem.update({ where: { id: data.subItemId }, data: { status: ItemStatus.AVAILABLE } });
+          await tx.itemStatusLog.create({
+            data: {
+              itemId,
+              subItemId: data.subItemId,
+              previousStatus: sub.status,
+              newStatus: ItemStatus.AVAILABLE,
+              reason: "Maintenance completed",
+              changedBy: session.userId,
+            },
+          });
+          await recomputeItemCounts(tx, itemId);
+        }
+      }
 
       await tx.item.update({
         where: { id: itemId },

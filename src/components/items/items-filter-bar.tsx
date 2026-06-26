@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { STATUS_LABELS, STATUS_PILLS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
@@ -58,6 +59,10 @@ export interface ItemsFilterBarProps {
   resultCount?: number;
   onScanQR: () => void;
   className?: string;
+  hideAlertPicker?: boolean;
+  hideScan?: boolean;
+  // When provided, renders a "ยืมอยู่" toggle (onLoan lives on /items, not /alerts).
+  onLoanCount?: number;
 }
 
 const STATUS_KEYS = Object.keys(STATUS_LABELS);
@@ -69,7 +74,7 @@ const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpi
 ];
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className,
+  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
@@ -107,34 +112,21 @@ export function ItemsFilterBar({
             </button>
           )}
         </div>
-        <Button type="button" onClick={onScanQR} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
-          <QrCode className="size-5" />
-          <span className="font-medium">สแกน QR</span>
-        </Button>
+        {!hideScan && (
+          <Button type="button" onClick={onScanQR} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
+            <QrCode className="size-5" />
+            <span className="font-medium">สแกน QR</span>
+          </Button>
+        )}
       </div>
 
-      {/* Row 2: profile tabs — 2-col grid, all visible (no scroll) */}
-      <div className="grid grid-cols-2 gap-2">
-          <ProfileTab
-            active={!value.profileId}
-            onClick={() => update({ profileId: "", categoryId: null })}
-            icon={Boxes}
-            label="ทุกประเภท"
-          />
-          {profiles.map((p) => (
-            <ProfileTab
-              key={p.id}
-              active={value.profileId === p.id}
-              activeColor={p.color}
-              icon={PROFILE_ICONS[p.icon] ?? Boxes}
-              label={p.name}
-              onClick={() => update({ profileId: p.id, categoryId: null })}
-            />
-          ))}
-      </div>
-
-      {/* Row 3: filter pickers */}
+      {/* Filter pickers row */}
       <div className="flex flex-wrap items-center gap-2">
+        <ProfilePicker
+          profiles={profiles}
+          value={value.profileId}
+          onChange={(id) => update({ profileId: id ?? "", categoryId: null })}
+        />
         <SubcategoryPicker
           options={scopedCategories}
           value={value.categoryId}
@@ -142,8 +134,16 @@ export function ItemsFilterBar({
           onChange={(id) => update({ categoryId: id })}
         />
         <LocationPicker value={value.location} locations={locations} onChange={(loc) => update({ location: loc })} />
-        <StatusPicker value={value.status} onChange={(s) => update({ status: s })} />
-        <AlertPicker value={value.preset} alerts={alerts} onChange={(p) => update({ preset: p })} />
+        <StatusPicker
+          value={value.status}
+          onChange={(s) => update({ status: s })}
+          onLoanActive={typeof onLoanCount === "number" ? value.preset === "onLoan" : undefined}
+          onLoanCount={onLoanCount ?? undefined}
+          onLoanToggle={typeof onLoanCount === "number" ? () => update({ preset: value.preset === "onLoan" ? null : "onLoan" }) : undefined}
+        />
+        {!hideAlertPicker && (
+          <AlertPicker value={value.preset} alerts={alerts} onChange={(p) => update({ preset: p })} />
+        )}
 
         <div className="basis-full sm:basis-auto flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto">
           {typeof resultCount === "number" && (
@@ -176,33 +176,12 @@ export function ItemsFilterBar({
               <ActiveChip key={s} label={STATUS_LABELS[s] ?? s} onRemove={() => update({ status: value.status.filter((x) => x !== s) })} />
             ))}
             {value.preset && (
-              <ActiveChip tone="alert" icon={<Bell className="size-3" />} label={PRESETS.find((p) => p.key === value.preset)?.label ?? ""} onRemove={() => update({ preset: null })} />
+              <ActiveChip tone="alert" icon={<Bell className="size-3" />} label={value.preset === "onLoan" ? "ยืมอยู่" : PRESETS.find((p) => p.key === value.preset)?.label ?? ""} onRemove={() => update({ preset: null })} />
             )}
           </div>
         </>
       )}
     </div>
-  );
-}
-
-// ─── Profile tab ───
-function ProfileTab({ active, activeColor, icon: Icon, label, onClick }: { active: boolean; activeColor?: string; icon: LucideIcon; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-2.5 h-12 px-3 rounded-lg text-sm font-medium border transition-colors min-w-0",
-        active
-          ? activeColor
-            ? cn(activeColor, "border-transparent font-semibold shadow-sm ring-1 ring-black/5")
-            : "bg-primary text-primary-foreground border-transparent shadow-sm"
-          : "bg-background text-foreground/80 border-border hover:bg-muted",
-      )}
-    >
-      <Icon className="size-6 shrink-0" />
-      <span className="truncate">{label}</span>
-    </button>
   );
 }
 
@@ -234,12 +213,48 @@ function FilterButton({ active, icon: Icon, children, count, ...rest }: { active
         rest.className,
       )}
     >
-      <Icon className="size-4 text-muted-foreground" />
-      {children}
+      <Icon className="size-4 text-muted-foreground shrink-0" />
+      <span className="min-w-0 max-w-[150px] truncate">{children}</span>
       {count ? (
         <span className="ml-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums">{count}</span>
       ) : null}
     </button>
+  );
+}
+
+// ─── Profile (category) ───
+function ProfilePicker({ profiles, value, onChange }: { profiles: ProfileOption[]; value: string; onChange: (id: string | null) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const selected = profiles.find((p) => p.id === value);
+  const Icon = selected ? (PROFILE_ICONS[selected.icon] ?? Boxes) : Boxes;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={(props: React.ComponentProps<"button">) => (
+          <FilterButton {...props} active={!!value} icon={Icon}>{selected?.name ?? "ทุกประเภท"}</FilterButton>
+        )}
+      />
+      <PopoverContent align="start" className="w-60 p-1.5">
+        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 text-foreground font-medium")} onClick={() => { onChange(null); setOpen(false); }}>
+          <Boxes className="size-4" />
+          <span className="flex-1">ทุกประเภท</span>
+          {!value && <Check className="size-4 text-primary" />}
+        </button>
+        <div className="h-px bg-border my-1" />
+        <div className="max-h-64 w-full overflow-y-auto overflow-x-hidden">
+          {profiles.map((p) => {
+            const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
+            return (
+              <button key={p.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === p.id && "bg-primary/10 text-foreground font-medium")} onClick={() => { onChange(p.id); setOpen(false); }}>
+                <PIcon className="size-4 shrink-0" />
+                <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                {value === p.id && <Check className="size-4 text-primary shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -260,42 +275,61 @@ function SubcategoryPicker({ options, value, onChange, disabled }: { options: Ca
           ทุกหมวดหมู่ย่อย
         </button>
         <div className="h-px bg-border my-1" />
-        <ScrollArea className="max-h-64">
+        <div className="max-h-64 w-full overflow-y-auto overflow-x-hidden">
           {options.map((o) => (
-            <button key={o.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center justify-between hover:bg-muted", value === o.id && "bg-primary/10 text-foreground")} onClick={() => { onChange(o.id); setOpen(false); }}>
-              {o.name}
-              {value === o.id && <Check className="size-4 text-primary" />}
+            <button key={o.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === o.id && "bg-primary/10 text-foreground")} onClick={() => { onChange(o.id); setOpen(false); }}>
+              <span className="flex-1 min-w-0 truncate">{o.name}</span>
+              {value === o.id && <Check className="size-4 text-primary shrink-0" />}
             </button>
           ))}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );
 }
 
-// ─── Status (multi) ───
-function StatusPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+// ─── Status (multi) + on-loan toggle ───
+function StatusPicker({ value, onChange, onLoanActive, onLoanCount, onLoanToggle }: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  onLoanActive?: boolean;
+  onLoanCount?: number;
+  onLoanToggle?: () => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const toggle = (k: string) => onChange(value.includes(k) ? value.filter((s) => s !== k) : [...value, k]);
+  const totalCount = value.length + (onLoanActive ? 1 : 0);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={(props: React.ComponentProps<"button">) => (
-          <FilterButton {...props} active={value.length > 0} icon={Activity} count={value.length || undefined}>สถานะ</FilterButton>
+          <FilterButton {...props} active={totalCount > 0} icon={Activity} count={totalCount || undefined}>สถานะ</FilterButton>
         )}
       />
       <PopoverContent align="start" className="w-64 p-2">
+        {onLoanToggle && (
+          <>
+            <div className="flex items-center gap-2 px-1 py-1.5 mb-1.5">
+              <span className="flex-1 text-sm font-medium">ยืมอยู่</span>
+              {onLoanCount! > 0 && (
+                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold tabular-nums">{onLoanCount}</span>
+              )}
+              <Switch checked={!!onLoanActive} onCheckedChange={onLoanToggle} aria-label="ยืมอยู่" />
+            </div>
+            <div className="h-px bg-border mb-1.5" />
+          </>
+        )}
         <div className="text-xs font-medium text-muted-foreground px-1 pb-1.5">เลือกได้หลายรายการ</div>
         <div className="flex flex-wrap gap-1.5">
           {STATUS_KEYS.map((k) => {
             const active = value.includes(k);
             return (
               <button key={k} onClick={() => toggle(k)} className={cn(
-                "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium border transition",
+                "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium border transition min-w-0 max-w-full",
                 active ? `${STATUS_PILLS[k]} ring-2 ring-primary/30` : "bg-background border-border text-foreground/70 hover:bg-muted",
               )}>
-                {active && <Check className="size-3" />}
-                {STATUS_LABELS[k]}
+                {active && <Check className="size-3 shrink-0" />}
+                <span className="truncate">{STATUS_LABELS[k]}</span>
               </button>
             );
           })}
@@ -311,24 +345,29 @@ function StatusPicker({ value, onChange }: { value: string[]; onChange: (v: stri
 // ─── Alerts (single preset, inline) ───
 function AlertPicker({ value, alerts, onChange }: { value: PresetKey | null; alerts: ItemsFilterBarProps["alerts"]; onChange: (p: PresetKey | null) => void }) {
   return (
-    <div className="inline-flex items-center gap-1.5 h-9 pl-2 pr-1 rounded-lg border border-border bg-background">
-      <Bell className="size-4 text-orange-500" />
-      <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">Alerts</span>
-      {PRESETS.map((a) => {
-        const active = value === a.key;
-        const count = alerts[a.countKey];
-        return (
-          <button key={a.key} type="button" onClick={() => onChange(active ? null : a.key)} className={cn(
-            "inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-medium transition",
-            active ? a.activeCls : "bg-orange-500/15 text-orange-600 hover:brightness-95",
-          )}>
-            {a.label}
-            {count > 0 && (
-              <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-600")}>{count}</span>
-            )}
-          </button>
-        );
-      })}
+    <div className="w-full sm:w-auto sm:inline-flex sm:items-center sm:h-9 sm:gap-1.5 sm:pl-2 sm:pr-1 p-1.5 rounded-lg border border-border bg-background basis-full sm:basis-auto shrink-0">
+      <div className="flex items-center gap-1.5 mb-1.5 sm:mb-0">
+        <Bell className="size-4 text-orange-500 shrink-0" />
+        <span className="text-xs font-semibold text-foreground/80 sm:hidden">การแจ้งเตือน</span>
+        <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">Alerts</span>
+      </div>
+      <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
+        {PRESETS.map((a) => {
+          const active = value === a.key;
+          const count = alerts[a.countKey];
+          return (
+            <button key={a.key} type="button" onClick={() => onChange(active ? null : a.key)} className={cn(
+              "flex flex-col items-center justify-center gap-1 min-h-9 px-1 py-1 sm:flex-row sm:inline-flex sm:h-7 sm:px-2 rounded-md text-xs font-medium transition text-center leading-tight",
+              active ? a.activeCls : "bg-orange-500/15 text-orange-600 hover:brightness-95",
+            )}>
+              <span className="leading-tight">{a.label}</span>
+              {count > 0 && (
+                <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-600")}>{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -348,7 +387,7 @@ function buildTree(locations: LocationOption[]) {
   return buildings;
 }
 
-function LocationPicker({ value, locations, onChange }: { value: LocationFilter; locations: LocationOption[]; onChange: (loc: LocationFilter) => void }) {
+export function LocationPicker({ value, locations, onChange }: { value: LocationFilter; locations: LocationOption[]; onChange: (loc: LocationFilter) => void }) {
   const [open, setOpen] = React.useState(false);
   const label = formatLocation(value);
   const [draft, setDraft] = React.useState<LocationFilter>(value);
@@ -394,7 +433,7 @@ function LocationPicker({ value, locations, onChange }: { value: LocationFilter;
           </CascadeColumn>
           <CascadeColumn title="ห้อง" empty={!draft.floor}>
             {rooms.map((r) => (
-              <CascadeRow key={r} label={`ห้อง ${r}`} selected={draft.room === r} hasChildren onClick={() => setDraft({ building: draft.building, floor: draft.floor, room: r })} />
+              <CascadeRow key={r} label={r ? `ห้อง ${r}` : "ไม่มีห้อง"} selected={draft.room === r} hasChildren onClick={() => setDraft({ building: draft.building, floor: draft.floor, room: r })} />
             ))}
           </CascadeColumn>
           <CascadeColumn title="รายละเอียด" empty={!draft.room}>

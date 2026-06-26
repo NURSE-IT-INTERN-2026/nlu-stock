@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { dispenseRequestSchema } from "@/lib/validators";
+import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 
 export async function POST(req: NextRequest) {
@@ -59,7 +60,6 @@ export async function POST(req: NextRequest) {
             subItemId: di.subItemId ?? undefined,
             lotId: di.lotId ?? undefined,
             quantity: di.quantity,
-            quantitySub: di.quantitySub,
             usageType: usageType ?? undefined,
             usageNote: usageNote ?? undefined,
             staffId: session.userId,
@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
               changedBy: session.userId,
             },
           });
+          // Tracked durable: counts derive from subItem statuses.
+          await recomputeItemCounts(tx, di.itemId);
         } else if (di.lotId) {
           // Consumable with lot: deduct lot + item availableQty (optimistic lock)
           const updated = await tx.lot.updateMany({
@@ -96,33 +98,21 @@ export async function POST(req: NextRequest) {
             const lot = await tx.lot.findUnique({ where: { id: di.lotId } });
             throw new Error(`Lot ${lot?.lotNumber ?? di.lotId} has only ${lot?.remainingQty ?? 0} ${item.issueUnit.name}, requested ${di.quantity}`);
           }
-          await tx.item.update({
-            where: { id: di.itemId },
+          const itemUpdate = await tx.item.updateMany({
+            where: { id: di.itemId, availableQty: { gte: di.quantity } },
             data: { availableQty: { decrement: di.quantity } },
           });
+          if (itemUpdate.count === 0) {
+            throw new Error(`${item.code} available quantity underflow (counter out of sync with lots)`);
+          }
         } else {
-          // Non-tracked item: deduct item availableQty only
-          await tx.item.update({
-            where: { id: di.itemId },
+          // Non-tracked item: deduct item availableQty (optimistic lock — no negative)
+          const updated = await tx.item.updateMany({
+            where: { id: di.itemId, availableQty: { gte: di.quantity } },
             data: { availableQty: { decrement: di.quantity } },
           });
-        }
-
-        // Composite (KIT): deduct stock from linked component items
-        if (item.category.profile?.isComposite) {
-          const components = await tx.kitComponent.findMany({
-            where: { kitId: item.id, isStockItem: true, itemId: { not: null } },
-          });
-          for (const comp of components) {
-            if (comp.itemId) {
-              const stockItem = await tx.item.findUnique({ where: { id: comp.itemId } });
-              if (stockItem && stockItem.availableQty >= comp.quantity * di.quantity) {
-                await tx.item.update({
-                  where: { id: comp.itemId },
-                  data: { availableQty: { decrement: comp.quantity * di.quantity } },
-                });
-              }
-            }
+          if (updated.count === 0) {
+            throw new Error(`${item.code} has only ${item.availableQty} available, requested ${di.quantity}`);
           }
         }
       }

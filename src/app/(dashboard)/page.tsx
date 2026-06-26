@@ -28,7 +28,7 @@ export default async function DashboardPage() {
           subtitle={lowStock > 0 ? "ต่ำกว่าจุดสั่งซื้อ" : undefined}
           iconName="AlertTriangle"
           color="text-orange-500"
-          href="/items?lowStock=true"
+          href="/alerts?lowStock=true"
         />
         <DashboardMetricCard
           title="หมดอายุใน 30 วัน"
@@ -36,7 +36,7 @@ export default async function DashboardPage() {
           subtitle={nearExpiry > 0 ? "หมดอายุใน 30 วัน" : undefined}
           iconName="CalendarClock"
           color="text-info-500"
-          href="/items?nearExpiry=true"
+          href="/alerts?nearExpiry=true"
         />
         <DashboardMetricCard
           title="ยืมอยู่ / ยังไม่คืน"

@@ -31,12 +31,14 @@ enum Role {
   ADMIN
   STAFF
   INSTRUCTOR
+  CHILDREN
 }
 
 enum AdjustmentReason {
   LOST
   DAMAGED_PENDING_REPAIR
-  COUNT_MISMATCH
+  COUNT_MISMATCH_SHORT
+  COUNT_MISMATCH_OVER
   DISPOSAL
   OTHER
 }
@@ -112,7 +114,6 @@ model CategoryProfile {
   dispenseType   DispenseType
   assetTracking  Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
   setTracking    Boolean      @default(false) // โชว์ setSize/borrowable (BOOK/TOY)
-  isComposite    Boolean      @default(false) // dispense → deduct component stock (KIT)
   icon           String       @default("Package")
   color          String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
   sortOrder      Int          @default(0)
@@ -142,8 +143,7 @@ model Unit {
   id   String @id @default(cuid())
   name String @unique
 
-  itemsAsIssue Item[] @relation("UnitItemIssue")
-  itemsAsSub   Item[] @relation("UnitItemSub")
+  items Item[] @relation("UnitItem")
 
   @@map("units")
 }
@@ -159,10 +159,7 @@ model Item {
   trackIndividually Boolean      @default(false)
   status            ItemStatus   @default(AVAILABLE)
   issueUnitId       String
-  issueUnit         Unit         @relation("UnitItemIssue", fields: [issueUnitId], references: [id])
-  subUnitId         String
-  subUnit           Unit         @relation("UnitItemSub", fields: [subUnitId], references: [id])
-  conversionFactor  Int          @default(1)
+  issueUnit         Unit         @relation("UnitItem", fields: [issueUnitId], references: [id])
   minThreshold      Int          @default(0)
   locationId        String?
   location          Location?    @relation(fields: [locationId], references: [id])
@@ -209,10 +206,6 @@ model Item {
   maintenanceRecords MaintenanceRecord[]
   statusLogs         ItemStatusLog[]
 
-  // Kit relations
-  kitComponents      KitComponent[] @relation("KitComponents")
-  kitStockItems      KitComponent[] @relation("KitStockItem")
-
   @@index([categoryId, isActive])
   @@index([locationId])
   @@index([availableQty])
@@ -231,11 +224,13 @@ model SubItem {
   serialNumber String?
   notes        String?
   imageUrl     String?
+  images       String[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   dispenseRecords DispenseRecord[]
   statusLogs      ItemStatusLog[]
+  maintenanceRecords MaintenanceRecord[]
 
   @@unique([itemId, subCode])
   @@index([itemId, status])
@@ -274,7 +269,6 @@ model DispenseRecord {
   lotId       String?
   lot         Lot?      @relation(fields: [lotId], references: [id])
   quantity    Int
-  quantitySub Int
   usageType   UsageType?
   usageNote   String?
   staffId     String
@@ -332,6 +326,8 @@ model MaintenanceRecord {
   id                String            @id @default(cuid())
   itemId            String
   item              Item              @relation(fields: [itemId], references: [id])
+  subItemId         String?
+  subItem           SubItem?          @relation(fields: [subItemId], references: [id], onDelete: Cascade)
   type              MaintenanceType
   result            MaintenanceResult
   performedAt       DateTime
@@ -345,23 +341,8 @@ model MaintenanceRecord {
 
   createdAt         DateTime          @default(now())
 
+  @@index([subItemId])
   @@map("maintenance_records")
-}
-
-// --- Kit Components ---
-model KitComponent {
-  id          String  @id @default(cuid())
-  kitId       String
-  kit         Item    @relation("KitComponents", fields: [kitId], references: [id], onDelete: Cascade)
-  itemId      String? // null = non-stock item
-  item        Item?   @relation("KitStockItem", fields: [itemId], references: [id])
-  name        String  // component name
-  quantity    Int     @default(1)
-  unit        String  // unit of measurement
-  isStockItem Boolean @default(false) // true = deduct from stock on dispense
-
-  @@index([kitId])
-  @@map("kit_components")
 }
 
 // --- Status Change Log ---

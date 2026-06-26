@@ -59,9 +59,6 @@ interface ItemRecord {
   status: string;
   issueUnitId: string;
   issueUnit: UnitOption;
-  subUnitId: string;
-  subUnit: UnitOption;
-  conversionFactor: number;
   minThreshold: number;
   locationId: string | null;
   location: LocationOption | null;
@@ -86,7 +83,7 @@ interface ItemRecord {
 
 const defaultForm = {
   code: "", name: "", nameEn: "", categoryId: "", trackIndividually: false,
-  issueUnitId: "", subUnitId: "", conversionFactor: 1, minThreshold: 0,
+  issueUnitId: "", minThreshold: 0,
   locationId: "", description: "", isActive: true,
   imageUrl: null as string | null,
   model: "", purchaseDate: "", purchasePrice: "",
@@ -273,8 +270,6 @@ export function ItemsMasterTab() {
       categoryId: item.categoryId,
       trackIndividually: item.trackIndividually,
       issueUnitId: item.issueUnitId,
-      subUnitId: item.subUnitId,
-      conversionFactor: item.conversionFactor,
       minThreshold: item.minThreshold,
       locationId: item.locationId || "",
       description: item.description || "",
@@ -304,7 +299,6 @@ export function ItemsMasterTab() {
       locationId: form.locationId || null,
       description: form.description || null,
       imageUrl: form.imageUrl || null,
-      conversionFactor: Number(form.conversionFactor),
       minThreshold: Number(form.minThreshold),
       maintenanceCycleMonths: Number(form.maintenanceCycleMonths),
       warrantyMonths: Number(form.warrantyMonths),
@@ -782,9 +776,8 @@ export function ItemsMasterTab() {
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">หน่วยหลัก <span className="text-destructive">*</span></Label>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium text-muted-foreground">หน่วย <span className="text-destructive">*</span></Label>
                   <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
                     <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
                       <span className={form.issueUnitId ? "text-gray-900" : "text-muted-foreground"}>
@@ -793,22 +786,6 @@ export function ItemsMasterTab() {
                     </SelectTrigger>
                     <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
                   </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">หน่วยย่อย <span className="text-destructive">*</span></Label>
-                    <Select value={form.subUnitId} onValueChange={(v) => setForm({ ...form, subUnitId: v ?? "" })}>
-                      <SelectTrigger className="h-10 bg-muted/50 border-transparent shadow-none">
-                        <span className={form.subUnitId ? "text-gray-900" : "text-muted-foreground"}>
-                          {form.subUnitId ? (units.find((u) => u.id === form.subUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">อัตราแปลงหน่วย <span className="text-muted-foreground/60 font-normal">(1 หน่วยเบิก = ? หน่วยย่อย)</span></Label>
-                  <Input type="number" min={1} value={form.conversionFactor} onChange={(e) => setForm({ ...form, conversionFactor: parseInt(e.target.value) || 1 })} className="h-10 text-gray-900 bg-muted/50 border-transparent shadow-none" />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
                   <div>
@@ -924,7 +901,7 @@ export function ItemsMasterTab() {
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-              <Button onClick={handleSave} disabled={saving || !form.code || !form.name || !form.categoryId || !form.issueUnitId || !form.subUnitId}>
+              <Button onClick={handleSave} disabled={saving || !form.code || !form.name || !form.categoryId || !form.issueUnitId}>
                 {saving ? "กำลังบันทึก..." : editing ? "บันทึกการแก้ไข" : "บันทึกรายการ"}
               </Button>
             </div>

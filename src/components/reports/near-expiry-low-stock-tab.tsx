@@ -95,10 +95,12 @@ export function NearExpiryLowStockTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <ReportFilters config={filterConfig} values={filters} onChange={setFilters} />
-        <ExportButtons reportType="near-expiry-low-stock" filters={filters} />
-      </div>
+      <ReportFilters
+        config={filterConfig}
+        values={filters}
+        onChange={setFilters}
+        actions={<ExportButtons reportType="near-expiry-low-stock" filters={filters} />}
+      />
 
       <Card>
         <CardHeader className="pb-2">

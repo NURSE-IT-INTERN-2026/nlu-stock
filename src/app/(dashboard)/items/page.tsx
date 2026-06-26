@@ -2,11 +2,11 @@
 
 import { Suspense, useState, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { STATUS_PILLS, STATUS_LABELS, locationLabel } from "@/lib/constants";
+import { STATUS_PILLS, STATUS_LABELS, locationLabel, formatSubCode } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -94,6 +94,28 @@ function ItemsContent() {
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); }, [setPage]);
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [mobileExpanded, setMobileExpanded] = useState<Set<string>>(new Set());
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const on = () => setIsMobile(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const [isVerySmall, setIsVerySmall] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 399px)");
+    const on = () => setIsVerySmall(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const toggleMobile = (id: string) => setMobileExpanded((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const [subItemsMap, setSubItemsMap] = useState<Record<string, SubItemRecord[]>>({});
   const [scannerOpen, setScannerOpen] = useState(false);
 
@@ -103,7 +125,7 @@ function ItemsContent() {
       const data = await getItems({ search: code, perPage: "1" });
       const match = (data.items as ItemRecord[])?.find((it: ItemRecord) => it.code === code);
       if (match) {
-        router.push(`/items/${match.id}`);
+        router.push(`/items/${match.code}`);
         return;
       }
     } catch {}
@@ -145,7 +167,7 @@ function ItemsContent() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full min-h-0 gap-6">
       <ItemsFilterBar
         profiles={profiles}
         categories={categories}
@@ -155,34 +177,34 @@ function ItemsContent() {
         onChange={handleFilterChange}
         resultCount={total}
         onScanQR={() => setScannerOpen(true)}
+        hideAlertPicker
       />
 
-      <div className="rounded-2xl border overflow-hidden bg-card">
-        <div className="overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-300px)]">
-          <Table>
+      <div className="rounded-2xl border overflow-hidden bg-card flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto [&_[data-slot=table-container]]:overflow-visible">
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <TableHead className="w-10"></TableHead>
-                <TableHead>รหัสพัสดุ</TableHead>
+                <TableHead className="w-28 md:w-32 max-[399px]:hidden">รหัสพัสดุ</TableHead>
                 <TableHead>ชื่อ</TableHead>
-                <TableHead>ประเภท</TableHead>
-                <TableHead>คงเหลือ</TableHead>
-                <TableHead>สถานที่</TableHead>
-                <TableHead>สถานะ</TableHead>
+                <TableHead className="hidden md:table-cell md:w-28">ประเภท</TableHead>
+                <TableHead className="hidden md:table-cell md:w-24">คงเหลือ</TableHead>
+                <TableHead className="hidden md:table-cell md:w-40 lg:w-56 xl:w-72">สถานที่</TableHead>
+                <TableHead className="w-24 md:w-24 text-center">สถานะ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: isMobile ? (isVerySmall ? 2 : 3) : 6 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={isMobile ? (isVerySmall ? 2 : 3) : 6} className="text-center text-muted-foreground py-8">
                     No items found
                   </TableCell>
                 </TableRow>
@@ -193,40 +215,31 @@ function ItemsContent() {
                 return (
                   <Fragment key={item.id}>
                     <TableRow
-                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${expanded ? "bg-orange-50/50 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
+                      className={`h-12 cursor-pointer hover:bg-muted/50 transition-colors ${expanded ? "bg-orange-50/50 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
                       onClick={() => {
                         if (hasSubItems) toggleExpand(item.id);
-                        else router.push(`/items/${item.id}`);
+                        else if (isMobile) toggleMobile(item.id);
+                        else router.push(`/items/${item.code}`);
                       }}
                     >
+                      <TableCell className="font-mono text-sm max-[399px]:hidden"><span className="block truncate">{item.code}</span></TableCell>
                       <TableCell>
-                        {hasSubItems && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
-                          >
-                            <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{item.code}</TableCell>
-                      <TableCell>
-                        <div>
-                          <span className="font-medium">{item.name}</span>
-                          {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate min-w-0">
+                            <span className="font-medium">{item.name}</span>
+                            {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                          </span>
+                          {hasSubItems && (
+                            <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200">
+                              <Layers className="size-2.5" />{item._count.subItems}
+                            </Badge>
+                          )}
                         </div>
-                        {item.trackIndividually && item._count.subItems > 1 && (
-                          <Badge variant="outline" className="text-xs mt-0.5 bg-orange-50 text-orange-700 border-orange-200">
-                            Tracked ({item._count.subItems})
-                          </Badge>
-                        )}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
+                      <TableCell className="hidden md:table-cell">
+                        <Badge variant="outline" className="max-w-full">{item.category.profile?.name ?? item.category.name}</Badge>
                       </TableCell>
-                      <TableCell className="text-sm tabular-nums">
+                      <TableCell className="hidden md:table-cell text-sm tabular-nums">
                         {item.totalQty === 0 ? (
                           <span className="text-muted-foreground">-</span>
                         ) : (
@@ -238,38 +251,55 @@ function ItemsContent() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell text-sm"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
+                      <TableCell className="text-center">
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
                           {STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ")}
                         </span>
                       </TableCell>
                     </TableRow>
-                    {expanded && subs?.map((sub) => (
+                    {expanded && subs?.map((sub) => {
+                      const fullCode = formatSubCode(item.code, sub.subCode);
+                      return (
                       <TableRow
                         key={sub.id}
-                        className="bg-orange-50/40 dark:bg-orange-950/30 hover:bg-orange-50/60 dark:hover:bg-orange-950/40 cursor-pointer"
-                        onClick={() => router.push(`/items/${item.id}`)}
+                        className="h-12 bg-orange-50/40 dark:bg-orange-950/30 hover:bg-orange-50/60 dark:hover:bg-orange-950/40 cursor-pointer"
+                        onClick={() => router.push(`/items/${item.code}/sub/${sub.subCode}`)}
                       >
-                        <TableCell></TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground pl-10">
-                          <span className="text-orange-300/80 mr-1.5">└</span>{sub.subCode}
+                        <TableCell className="font-mono text-sm text-muted-foreground pl-6 max-[399px]:hidden">
+                          <span className="block truncate max-w-[8rem]"><span className="text-orange-300/80 mr-1.5">└</span>{fullCode}</span>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{sub.name || sub.notes || "-"}</TableCell>
-                        <TableCell></TableCell>
-                        <TableCell></TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        <TableCell className="hidden md:table-cell"></TableCell>
+                        <TableCell className="hidden md:table-cell"></TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                           {sub.status === "CHECKED_OUT" && sub.dispenseRecords?.[0]
                             ? <span className="text-blue-600">→ {sub.dispenseRecords[0].staff.name}</span>
                             : item.location ? locationLabel(item.location) : "-"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[sub.status] || "bg-muted text-muted-foreground border-border"}`}>
                             {STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")}
                           </span>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
+                    {(mobileExpanded.has(item.id) || (isMobile && expanded)) && (
+                      <TableRow className="md:hidden">
+                        <TableCell colSpan={isVerySmall ? 2 : 3} className="bg-muted/30">
+                          <div className="py-1 space-y-1.5 text-sm">
+                            {isVerySmall && (
+                              <div className="flex justify-between gap-3"><span className="text-muted-foreground">รหัสพัสดุ</span><span className="font-mono text-right truncate">{item.code}</span></div>
+                            )}
+                            <div className="flex justify-between gap-3"><span className="text-muted-foreground">ประเภท</span><span className="text-right truncate">{item.category.profile?.name ?? item.category.name}</span></div>
+                            <div className="flex justify-between gap-3"><span className="text-muted-foreground">คงเหลือ</span><span className={`tabular-nums ${item.availableQty < item.minThreshold ? "text-destructive" : ""}`}>{item.totalQty === 0 ? "-" : `${item.availableQty}${item.availableQty === item.totalQty ? "" : `/${item.totalQty}`} ${item.issueUnit.name}`}</span></div>
+                            <div className="flex justify-between gap-3"><span className="text-muted-foreground">สถานที่</span><span className="text-right truncate">{item.location ? locationLabel(item.location) : "-"}</span></div>
+                            <Button size="sm" className="w-full mt-1" onClick={() => router.push(`/items/${item.code}`)}>เปิดรายละเอียด</Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </Fragment>
                 );
               })}
@@ -278,7 +308,7 @@ function ItemsContent() {
         </div>
 
         {/* Fixed footer */}
-        <div className="flex items-center border-t bg-card px-4 py-2">
+        <div className="flex items-center border-t bg-card px-4 py-2 shrink-0">
           <div className="flex items-center gap-0.5">
             <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-7 w-7 p-0 text-xs">
               &laquo;

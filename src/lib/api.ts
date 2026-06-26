@@ -50,7 +50,6 @@ export interface ProfileOption {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
-  isComposite: boolean;
   icon: string;
   color: string;
   sortOrder: number;
@@ -142,7 +141,6 @@ export function createProfile(data: {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking?: boolean;
   setTracking?: boolean;
-  isComposite?: boolean;
   icon?: string;
   color: string;
   description?: string;
@@ -210,8 +208,6 @@ export interface QuickCreateItemPayload {
   name: string;
   categoryId: string;
   issueUnitId: string;
-  subUnitId: string;
-  conversionFactor: number;
   copyCount?: number;
   setSize?: number;
   initialQty?: number;
@@ -224,10 +220,8 @@ export function quickCreateItem(data: QuickCreateItemPayload) {
     name: string;
     nameEn: string | null;
     trackIndividually: boolean;
-    conversionFactor: number;
     category: { name: string; category: string };
     issueUnit: { id: string; name: string };
-    subUnit: { id: string; name: string };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
   }>("/api/items/quick-create", {
     method: "POST",
@@ -274,6 +268,10 @@ export function getItem(id: string) {
   return request<unknown>(`/api/items/${id}`);
 }
 
+export function getSubItem(itemId: string, subId: string) {
+  return request<unknown>(`/api/items/${itemId}/sub-items/${subId}`);
+}
+
 // ─── Items (settings) ───
 
 export function getSettingsItems(params: Record<string, string>) {
@@ -296,7 +294,11 @@ export function deleteSettingsItem(id: string) {
 export function searchDispenseItems(params: {
   q?: string;
   categoryId?: string;
-  locationId?: string;
+  profileId?: string;
+  building?: string;
+  floor?: string;
+  room?: string;
+  detail?: string;
   limit?: string;
   page?: string;
 }) {
@@ -367,6 +369,16 @@ export function updateItemStatus(
   data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null },
 ) {
   return request<unknown>(`/api/items/${itemId}/status`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function bulkUpdateSubItemStatus(
+  itemId: string,
+  data: { subItemIds: string[]; newStatus: string; notes?: string | null; imageUrl?: string | null },
+) {
+  return request<{ availableQty: number; totalQty: number }>(`/api/items/${itemId}/status/bulk`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -458,10 +470,6 @@ export function importRows(type: string, rows: Record<string, string>[]) {
 
 // ─── Dashboard ───
 
-export function getDashboardStatusOverview() {
-  return request<unknown>("/api/dashboard/status-overview");
-}
-
 export function getDashboardDispenseMonthly() {
   return request<unknown[]>("/api/dashboard/dispense-monthly");
 }
@@ -478,12 +486,20 @@ export function getDashboardRecentReceive() {
   return request<unknown[]>("/api/dashboard/recent-receive");
 }
 
-export function getDashboardTopDispense(categoryId?: string) {
-  return request<unknown[]>(`/api/dashboard/top-dispense${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`);
+export function getDashboardTopDispense(categoryId?: string, profileId?: string) {
+  const qs = new URLSearchParams();
+  if (categoryId) qs.set("categoryId", categoryId);
+  if (profileId) qs.set("profileId", profileId);
+  const q = qs.toString();
+  return request<unknown[]>(`/api/dashboard/top-dispense${q ? `?${q}` : ""}`);
 }
 
-export function getDashboardUsageBySubject(categoryId?: string) {
-  return request<unknown[]>(`/api/dashboard/usage-by-subject${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`);
+export function getDashboardUsageBySubject(categoryId?: string, profileId?: string) {
+  const qs = new URLSearchParams();
+  if (categoryId) qs.set("categoryId", categoryId);
+  if (profileId) qs.set("profileId", profileId);
+  const q = qs.toString();
+  return request<unknown[]>(`/api/dashboard/usage-by-subject${q ? `?${q}` : ""}`);
 }
 
 // ─── Reports ───

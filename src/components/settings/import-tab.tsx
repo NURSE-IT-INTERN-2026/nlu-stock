@@ -20,8 +20,8 @@ type ImportType = "items" | "categories" | "locations" | "sub-items";
 const COLUMN_REF: Record<ImportType, { required: string[]; optional: string[]; sample: Record<string, string> }> = {
   items: {
     required: ["code", "name", "category"],
-    optional: ["nameEn", "trackIndividually", "issueUnit", "subUnit", "conversionFactor", "minThreshold", "building", "floor", "room", "detail", "description"],
-    sample: { code: "NLU-CON-001", name: "ปากกาลูกลื่น", category: "CON", issueUnit: "ชิ้น", conversionFactor: "1", minThreshold: "10" },
+    optional: ["nameEn", "trackIndividually", "issueUnit", "minThreshold", "building", "floor", "room", "detail", "description"],
+    sample: { code: "NLU-CON-001", name: "ปากกาลูกลื่น", category: "CON", issueUnit: "ชิ้น", minThreshold: "10" },
   },
   categories: {
     required: ["name", "category"],

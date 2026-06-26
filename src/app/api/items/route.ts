@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
     };
   }
 
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
   const lowStock = params.get("lowStock");
   if (lowStock === "true") {
     const lowStockItems = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -61,9 +64,8 @@ export async function GET(request: NextRequest) {
 
   const nearExpiry = params.get("nearExpiry");
   if (nearExpiry === "true") {
-    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     where.lots = {
-      some: { expiryDate: { gte: new Date(), lte: in30Days } },
+      some: { expiryDate: { gte: now, lte: in30Days } },
     };
   }
 
@@ -74,10 +76,23 @@ export async function GET(request: NextRequest) {
 
   const overdueMaint = params.get("overdueMaint");
   if (overdueMaint === "true") {
-    where.nextMaintenanceDate = { lt: new Date() };
+    where.nextMaintenanceDate = { lt: now };
   }
 
-  const [items, total] = await Promise.all([
+  // Union mode: items matching ANY alert condition (used by /alerts page).
+  const alerts = params.get("alerts");
+  if (alerts === "true") {
+    const lowStockIds = (await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
+    `).map((r) => r.id);
+    where.OR = [
+      { id: { in: lowStockIds } },
+      { lots: { some: { expiryDate: { gte: now, lte: in30Days } } } },
+      { nextMaintenanceDate: { lt: now } },
+    ];
+  }
+
+  const [rawItems, total] = await Promise.all([
     prisma.item.findMany({
       where,
       skip,
@@ -87,10 +102,9 @@ export async function GET(request: NextRequest) {
         category: { include: { profile: true } },
         location: true,
         issueUnit: true,
-        subUnit: true,
         _count: { select: { subItems: true } },
         lots: {
-          where: { expiryDate: { not: null } },
+          where: { expiryDate: { gte: now, lte: in30Days } },
           orderBy: { expiryDate: "asc" },
           take: 1,
         },
@@ -98,6 +112,15 @@ export async function GET(request: NextRequest) {
     }),
     prisma.item.count({ where }),
   ]);
+
+  // Derive per-item alert types for the /alerts page (badge column).
+  const items = rawItems.map((item) => {
+    const types: string[] = [];
+    if (item.availableQty < item.minThreshold) types.push("lowStock");
+    if (item.lots.length > 0) types.push("nearExpiry");
+    if (item.nextMaintenanceDate && new Date(item.nextMaintenanceDate) < now) types.push("overdueMaint");
+    return { ...item, alertTypes: types };
+  });
 
   return json({ items, page, perPage, total });
 }

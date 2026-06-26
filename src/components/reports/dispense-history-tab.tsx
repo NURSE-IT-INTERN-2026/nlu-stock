@@ -19,7 +19,6 @@ interface Row {
   itemCode: string;
   itemName: string;
   quantity: number;
-  quantitySub: number;
   staffName: string;
   usageTypeLabel: string;
   lotNumber: string;
@@ -84,10 +83,12 @@ export function DispenseHistoryTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <ReportFilters config={filterConfig} values={filters} onChange={(v) => { setFilters(v); setPage(1); }} />
-        <ExportButtons reportType="dispense-history" filters={filters} />
-      </div>
+      <ReportFilters
+        config={filterConfig}
+        values={filters}
+        onChange={(v) => { setFilters(v); setPage(1); }}
+        actions={<ExportButtons reportType="dispense-history" filters={filters} />}
+      />
       <ReportDataTable columns={columns} data={data} loading={loading} pageSize={perPage} />
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground px-2">

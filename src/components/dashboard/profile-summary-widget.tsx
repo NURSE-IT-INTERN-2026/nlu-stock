@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { profileIcon } from "@/lib/profile-icons";
@@ -49,7 +50,11 @@ export function ProfileSummaryWidget() {
               const Icon = profileIcon(r.icon);
               const textCls = r.color.split(" ").filter((c) => c.startsWith("text-")).join(" ");
               return (
-                <div key={r.profileId} className="rounded-lg border border-border/60 bg-card px-3 py-2.5">
+                <Link
+                  key={r.profileId}
+                  href={`/items?profile=${r.profileId}`}
+                  className="block rounded-lg border border-border/60 bg-card px-3 py-2.5 transition-colors hover:border-primary/50 hover:bg-accent"
+                >
                   <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="flex items-center gap-2 min-w-0">
                       <span
@@ -73,7 +78,7 @@ export function ProfileSummaryWidget() {
                       style={{ width: `${total > 0 ? (r.count / total) * 100 : 0}%` }}
                     />
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>

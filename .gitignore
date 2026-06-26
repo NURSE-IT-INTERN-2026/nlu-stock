@@ -60,3 +60,16 @@ graphify-out/
 
 # Auto-generated reports
 TECH_STACK_REPORT.html
+
+# doc exports / artifacts
+doc/*.zip
+doc/*.csv
+
+# E2E (Playwright)
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/e2e/.auth/
+/uploads-test/
+.env.test
+.next-e2e/

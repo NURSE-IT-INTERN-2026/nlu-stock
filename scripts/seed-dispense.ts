@@ -36,7 +36,6 @@ async function main() {
           item: { connect: { id: pick(items).id } },
           staff: { connect: { id: pick(staff).id } },
           quantity: 1 + rand(25),
-          quantitySub: 0,
           usageType: pick(usageTypes as unknown as UsageType[]),
           dispensedAt,
         },
