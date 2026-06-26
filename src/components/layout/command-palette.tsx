@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { useQuery } from "@tanstack/react-query";
 import { Search, CornerDownLeft, ArrowUp, ArrowDown } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { getItems } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { SessionUser } from "@/types";
@@ -79,11 +79,9 @@ export function CommandPalette({ user }: { user: SessionUser }) {
   const searching = debounced.trim().length >= 2;
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(v) => { setOpen(v); if (!v) setQuery(""); }}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/40 supports-backdrop-filter:backdrop-blur-[2px]" />
-        <DialogPrimitive.Popup className="fixed left-1/2 top-[18%] z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none">
-          <DialogPrimitive.Title className="sr-only">คำสั่งลัด</DialogPrimitive.Title>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setQuery(""); }}>
+      <DialogContent showCloseButton={false} className="top-[18%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-md sm:rounded-2xl">
+          <DialogTitle className="sr-only">คำสั่งลัด</DialogTitle>
           <Command shouldFilter={false} className="flex flex-col">
             <div className="flex items-center gap-2 border-b border-border px-3">
               <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -141,8 +139,7 @@ export function CommandPalette({ user }: { user: SessionUser }) {
               <span>ปิด <kbd className="rounded border border-border bg-muted px-1 text-[10px]">esc</kbd></span>
             </div>
           </Command>
-        </DialogPrimitive.Popup>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+      </DialogContent>
+    </Dialog>
   );
 }
