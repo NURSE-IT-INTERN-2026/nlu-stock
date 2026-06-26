@@ -9,9 +9,16 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const categoryId = searchParams.get("categoryId") ?? "";
-  const locationId = searchParams.get("locationId") ?? "";
+  const profileId = searchParams.get("profileId") ?? "";
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "20");
+
+  // Location cascade filter (building → floor → room → detail)
+  const building = searchParams.get("building") ?? "";
+  const floor = searchParams.get("floor") ?? "";
+  const room = searchParams.get("room") ?? "";
+  const detail = searchParams.get("detail") ?? "";
+  const hasLoc = building || floor || room || detail;
 
   const where = {
     isActive: true,
@@ -23,7 +30,15 @@ export async function GET(req: NextRequest) {
       ],
     }),
     ...(categoryId && { categoryId }),
-    ...(locationId && { locationId }),
+    ...(profileId && { category: { profileId } }),
+    ...(hasLoc && {
+      location: {
+        ...(building && { building }),
+        ...(floor && { floor }),
+        ...(room && { room }),
+        ...(detail && { detail }),
+      },
+    }),
   };
 
   const [items, total] = await Promise.all([
@@ -32,7 +47,6 @@ export async function GET(req: NextRequest) {
       include: {
         category: { select: { name: true, profile: { select: { dispenseType: true, assetTracking: true, setTracking: true, color: true } } } },
         issueUnit: { select: { id: true, name: true } },
-        subUnit: { select: { id: true, name: true } },
         lots: {
           where: { remainingQty: { gt: 0 } },
           orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }],

@@ -42,6 +42,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "ผู้ดูแล",
   STAFF: "เจ้าหน้าที่",
   INSTRUCTOR: "ผู้สอน",
+  CHILDREN: "นักศึกษา",
 };
 
 export function UsersTab() {
@@ -238,6 +239,7 @@ export function UsersTab() {
                   <SelectItem value="ADMIN">ผู้ดูแล</SelectItem>
                   <SelectItem value="STAFF">เจ้าหน้าที่</SelectItem>
                   <SelectItem value="INSTRUCTOR">ผู้สอน</SelectItem>
+                  <SelectItem value="CHILDREN">นักศึกษา</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -24,24 +24,33 @@ interface HeaderProps {
 
 const SEGMENT_LABELS: Record<string, string> = {
   items: "รายการพัสดุ",
-  dispense: "เบิกพัสดุ",
+  dispense: "เบิก-ยืมพัสดุ",
   receive: "รับพัสดุเข้า",
   reports: "รายงาน",
+  alerts: "การแจ้งเตือน",
   settings: "ตั้งค่าระบบ",
-  confirm: "ยืนยันการเบิก",
+  cart: "ยืนยันการเบิก",
 };
 
 function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
 
-  // Build trail from intermediate segments only (skip root)
-  const trail = segments.slice(0, -1).map((seg, i, arr) => {
-    const href = "/" + arr.slice(0, i + 1).join("/");
-    return { label: SEGMENT_LABELS[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1), href };
-  });
+  const labelFor = (seg: string) => SEGMENT_LABELS[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1);
 
-  // Final segment: prefer page-supplied detail (e.g. item code) over generic title
+  // Intermediate segments form the trail — skip raw id/dynamic segments without a label.
+  const intermediate = segments.slice(0, -1).flatMap((seg, i) =>
+    SEGMENT_LABELS[seg]
+      ? [{ label: SEGMENT_LABELS[seg], href: "/" + segments.slice(0, i + 1).join("/") }]
+      : []
+  );
+  // On a root-level page that supplies a detail, promote the single segment to a
+  // clickable crumb so we render "Page › detail" (e.g. "การแจ้งเตือน › ทั้งหมด").
+  const trail = detail && segments.length === 1
+    ? [{ label: labelFor(segments[0]), href: "/" + segments[0] }]
+    : intermediate;
+
+  // Final segment: prefer page-supplied detail (e.g. item code, active tab) over generic title
   const last = detail ?? title;
 
   // If no trail, just show the last label
@@ -77,12 +86,6 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
   const { detail } = usePageHeader();
   const alerts = useAlerts();
 
-  const alertItems = [
-    { count: alerts.lowStock, label: "สต็อกต่ำ", href: "/alerts?lowStock=true" },
-    { count: alerts.nearExpiry, label: "ใกล้หมดอายุ", href: "/alerts?nearExpiry=true" },
-    { count: alerts.overdueMaintenance, label: "เกินกำหนดซ่อม", href: "/alerts?overdueMaint=true" },
-  ].filter((a) => a.count > 0);
-
   async function handleLogout() {
     await logout();
     window.location.href = "/login";
@@ -108,39 +111,25 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
       {/* Right: actions */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Alerts */}
-        {alerts.total > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="การแจ้งเตือน"
-              className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors max-[425px]:hidden"
-            >
-              <Bell className="size-5" />
-              <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
-                {alerts.total > 9 ? "9+" : alerts.total}
-              </span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="text-orange-700 dark:text-orange-300">
-                  {alerts.total} รายการแจ้งเตือน
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {alertItems.map((a) => (
-                  <DropdownMenuItem key={a.href} onClick={() => router.push(a.href)} className="justify-between">
-                    <span>{a.label}</span>
-                    <span className="font-bold text-orange-600 dark:text-orange-400">{a.count}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <button
+          type="button"
+          aria-label="การแจ้งเตือน"
+          onClick={() => router.push("/alerts")}
+          className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors max-[425px]:hidden"
+        >
+          <Bell className="size-5" />
+          {alerts.total > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+              {alerts.total}
+            </span>
+          )}
+        </button>
 
         {/* Cart */}
         <button
           type="button"
           aria-label="ดูตะกร้า"
-          onClick={() => router.push("/dispense/confirm")}
+          onClick={() => router.push("/dispense/cart")}
           className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors max-[425px]:hidden"
         >
           <ShoppingBasket className="size-5" />
@@ -191,16 +180,10 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="hidden max-[425px]:block" />
-            <DropdownMenuItem className="hidden max-[425px]:flex justify-between" onClick={() => router.push("/dispense/confirm")}>
+            <DropdownMenuItem className="hidden max-[425px]:flex justify-between" onClick={() => router.push("/dispense/cart")}>
               <span className="flex items-center"><ShoppingBasket className="mr-2 h-4 w-4" />ตะกร้า</span>
               {itemCount > 0 && <span className="font-bold text-primary">{itemCount}</span>}
             </DropdownMenuItem>
-            {alerts.total > 0 && alertItems.map((a) => (
-              <DropdownMenuItem key={a.href} className="hidden max-[425px]:flex justify-between" onClick={() => router.push(a.href)}>
-                <span className="flex items-center"><Bell className="mr-2 h-4 w-4" />{a.label}</span>
-                <span className="font-bold text-orange-600 dark:text-orange-400">{a.count}</span>
-              </DropdownMenuItem>
-            ))}
             <DropdownMenuSeparator className="hidden max-[425px]:block" />
             <DropdownMenuItem>
               <User className="mr-2 h-4 w-4" />

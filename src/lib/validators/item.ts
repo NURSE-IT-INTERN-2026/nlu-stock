@@ -10,8 +10,6 @@ const itemBaseSchema = z.object({
   categoryId: z.string().min(1, "Category is required"),
   trackIndividually: z.boolean().default(false),
   issueUnitId: z.string().min(1, "Issue unit is required"),
-  subUnitId: z.string().min(1, "Sub unit is required"),
-  conversionFactor: z.number().int().min(1).default(1),
   minThreshold: z.number().int().min(0).default(0),
   locationId: z.string().optional().nullable(),
   imageUrl: z.string().optional().nullable(),
@@ -61,6 +59,15 @@ export const stockAdjustSchema = z.object({
 export const statusChangeSchema = z.object({
   newStatus: z.nativeEnum(ItemStatus),
   subItemId: z.string().optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
+});
+
+// Bulk per-piece status change for tracked items (used by adjust dialog + subcodes tab batch).
+// Generic over the full ItemStatus set; the UI limits which statuses each entry point offers.
+export const bulkSubItemStatusSchema = z.object({
+  subItemIds: z.array(z.string().min(1)).min(1, "เลือกอย่างน้อย 1 ชิ้น"),
+  newStatus: z.nativeEnum(ItemStatus),
   notes: z.string().max(500).optional().nullable(),
   imageUrl: z.string().optional().nullable(),
 });

@@ -49,7 +49,6 @@ export async function GET(request: NextRequest) {
         category: true,
         location: true,
         issueUnit: true,
-        subUnit: true,
         _count: { select: { subItems: true, dispenseRecords: true, receiveRecords: true } },
       },
     }),
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
 
   const item = await prisma.item.create({
     data,
-    include: { category: { include: { profile: true } }, location: true, issueUnit: true, subUnit: true },
+    include: { category: { include: { profile: true } }, location: true, issueUnit: true },
   });
 
   return json(item, 201);

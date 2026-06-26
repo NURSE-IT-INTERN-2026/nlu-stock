@@ -10,8 +10,6 @@ interface StepSummaryProps {
   categoryName: string;
   categoryType?: string;
   issueUnitName: string;
-  subUnitName: string;
-  conversionFactor: number;
   codeMeta?: CodeMeta | null;
   initialQty?: number;
 }
@@ -23,8 +21,6 @@ export function StepSummary({
   categoryName,
   categoryType,
   issueUnitName,
-  subUnitName,
-  conversionFactor,
   codeMeta,
   initialQty = 0,
 }: StepSummaryProps) {
@@ -49,7 +45,7 @@ export function StepSummary({
 
         {/* Section: หน่วย */}
         <Section label="หน่วย">
-          <Row label="อัตราแปลง (หน่วยเบิก = จำนวน หน่วยย่อย)" value={issueUnitName ? `1 ${issueUnitName} = ${conversionFactor} ${subUnitName || issueUnitName}` : "—"} />
+          <Row label="หน่วยนับ" value={issueUnitName || "—"} />
           {codeMeta?.isSet && codeMeta.setSize > 1 && <Row label="จำนวนต่อชุด" value={`${codeMeta.setSize}`} />}
           {codeMeta && codeMeta.copyCount > 1 && (
             <Row label="จำนวนชิ้น" value={`${codeMeta.copyCount} ${issueUnitName || "รายการ"}`} />

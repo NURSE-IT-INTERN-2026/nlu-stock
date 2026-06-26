@@ -32,7 +32,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
     case "stock-summary": {
       const where: Record<string, unknown> = { isActive: true };
       const categoryId = params.get("categoryId");
+      const profileId = params.get("profileId");
       if (categoryId) where.categoryId = categoryId;
+      else if (profileId) where.category = { profileId };
 
       const groups = await prisma.item.groupBy({
         by: ["categoryId"],

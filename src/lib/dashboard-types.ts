@@ -45,11 +45,6 @@ export const UsageByTypeDataSchema = z.object({
   totalQuantity: z.number(),
 });
 
-export const StatusDataSchema = z.object({
-  status: z.string(),
-  count: z.number(),
-});
-
 export const MonthlyDispenseDataSchema = z.object({
   month: z.string(),
   total: z.number(),
@@ -61,7 +56,6 @@ export const DispenseRecordArraySchema = z.array(DispenseRecordSchema);
 export const ReceiveRecordArraySchema = z.array(ReceiveRecordSchema);
 export const TopDispenseDataArraySchema = z.array(TopDispenseDataSchema);
 export const UsageByTypeDataArraySchema = z.array(UsageByTypeDataSchema);
-export const StatusDataArraySchema = z.array(StatusDataSchema);
 export const MonthlyDispenseDataArraySchema = z.array(MonthlyDispenseDataSchema);
 
 // ── Derived types ──
@@ -70,5 +64,4 @@ export type DispenseRecord = z.infer<typeof DispenseRecordSchema>;
 export type ReceiveRecord = z.infer<typeof ReceiveRecordSchema>;
 export type TopDispenseData = z.infer<typeof TopDispenseDataSchema>;
 export type UsageByTypeData = z.infer<typeof UsageByTypeDataSchema>;
-export type StatusData = z.infer<typeof StatusDataSchema>;
 export type MonthlyDispenseData = z.infer<typeof MonthlyDispenseDataSchema>;

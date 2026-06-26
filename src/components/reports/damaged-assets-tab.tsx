@@ -64,10 +64,12 @@ export function DamagedAssetsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <ReportFilters config={filterConfig} values={filters} onChange={setFilters} />
-        <ExportButtons reportType="damaged-assets" filters={filters} />
-      </div>
+      <ReportFilters
+        config={filterConfig}
+        values={filters}
+        onChange={setFilters}
+        actions={<ExportButtons reportType="damaged-assets" filters={filters} />}
+      />
       <ReportDataTable columns={columns} data={data} loading={loading} />
     </div>
   );

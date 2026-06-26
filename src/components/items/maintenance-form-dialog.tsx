@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,18 +16,30 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/shared/file-upload";
 import { createMaintenance, searchDispenseItems } from "@/lib/api";
+
+const TYPE_LABELS = {
+  PREVENTIVE: "ป้องกัน",
+  CORRECTIVE: "ซ่อมแก้ไข",
+} as const;
+
+const RESULT_LABELS = {
+  AVAILABLE: "พร้อมใช้งาน",
+  NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
+  DISPOSED: "จำหน่าย",
+} as const;
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemId?: string;
   itemLabel?: string;
+  subItemId?: string;
+  subItemLabel?: string;
   maintenanceCycleMonths?: number;
   onSuccess: () => void;
 }
@@ -39,7 +51,7 @@ interface SearchItem {
   category: { name: string; category: string };
 }
 
-export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, maintenanceCycleMonths, onSuccess }: Props) {
+export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, maintenanceCycleMonths, onSuccess }: Props) {
   // ── Item selection ──
   const hasDefaultItem = !!itemId;
   const [selectedItemId, setSelectedItemId] = useState<string | null>(itemId ?? null);
@@ -102,7 +114,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, m
   const handleSubmit = async () => {
     const targetId = selectedItemId;
     if (!targetId) {
-      toast.error("Please select an item");
+      toast.error("กรุณาเลือกพัสดุ");
       return;
     }
     setSubmitting(true);
@@ -116,12 +128,13 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, m
         cost: cost ? parseFloat(cost) : null,
         nextMaintenanceAt: nextMaintenanceAt || null,
         attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
+        subItemId: subItemId ?? undefined,
       });
-      toast.success("Maintenance record saved");
+      toast.success("บันทึกการบำรุงรักษาแล้ว");
       resetAndClose();
       onSuccess();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
       setSubmitting(false);
     }
@@ -144,135 +157,208 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, m
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Record Maintenance</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl"
+        showCloseButton={false}
+      >
+        <DialogTitle className="sr-only">บันทึกการบำรุงรักษา</DialogTitle>
+        <DialogDescription className="sr-only">
+          ฟอร์มบันทึกการบำรุงรักษาพัสดุ
+        </DialogDescription>
 
-        <div className="space-y-4">
-          {/* ── Item selector ── */}
-          {hasDefaultItem ? (
-            <div className="rounded-lg border px-3 py-2 text-sm bg-muted/30">
-              <span className="text-muted-foreground">Item: </span>
-              <span className="font-medium">{itemLabel ?? itemId}</span>
+        <div className="flex max-h-[85vh] flex-col overflow-hidden">
+          {/* ── Header ── */}
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Wrench className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-foreground">บันทึกการบำรุงรักษา</p>
+                <p className="text-xs text-muted-foreground">บำรุงรักษาหรือซ่อมแซมพัสดุ</p>
+              </div>
             </div>
-          ) : selectedItemId ? (
-            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-              <span className="text-sm font-medium">Item selected</span>
-              <Button variant="ghost" size="sm" onClick={() => { setSelectedItemId(null); setSearchQuery(""); }}>
-                Change
-              </Button>
+            <button
+              onClick={resetAndClose}
+              aria-label="ปิด"
+              className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* ── Body ── */}
+          <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6 space-y-5">
+            {/* ── Item selector ── */}
+            {hasDefaultItem ? (
+              <div className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">พัสดุ:</span>
+                  <span className="font-medium text-foreground">{itemLabel ?? itemId}</span>
+                </div>
+                {subItemLabel && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">ชิ้น:</span>
+                    <span className="font-mono font-medium text-foreground">{subItemLabel}</span>
+                  </div>
+                )}
+              </div>
+            ) : selectedItemId ? (
+              <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/[0.02] px-3 py-2.5">
+                <span className="text-sm font-medium text-foreground">เลือกพัสดุแล้ว</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setSelectedItemId(null); setSearchQuery(""); }}
+                >
+                  เปลี่ยน
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>พัสดุ <span className="text-destructive">*</span></Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="ค้นหาพัสดุจากชื่อหรือรหัส..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-card pl-9"
+                    autoFocus
+                  />
+                </div>
+                {searching && (
+                  <div className="text-xs text-muted-foreground py-1">กำลังค้นหา...</div>
+                )}
+                {searchResults.length > 0 && (
+                  <div className="max-h-40 overflow-y-auto rounded-xl border border-border bg-card divide-y">
+                    {searchResults.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedItemId(item.id);
+                          setSearchResults([]);
+                          setSearchQuery("");
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                      >
+                        <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
+                        <span className="ml-2">{item.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {searchQuery && !searching && searchResults.length === 0 && (
+                  <div className="text-xs text-muted-foreground py-1">ไม่พบพัสดุ</div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>ประเภท</Label>
+                <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+                  <SelectTrigger className="bg-card w-full">
+                    <span className="text-foreground">{TYPE_LABELS[type]}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PREVENTIVE">{TYPE_LABELS.PREVENTIVE}</SelectItem>
+                    <SelectItem value="CORRECTIVE">{TYPE_LABELS.CORRECTIVE}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>ผลการตรวจ</Label>
+                <Select value={result} onValueChange={(v) => setResult(v as typeof result)}>
+                  <SelectTrigger className="bg-card w-full">
+                    <span className="text-foreground">{RESULT_LABELS[result]}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AVAILABLE">{RESULT_LABELS.AVAILABLE}</SelectItem>
+                    <SelectItem value="NEEDS_MORE_REPAIR">{RESULT_LABELS.NEEDS_MORE_REPAIR}</SelectItem>
+                    <SelectItem value="DISPOSED">{RESULT_LABELS.DISPOSED}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          ) : (
+
             <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Label>วันที่ดำเนินการ</Label>
+              <Input
+                type="date"
+                value={performedAt}
+                onChange={(e) => setPerformedAt(e.target.value)}
+                className="bg-card"
+              />
+            </div>
+
+            {type === "CORRECTIVE" && (
+              <div className="space-y-2">
+                <Label>ปัญหา/อาการ</Label>
                 <Input
-                  placeholder="Search item by name or code..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                  autoFocus
+                  value={issue}
+                  onChange={(e) => setIssue(e.target.value)}
+                  placeholder="เสียอะไร?"
+                  className="bg-card"
                 />
               </div>
-              {searching && (
-                <div className="text-xs text-muted-foreground py-1">Searching...</div>
-              )}
-              {searchResults.length > 0 && (
-                <div className="max-h-40 overflow-y-auto rounded-lg border divide-y">
-                  {searchResults.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedItemId(item.id);
-                        setSearchResults([]);
-                        setSearchQuery("");
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
-                    >
-                      <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
-                      <span className="ml-2">{item.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {searchQuery && !searching && searchResults.length === 0 && (
-                <div className="text-xs text-muted-foreground py-1">No items found</div>
-              )}
-            </div>
-          )}
+            )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PREVENTIVE">ป้องกัน</SelectItem>
-                  <SelectItem value="CORRECTIVE">ซ่อมแก้ไข</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-2">
+              <Label>รายละเอียดงานที่ทำ</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="งานที่ดำเนินการ..."
+                rows={2}
+                className="bg-card"
+              />
             </div>
-            <div className="space-y-1.5">
-              <Label>Result</Label>
-              <Select value={result} onValueChange={(v) => setResult(v as typeof result)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="AVAILABLE">พร้อมใช้งาน</SelectItem>
-                  <SelectItem value="NEEDS_MORE_REPAIR">ต้องซ่อมเพิ่ม</SelectItem>
-                  <SelectItem value="DISPOSED">จำหน่าย</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>ค่าใช้จ่าย (฿)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="0"
+                  className="bg-card"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>นัดครั้งถัดไป</Label>
+                <Input
+                  type="date"
+                  value={nextMaintenanceAt}
+                  onChange={(e) => setNextMaintenanceAt(e.target.value)}
+                  className="bg-card"
+                />
+                {cycle > 0 && nextMaintenanceAt && (
+                  <span className="text-[11px] text-muted-foreground">คำนวณอัตโนมัติ: +{cycle} เดือน</span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>เอกสารแนบ</Label>
+              <FileUpload
+                value={attachmentUrl}
+                onChange={setAttachmentUrl}
+                accept="image/*,.pdf"
+                label="Upload Attachment"
+              />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Date Performed</Label>
-            <Input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} />
-          </div>
-
-          {type === "CORRECTIVE" && (
-            <div className="space-y-1.5">
-              <Label>Issue</Label>
-              <Input value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="What was wrong?" />
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Work performed..." rows={2} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Cost (฿)</Label>
-              <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Next Maintenance</Label>
-              <Input type="date" value={nextMaintenanceAt} onChange={(e) => setNextMaintenanceAt(e.target.value)} />
-              {cycle > 0 && nextMaintenanceAt && (
-                <span className="text-[11px] text-muted-foreground">Auto: +{cycle} months</span>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Attachment</Label>
-            <FileUpload
-              value={attachmentUrl}
-              onChange={setAttachmentUrl}
-              accept="image/*,.pdf"
-              label="Upload Attachment"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={resetAndClose}>Cancel</Button>
-            <Button disabled={submitting || !selectedItemId} onClick={handleSubmit}>
-              {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Save
+          {/* ── Footer ── */}
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
+            <Button variant="ghost" onClick={resetAndClose}>ยกเลิก</Button>
+            <Button disabled={submitting || !selectedItemId} onClick={handleSubmit} className="gap-1.5">
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              บันทึก
             </Button>
           </div>
         </div>

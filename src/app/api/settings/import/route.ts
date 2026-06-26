@@ -62,13 +62,6 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
       continue;
     }
 
-    const subUnitName = row.subUnit || issueUnitName;
-    const subUnit = units.find((u) => u.name === subUnitName);
-    if (!subUnit) {
-      result.errors.push({ row: i + 1, message: `Unit "${subUnitName}" not found` });
-      continue;
-    }
-
     validRows.push({
       index: i,
       data: {
@@ -80,8 +73,6 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
           ? forcedTrackIndividually(category.profile)
           : row.trackIndividually === "true",
         issueUnit: { connect: { id: issueUnit.id } },
-        subUnit: { connect: { id: subUnit.id } },
-        conversionFactor: parseInt(row.conversionFactor) || 1,
         minThreshold: parseInt(row.minThreshold) || 0,
         location: location ? { connect: { id: location.id } } : undefined,
         description: row.description || null,
@@ -207,9 +198,23 @@ async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
   }
 
   if (validRows.length > 0) {
-    await prisma.$transaction(
-      validRows.map((data) => prisma.subItem.create({ data }))
-    );
+    // Count new sub-items per parent to reconcile Item counters.
+    // Imported sub-items are AVAILABLE by default, so both totalQty and availableQty increment.
+    const countsByItem = new Map<string, number>();
+    for (const r of validRows) {
+      const itemId = (r.item as { connect: { id: string } }).connect.id;
+      countsByItem.set(itemId, (countsByItem.get(itemId) ?? 0) + 1);
+    }
+
+    await prisma.$transaction([
+      ...validRows.map((data) => prisma.subItem.create({ data })),
+      ...Array.from(countsByItem.entries()).map(([itemId, count]) =>
+        prisma.item.update({
+          where: { id: itemId },
+          data: { totalQty: { increment: count }, availableQty: { increment: count } },
+        }),
+      ),
+    ]);
     result.imported = validRows.length;
   }
 
@@ -254,8 +259,8 @@ export async function POST(request: NextRequest) {
 
 const TEMPLATES: Record<string, { headers: string[]; example: string[] }> = {
   items: {
-    headers: ["code", "name", "nameEn", "category", "trackIndividually", "issueUnit", "subUnit", "conversionFactor", "minThreshold", "building", "floor", "room", "detail", "description"],
-    example: ["NLU-CON-001", "Pen", "Ballpoint Pen", "CON", "false", "ชิ้น", "", "1", "10", "อาคาร A", "ชั้น 1", "ห้อง 101", "ตู้ 1", ""],
+    headers: ["code", "name", "nameEn", "category", "trackIndividually", "issueUnit", "minThreshold", "building", "floor", "room", "detail", "description"],
+    example: ["NLU-CON-001", "Pen", "Ballpoint Pen", "CON", "false", "ชิ้น", "10", "อาคาร A", "ชั้น 1", "ห้อง 101", "ตู้ 1", ""],
   },
   categories: {
     headers: ["name", "category", "description", "sortOrder"],

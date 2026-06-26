@@ -31,7 +31,7 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const ext = "." + (path[path.length - 1]?.split(".").pop() ?? "");
+  const ext = "." + (path[path.length - 1]?.split(".").pop() ?? "").toLowerCase();
   const contentType = MIME_MAP[ext] || "application/octet-stream";
   const buffer = await readFile(filePath);
 

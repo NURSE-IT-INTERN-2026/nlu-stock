@@ -29,12 +29,7 @@ interface StepCategoryUnitsProps {
   allowedDispenseType?: "CONSUMABLE" | "COUNT" | "ITEM";
   issueUnitId: string;
   issueUnitName?: string;
-  subUnitId: string;
-  subUnitName?: string;
   onIssueUnitChange: (id: string, name: string) => void;
-  onSubUnitChange: (id: string, name: string) => void;
-  conversionFactor: number;
-  onConversionFactorChange: (factor: number) => void;
   /** Opens inline category selection step */
   onOpenCategorySelect: () => void;
   /** Category type code (profile.code) — used as code prefix */
@@ -57,12 +52,7 @@ export function StepCategoryUnits({
   allowedDispenseType,
   issueUnitId,
   issueUnitName: issueUnitNameProp = "",
-  subUnitId,
-  subUnitName: subUnitNameProp = "",
   onIssueUnitChange,
-  onSubUnitChange,
-  conversionFactor,
-  onConversionFactorChange,
   onOpenCategorySelect,
   categoryType,
   profile,
@@ -94,10 +84,6 @@ export function StepCategoryUnits({
     if (issueUnitId) {
       const name = units.find((u) => u.id === issueUnitId)?.name ?? "";
       if (name) onIssueUnitChange(issueUnitId, name);
-    }
-    if (subUnitId) {
-      const name = units.find((u) => u.id === subUnitId)?.name ?? "";
-      if (name) onSubUnitChange(subUnitId, name);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [units]);
@@ -176,83 +162,36 @@ export function StepCategoryUnits({
         )}
       </div>
 
-      {/* Units + conversion factor as a single equation row */}
+      {/* Unit */}
       {unitsLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-lg" />
         </div>
       ) : (
-        <div className="space-y-2" role="group" aria-labelledby="conv-rate-label">
-          <Label id="conv-rate-label" className="text-xs">อัตราแปลงหน่วย</Label>
-          <div className="grid grid-cols-[1fr_28px_88px_1fr] gap-x-1.5 gap-y-1">
-            {/* Labels row */}
-            <Label htmlFor="issue-unit-select" className="text-xs text-muted-foreground font-normal">หน่วยเบิก <span className="text-destructive">*</span></Label>
-            <span />
-            <Label htmlFor="conv-factor" className="text-xs text-muted-foreground font-normal">จำนวน</Label>
-            <Label htmlFor="sub-unit-select" className="text-xs text-muted-foreground font-normal">หน่วยย่อย <span className="text-destructive">*</span></Label>
-
-            {/* Controls row */}
-            <Select
-              value={issueUnitId}
-              onValueChange={(v) => {
-                if (!v) return;
-                const name = units.find((u) => u.id === v)?.name ?? "";
-                onIssueUnitChange(v, name);
-                if (!subUnitId) onSubUnitChange(v, name);
-              }}
-            >
-              <SelectTrigger id="issue-unit-select" className="bg-card">
-                <span className={issueUnitId ? "text-foreground" : "text-muted-foreground"}>
-                  {issueUnitId
-                    ? ((units.find((u) => u.id === issueUnitId)?.name ?? issueUnitNameProp) || "เลือก")
-                    : "เลือก"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {units.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="flex h-9 items-center justify-center text-sm text-muted-foreground">มี</div>
-
-            <Input
-              id="conv-factor"
-              type="number"
-              min={1}
-              value={conversionFactor}
-              onChange={(e) => onConversionFactorChange(parseInt(e.target.value) || 1)}
-              className="bg-card text-center"
-            />
-
-            <Select value={subUnitId} onValueChange={(v) => {
+        <div className="space-y-2">
+          <Label htmlFor="issue-unit-select" className="text-xs">หน่วย <span className="text-destructive">*</span></Label>
+          <Select
+            value={issueUnitId}
+            onValueChange={(v) => {
               if (!v) return;
               const name = units.find((u) => u.id === v)?.name ?? "";
-              onSubUnitChange(v, name);
-            }}>
-              <SelectTrigger id="sub-unit-select" className="bg-card">
-                <span className={subUnitId ? "text-foreground" : "text-muted-foreground"}>
-                  {subUnitId
-                    ? ((units.find((u) => u.id === subUnitId)?.name ?? subUnitNameProp) || "เลือก")
-                    : "เลือก"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {units.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Preview of the actual relationship */}
-          {issueUnitId && subUnitId && (
-            <p className="text-xs text-muted-foreground">
-              = 1 {units.find((u) => u.id === issueUnitId)?.name ?? "..."} มี {conversionFactor} {units.find((u) => u.id === subUnitId)?.name ?? "..."}
-            </p>
-          )}
+              onIssueUnitChange(v, name);
+            }}
+          >
+            <SelectTrigger id="issue-unit-select" className="bg-card">
+              <span className={issueUnitId ? "text-foreground" : "text-muted-foreground"}>
+                {issueUnitId
+                  ? ((units.find((u) => u.id === issueUnitId)?.name ?? issueUnitNameProp) || "เลือก")
+                  : "เลือก"}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {units.map((u) => (
+                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
     </div>

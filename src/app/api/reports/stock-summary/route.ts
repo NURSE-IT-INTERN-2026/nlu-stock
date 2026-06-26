@@ -8,9 +8,11 @@ export async function GET(request: NextRequest) {
 
   const params = getSearchParams(request);
   const categoryId = params.get("categoryId") || undefined;
+  const profileId = params.get("profileId") || undefined;
 
   const where: Record<string, unknown> = { isActive: true };
   if (categoryId) where.categoryId = categoryId;
+  else if (profileId) where.category = { profileId };
 
   const groups = await prisma.item.groupBy({
     by: ["categoryId"],

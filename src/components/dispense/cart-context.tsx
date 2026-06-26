@@ -25,9 +25,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (idx >= 0) {
         const existing = prev[idx];
         const newQty = Math.min(existing.quantity + item.quantity, item.availableQty);
-        const newQtySub = existing.quantitySub + item.quantitySub;
         const updated = [...prev];
-        updated[idx] = { ...existing, quantity: newQty, quantitySub: newQtySub };
+        updated[idx] = { ...existing, quantity: newQty };
         return updated;
       }
       const clampedQty = Math.min(item.quantity, item.availableQty);
@@ -70,7 +69,7 @@ export function useCart() {
   return ctx;
 }
 
-/** Shared per-line cart actions used by both CartDrawer and the confirm page. */
+/** Shared per-line cart actions used by the cart page. */
 export function useCartLineActions() {
   const { updateItem } = useCart();
 

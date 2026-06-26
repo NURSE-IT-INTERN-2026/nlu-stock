@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, getSearchParams, paginate } from "@/lib/api-utils";
+import { ADJUSTMENT_REASON_LABELS } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
 type TimelineEvent = {
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             id: r.id,
             type: "ADJUSTMENT",
             date: r.adjustedAt,
-            description: `Adjusted ${r.previousQty} → ${r.newQty} (${r.reason})`,
+            description: `ปรับยอด ${r.previousQty} → ${r.newQty} (${ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason})`,
             user: r.adjuster.name,
             details: { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
           });

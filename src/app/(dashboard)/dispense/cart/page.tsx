@@ -43,17 +43,16 @@ export default function ConfirmDispensePage() {
           subItemId: i.subItemId ?? null,
           lotId: i.lotId ?? null,
           quantity: i.quantity,
-          quantitySub: i.quantitySub,
         })),
         usageType: usageType || null,
         usageNote: usageType === "OTHER" ? usageNote || null : null,
         notes: notes || null,
       });
-      toast.success(`Dispensed ${data.count} item(s) successfully`);
+      toast.success(`เบิกพัสดุสำเร็จ ${data.count} รายการ`);
       clearCart();
       router.push("/dispense");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to dispense");
+      toast.error(err instanceof Error ? err.message : "เบิกพัสดุไม่สำเร็จ");
     } finally {
       setSubmitting(false);
     }
@@ -72,19 +71,19 @@ export default function ConfirmDispensePage() {
           <ShoppingBasket className="h-8 w-8 text-muted-foreground" />
         </div>
         <div className="text-center">
-          <p className="text-lg font-medium">Cart is empty</p>
-          <p className="text-sm text-muted-foreground mt-1">Add items from the dispense page first</p>
+          <p className="text-lg font-medium">ตะกร้าว่าง</p>
+          <p className="text-sm text-muted-foreground mt-1">เพิ่มพัสดุจากหน้าเบิก-ยืมพัสดุก่อน</p>
         </div>
         <Button variant="outline" onClick={() => router.push("/dispense")}>
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Dispense
+          กลับหน้าเบิก
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col -m-6 h-[calc(100vh-3.5rem)]">
+    <div className="flex flex-col -m-6 h-[calc(100vh-8.5rem)] lg:h-[calc(100vh-5rem)]">
       {/* ── Items list (scrollable) ── */}
       <div className="flex-1 min-h-0 overflow-y-auto p-6">
         <div className="mb-4 flex items-start justify-between">
@@ -94,7 +93,7 @@ export default function ConfirmDispensePage() {
           </div>
           <Button size="lg" className="h-11" onClick={() => router.push("/dispense")}>
             <ArrowLeft className="h-4 w-4 mr-1.5" />
-            กลับหน้าเบิก-ยืม
+            กลับหน้าเบิก-ยืมพัสดุ
           </Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -104,7 +103,7 @@ export default function ConfirmDispensePage() {
             <article key={key} className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(15,23,42,0.08)] transition-shadow hover:shadow-[0_1px_0_rgba(0,0,0,0.02),0_12px_28px_-12px_rgba(15,23,42,0.14)]">
               {/* Delete */}
               <button
-                aria-label="Remove"
+                aria-label="ลบ"
                 className="absolute right-3 top-3 z-10 grid size-7 place-items-center rounded-md text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                 onClick={() => removeItem(item.itemId, item.lotId, item.subItemId)}
               >
@@ -135,7 +134,7 @@ export default function ConfirmDispensePage() {
                   <h3 className="mt-1 truncate text-[15px] font-semibold leading-snug text-foreground">{item.itemName}</h3>
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                     <span className="inline-flex items-baseline gap-1 text-muted-foreground">
-                      Available
+                      คงเหลือ
                       <span className="text-sm font-semibold text-foreground">
                         {item.trackIndividually ? `${item.subItems?.length ?? 0}` : item.availableQty}
                       </span>
@@ -148,11 +147,6 @@ export default function ConfirmDispensePage() {
                       </span>
                     )}
                   </div>
-                  {item.conversionFactor > 1 && (
-                    <p className="mt-1 text-[10px] text-muted-foreground/50">
-                      = {item.quantity * item.conversionFactor} {item.subUnit}
-                    </p>
-                  )}
                 </div>
               </div>
 
@@ -166,7 +160,7 @@ export default function ConfirmDispensePage() {
                       <SelectTrigger className="h-8 w-full justify-between rounded-lg border-border bg-card font-mono text-xs">
                         <SelectValue>
                           {(value: string | null) => {
-                            if (!value) return "Select lot";
+                            if (!value) return "เลือก Lot";
                             const lot = item.lots?.find((l) => l.id === value);
                             return lot ? `${lot.lotNumber} — ${lot.quantity}` : value;
                           }}
@@ -176,7 +170,7 @@ export default function ConfirmDispensePage() {
                         {item.lots.map((lot) => (
                           <SelectItem key={lot.id} value={lot.id} className="font-mono text-xs">
                             {lot.lotNumber} — {lot.quantity} {item.issueUnit}
-                            {lot.expiryDate && ` (exp: ${new Date(lot.expiryDate).toLocaleDateString()})`}
+                            {lot.expiryDate && ` (หมดอายุ: ${new Date(lot.expiryDate).toLocaleDateString()})`}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -192,7 +186,7 @@ export default function ConfirmDispensePage() {
                       <SelectTrigger className="h-8 w-full justify-between rounded-lg border-border bg-card font-mono text-xs">
                         <SelectValue>
                           {(value: string | null) => {
-                            if (!value) return "Select unit";
+                            if (!value) return "เลือกชิ้น";
                             const sub = item.subItems?.find((s) => s.id === value);
                             return sub ? sub.subCode : value;
                           }}
@@ -205,7 +199,7 @@ export default function ConfirmDispensePage() {
                           );
                           return (
                             <SelectItem key={sub.id} value={sub.id} disabled={inCart} className="font-mono text-xs">
-                              {sub.subCode} {inCart ? "(in cart)" : ""}
+                              {sub.subCode} {inCart ? "(อยู่ในตะกร้า)" : ""}
                             </SelectItem>
                           );
                         })}
@@ -247,15 +241,16 @@ export default function ConfirmDispensePage() {
       </div>
 
       {/* ── Sticky footer ── */}
-      <div className="shrink-0 border-t bg-card px-6 py-3 flex items-center gap-4">
-        <p className="text-xs text-muted-foreground">
-          รวม: {items.length} รายการ · {totalQty} ชิ้น
-        </p>
+      <div className="shrink-0 border-t bg-card px-6 py-4 shadow-[0_-4px_16px_-8px_rgba(15,23,42,0.12)] flex items-center gap-3">
+        <div className="flex flex-col leading-tight">
+          <span className="text-xs text-muted-foreground">รวมทั้งหมด</span>
+          <span className="text-base font-semibold">{items.length} รายการ · {totalQty} ชิ้น</span>
+        </div>
         <span className="flex-1" />
 
         {/* ใช้ใน */}
         <Select value={usageType} onValueChange={(v) => v !== null && setUsageType(v)}>
-          <SelectTrigger className="h-8 text-xs w-[160px]">
+          <SelectTrigger className="h-11 w-[180px] text-sm">
             <SelectValue placeholder="ใช้ใน (optional)" />
           </SelectTrigger>
           <SelectContent>
@@ -272,16 +267,16 @@ export default function ConfirmDispensePage() {
             placeholder="ระบุ..."
             value={usageNote}
             onChange={(e) => setUsageNote(e.target.value)}
-            className="h-8 text-xs w-[160px]"
+            className="h-11 w-[180px] text-sm"
           />
         )}
 
-        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setClearDialogOpen(true)}>
-          Clear all
+        <Button variant="ghost" className="h-11 text-muted-foreground" onClick={() => setClearDialogOpen(true)}>
+          ล้างทั้งหมด
         </Button>
-        <Button disabled={submitting} onClick={handleConfirm}>
+        <Button size="lg" className="h-11 px-6" disabled={submitting} onClick={handleConfirm}>
           {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-          Confirm Dispense
+          ยืนยันการเบิก
         </Button>
       </div>
 

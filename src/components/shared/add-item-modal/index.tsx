@@ -94,9 +94,6 @@ export function AddItemModal({
           profile: null,
       issueUnitId: "",
       issueUnitName: "",
-      subUnitId: "",
-      subUnitName: "",
-      conversionFactor: 1,
     },
     isSubmitting: false,
     catWizard: { ...INITIAL_CAT_WIZARD },
@@ -117,9 +114,6 @@ export function AddItemModal({
           profile: null,
         issueUnitId: "",
         issueUnitName: "",
-        subUnitId: "",
-        subUnitName: "",
-        conversionFactor: 1,
       },
       isSubmitting: false,
       codeMeta: null,
@@ -149,9 +143,6 @@ export function AddItemModal({
           profile: null,
           issueUnitId: "",
           issueUnitName: "",
-          subUnitId: "",
-          subUnitName: "",
-          conversionFactor: 1,
         },
         copyCount: 1,
         codeMeta: null,
@@ -224,8 +215,7 @@ export function AddItemModal({
     (state.step === "category-units" &&
       state.form.code.trim() !== "" &&
       state.form.categoryId !== "" &&
-      state.form.issueUnitId !== "" &&
-      state.form.subUnitId !== "") ||
+      state.form.issueUnitId !== "") ||
     state.step === "summary" ||
     (state.step === "cat-create-name" && state.catWizard.newCategoryName.trim() !== "" && state.catWizard.newCategoryProfileId !== "") ||
     state.step === "cat-create-confirm";
@@ -260,8 +250,6 @@ export function AddItemModal({
           name: state.form.name,
           categoryId: state.form.categoryId,
           issueUnitId: state.form.issueUnitId,
-          subUnitId: state.form.subUnitId,
-          conversionFactor: state.form.conversionFactor,
           copyCount: state.codeMeta?.copyCount ?? 1,
           setSize: state.codeMeta?.isSet ? state.codeMeta.setSize : 1,
           initialQty: isFlat ? state.initialQty : 0,
@@ -433,12 +421,7 @@ export function AddItemModal({
             allowedDispenseType={allowedDispenseType}
             issueUnitId={state.form.issueUnitId}
             issueUnitName={state.form.issueUnitName}
-            subUnitId={state.form.subUnitId}
-            subUnitName={state.form.subUnitName}
             onIssueUnitChange={(id, name) => setState((s) => ({ ...s, form: { ...s.form, issueUnitId: id, issueUnitName: name } }))}
-            onSubUnitChange={(id, name) => setState((s) => ({ ...s, form: { ...s.form, subUnitId: id, subUnitName: name } }))}
-            conversionFactor={state.form.conversionFactor}
-            onConversionFactorChange={(f) => setState((s) => ({ ...s, form: { ...s.form, conversionFactor: f } }))}
             onOpenCategorySelect={() => setState((s) => ({ ...s, step: "cat-select" }))}
             categoryType={state.form.categoryType}
             profile={state.form.profile}
@@ -456,8 +439,6 @@ export function AddItemModal({
             categoryName={state.form.categoryName}
             categoryType={state.form.categoryType}
             issueUnitName={state.form.issueUnitName}
-            subUnitName={state.form.subUnitName}
-            conversionFactor={state.form.conversionFactor}
             codeMeta={state.codeMeta}
             initialQty={state.initialQty}
           />

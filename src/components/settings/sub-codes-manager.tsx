@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
+import { formatSubCode } from "@/lib/constants";
 
 interface SubItemRecord {
   id: string;
@@ -109,7 +110,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   }
 
   async function handleDelete(sub: SubItemRecord) {
-    if (!confirm(`Delete "${sub.subCode}"?`)) return;
+    if (!confirm(`Delete "${formatSubCode(itemCode, sub.subCode)}"?`)) return;
     try {
       await deleteSubItem(sub.id);
       toast.success("Sub-code deleted");
@@ -153,7 +154,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
             ) : subItems.map((sub) => (
               <TableRow key={sub.id}>
-                <TableCell className="font-mono text-sm">{sub.subCode}</TableCell>
+                <TableCell className="font-mono text-sm">{formatSubCode(itemCode, sub.subCode)}</TableCell>
                 <TableCell className="text-sm">{sub.name || "-"}</TableCell>
                 <TableCell>
                   <Badge variant={sub.status === "AVAILABLE" ? "default" : sub.status === "DAMAGED" ? "destructive" : "secondary"}>

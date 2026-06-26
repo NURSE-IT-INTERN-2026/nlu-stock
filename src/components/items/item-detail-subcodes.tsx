@@ -13,7 +13,8 @@ import {
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { updateItemStatus } from "@/lib/api";
+import { formatSubCode } from "@/lib/constants";
+import { bulkUpdateSubItemStatus } from "@/lib/api";
 
 interface SubItemRecord {
   id: string;
@@ -49,11 +50,12 @@ const STATUS_CHIPS = [
 interface Props {
   subItems: SubItemRecord[];
   itemId: string;
+  itemCode: string;
   canAct: boolean;
   onRefresh: () => void;
 }
 
-export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Props) {
+export function ItemDetailSubcodes({ subItems, itemId, itemCode, canAct, onRefresh }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newStatus, setNewStatus] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -100,18 +102,13 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
     if (!newStatus || selected.size === 0) return;
     setSubmitting(true);
     try {
-      const promises = Array.from(selected).map((subItemId) =>
-        updateItemStatus(itemId, { newStatus, subItemId })
-      );
-      const results = await Promise.allSettled(promises);
-      const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed > 0) toast.error(`${failed} update(s) failed`);
-      else toast.success(`Updated ${selected.size} sub-item(s)`);
+      await bulkUpdateSubItemStatus(itemId, { subItemIds: Array.from(selected), newStatus });
+      toast.success(`อัปเดต ${selected.size} ชิ้น`);
       setSelected(new Set());
       setNewStatus("");
       onRefresh();
     } catch {
-      toast.error("Batch update failed");
+      toast.error("อัปเดตหลายชิ้นไม่สำเร็จ");
     } finally {
       setSubmitting(false);
     }
@@ -156,7 +153,7 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
 
       {/* ── Batch actions ── */}
       {canAct && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selected.size > 0 && (
             <>
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
@@ -214,6 +211,7 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
                   key={sub.id}
                   sub={sub}
                   idx={idx}
+                  itemCode={itemCode}
                   expanded={expanded}
                   expandable={expandable}
                   canAct={canAct}
@@ -232,11 +230,12 @@ export function ItemDetailSubcodes({ subItems, itemId, canAct, onRefresh }: Prop
 
 // ── Expandable row group ──
 function SubItemRowGroup({
-  sub, idx, expanded, expandable, canAct, selected,
+  sub, idx, itemCode, expanded, expandable, canAct, selected,
   onToggleExpand, onToggleSelect,
 }: {
   sub: SubItemRecord;
   idx: number;
+  itemCode: string;
   expanded: boolean;
   expandable: boolean;
   canAct: boolean;
@@ -263,7 +262,7 @@ function SubItemRowGroup({
             <span className="w-4" />
           )}
         </TableCell>
-        <TableCell className="font-mono text-sm">{sub.subCode}</TableCell>
+        <TableCell className="font-mono text-sm">{formatSubCode(itemCode, sub.subCode)}</TableCell>
         <TableCell className="text-sm">{sub.name || "-"}</TableCell>
         <TableCell>
           <Badge variant={STATUS_VARIANTS[sub.status] || "secondary"}>

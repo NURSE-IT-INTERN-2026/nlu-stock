@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 
 export async function POST(
@@ -49,6 +50,8 @@ export async function POST(
             data: { returnedAt: new Date() },
           });
         }
+        // Tracked durable: counts derive from subItem statuses.
+        await recomputeItemCounts(tx, itemId);
       } else {
         // Non-tracked durable: return quantity
         const qty = body.quantity as number;

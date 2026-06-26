@@ -12,6 +12,7 @@ const quickLogins = [
   { label: "Admin", email: "admin@nlu.ac.th", role: "ADMIN" },
   { label: "Staff", email: "staff@nlu.ac.th", role: "STAFF" },
   { label: "Instructor", email: "instructor@nlu.ac.th", role: "INSTRUCTOR" },
+  { label: "Student", email: "children@nlu.ac.th", role: "CHILDREN" },
 ];
 
 export default function LoginPage() {
@@ -44,7 +45,7 @@ export default function LoginPage() {
         <CardDescription>Sign in to manage inventory</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {quickLogins.map((q) => (
             <Button
               key={q.email}

@@ -17,6 +17,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const result = await prisma.$transaction(async (tx) => {
     const item = await tx.item.findUnique({ where: { id } });
     if (!item) throw new Error("NOT_FOUND");
+    // Tracked items are adjusted per-piece (status change), not by a blind count.
+    if (item.trackIndividually) throw new Error("TRACKED_NOT_ALLOWED");
 
     // ── Lot-level correction (consumables): set a specific lot's remainingQty.
     if (data.lotId != null && data.lotCount != null) {
@@ -103,11 +105,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }).catch((e: Error) => {
     if (e.message === "NOT_FOUND") return null;
     if (e.message === "SAME_QTY") return "SAME_QTY";
+    if (e.message === "TRACKED_NOT_ALLOWED") return "TRACKED_NOT_ALLOWED";
     throw e;
   });
 
   if (result === null) return notFound("Item not found");
   if (result === "SAME_QTY") return error("Shelf count is the same as current available quantity");
+  if (result === "TRACKED_NOT_ALLOWED") return error("รายการนับรายชิ้น ใช้การเปลี่ยนสถานะรายชิ้นแทน");
 
   return json(result, 201);
 }

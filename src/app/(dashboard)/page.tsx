@@ -44,7 +44,7 @@ export default async function DashboardPage() {
           subtitle={onLoan > 0 ? "ยังไม่คืน" : undefined}
           iconName="Undo2"
           color="text-danger-500"
-          href="/alerts?onLoan=true"
+          href="/items?onLoan=true"
         />
       </div>
 
