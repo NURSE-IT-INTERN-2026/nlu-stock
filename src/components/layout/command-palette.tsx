@@ -83,12 +83,14 @@ export function CommandPalette({ user }: { user: SessionUser }) {
       <DialogContent showCloseButton={false} className="top-[18%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-md sm:rounded-2xl">
           <DialogTitle className="sr-only">คำสั่งลัด</DialogTitle>
           <Command shouldFilter={false} className="flex flex-col">
-            <div className="flex items-center gap-2 border-b border-border px-3">
-              <Search className="size-4 shrink-0 text-muted-foreground" />
+            <div className="flex items-center gap-2.5 border-b border-border px-3 py-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Search className="size-4" />
+              </span>
               <Command.Input
                 value={query}
                 onValueChange={setQuery}
-                className="h-11 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                className="h-8 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
               <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">esc</kbd>
             </div>
