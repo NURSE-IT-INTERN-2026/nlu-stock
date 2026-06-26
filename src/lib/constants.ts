@@ -24,11 +24,12 @@ export const USAGE_TYPE_OPTIONS = [
 // ─── Adjustment Reason ───
 
 export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
-  LOST: "Lost",
-  DAMAGED_PENDING_REPAIR: "Damaged (pending repair)",
-  COUNT_MISMATCH: "Count mismatch",
-  DISPOSAL: "Disposal",
-  OTHER: "Other",
+  LOST: "สูญหาย",
+  DAMAGED_PENDING_REPAIR: "เสียหาย (รอซ่อม)",
+  COUNT_MISMATCH_SHORT: "นับแล้วขาด",
+  COUNT_MISMATCH_OVER: "นับแล้วเกิน",
+  DISPOSAL: "กำจัด (พ้นสภาพ)",
+  OTHER: "อื่นๆ",
 };
 
 export const ADJUSTMENT_REASON_OPTIONS = Object.entries(ADJUSTMENT_REASON_LABELS)
@@ -52,6 +53,11 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_MAINTENANCE: "รอบำรุง",
   DISPOSED: "จำหน่าย",
 };
+
+// Target statuses offered when adjusting a tracked (per-piece) item via the adjust dialog.
+export const TRACKED_ADJUST_STATUS_OPTIONS: { value: ItemStatus; label: string }[] = (
+  ["LOST", "DAMAGED", "DISPOSED", "UNDER_REPAIR"] as ItemStatus[]
+).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
 export const STATUS_COLORS: Record<string, string> = {
   AVAILABLE: "#22c55e",
@@ -87,4 +93,10 @@ export const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destruct
 
 export function locationLabel(loc: { building: string; floor: string; room: string; detail?: string | null }) {
   return [loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ");
+}
+
+// ─── Sub-code helper ───
+// subCode may be stored as suffix ("C01") or full ("ITM001-01"); show full, avoid doubling prefix.
+export function formatSubCode(itemCode: string, subCode: string): string {
+  return subCode.startsWith(itemCode) ? subCode : `${itemCode}-${subCode}`;
 }

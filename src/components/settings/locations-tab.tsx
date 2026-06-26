@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, MapPin, ChevronRight, Eye, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import { getLocations, createLocation, updateLocation, deleteLocation } from "@/lib/api";
+import { getLocations, createLocation, updateLocation, deleteLocation, getItems } from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 
 interface Location {
   id: string;
@@ -36,12 +37,209 @@ interface Location {
   _count: { items: number };
 }
 
+// ponytail: tree built client-side from already-sorted flat list; no backend change
+interface TreeRow {
+  key: string;
+  label: string;
+  depth: number;
+  loc?: Location;
+  children: TreeRow[];
+  count: number;
+}
+
+function groupBy<T>(arr: T[], key: (t: T) => string): [string, T[]][] {
+  const m = new Map<string, T[]>();
+  for (const x of arr) {
+    const k = key(x);
+    const list = m.get(k);
+    if (list) list.push(x);
+    else m.set(k, [x]);
+  }
+  return [...m.entries()];
+}
+
+function buildLocationTree(locs: Location[]): TreeRow[] {
+  const leaf = (key: string, label: string, depth: number, loc: Location): TreeRow =>
+    ({ key, label, depth, loc, children: [], count: loc._count.items });
+  const group = (key: string, label: string, depth: number, children: TreeRow[]): TreeRow =>
+    ({ key, label, depth, children, count: children.reduce((s, c) => s + c.count, 0) });
+
+  return groupBy(locs, (l) => l.building).map(([building, bLocs]) =>
+    group(building, building, 0,
+      groupBy(bLocs, (l) => l.floor).map(([floor, fLocs]) =>
+        group(`${building}|${floor}`, floor, 1,
+          groupBy(fLocs, (l) => l.room).map(([room, rLocs]) => {
+            // no room: detail identifies the spot — show at room level
+            if (!room) {
+              if (rLocs.length === 1 && rLocs[0].detail) return leaf(rLocs[0].id, rLocs[0].detail, 2, rLocs[0]);
+              return group(`${building}|${floor}|`, "(ไม่มีห้อง)", 2,
+                rLocs.map((l) => leaf(l.id, l.detail || "(ไม่มีรายละเอียด)", 3, l)));
+            }
+            // single room with no detail → room itself is the leaf
+            if (rLocs.length === 1 && !rLocs[0].detail) return leaf(rLocs[0].id, room, 2, rLocs[0]);
+            return group(`${building}|${floor}|${room}`, room, 2,
+              rLocs.map((l) => leaf(l.id, l.detail || "(ไม่มีรายละเอียด)", 3, l)));
+          })
+        )
+      )
+    )
+  );
+}
+
+function LocationTree({
+  rows,
+  onEdit,
+  onDelete,
+}: {
+  rows: TreeRow[];
+  onEdit: (loc: Location) => void;
+  onDelete: (loc: Location) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const renderRow = (row: TreeRow): ReactNode => {
+    const isLeaf = !!row.loc;
+    const isOpen = expanded.has(row.key);
+    return (
+      <div key={row.key}>
+        <div
+          className={cn(
+            "flex items-center justify-between border-b border-border last:border-b-0 transition-colors",
+            isLeaf ? "hover:bg-muted/40" : "bg-muted/30"
+          )}
+          style={{ paddingLeft: 12 + row.depth * 20, paddingRight: 16 }}
+        >
+          {isLeaf ? (
+            <>
+              <span className="font-medium py-2.5 text-sm">{row.label}</span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground tabular-nums mr-1">{row.count} รายการ</span>
+                <LocationPeek locationId={row.loc!.id} label={row.label} />
+                <TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <Tooltip>
+                      <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(row.loc!)} aria-label="แก้ไข" />}>
+                        <Pencil className="h-3 w-3" />
+                      </TooltipTrigger>
+                      <TooltipContent>แก้ไข</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(row.loc!)} aria-label="ลบ" />}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </TooltipTrigger>
+                      <TooltipContent>ลบ</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => toggle(row.key)}
+              className="flex items-center gap-2 w-full py-2.5 text-left text-sm font-semibold"
+            >
+              <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform", isOpen && "rotate-90")} />
+              <span>{row.label}</span>
+              <span className="text-xs font-normal text-muted-foreground tabular-nums">{row.count} รายการ</span>
+            </button>
+          )}
+        </div>
+        {!isLeaf && isOpen && <div>{row.children.map(renderRow)}</div>}
+      </div>
+    );
+  };
+
+  return <>{rows.map(renderRow)}</>;
+}
+
+interface ItemPreview {
+  id: string;
+  code: string;
+  name: string;
+  availableQty: number;
+  issueUnit?: { name: string } | null;
+}
+
+// ponytail: lazy-fetch on open; no need to preload every row
+function LocationPeek({ locationId, label }: { locationId: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<ItemPreview[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setLoading(true);
+    getItems({ locationId })
+      .then((res) => { if (active) setItems(res.items as ItemPreview[]); })
+      .catch(() => { if (active) toast.error("โหลดรายการไม่สำเร็จ"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [open, locationId]);
+
+  return (
+    <>
+      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOpen(true)} aria-label="ดูรายการในตำแหน่งนี้">
+        <Eye className="h-3 w-3" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md sm:rounded-2xl">
+          <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Eye className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold text-foreground">{label}</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                {loading ? "กำลังโหลด…" : `${items.length} รายการในตำแหน่งนี้`}
+              </DialogDescription>
+            </div>
+          </div>
+
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-border bg-secondary/40">
+            {loading ? (
+              <div className="space-y-2 p-5">
+                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
+              </div>
+            ) : items.length === 0 ? (
+              <p className="px-6 py-12 text-center text-sm text-muted-foreground">ไม่มีรายการในตำแหน่งนี้</p>
+            ) : items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between gap-3 px-6 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{it.name}</p>
+                  <p className="text-xs text-muted-foreground">{it.code}</p>
+                </div>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {it.availableQty}{it.issueUnit?.name ? ` ${it.issueUnit.name}` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end border-t border-border bg-card px-6 py-4">
+            <Button variant="outline" onClick={() => setOpen(false)}>ปิด</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function LocationsTab() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Location | null>(null);
   const [form, setForm] = useState({ building: "", floor: "", room: "", detail: "" });
+  const [noRoom, setNoRoom] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Location | null>(null);
 
   const fetchLocations = useCallback(async () => {
@@ -70,12 +268,14 @@ export function LocationsTab() {
   function openCreate() {
     setEditing(null);
     setForm({ building: "", floor: "", room: "", detail: "" });
+    setNoRoom(false);
     setDialogOpen(true);
   }
 
   function openEdit(loc: Location) {
     setEditing(loc);
     setForm({ building: loc.building, floor: loc.floor, room: loc.room, detail: loc.detail || "" });
+    setNoRoom(!loc.room);
     setDialogOpen(true);
   }
 
@@ -83,7 +283,7 @@ export function LocationsTab() {
     const payload = {
       building: form.building,
       floor: form.floor,
-      room: form.room,
+      room: noRoom ? "" : form.room,
       detail: form.detail || null,
     };
 
@@ -145,7 +345,7 @@ export function LocationsTab() {
         <Button size="sm" onClick={() => openCreate()}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
       </div>
 
-      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm divide-y divide-border">
+      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
         {sortedLocations.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <MapPin className="h-8 w-8 text-muted-foreground/40" />
@@ -155,61 +355,90 @@ export function LocationsTab() {
               </div>
               <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มสถานที่</Button>
             </div>
-        ) : sortedLocations.map((loc) => (
-          <div key={loc.id} className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/40 transition-colors">
-            <span className="font-medium">
-              {[loc.building, loc.floor, loc.room, loc.detail].filter(Boolean).join(" / ")}
-            </span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground tabular-nums mr-1">{loc._count.items} รายการ</span>
-              <TooltipProvider>
-                <div className="flex items-center gap-1">
-                  <Tooltip>
-                    <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(loc)} aria-label="แก้ไข" />}>
-                      <Pencil className="h-3 w-3" />
-                    </TooltipTrigger>
-                    <TooltipContent>แก้ไข</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(loc)} aria-label="ลบ" />}>
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </TooltipTrigger>
-                    <TooltipContent>ลบ</TooltipContent>
-                  </Tooltip>
-                </div>
-              </TooltipProvider>
-            </div>
-          </div>
-        ))}
+        ) : (
+          <LocationTree rows={buildLocationTree(sortedLocations)} onEdit={openEdit} onDelete={handleDelete} />
+        )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "แก้ไขสถานที่" : "เพิ่มสถานที่"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="loc-building">อาคาร</Label>
-              <Input id="loc-building" value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} />
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg sm:rounded-2xl">
+          <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <MapPin className="h-4 w-4" />
             </div>
-            <div>
-              <Label htmlFor="loc-floor">ชั้น</Label>
-              <Input id="loc-floor" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} />
-            </div>
-            <div>
-              <Label htmlFor="loc-room">ห้อง</Label>
-              <Input id="loc-room" value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} />
-            </div>
-            <div>
-              <Label htmlFor="loc-detail">รายละเอียดเพิ่มเติม</Label>
-              <Input id="loc-detail" value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} placeholder="ไม่จำเป็น" />
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold text-foreground">
+                {editing ? "แก้ไขสถานที่" : "เพิ่มสถานที่"}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                {editing ? "ปรับปรุงตำแหน่งจัดเก็บ" : "ระบุตำแหน่งจัดเก็บพัสดุ"}
+              </DialogDescription>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-            <Button onClick={handleSave} disabled={!form.building || !form.floor || !form.room}>{editing ? "บันทึก" : "สร้าง"}</Button>
-          </DialogFooter>
+
+          <div className="space-y-6 bg-secondary/40 px-6 py-6">
+            <div className="space-y-2">
+              <Label htmlFor="loc-building">อาคาร <span className="text-destructive">*</span></Label>
+              <Input id="loc-building" value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} placeholder="เช่น อาคาร 2" className="bg-card" autoFocus={!editing} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="loc-floor">ชั้น <span className="text-destructive">*</span></Label>
+                <Input id="loc-floor" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="เช่น 4" className="bg-card" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="loc-room">
+                  ห้อง {!noRoom && <span className="text-destructive">*</span>}
+                </Label>
+                <Input
+                  id="loc-room"
+                  value={noRoom ? "" : form.room}
+                  disabled={noRoom}
+                  onChange={(e) => setForm({ ...form, room: e.target.value })}
+                  placeholder="เช่น 402"
+                  className="bg-card disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { const v = !noRoom; setNoRoom(v); if (v) setForm((f) => ({ ...f, room: "" })); }}
+              aria-pressed={noRoom}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all",
+                noRoom ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-card hover:border-primary/40",
+              )}
+            >
+              <Switch checked={noRoom} tabIndex={-1} className="pointer-events-none" aria-hidden />
+              <span className="flex-1">
+                <span className="block text-sm font-medium text-foreground">ไม่มีห้องเฉพาะ</span>
+                <span className="block text-xs text-muted-foreground">ระบุตำแหน่งแทน เช่น ล็อคเกอร์หน้าห้อง</span>
+              </span>
+            </button>
+
+            <div className="space-y-2">
+              <Label htmlFor="loc-detail">
+                {noRoom ? <>ตำแหน่ง <span className="text-destructive">*</span></> : "รายละเอียดเพิ่มเติม"}
+              </Label>
+              <Input
+                id="loc-detail"
+                value={form.detail}
+                onChange={(e) => setForm({ ...form, detail: e.target.value })}
+                placeholder={noRoom ? "เช่น ล็อคเกอร์หน้าห้อง 402" : "ไม่จำเป็น"}
+                className="bg-card"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-4">
+            <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={handleSave} disabled={!form.building || !form.floor || (noRoom ? !form.detail.trim() : !form.room.trim())} className="gap-1.5">
+              <Check className="h-4 w-4" />
+              {editing ? "บันทึก" : "สร้างสถานที่"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

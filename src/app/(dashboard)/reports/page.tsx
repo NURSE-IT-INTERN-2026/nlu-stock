@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Package, ShoppingCart, BookOpen, AlertTriangle, Wallet,
+  Wrench, CalendarClock, History,
+} from "lucide-react";
 import { StockSummaryTab } from "@/components/reports/stock-summary-tab";
 import { DispenseHistoryTab } from "@/components/reports/dispense-history-tab";
 import { UsageBySubjectTab } from "@/components/reports/usage-by-subject-tab";
@@ -10,77 +14,74 @@ import { AnnualCostTab } from "@/components/reports/annual-cost-tab";
 import { DamagedAssetsTab } from "@/components/reports/damaged-assets-tab";
 import { MaintenanceScheduleTab } from "@/components/reports/maintenance-schedule-tab";
 import { MaintenanceHistoryTab } from "@/components/reports/maintenance-history-tab";
-import {
-  Package, ShoppingCart, Users, AlertTriangle, DollarSign,
-  Wrench, Calendar, Clock,
-} from "lucide-react";
+
+const TABS = [
+  { value: "stock-summary", label: "สรุปสต็อก", icon: Package, component: StockSummaryTab },
+  { value: "dispense-history", label: "ประวัติการเบิก", icon: ShoppingCart, component: DispenseHistoryTab },
+  { value: "usage-by-subject", label: "การใช้งานรายวิชา", icon: BookOpen, component: UsageBySubjectTab },
+  { value: "near-expiry-low-stock", label: "ใกล้หมดอายุ / สต็อกต่ำ", icon: AlertTriangle, component: NearExpiryLowStockTab },
+  { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", icon: Wallet, component: AnnualCostTab },
+  { value: "damaged-assets", label: "พัสดุชำรุด", icon: Wrench, component: DamagedAssetsTab },
+  { value: "maintenance-schedule", label: "ตารางบำรุงรักษา", icon: CalendarClock, component: MaintenanceScheduleTab },
+  { value: "maintenance-history", label: "ประวัติบำรุงรักษา", icon: History, component: MaintenanceHistoryTab },
+] as const;
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState("stock-summary");
+  return (
+    <Suspense fallback={null}>
+      <ReportsContent />
+    </Suspense>
+  );
+}
+
+function ReportsContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const validTabs: string[] = TABS.map((t) => t.value);
+  const [activeTab, setActiveTab] = useState(
+    tabParam && validTabs.includes(tabParam) ? tabParam : "stock-summary",
+  );
 
   return (
-    <div className="space-y-4">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start flex-wrap h-auto gap-1 bg-muted/50 p-1">
-          <TabsTrigger value="stock-summary" className="gap-1.5">
-            <Package className="h-3.5 w-3.5" />
-            Stock Summary
-          </TabsTrigger>
-          <TabsTrigger value="dispense-history" className="gap-1.5">
-            <ShoppingCart className="h-3.5 w-3.5" />
-            Dispense History
-          </TabsTrigger>
-          <TabsTrigger value="usage-by-subject" className="gap-1.5">
-            <Users className="h-3.5 w-3.5" />
-            Usage by Subject
-          </TabsTrigger>
-          <TabsTrigger value="near-expiry-low-stock" className="gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Near-Expiry / Low Stock
-          </TabsTrigger>
-          <TabsTrigger value="annual-cost" className="gap-1.5">
-            <DollarSign className="h-3.5 w-3.5" />
-            Annual Cost
-          </TabsTrigger>
-          <TabsTrigger value="damaged-assets" className="gap-1.5">
-            <Wrench className="h-3.5 w-3.5" />
-            Damaged Assets
-          </TabsTrigger>
-          <TabsTrigger value="maintenance-schedule" className="gap-1.5">
-            <Calendar className="h-3.5 w-3.5" />
-            Maint. Schedule
-          </TabsTrigger>
-          <TabsTrigger value="maintenance-history" className="gap-1.5">
-            <Clock className="h-3.5 w-3.5" />
-            Maint. History
-          </TabsTrigger>
-        </TabsList>
+    <div className="space-y-0">
+      {/* Page header */}
+      <div className="pb-6">
+        <h1 className="text-xl font-semibold tracking-tight">รายงาน</h1>
+        <p className="text-sm text-muted-foreground mt-1">สรุปและวิเคราะห์ข้อมูลพัสดุ การเบิก และการบำรุงรักษา</p>
+      </div>
 
-        <TabsContent value="stock-summary" className="mt-4">
-          <StockSummaryTab />
-        </TabsContent>
-        <TabsContent value="dispense-history" className="mt-4">
-          <DispenseHistoryTab />
-        </TabsContent>
-        <TabsContent value="usage-by-subject" className="mt-4">
-          <UsageBySubjectTab />
-        </TabsContent>
-        <TabsContent value="near-expiry-low-stock" className="mt-4">
-          <NearExpiryLowStockTab />
-        </TabsContent>
-        <TabsContent value="annual-cost" className="mt-4">
-          <AnnualCostTab />
-        </TabsContent>
-        <TabsContent value="damaged-assets" className="mt-4">
-          <DamagedAssetsTab />
-        </TabsContent>
-        <TabsContent value="maintenance-schedule" className="mt-4">
-          <MaintenanceScheduleTab />
-        </TabsContent>
-        <TabsContent value="maintenance-history" className="mt-4">
-          <MaintenanceHistoryTab />
-        </TabsContent>
-      </Tabs>
+      {/* Horizontal tabs */}
+      <div className="border-b mb-6">
+        <nav className="flex gap-1 -mb-px overflow-x-auto">
+          {TABS.map(({ value, label, icon: Icon }) => {
+            const isActive = activeTab === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setActiveTab(value)}
+                className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Content area */}
+      <div>
+        {TABS.map(({ value, component: Component }) => (
+          <div key={value} className={activeTab === value ? "" : "hidden"}>
+            <Component />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

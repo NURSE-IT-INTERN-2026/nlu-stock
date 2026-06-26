@@ -8,13 +8,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
 
-  const item = await prisma.item.findUnique({
-    where: { id },
+  const item = await prisma.item.findFirst({
+    where: { OR: [{ id }, { code: id }] },
     include: {
       category: { include: { profile: true } },
       location: true,
       issueUnit: true,
-      subUnit: true,
       subItems: { orderBy: { subCode: "asc" } },
       lots: { orderBy: { expiryDate: "asc" } },
       dispenseRecords: {

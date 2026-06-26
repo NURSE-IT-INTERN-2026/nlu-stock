@@ -12,9 +12,15 @@ interface AlertCounts {
   onLoan: number;
 }
 
-const defaultCounts: AlertCounts = { lowStock: 0, nearExpiry: 0, overdueMaintenance: 0, total: 0, totalItems: 0, onLoan: 0 };
+// `loaded` flips true after the first successful fetch — lets consumers tell "still
+// loading" (counts default to 0) apart from "loaded and genuinely zero".
+interface AlertState extends AlertCounts {
+  loaded: boolean;
+}
 
-const AlertContext = createContext<AlertCounts>(defaultCounts);
+const defaultState: AlertState = { lowStock: 0, nearExpiry: 0, overdueMaintenance: 0, total: 0, totalItems: 0, onLoan: 0, loaded: false };
+
+const AlertContext = createContext<AlertState>(defaultState);
 
 export function useAlerts() {
   return useContext(AlertContext);
@@ -25,12 +31,15 @@ function countsEqual(a: AlertCounts, b: AlertCounts) {
 }
 
 export function AlertProvider({ children }: { children: ReactNode }) {
-  const [counts, setCounts] = useState<AlertCounts>(defaultCounts);
+  const [state, setState] = useState<AlertState>(defaultState);
 
   const fetchAlerts = useCallback(async () => {
     try {
       const data: AlertCounts = await getAlerts();
-      setCounts((prev) => countsEqual(prev, data) ? prev : data);
+      setState((prev) => {
+        if (prev.loaded && countsEqual(prev, data)) return prev;
+        return { ...data, loaded: true };
+      });
     } catch {
       // silent — will retry
     }
@@ -42,7 +51,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [fetchAlerts]);
 
-  const value = useMemo(() => counts, [counts]);
+  const value = useMemo(() => state, [state]);
 
   return (
     <AlertContext.Provider value={value}>

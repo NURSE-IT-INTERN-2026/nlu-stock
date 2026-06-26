@@ -88,7 +88,6 @@ export async function GET(request: NextRequest) {
     where.OR = [
       { id: { in: lowStockIds } },
       { lots: { some: { expiryDate: { gte: now, lte: in30Days } } } },
-      { dispenseRecords: { some: { returnedAt: null } } },
       { nextMaintenanceDate: { lt: now } },
     ];
   }
@@ -103,14 +102,12 @@ export async function GET(request: NextRequest) {
         category: { include: { profile: true } },
         location: true,
         issueUnit: true,
-        subUnit: true,
         _count: { select: { subItems: true } },
         lots: {
-          where: { expiryDate: { not: null } },
+          where: { expiryDate: { gte: now, lte: in30Days } },
           orderBy: { expiryDate: "asc" },
           take: 1,
         },
-        dispenseRecords: { where: { returnedAt: null }, select: { id: true }, take: 1 },
       },
     }),
     prisma.item.count({ where }),
@@ -120,9 +117,8 @@ export async function GET(request: NextRequest) {
   const items = rawItems.map((item) => {
     const types: string[] = [];
     if (item.availableQty < item.minThreshold) types.push("lowStock");
-    if (item.lots.some((l) => l.expiryDate && new Date(l.expiryDate) >= now && new Date(l.expiryDate) <= in30Days)) types.push("nearExpiry");
+    if (item.lots.length > 0) types.push("nearExpiry");
     if (item.nextMaintenanceDate && new Date(item.nextMaintenanceDate) < now) types.push("overdueMaint");
-    if ((item.dispenseRecords?.length ?? 0) > 0) types.push("onLoan");
     return { ...item, alertTypes: types };
   });
 

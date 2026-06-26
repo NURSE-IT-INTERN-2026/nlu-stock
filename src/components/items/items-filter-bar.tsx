@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { STATUS_LABELS, STATUS_PILLS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
@@ -60,6 +61,8 @@ export interface ItemsFilterBarProps {
   className?: string;
   hideAlertPicker?: boolean;
   hideScan?: boolean;
+  // When provided, renders a "ยืมอยู่" toggle (onLoan lives on /items, not /alerts).
+  onLoanCount?: number;
 }
 
 const STATUS_KEYS = Object.keys(STATUS_LABELS);
@@ -71,7 +74,7 @@ const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpi
 ];
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan,
+  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
@@ -131,7 +134,13 @@ export function ItemsFilterBar({
           onChange={(id) => update({ categoryId: id })}
         />
         <LocationPicker value={value.location} locations={locations} onChange={(loc) => update({ location: loc })} />
-        <StatusPicker value={value.status} onChange={(s) => update({ status: s })} />
+        <StatusPicker
+          value={value.status}
+          onChange={(s) => update({ status: s })}
+          onLoanActive={typeof onLoanCount === "number" ? value.preset === "onLoan" : undefined}
+          onLoanCount={onLoanCount ?? undefined}
+          onLoanToggle={typeof onLoanCount === "number" ? () => update({ preset: value.preset === "onLoan" ? null : "onLoan" }) : undefined}
+        />
         {!hideAlertPicker && (
           <AlertPicker value={value.preset} alerts={alerts} onChange={(p) => update({ preset: p })} />
         )}
@@ -167,7 +176,7 @@ export function ItemsFilterBar({
               <ActiveChip key={s} label={STATUS_LABELS[s] ?? s} onRemove={() => update({ status: value.status.filter((x) => x !== s) })} />
             ))}
             {value.preset && (
-              <ActiveChip tone="alert" icon={<Bell className="size-3" />} label={PRESETS.find((p) => p.key === value.preset)?.label ?? ""} onRemove={() => update({ preset: null })} />
+              <ActiveChip tone="alert" icon={<Bell className="size-3" />} label={value.preset === "onLoan" ? "ยืมอยู่" : PRESETS.find((p) => p.key === value.preset)?.label ?? ""} onRemove={() => update({ preset: null })} />
             )}
           </div>
         </>
@@ -279,18 +288,37 @@ function SubcategoryPicker({ options, value, onChange, disabled }: { options: Ca
   );
 }
 
-// ─── Status (multi) ───
-function StatusPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+// ─── Status (multi) + on-loan toggle ───
+function StatusPicker({ value, onChange, onLoanActive, onLoanCount, onLoanToggle }: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  onLoanActive?: boolean;
+  onLoanCount?: number;
+  onLoanToggle?: () => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const toggle = (k: string) => onChange(value.includes(k) ? value.filter((s) => s !== k) : [...value, k]);
+  const totalCount = value.length + (onLoanActive ? 1 : 0);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={(props: React.ComponentProps<"button">) => (
-          <FilterButton {...props} active={value.length > 0} icon={Activity} count={value.length || undefined}>สถานะ</FilterButton>
+          <FilterButton {...props} active={totalCount > 0} icon={Activity} count={totalCount || undefined}>สถานะ</FilterButton>
         )}
       />
       <PopoverContent align="start" className="w-64 p-2">
+        {onLoanToggle && (
+          <>
+            <div className="flex items-center gap-2 px-1 py-1.5 mb-1.5">
+              <span className="flex-1 text-sm font-medium">ยืมอยู่</span>
+              {onLoanCount! > 0 && (
+                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold tabular-nums">{onLoanCount}</span>
+              )}
+              <Switch checked={!!onLoanActive} onCheckedChange={onLoanToggle} aria-label="ยืมอยู่" />
+            </div>
+            <div className="h-px bg-border mb-1.5" />
+          </>
+        )}
         <div className="text-xs font-medium text-muted-foreground px-1 pb-1.5">เลือกได้หลายรายการ</div>
         <div className="flex flex-wrap gap-1.5">
           {STATUS_KEYS.map((k) => {
@@ -359,7 +387,7 @@ function buildTree(locations: LocationOption[]) {
   return buildings;
 }
 
-function LocationPicker({ value, locations, onChange }: { value: LocationFilter; locations: LocationOption[]; onChange: (loc: LocationFilter) => void }) {
+export function LocationPicker({ value, locations, onChange }: { value: LocationFilter; locations: LocationOption[]; onChange: (loc: LocationFilter) => void }) {
   const [open, setOpen] = React.useState(false);
   const label = formatLocation(value);
   const [draft, setDraft] = React.useState<LocationFilter>(value);
@@ -405,7 +433,7 @@ function LocationPicker({ value, locations, onChange }: { value: LocationFilter;
           </CascadeColumn>
           <CascadeColumn title="ห้อง" empty={!draft.floor}>
             {rooms.map((r) => (
-              <CascadeRow key={r} label={`ห้อง ${r}`} selected={draft.room === r} hasChildren onClick={() => setDraft({ building: draft.building, floor: draft.floor, room: r })} />
+              <CascadeRow key={r} label={r ? `ห้อง ${r}` : "ไม่มีห้อง"} selected={draft.room === r} hasChildren onClick={() => setDraft({ building: draft.building, floor: draft.floor, room: r })} />
             ))}
           </CascadeColumn>
           <CascadeColumn title="รายละเอียด" empty={!draft.room}>

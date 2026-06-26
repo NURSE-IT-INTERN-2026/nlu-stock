@@ -10,8 +10,6 @@ const quickCreateSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
   categoryId: z.string().min(1, "Category is required"),
   issueUnitId: z.string().min(1, "Issue unit is required"),
-  subUnitId: z.string().min(1, "Sub unit is required"),
-  conversionFactor: z.number().int().min(1).default(1),
   copyCount: z.number().int().min(1).default(1),
   setSize: z.number().int().min(1).default(1),
   initialQty: z.number().int().min(0).default(0),
@@ -54,8 +52,6 @@ export async function POST(request: NextRequest) {
       name: data.name,
       categoryId: data.categoryId,
       issueUnitId: data.issueUnitId,
-      subUnitId: data.subUnitId,
-      conversionFactor: data.conversionFactor,
       trackIndividually,
       setSize,
       ...(subItems.length > 0
@@ -67,7 +63,6 @@ export async function POST(request: NextRequest) {
     include: {
       category: { include: { profile: true } },
       issueUnit: true,
-      subUnit: true,
       location: true,
     },
   });

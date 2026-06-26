@@ -8,7 +8,8 @@ export const subItemCreateSchema = z.object({
   condition: z.nativeEnum(ItemCondition).optional().nullable(),
   serialNumber: z.string().max(100).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
+  images: z.array(z.string()).default([]),
 });
 
 export const subItemUpdateSchema = subItemCreateSchema.partial();

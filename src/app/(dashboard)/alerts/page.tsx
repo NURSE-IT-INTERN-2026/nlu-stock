@@ -2,17 +2,17 @@
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { STATUS_PILLS, STATUS_LABELS, locationLabel } from "@/lib/constants";
+import { locationLabel } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePageHeader } from "@/components/layout/page-header-context";
 import { getItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
@@ -33,25 +33,46 @@ interface ItemRecord {
   totalQty: number;
   minThreshold: number;
   location: LocationOption | null;
+  nextMaintenanceDate: string | null;
+  lots: { expiryDate: string | null }[];
   _count: { subItems: number };
   alertTypes: string[];
 }
 
-type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "onLoan";
+type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint";
 
 const ALERT_BADGE: Record<string, string> = {
   lowStock: "bg-orange-500/15 text-orange-600 border-orange-500/30",
   nearExpiry: "bg-warning/15 text-warning border-warning/30",
   overdueMaint: "bg-destructive/15 text-destructive border-destructive/30",
-  onLoan: "bg-blue-500/15 text-blue-600 border-blue-500/30",
 };
 
 const ALERT_LABEL: Record<string, string> = {
   lowStock: "สต็อกต่ำ",
   nearExpiry: "ใกล้หมดอายุ",
   overdueMaint: "เกินกำหนดซ่อม",
-  onLoan: "ยืมอยู่",
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function alertDetail(item: ItemRecord, type: string): string {
+  switch (type) {
+    case "lowStock": {
+      const qty = item.availableQty === item.totalQty ? `${item.availableQty}` : `${item.availableQty}/${item.totalQty}`;
+      return `${qty} ${item.issueUnit.name} · ขั้นต่ำ ${item.minThreshold}`;
+    }
+    case "nearExpiry": {
+      const d = item.lots[0]?.expiryDate;
+      return d ? `หมดอายุ ${new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}` : ALERT_LABEL.nearExpiry;
+    }
+    case "overdueMaint": {
+      const days = item.nextMaintenanceDate ? Math.max(0, Math.floor((Date.now() - new Date(item.nextMaintenanceDate).getTime()) / DAY_MS)) : 0;
+      return `เกินกำหนด ${days} วัน`;
+    }
+    default:
+      return "";
+  }
+}
 
 export default function AlertsPage() {
   return (
@@ -65,6 +86,7 @@ function AlertsContent() {
   const alerts = useAlerts();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setDetail } = usePageHeader();
   const [items, setItems] = useState<ItemRecord[]>([]);
   const { categories } = useCategories();
   const { locations } = useLocations();
@@ -77,14 +99,23 @@ function AlertsContent() {
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
 
-  // Initial alert-type filter from URL params (?lowStock=true etc.), default "all" = union.
-  const [alertType, setAlertType] = useState<AlertTypeKey>(() => {
+  // Alert-type filter is URL-driven (?lowStock=true etc.) so bell links and chip clicks stay in sync
+  // even when navigating between param variants of /alerts without a remount.
+  const alertType: AlertTypeKey = useMemo(() => {
     if (searchParams.get("lowStock") === "true") return "lowStock";
     if (searchParams.get("nearExpiry") === "true") return "nearExpiry";
     if (searchParams.get("overdueMaint") === "true") return "overdueMaint";
-    if (searchParams.get("onLoan") === "true") return "onLoan";
     return "all";
-  });
+  }, [searchParams]);
+
+  const selectAlertType = useCallback((key: AlertTypeKey) => {
+    setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    for (const k of ["lowStock", "nearExpiry", "overdueMaint"]) params.delete(k);
+    if (key !== "all") params.set(key, "true");
+    const qs = params.toString();
+    router.replace(qs ? `/alerts?${qs}` : "/alerts");
+  }, [searchParams, router, setPage]);
 
   const [filter, setFilter] = useState<FilterState>(() => {
     const statusParam = searchParams.get("status");
@@ -126,11 +157,71 @@ function AlertsContent() {
     { key: "lowStock", label: "สต็อกต่ำ", count: alerts.lowStock },
     { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
     { key: "overdueMaint", label: "เกินกำหนดซ่อม", count: alerts.overdueMaintenance },
-    { key: "onLoan", label: "ยืมอยู่", count: alerts.onLoan },
   ];
+
+  // Reflect the active tab in the header breadcrumb ("การแจ้งเตือน › <tab>").
+  const activeTabLabel = alertChips.find((c) => c.key === alertType)?.label ?? "ทั้งหมด";
+  useEffect(() => {
+    setDetail(activeTabLabel);
+    return () => setDetail(null);
+  }, [activeTabLabel, setDetail]);
+
+  // Counts default to 0 before the first fetch resolves — wait for `loaded` to avoid
+  // flashing the empty state on every navigation.
+  if (!alerts.loaded) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  // No alerts at all → clean empty state, no tab strip / filter bar.
+  if (alerts.total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <CheckCircle2 className="size-12 text-success/60 mb-3" />
+        <p className="text-lg font-medium">ไม่มีรายการแจ้งเตือน</p>
+        <p className="text-sm text-muted-foreground mt-1">ทุกพัสดุอยู่ในเกณฑ์ปกติ</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Alert-type tabs — underline style, matches /settings. Sits ABOVE the filter
+          bar so it reads as primary nav, distinct from the refinement pills below.
+          Per-type color lives in the table badges; the tab strip stays uniform. */}
+      <div className="border-b">
+        <nav className="flex gap-1 -mb-px overflow-x-auto">
+          {alertChips.map((c) => {
+            const active = alertType === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => selectAlertType(c.key)}
+                className={cn(
+                  "flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+                  active
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
+                )}
+              >
+                {c.label}
+                {c.count > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[10px] font-bold tabular-nums",
+                    active ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                  )}>{c.count}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
       <ItemsFilterBar
         profiles={profiles}
         categories={categories}
@@ -144,36 +235,6 @@ function AlertsContent() {
         hideScan
       />
 
-      {/* Alert-type chips (single-select; "all" = union) */}
-      <div className="flex flex-wrap items-center gap-2">
-        {alertChips.map((c) => {
-          const active = alertType === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => { setAlertType(c.key); setPage(1); }}
-              className={cn(
-                "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap",
-                active
-                  ? c.key === "all"
-                    ? "bg-primary text-primary-foreground border-transparent shadow-sm"
-                    : ALERT_BADGE[c.key]
-                  : "bg-background text-foreground/80 border-border hover:bg-muted",
-              )}
-            >
-              {c.label}
-              {c.count > 0 && (
-                <span className={cn(
-                  "inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[10px] font-bold tabular-nums",
-                  active ? (c.key === "all" ? "bg-white/25" : "bg-background/60") : "bg-muted text-muted-foreground",
-                )}>{c.count > 9 ? "9+" : c.count}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       <div className="rounded-2xl border overflow-hidden bg-card">
         <div className="overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
           <Table>
@@ -181,25 +242,23 @@ function AlertsContent() {
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                 <TableHead>รหัสพัสดุ</TableHead>
                 <TableHead>ชื่อ</TableHead>
-                <TableHead>ประเภท</TableHead>
                 <TableHead>การแจ้งเตือน</TableHead>
-                <TableHead>คงเหลือ</TableHead>
+                <TableHead>รายละเอียด</TableHead>
                 <TableHead>สถานที่</TableHead>
-                <TableHead>สถานะ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     ไม่มีรายการแจ้งเตือน
                   </TableCell>
                 </TableRow>
@@ -215,9 +274,6 @@ function AlertsContent() {
                     {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge>
-                  </TableCell>
-                  <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {item.alertTypes.map((t) => (
                         <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
@@ -226,24 +282,14 @@ function AlertsContent() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm tabular-nums">
-                    {item.totalQty === 0 ? (
-                      <span className="text-muted-foreground">-</span>
-                    ) : (
-                      <span className={item.availableQty < item.minThreshold ? "text-destructive font-medium" : "text-muted-foreground"}>
-                        {item.availableQty === item.totalQty
-                          ? item.availableQty
-                          : `${item.availableQty}/${item.totalQty}`}{" "}
-                        <span className="text-muted-foreground font-normal">{item.issueUnit.name}</span>
-                      </span>
-                    )}
+                  <TableCell className="text-sm">
+                    <div className="flex flex-col gap-0.5">
+                      {item.alertTypes.map((t) => (
+                        <span key={t} className="text-xs text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
-                      {STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ")}
-                    </span>
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

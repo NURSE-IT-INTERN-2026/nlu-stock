@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { dispenseRequestSchema } from "@/lib/validators";
+import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 
 export async function POST(req: NextRequest) {
@@ -59,7 +60,6 @@ export async function POST(req: NextRequest) {
             subItemId: di.subItemId ?? undefined,
             lotId: di.lotId ?? undefined,
             quantity: di.quantity,
-            quantitySub: di.quantitySub,
             usageType: usageType ?? undefined,
             usageNote: usageNote ?? undefined,
             staffId: session.userId,
@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
               changedBy: session.userId,
             },
           });
+          // Tracked durable: counts derive from subItem statuses.
+          await recomputeItemCounts(tx, di.itemId);
         } else if (di.lotId) {
           // Consumable with lot: deduct lot + item availableQty (optimistic lock)
           const updated = await tx.lot.updateMany({

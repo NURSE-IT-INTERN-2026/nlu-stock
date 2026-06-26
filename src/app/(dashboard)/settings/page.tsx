@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CategoriesTab } from "@/components/settings/categories-tab";
 import { LocationsTab } from "@/components/settings/locations-tab";
 import { ItemsMasterTab } from "@/components/settings/items-master-tab";
@@ -19,7 +19,12 @@ const TABS = [
 ] as const;
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("items");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // URL is the single source of truth — survives refresh + back button.
+  const activeTab = searchParams.get("tab") ?? "items";
+  const changeTab = (value: string) =>
+    router.replace(`/settings?tab=${value}`, { scroll: false });
 
   return (
     <div className="space-y-0">
@@ -38,7 +43,7 @@ export default function SettingsPage() {
               <button
                 key={value}
                 type="button"
-                onClick={() => setActiveTab(value)}
+                onClick={() => changeTab(value)}
                 className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                   isActive
                     ? "border-primary text-primary"

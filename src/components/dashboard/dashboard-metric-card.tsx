@@ -27,10 +27,12 @@ interface DashboardMetricCardProps {
   iconName: string;
   color: string;
   href?: string;
+  onClick?: () => void;
+  active?: boolean;
   className?: string;
 }
 
-export function DashboardMetricCard({ title, value, subtitle, iconName, color, href, className }: DashboardMetricCardProps) {
+export function DashboardMetricCard({ title, value, subtitle, iconName, color, href, onClick, active, className }: DashboardMetricCardProps) {
   const Icon = ICON_MAP[iconName];
   const badgeBg = BADGE_BG[color] ?? "bg-muted";
 
@@ -55,6 +57,32 @@ export function DashboardMetricCard({ title, value, subtitle, iconName, color, h
     </CardContent>
   );
 
+  const ariaLabel = `${title}: ${value}${subtitle ? `, ${subtitle}` : ""}`;
+
+  // Clickable (client filter) — render as button, highlight when active.
+  if (onClick) {
+    return (
+      <Card
+        className={[
+          "transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] cursor-pointer py-0 gap-0",
+          "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+          active && "ring-2 ring-primary",
+          className,
+        ].filter(Boolean).join(" ")}
+      >
+        <button
+          type="button"
+          onClick={onClick}
+          aria-pressed={active}
+          aria-label={ariaLabel}
+          className="block w-full text-left focus:outline-none"
+        >
+          {inner}
+        </button>
+      </Card>
+    );
+  }
+
   if (!href) {
     return (
       <Card className={["py-0 gap-0", className].filter(Boolean).join(" ")}>
@@ -74,7 +102,7 @@ export function DashboardMetricCard({ title, value, subtitle, iconName, color, h
       <Link
         href={href}
         className="block focus:outline-none"
-        aria-label={`${title}: ${value}${subtitle ? `, ${subtitle}` : ""}`}
+        aria-label={ariaLabel}
       >
         {inner}
       </Link>

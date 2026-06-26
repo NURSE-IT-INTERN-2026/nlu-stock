@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
       itemCode: r.item.code,
       itemName: r.item.name,
       quantity: r.quantity,
-      quantitySub: r.quantitySub,
       staffName: r.staff.name,
       usageTypeLabel: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
       lotNumber: r.lot?.lotNumber ?? "—",

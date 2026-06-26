@@ -12,6 +12,7 @@ import {
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatSubCode } from "@/lib/constants";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { returnItem } from "@/lib/api";
@@ -36,8 +37,6 @@ interface ItemData {
   trackIndividually: boolean;
   status: string;
   issueUnit: { id: string; name: string };
-  subUnit: { id: string; name: string };
-  conversionFactor: number;
   minThreshold: number;
   location: LocationType | null;
   imageUrl: string | null;
@@ -138,9 +137,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
             <SpecRow icon={Tag} label="ประเภท" value={item.category.profile?.name ?? item.category.name} />
             <SpecRow icon={FolderTree} label="หมวดหมู่" value={item.category.name} />
             <SpecRow icon={Layers} label="หน่วยเบิก" value={item.issueUnit.name} />
-            {item.subUnit && (
-              <SpecRow icon={Layers} label="หน่วยย่อย" value={`${item.subUnit.name} (1 ${item.issueUnit.name} = ${item.conversionFactor} ${item.subUnit.name})`} />
-            )}
             <SpecRow icon={MapPin} label="ที่ตั้ง" value={locationStr} />
             {item.storageRequirements && (
               <SpecRow icon={ClipboardList} label="การเก็บรักษา" value={item.storageRequirements} />
@@ -175,7 +171,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
             <div className="space-y-2">
               {checkedOutSubs.map((sub) => (
                 <div key={sub.id} className="flex items-center justify-between rounded-xl border p-3 transition-colors hover:bg-muted/50">
-                  <span className="font-mono text-sm">{sub.subCode}</span>
+                  <span className="font-mono text-sm">{formatSubCode(item.code, sub.subCode)}</span>
                   <Button size="sm" variant="outline" onClick={() => handleReturn(sub.id)}>
                     <Undo2 className="h-3.5 w-3.5 mr-1" />คืน
                   </Button>
@@ -210,12 +206,12 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
         {/* ── QR code ── */}
         <section className="animate-in fade-in slide-in-from-2 duration-300" style={{ animationDelay: "50ms" }}>
           <SectionHeading title="QR code" />
-          <div className="flex gap-5 items-start">
-            <div className="size-36 rounded-2xl border border-border bg-card grid place-items-center shrink-0">
+          <div className="flex gap-4 sm:gap-5 items-start">
+            <div className="size-28 sm:size-36 rounded-2xl border border-border bg-card grid place-items-center shrink-0">
               {qrDataUrl ? (
-                <img src={qrDataUrl} alt={`QR for ${item.code}`} className="size-32 rounded-lg" />
+                <img src={qrDataUrl} alt={`QR for ${item.code}`} className="size-24 sm:size-32 rounded-lg" />
               ) : (
-                <QrCode className="size-24 text-foreground animate-pulse" />
+                <QrCode className="size-20 sm:size-24 text-foreground animate-pulse" />
               )}
             </div>
             <div className="flex-1 min-w-0 pt-1">
@@ -257,12 +253,12 @@ function SpecRow({ icon: Icon, label, value }: {
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 py-3.5">
+    <div className="flex items-center gap-4 py-3.5">
       <span className="grid place-items-center size-8 rounded-lg bg-muted text-muted-foreground shrink-0">
         <Icon className="size-4" />
       </span>
-      <dt className="text-sm text-muted-foreground md:w-32">{label}</dt>
-      <dd className="text-sm font-medium md:ml-auto md:text-right">{value}</dd>
+      <dt className="text-sm text-muted-foreground shrink-0 md:w-32">{label}</dt>
+      <dd className="text-sm font-medium ml-auto text-right min-w-0 truncate">{value}</dd>
     </div>
   );
 }

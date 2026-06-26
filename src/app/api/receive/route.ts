@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { recomputeItemCounts } from "@/lib/stock";
 import { z } from "zod";
 
 const receiveItemSchema = z.object({
@@ -77,14 +78,23 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Update item totals
-        await tx.item.update({
-          where: { id: item.id },
-          data: {
-            totalQty: { increment: ri.quantity },
-            availableQty: { increment: ri.quantity },
-          },
-        });
+        // Tracked durables must supply exactly one sub-code per copy
+        if (item.trackIndividually) {
+          if (!ri.subCodes?.length || ri.subCodes.length !== ri.quantity) {
+            throw new Error(`${item.code}: tracked item needs ${ri.quantity} sub-code(s), got ${ri.subCodes?.length ?? 0}`);
+          }
+        }
+
+        // Update item totals (non-tracked only; tracked derives qty from sub-items via recompute)
+        if (!item.trackIndividually) {
+          await tx.item.update({
+            where: { id: item.id },
+            data: {
+              totalQty: { increment: ri.quantity },
+              availableQty: { increment: ri.quantity },
+            },
+          });
+        }
 
         // Sub-items for tracked durables — check duplicates first
         if (item.trackIndividually && ri.subCodes?.length) {
@@ -106,6 +116,8 @@ export async function POST(req: NextRequest) {
               },
             });
           }
+          // Qty derived from sub-items — recompute instead of manual increment
+          await recomputeItemCounts(tx, item.id);
         }
 
         // Create ReceiveRecord

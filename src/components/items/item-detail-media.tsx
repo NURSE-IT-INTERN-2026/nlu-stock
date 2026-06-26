@@ -17,10 +17,16 @@ interface Props {
   item: MediaItem;
   canAct: boolean;
   onRefresh: () => void;
+  // Override persistence (default: updateItem on the parent item). Used by sub-item detail.
+  onSave?: (id: string, data: { imageUrl: string | null; images: string[] }) => Promise<unknown>;
 }
 
-export function ItemDetailMedia({ item, canAct, onRefresh }: Props) {
+export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const save = useCallback((data: { imageUrl: string | null; images: string[] }) => {
+    const p = onSave ? onSave(item.id, data) : updateItem(item.id, data);
+    return Promise.resolve(p).then(() => onRefresh());
+  }, [item.id, onSave, onRefresh]);
   const [dragOver, setDragOver] = useState(false);
   const [pendingImages, setPendingImages] = useState<{ localUrl: string; file: File }[]>([]);
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
@@ -64,10 +70,17 @@ export function ItemDetailMedia({ item, canAct, onRefresh }: Props) {
     }
     // move from pending → uploaded
     setPendingImages((prev) => prev.filter((p) => !pending.includes(p)));
-    setUploadedUrls((prev) => [...prev, ...newUrls]);
     pending.forEach((p) => URL.revokeObjectURL(p.localUrl));
+
+    // persist: merge server + newly-uploaded, first slot = cover
+    if (newUrls.length > 0) {
+      const serverCover = item.imageUrl ? [item.imageUrl] : [];
+      const combined = [...serverCover, ...(item.images || []), ...newUrls].slice(0, 8);
+      await save({ imageUrl: combined[0] ?? null, images: combined.slice(1) });
+      setUploadedUrls([]);
+    }
     setUploading(false);
-  }, []);
+  }, [item.imageUrl, item.images, save]);
 
   const removeImage = useCallback((idx: number) => {
     // allImages = [imageUrl?, ...item.images, ...uploadedUrls, ...pendingLocal]
@@ -79,7 +92,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh }: Props) {
       // promote first server extra to cover, or clear
       const newCover = serverExtras[0] || null;
       const newExtras = serverExtras.slice(1);
-      updateItem(item.id, { imageUrl: newCover, images: newExtras }).then(() => { onRefresh(); });
+      save({ imageUrl: newCover, images: newExtras });
       return;
     }
 
@@ -88,7 +101,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh }: Props) {
     // inside server extras (item.images)?
     if (serverExtraIdx < serverExtras.length) {
       const newExtras = serverExtras.filter((_, i) => i !== serverExtraIdx);
-      updateItem(item.id, { images: newExtras }).then(() => { onRefresh(); });
+      save({ imageUrl: item.imageUrl, images: newExtras });
       return;
     }
 
@@ -106,7 +119,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh }: Props) {
       if (removed) URL.revokeObjectURL(removed.localUrl);
       return prev.filter((_, i) => i !== pendingIdx);
     });
-  }, [item.id, item.imageUrl, item.images, onRefresh, uploadedUrls.length]);
+  }, [item.id, item.imageUrl, item.images, save, uploadedUrls.length]);
 
   // ── Lightbox ──
   const [lightboxIdx, setLightboxIdx] = useState(-1);

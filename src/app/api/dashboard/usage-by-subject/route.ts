@@ -9,7 +9,12 @@ export async function GET(request: NextRequest) {
 
   const params = getSearchParams(request);
   const categoryId = params.get("categoryId") || undefined;
-  const itemFilter = categoryId ? { item: { categoryId } } : {};
+  const profileId = params.get("profileId") || undefined;
+  const itemFilter = categoryId
+    ? { item: { categoryId } }
+    : profileId
+      ? { item: { category: { profileId } } }
+      : {};
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);

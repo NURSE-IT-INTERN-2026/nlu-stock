@@ -143,6 +143,7 @@ async function main() {
   const admin = await prisma.user.create({ data: { email: "admin@nlu.ac.th", name: "Admin User", role: "ADMIN" } });
   await prisma.user.create({ data: { email: "staff@nlu.ac.th", name: "Staff User", role: "STAFF" } });
   await prisma.user.create({ data: { email: "instructor@nlu.ac.th", name: "Instructor User", role: "INSTRUCTOR" } });
+  await prisma.user.create({ data: { email: "children@nlu.ac.th", name: "Children User", role: "CHILDREN" } });
 
   // ============================================================
   // Units — collect unique units from CSVs + ชีต8
@@ -300,7 +301,7 @@ async function main() {
         nameEn: group.nameEn || null,
         categoryId: group.subCategory ? await ensureSubCategory("KRU", group.subCategory) : catKru.id,
         trackIndividually: true,
-        issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"), conversionFactor: 1,
+        issueUnitId: unitId("เครื่อง"),
         minThreshold: 1, locationId: locId,
         totalQty: group.subItems.length, availableQty: availableCount,
         model, purchasePrice: price,
@@ -398,7 +399,7 @@ async function main() {
         name: stripTrailingNum(group.nameTh),
         categoryId: catEle.id,
         trackIndividually: true,
-        issueUnitId: unitId("เครื่อง"), subUnitId: unitId("เครื่อง"), conversionFactor: 1,
+        issueUnitId: unitId("เครื่อง"),
         minThreshold: 1, locationId: locId,
         totalQty: group.subItems.length, availableQty: availableCount,
         model, purchasePrice: price,
@@ -468,7 +469,7 @@ async function main() {
         categoryId: bookCatId,
         trackIndividually: true,
         setSize,
-        issueUnitId: unitId("เล่ม"), subUnitId: unitId("เล่ม"), conversionFactor: 1,
+        issueUnitId: unitId("เล่ม"),
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
         description: group.category || null,
@@ -530,7 +531,7 @@ async function main() {
         categoryId: toyCatId,
         trackIndividually: true,
         setSize,
-        issueUnitId: unitId("ชิ้น"), subUnitId: unitId("ชิ้น"), conversionFactor: 1,
+        issueUnitId: unitId("ชิ้น"),
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
         description: group.category || null,
@@ -580,7 +581,7 @@ async function main() {
         code, name, nameEn,
         categoryId: catDur.id,
         trackIndividually: false,
-        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        issueUnitId: unitId(unitName),
         minThreshold: 0, locationId: defaultLocId,
         totalQty: qty, availableQty: qty,
         purchasePrice: parsePrice(priceStr),
@@ -618,7 +619,7 @@ async function main() {
         code, name: nameRaw,
         categoryId: catCon.id,
         trackIndividually: false,
-        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        issueUnitId: unitId(unitName),
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
       },
@@ -660,7 +661,7 @@ async function main() {
         code, name: nameRaw,
         categoryId: catKit.id,
         trackIndividually: false,
-        issueUnitId: unitId(unitName), subUnitId: unitId(unitName), conversionFactor: 1,
+        issueUnitId: unitId(unitName),
         minThreshold: 0, locationId: defaultLocId,
         totalQty: qty, availableQty: qty,
         description: notes || null,
@@ -702,7 +703,7 @@ async function main() {
       await prisma.dispenseRecord.create({
         data: {
           itemId: item.id, lotId: lot.id,
-          quantity: qty, quantitySub: 0,
+          quantity: qty,
           usageType: ["COURSE", "ACTIVITY", "OTHER"][j % 3] as any,
           staffId: admin.id, dispensedAt: day(j * 3 + 1),
         },
@@ -754,7 +755,6 @@ async function main() {
       data: {
         itemId: m.itemId,
         quantity: m.qty,
-        quantitySub: 0,
         usageType: m.usageType,
         staffId: admin.id,
         dispensedAt: day(m.daysAgo),

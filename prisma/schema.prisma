@@ -31,12 +31,14 @@ enum Role {
   ADMIN
   STAFF
   INSTRUCTOR
+  CHILDREN
 }
 
 enum AdjustmentReason {
   LOST
   DAMAGED_PENDING_REPAIR
-  COUNT_MISMATCH
+  COUNT_MISMATCH_SHORT
+  COUNT_MISMATCH_OVER
   DISPOSAL
   OTHER
 }
@@ -141,8 +143,7 @@ model Unit {
   id   String @id @default(cuid())
   name String @unique
 
-  itemsAsIssue Item[] @relation("UnitItemIssue")
-  itemsAsSub   Item[] @relation("UnitItemSub")
+  items Item[] @relation("UnitItem")
 
   @@map("units")
 }
@@ -158,10 +159,7 @@ model Item {
   trackIndividually Boolean      @default(false)
   status            ItemStatus   @default(AVAILABLE)
   issueUnitId       String
-  issueUnit         Unit         @relation("UnitItemIssue", fields: [issueUnitId], references: [id])
-  subUnitId         String
-  subUnit           Unit         @relation("UnitItemSub", fields: [subUnitId], references: [id])
-  conversionFactor  Int          @default(1)
+  issueUnit         Unit         @relation("UnitItem", fields: [issueUnitId], references: [id])
   minThreshold      Int          @default(0)
   locationId        String?
   location          Location?    @relation(fields: [locationId], references: [id])
@@ -226,11 +224,13 @@ model SubItem {
   serialNumber String?
   notes        String?
   imageUrl     String?
+  images       String[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   dispenseRecords DispenseRecord[]
   statusLogs      ItemStatusLog[]
+  maintenanceRecords MaintenanceRecord[]
 
   @@unique([itemId, subCode])
   @@index([itemId, status])
@@ -269,7 +269,6 @@ model DispenseRecord {
   lotId       String?
   lot         Lot?      @relation(fields: [lotId], references: [id])
   quantity    Int
-  quantitySub Int
   usageType   UsageType?
   usageNote   String?
   staffId     String
@@ -327,6 +326,8 @@ model MaintenanceRecord {
   id                String            @id @default(cuid())
   itemId            String
   item              Item              @relation(fields: [itemId], references: [id])
+  subItemId         String?
+  subItem           SubItem?          @relation(fields: [subItemId], references: [id], onDelete: Cascade)
   type              MaintenanceType
   result            MaintenanceResult
   performedAt       DateTime
@@ -340,6 +341,7 @@ model MaintenanceRecord {
 
   createdAt         DateTime          @default(now())
 
+  @@index([subItemId])
   @@map("maintenance_records")
 }
 

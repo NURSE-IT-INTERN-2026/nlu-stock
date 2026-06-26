@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useCart } from "./cart-context";
 import type { CartItem } from "@/lib/validators/dispense";
+import { formatSubCode } from "@/lib/constants";
 
 interface ItemData {
   id: string;
@@ -30,8 +31,6 @@ interface ItemData {
   category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
   trackIndividually: boolean;
   issueUnit: { id: string; name: string };
-  subUnit: { id: string; name: string };
-  conversionFactor: number;
   availableQty: number;
   lots: { id: string; lotNumber: string; expiryDate: string | null; quantity: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
@@ -46,14 +45,12 @@ interface Props {
 export function QuantityDialog({ item, open, onClose }: Props) {
   const { addItem, getItemQty } = useCart();
   const [quantity, setQuantity] = useState(1);
-  const [quantitySub, setQuantitySub] = useState(0);
   const [lotId, setLotId] = useState<string | null>(null);
   const [selectedSubItems, setSelectedSubItems] = useState<Set<string>>(new Set());
 
   // Reset state when item changes
   useEffect(() => {
     setQuantity(1);
-    setQuantitySub(0);
     setLotId(null);
     setSelectedSubItems(new Set());
   }, [item?.id]);
@@ -80,10 +77,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         dispenseType: item.category.profile.dispenseType,
         trackIndividually: isTracked,
         issueUnit: item.issueUnit.name,
-        subUnit: item.subUnit.name,
-        conversionFactor: item.conversionFactor,
         quantity,
-        quantitySub,
         lotId,
         lotNumber: lot?.lotNumber ?? null,
         availableQty: item.availableQty,
@@ -102,10 +96,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
           dispenseType: item.category.profile.dispenseType,
           trackIndividually: true,
           issueUnit: item.issueUnit.name,
-          subUnit: item.subUnit.name,
-          conversionFactor: item.conversionFactor,
           quantity: 1,
-          quantitySub: 0,
           subItemId: subId,
           subCode: sub?.subCode ?? null,
           availableQty: item.availableQty,
@@ -123,10 +114,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
         dispenseType: item.category.profile.dispenseType,
         trackIndividually: false,
         issueUnit: item.issueUnit.name,
-        subUnit: item.subUnit.name,
-        conversionFactor: item.conversionFactor,
         quantity,
-        quantitySub,
         subItemId: hasSingleSubItem ? item.subItems[0].id : null,
         subCode: hasSingleSubItem ? item.subItems[0].subCode : null,
         availableQty: item.availableQty,
@@ -140,7 +128,6 @@ export function QuantityDialog({ item, open, onClose }: Props) {
 
   const resetAndClose = () => {
     setQuantity(1);
-    setQuantitySub(0);
     setLotId(null);
     setSelectedSubItems(new Set());
     onClose();
@@ -200,29 +187,15 @@ export function QuantityDialog({ item, open, onClose }: Props) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Qty ({item.issueUnit.name})</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={maxQty}
-                    value={quantity}
-                    onChange={(e) => setQuantity(Math.min(parseInt(e.target.value) || 1, maxQty))}
-                  />
-                </div>
-                {item.conversionFactor > 1 && (
-                  <div className="space-y-1">
-                    <Label>Sub ({item.subUnit.name})</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={item.conversionFactor - 1}
-                      value={quantitySub}
-                      onChange={(e) => setQuantitySub(parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                )}
+              <div className="space-y-1">
+                <Label>Qty ({item.issueUnit.name})</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={maxQty}
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.min(parseInt(e.target.value) || 1, maxQty))}
+                />
               </div>
             </>
           )}
@@ -237,7 +210,7 @@ export function QuantityDialog({ item, open, onClose }: Props) {
                       checked={selectedSubItems.has(sub.id)}
                       onCheckedChange={() => toggleSubItem(sub.id)}
                     />
-                    <span className="font-mono text-sm">{sub.subCode}</span>
+                    <span className="font-mono text-sm">{formatSubCode(item.code, sub.subCode)}</span>
                     {sub.condition && (
                       <Badge variant="secondary" className="text-xs">{sub.condition}</Badge>
                     )}
