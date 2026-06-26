@@ -248,7 +248,7 @@ function ReceiveContent() {
         {/* Thumbnail */}
         <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted flex items-center justify-center">
           {thumb ? (
-            <img src={thumb} alt={item.name} className="w-full h-full object-cover" />
+            <img src={thumb} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
           ) : (
             <Package className="h-5 w-5 text-muted-foreground" />
           )}
