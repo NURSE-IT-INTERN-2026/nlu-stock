@@ -194,7 +194,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
             onKeyDown={(e) => { if (e.key === "Enter") setLightboxIdx(i); }}
             className="relative group aspect-square rounded-2xl overflow-hidden border border-border bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:ring-2 hover:ring-primary/30 cursor-pointer"
           >
-            <img src={src} alt={`รูปที่ ${i + 1}`} className="size-full object-cover" />
+            <img src={src} alt={`รูปที่ ${i + 1}`} loading="lazy" className="size-full object-cover" />
             {canAct && (
               <button
                 type="button"
