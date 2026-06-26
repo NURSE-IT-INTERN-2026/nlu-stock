@@ -273,7 +273,11 @@ export function CategoryPicker({ profiles, categories, value, onChange }: {
             {profiles.map((p) => {
               const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
               return (
-                <button key={p.id} onClick={() => { setDraftProfile(p.id); setDraftCategory(null); }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors", draftProfile === p.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85")}>
+                <button key={p.id} onClick={() => {
+                  // no subcategories → dead-end, apply profile-only filter immediately
+                  if (!categories.some((c) => c.profile?.id === p.id)) { apply(p.id, null); return; }
+                  setDraftProfile(p.id); setDraftCategory(null);
+                }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors", draftProfile === p.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85")}>
                   <PIcon className="size-4 shrink-0 text-muted-foreground" />
                   <span className="flex-1 min-w-0 truncate">{p.name}</span>
                   {draftProfile === p.id && <Check className="size-3.5 text-primary shrink-0" />}
@@ -414,6 +418,11 @@ export function LocationPicker({ value, locations, onChange }: { value: Location
   const rooms = draft.building && draft.floor ? [...(tree.get(draft.building)?.get(draft.floor)?.keys() ?? [])] : [];
   const details = draft.building && draft.floor && draft.room ? [...(tree.get(draft.building)?.get(draft.floor)?.get(draft.room) ?? [])] : [];
 
+  // click a dead-end level (no children) → apply immediately, like a leaf
+  const floorsOf = (b?: string) => b ? [...(tree.get(b)?.keys() ?? [])] : [];
+  const roomsOf = (b?: string, f?: string) => b && f ? [...(tree.get(b)?.get(f)?.keys() ?? [])] : [];
+  const detailsOf = (b?: string, f?: string, r?: string) => b && f && r ? [...(tree.get(b)?.get(f)?.get(r) ?? [])] : [];
+
   const apply = (loc: LocationFilter) => { onChange(loc); setOpen(false); };
 
   return (
@@ -437,19 +446,22 @@ export function LocationPicker({ value, locations, onChange }: { value: Location
         {/* cascade columns */}
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-border flex-1 min-h-0">
           <CascadeColumn title="อาคาร">
-            {buildings.map((b) => (
-              <CascadeRow key={b} label={b} selected={draft.building === b} hasChildren onClick={() => setDraft({ building: b })} />
-            ))}
+            {buildings.map((b) => {
+              const kids = floorsOf(b);
+              return <CascadeRow key={b} label={b} selected={draft.building === b} hasChildren={kids.length > 0} onClick={() => kids.length === 0 ? apply({ building: b }) : setDraft({ building: b })} />;
+            })}
           </CascadeColumn>
           <CascadeColumn title="ชั้น" empty={!draft.building}>
-            {floors.map((f) => (
-              <CascadeRow key={f} label={f} selected={draft.floor === f} hasChildren onClick={() => setDraft({ building: draft.building, floor: f })} />
-            ))}
+            {floors.map((f) => {
+              const kids = roomsOf(draft.building, f);
+              return <CascadeRow key={f} label={f} selected={draft.floor === f} hasChildren={kids.length > 0} onClick={() => kids.length === 0 ? apply({ building: draft.building, floor: f }) : setDraft({ building: draft.building, floor: f })} />;
+            })}
           </CascadeColumn>
           <CascadeColumn title="ห้อง" empty={!draft.floor}>
-            {rooms.map((r) => (
-              <CascadeRow key={r} label={r ? `ห้อง ${r}` : "ไม่มีห้อง"} selected={draft.room === r} hasChildren onClick={() => setDraft({ building: draft.building, floor: draft.floor, room: r })} />
-            ))}
+            {rooms.map((r) => {
+              const kids = detailsOf(draft.building, draft.floor, r);
+              return <CascadeRow key={r} label={r ? `ห้อง ${r}` : "ไม่มีห้อง"} selected={draft.room === r} hasChildren={kids.length > 0} onClick={() => kids.length === 0 ? apply({ building: draft.building, floor: draft.floor, room: r }) : setDraft({ building: draft.building, floor: draft.floor, room: r })} />;
+            })}
           </CascadeColumn>
           <CascadeColumn title="รายละเอียด" empty={!draft.room}>
             {details.length === 0 ? (
