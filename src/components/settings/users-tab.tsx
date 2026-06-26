@@ -178,7 +178,7 @@ export function UsersTab() {
                 <TableCell><Badge variant="outline">{ROLE_LABELS[user.role] || user.role}</Badge></TableCell>
                 <TableCell>
                   {user.isActive
-                    ? <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-success/15 text-success border-success/30">ใช้งาน</span>
+                    ? <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-success/15 text-success-700 border-success/30">ใช้งาน</span>
                     : <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border-border">ปิดใช้งาน</span>}
                 </TableCell>
                 <TableCell>

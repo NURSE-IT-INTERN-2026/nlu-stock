@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,14 +16,10 @@ interface Row {
 }
 
 export function ProfileSummaryWidget() {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getDashboardProfileSummary()
-      .then((d) => setRows(d as Row[]))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: rows = [], isLoading: loading } = useQuery({
+    queryKey: ["dashboard", "profile-summary"],
+    queryFn: async () => (await getDashboardProfileSummary()) as Row[],
+  });
 
   const total = rows.reduce((s, r) => s + r.count, 0);
 

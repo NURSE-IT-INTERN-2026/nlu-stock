@@ -177,9 +177,9 @@ export default function ItemDetailPage() {
             )}
             {soonLots.length > 0 && (
               <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
-                <AlertTriangle className="size-5 text-warning shrink-0 mt-0.5" />
+                <AlertTriangle className="size-5 text-warning-700 shrink-0 mt-0.5" />
                 <div className="text-sm min-w-0">
-                  <span className="font-semibold text-warning">ใกล้หมดอายุ ({soonLots.length})</span>
+                  <span className="font-semibold text-warning-700">ใกล้หมดอายุ ({soonLots.length})</span>
                   <span className="text-muted-foreground ml-2">
                     {soonLots.map((l) => `Lot ${l.lotNumber} · ใน ${l.days} วัน`).join("  ·  ")}
                   </span>
@@ -357,8 +357,8 @@ function StockSummary({ available, total, unit, minThreshold }: {
   const statusIcon = isOut
     ? <XCircle className="size-3 text-destructive" />
     : isLow
-      ? <AlertTriangle className="size-3 text-warning" />
-      : <CheckCircle2 className="size-3 text-success" />;
+      ? <AlertTriangle className="size-3 text-warning-700" />
+      : <CheckCircle2 className="size-3 text-success-700" />;
 
   const statusLabel = isOut ? "หมดสต็อก" : isLow ? "เหลือน้อย" : "มีในสต็อก";
 
@@ -372,7 +372,7 @@ function StockSummary({ available, total, unit, minThreshold }: {
         {statusIcon}
         <span className={cn(
           "text-xs font-medium",
-          isOut ? "text-destructive" : isLow ? "text-warning" : "text-success",
+          isOut ? "text-destructive" : isLow ? "text-warning-700" : "text-success-700",
         )}>
           {statusLabel}
         </span>

@@ -136,7 +136,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
           {itemCount > 0 && (
             <Badge
               key={itemCount}
-              className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-[10px]"
+              className="animate-cart-pop absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-[10px]"
             >
               {itemCount}
             </Badge>

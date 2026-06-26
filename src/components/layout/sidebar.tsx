@@ -91,7 +91,7 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
                 "flex items-center rounded-xl text-sm transition-colors",
                 collapsed ? "justify-center p-2" : "gap-3 px-3 py-2.5",
                 active
-                  ? "bg-orange-500 text-white font-semibold"
+                  ? "bg-primary text-primary-foreground font-semibold"
                   : "text-sidebar-foreground font-medium hover:bg-sidebar-accent"
               )}
             >
@@ -102,10 +102,10 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
                   "rounded-lg",
                   active
                     ? "bg-white/20"
-                    : "bg-orange-100 dark:bg-orange-900/30"
+                    : "bg-primary/10"
                 )}
               >
-                <Icon className={cn("h-4 w-4", active ? "text-white" : "text-orange-500 dark:text-orange-400")} />
+                <Icon className={cn("h-4 w-4", active ? "text-white" : "text-primary")} />
               </span>
               {!collapsed && (
                 <>
