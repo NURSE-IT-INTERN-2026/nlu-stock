@@ -82,7 +82,7 @@ export function ItemsFilterBar({
   const locLabel = formatLocation(value.location);
 
   const activeFiltersCount =
-    (value.categoryId ? 1 : 0) +
+    (value.profileId ? 1 : 0) +
     (locLabel ? 1 : 0) +
     value.status.length +
     (value.preset ? 1 : 0);
@@ -122,16 +122,11 @@ export function ItemsFilterBar({
 
       {/* Filter pickers row */}
       <div className="flex flex-wrap items-center gap-2">
-        <ProfilePicker
+        <CategoryPicker
           profiles={profiles}
-          value={value.profileId}
-          onChange={(id) => update({ profileId: id ?? "", categoryId: null })}
-        />
-        <SubcategoryPicker
-          options={scopedCategories}
-          value={value.categoryId}
-          disabled={scopedCategories.length === 0}
-          onChange={(id) => update({ categoryId: id })}
+          categories={categories}
+          value={{ profileId: value.profileId, categoryId: value.categoryId }}
+          onChange={({ profileId, categoryId }) => update({ profileId, categoryId })}
         />
         <LocationPicker value={value.location} locations={locations} onChange={(loc) => update({ location: loc })} />
         <StatusPicker
@@ -166,8 +161,15 @@ export function ItemsFilterBar({
           <Separator className="bg-border/60" />
           <div className="flex flex-wrap items-center gap-1.5">
             <SlidersHorizontal className="size-3.5 text-muted-foreground mr-1" />
-            {value.categoryId && (
-              <ActiveChip label={`หมวด: ${scopedCategories.find((c) => c.id === value.categoryId)?.name ?? ""}`} onRemove={() => update({ categoryId: null })} />
+            {value.profileId && (
+              <ActiveChip
+                icon={<Layers className="size-3" />}
+                label={
+                  (profiles.find((p) => p.id === value.profileId)?.name ?? "") +
+                  (value.categoryId ? ` / ${scopedCategories.find((c) => c.id === value.categoryId)?.name ?? ""}` : "")
+                }
+                onRemove={() => update({ profileId: "", categoryId: null })}
+              />
             )}
             {locLabel && (
               <ActiveChip icon={<MapPin className="size-3" />} label={locLabel} onRemove={() => update({ location: {} })} />
@@ -222,66 +224,79 @@ function FilterButton({ active, icon: Icon, children, count, ...rest }: { active
   );
 }
 
-// ─── Profile (category) ───
-function ProfilePicker({ profiles, value, onChange }: { profiles: ProfileOption[]; value: string; onChange: (id: string | null) => void }) {
+// ─── Category cascade (profile → subcategory) ───
+// 2-level cascade mirroring LocationPicker. No schema change: CategoryType.profileId already holds main→sub.
+export function CategoryPicker({ profiles, categories, value, onChange }: {
+  profiles: ProfileOption[];
+  categories: CategoryOption[];
+  value: { profileId: string; categoryId: string | null };
+  onChange: (next: { profileId: string; categoryId: string | null }) => void;
+}) {
   const [open, setOpen] = React.useState(false);
-  const selected = profiles.find((p) => p.id === value);
-  const Icon = selected ? (PROFILE_ICONS[selected.icon] ?? Boxes) : Boxes;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={(props: React.ComponentProps<"button">) => (
-          <FilterButton {...props} active={!!value} icon={Icon}>{selected?.name ?? "ทุกประเภท"}</FilterButton>
-        )}
-      />
-      <PopoverContent align="start" className="w-60 p-1.5">
-        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 text-foreground font-medium")} onClick={() => { onChange(null); setOpen(false); }}>
-          <Boxes className="size-4" />
-          <span className="flex-1">ทุกประเภท</span>
-          {!value && <Check className="size-4 text-primary" />}
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 w-full overflow-y-auto overflow-x-hidden">
-          {profiles.map((p) => {
-            const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
-            return (
-              <button key={p.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === p.id && "bg-primary/10 text-foreground font-medium")} onClick={() => { onChange(p.id); setOpen(false); }}>
-                <PIcon className="size-4 shrink-0" />
-                <span className="flex-1 min-w-0 truncate">{p.name}</span>
-                {value === p.id && <Check className="size-4 text-primary shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+  const [draftProfile, setDraftProfile] = React.useState<string>(value.profileId);
+  const [draftCategory, setDraftCategory] = React.useState<string | null>(value.categoryId);
+  React.useEffect(() => { if (open) { setDraftProfile(value.profileId); setDraftCategory(value.categoryId); } }, [open, value.profileId, value.categoryId]);
 
-// ─── Subcategory ───
-function SubcategoryPicker({ options, value, onChange, disabled }: { options: CategoryOption[]; value: string | null; onChange: (id: string | null) => void; disabled?: boolean }) {
-  const [open, setOpen] = React.useState(false);
-  const selected = options.find((c) => c.id === value);
+  const profile = profiles.find((p) => p.id === draftProfile) ?? null;
+  const scoped = draftProfile ? categories.filter((c) => c.profile?.id === draftProfile) : categories;
+
+  const selProfile = profiles.find((p) => p.id === value.profileId);
+  const label = selProfile
+    ? (value.categoryId ? `${selProfile.name} / ${categories.find((c) => c.id === value.categoryId)?.name ?? ""}` : selProfile.name)
+    : null;
+
+  const apply = (p: string, c: string | null) => { onChange({ profileId: p, categoryId: c }); setOpen(false); };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        disabled={disabled}
         render={(props: React.ComponentProps<"button">) => (
-          <FilterButton {...props} active={!!value} icon={Layers}>{selected?.name ?? "หมวดหมู่ย่อย"}</FilterButton>
+          <FilterButton {...props} active={!!value.profileId} icon={Layers}>{label ?? "หมวดหมู่"}</FilterButton>
         )}
       />
-      <PopoverContent align="start" className="w-60 p-1.5">
-        <button className="w-full text-left text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-muted" onClick={() => { onChange(null); setOpen(false); }}>
-          ทุกหมวดหมู่ย่อย
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 w-full overflow-y-auto overflow-x-hidden">
-          {options.map((o) => (
-            <button key={o.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === o.id && "bg-primary/10 text-foreground")} onClick={() => { onChange(o.id); setOpen(false); }}>
-              <span className="flex-1 min-w-0 truncate">{o.name}</span>
-              {value === o.id && <Check className="size-4 text-primary shrink-0" />}
-            </button>
-          ))}
+      <PopoverContent align="start" sideOffset={6} className="w-[min(92vw,480px)] max-h-[70vh] p-0 overflow-hidden flex flex-col">
+        {/* breadcrumb */}
+        <div className="flex items-center gap-1 flex-wrap px-3 py-2.5 bg-muted/50 border-b border-border text-xs shrink-0">
+          <Layers className="size-3.5 text-primary" />
+          <Crumb label="ทุกหมวดหมู่" active={!draftProfile} onClick={() => { setDraftProfile(""); setDraftCategory(null); }} />
+          {draftProfile && (
+            <>
+              <ChevronRight className="size-3 text-muted-foreground" />
+              <Crumb label={profile?.name ?? draftProfile} active={!draftCategory} onClick={() => setDraftCategory(null)} />
+            </>
+          )}
+        </div>
+
+        {/* cascade columns */}
+        <div className="grid grid-cols-2 divide-x divide-border flex-1 min-h-0">
+          <CascadeColumn title="ประเภท">
+            {profiles.map((p) => {
+              const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
+              return (
+                <button key={p.id} onClick={() => { setDraftProfile(p.id); setDraftCategory(null); }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors", draftProfile === p.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85")}>
+                  <PIcon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                  {draftProfile === p.id && <Check className="size-3.5 text-primary shrink-0" />}
+                </button>
+              );
+            })}
+          </CascadeColumn>
+          <CascadeColumn title="หมวดหมู่ย่อย" empty={!draftProfile}>
+            {scoped.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">ไม่มีหมวดหมู่ย่อย</div>
+            ) : scoped.map((c) => (
+              <CascadeRow key={c.id} label={c.name} selected={draftCategory === c.id} onClick={() => apply(draftProfile, c.id)} />
+            ))}
+          </CascadeColumn>
+        </div>
+
+        {/* footer */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-border bg-muted/30 shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => apply("", null)} className="h-8 text-muted-foreground">ล้างหมวดหมู่</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} className="h-8">ยกเลิก</Button>
+            <Button size="sm" onClick={() => apply(draftProfile, draftCategory)} className="h-8">ใช้ตัวกรองนี้</Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
