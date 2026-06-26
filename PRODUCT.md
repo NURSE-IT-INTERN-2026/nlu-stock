@@ -8,9 +8,10 @@ product
 Asset and inventory management system for a Thai nursing education institute.
 
 ## Users
-- **ADMIN**: manages items master, categories, units, locations; full access
+- **ADMIN**: manages items master, categories, units, locations, users; full access
 - **STAFF**: receives stock in, approves dispense requests, manages day-to-day
 - **INSTRUCTOR**: requests item dispense for teaching/lab sessions; read-only on most views
+- **CHILDREN** (นักศึกษา / student): browse-only — search and view items + reports; no dashboard, no dispense/receive
 
 ## Primary tasks (by frequency)
 1. Receive items into stock (stock-in)

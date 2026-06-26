@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/sidebar";
 import { BottomTab } from "@/components/layout/bottom-tab";
-import { CommandPalette } from "@/components/layout/command-palette";
 import { Header } from "@/components/layout/header";
 import { useSession } from "@/components/layout/auth-guard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -98,7 +97,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
         <BottomTab user={user} />
-        <CommandPalette user={user} />
       </div>
       </PageHeaderProvider>
       </CartProvider>
