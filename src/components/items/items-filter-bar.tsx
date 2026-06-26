@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { STATUS_LABELS, STATUS_PILLS } from "@/lib/constants";
+import { STATUS_COLORS, STATUS_LABELS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
 // Map profile.icon string → lucide component. Unknown → Boxes fallback.
@@ -68,7 +68,7 @@ export interface ItemsFilterBarProps {
 const STATUS_KEYS = Object.keys(STATUS_LABELS);
 
 const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpiry" | "overdueMaintenance"; activeCls: string; badgeCls: string }[] = [
-  { key: "lowStock", label: "สต๊อกต่ำ", countKey: "lowStock", activeCls: "bg-orange-500 text-white", badgeCls: "bg-white/25" },
+  { key: "lowStock", label: "สต๊อกต่ำ", countKey: "lowStock", activeCls: "bg-primary text-primary-foreground", badgeCls: "bg-white/25" },
   { key: "nearExpiry", label: "ใกล้หมดอายุ", countKey: "nearExpiry", activeCls: "bg-warning text-warning-foreground", badgeCls: "bg-black/10" },
   { key: "overdueMaint", label: "บำรุงเกินกำหนด", countKey: "overdueMaintenance", activeCls: "bg-destructive text-destructive-foreground", badgeCls: "bg-white/25" },
 ];
@@ -192,7 +192,7 @@ function ActiveChip({ label, onRemove, icon, tone = "default" }: { label: string
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 rounded-full text-xs font-medium border",
-      tone === "alert" ? "bg-orange-500/15 text-orange-600 border-orange-500/30" : "bg-primary/10 text-foreground border-primary/20",
+      tone === "alert" ? "bg-orange-500/15 text-orange-700 border-orange-500/30" : "bg-primary/10 text-foreground border-primary/20",
     )}>
       {icon}
       {label}
@@ -338,17 +338,18 @@ function StatusPicker({ value, onChange, onLoanActive, onLoanCount, onLoanToggle
             <div className="h-px bg-border mb-1.5" />
           </>
         )}
-        <div className="text-xs font-medium text-muted-foreground px-1 pb-1.5">เลือกได้หลายรายการ</div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="text-xs font-medium text-muted-foreground px-1 pb-1">เลือกได้หลายรายการ</div>
+        <div className="space-y-0.5">
           {STATUS_KEYS.map((k) => {
             const active = value.includes(k);
             return (
               <button key={k} onClick={() => toggle(k)} className={cn(
-                "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium border transition min-w-0 max-w-full",
-                active ? `${STATUS_PILLS[k]} ring-2 ring-primary/30` : "bg-background border-border text-foreground/70 hover:bg-muted",
+                "w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm text-left transition-colors",
+                active ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85",
               )}>
-                {active && <Check className="size-3 shrink-0" />}
-                <span className="truncate">{STATUS_LABELS[k]}</span>
+                <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS[k] }} />
+                <span className="flex-1 min-w-0 truncate">{STATUS_LABELS[k]}</span>
+                {active && <Check className="size-4 text-primary shrink-0" />}
               </button>
             );
           })}
@@ -368,7 +369,7 @@ function AlertPicker({ value, alerts, onChange }: { value: PresetKey | null; ale
       <div className="flex items-center gap-1.5 mb-1.5 sm:mb-0">
         <Bell className="size-4 text-orange-500 shrink-0" />
         <span className="text-xs font-semibold text-foreground/80 sm:hidden">การแจ้งเตือน</span>
-        <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">Alerts</span>
+        <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">การแจ้งเตือน</span>
       </div>
       <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
         {PRESETS.map((a) => {
@@ -377,11 +378,11 @@ function AlertPicker({ value, alerts, onChange }: { value: PresetKey | null; ale
           return (
             <button key={a.key} type="button" onClick={() => onChange(active ? null : a.key)} className={cn(
               "flex flex-col items-center justify-center gap-1 min-h-9 px-1 py-1 sm:flex-row sm:inline-flex sm:h-7 sm:px-2 rounded-md text-xs font-medium transition text-center leading-tight",
-              active ? a.activeCls : "bg-orange-500/15 text-orange-600 hover:brightness-95",
+              active ? a.activeCls : "bg-orange-500/15 text-orange-700 hover:brightness-95",
             )}>
               <span className="leading-tight">{a.label}</span>
               {count > 0 && (
-                <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-600")}>{count}</span>
+                <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-700")}>{count}</span>
               )}
             </button>
           );
