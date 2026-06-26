@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS, locationLabel } from "@/lib/constants";
 import { createDispense } from "@/lib/api";
+import { AnimatePresence, motion } from "motion/react";
 
 export default function ConfirmDispensePage() {
   const { items, removeItem, updateItem, clearCart } = useCart();
@@ -66,7 +67,7 @@ export default function ConfirmDispensePage() {
   // Empty state
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 animate-fade-in">
         <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
           <ShoppingBasket className="h-8 w-8 text-muted-foreground" />
         </div>
@@ -97,14 +98,22 @@ export default function ConfirmDispensePage() {
           </Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {items.map((item) => {
+        <AnimatePresence>
+        {items.map((item, index) => {
           const key = `${item.itemId}-${item.lotId ?? ""}-${item.subItemId ?? ""}`;
           return (
-            <article key={key} className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(15,23,42,0.08)] transition-shadow hover:shadow-[0_1px_0_rgba(0,0,0,0.02),0_12px_28px_-12px_rgba(15,23,42,0.14)]">
+            <motion.article
+            key={key}
+            layout
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1, transition: { duration: 0.2, ease: "easeOut", delay: Math.min(index * 0.05, 0.3) } }}
+            exit={{ opacity: 0, scale: 0.9, height: 0, transition: { duration: 0.2, ease: "easeOut" } }}
+            className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(15,23,42,0.08)] transition-shadow hover:shadow-[0_1px_0_rgba(0,0,0,0.02),0_12px_28px_-12px_rgba(15,23,42,0.14)]"
+          >
               {/* Delete */}
               <button
                 aria-label="ลบ"
-                className="absolute right-3 top-3 z-10 grid size-7 place-items-center rounded-md text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                className="absolute right-3 top-3 z-10 grid size-7 place-items-center rounded-md text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors active:scale-90"
                 onClick={() => removeItem(item.itemId, item.lotId, item.subItemId)}
               >
                 <Trash2 className="size-4" />
@@ -209,9 +218,23 @@ export default function ConfirmDispensePage() {
                 </div>
 
                 {/* Qty control */}
-                <div className="flex h-9 items-center rounded-lg border border-border bg-card">
+                <div
+                  className="flex h-9 items-center rounded-lg border border-border bg-card"
+                  onKeyDown={(e) => {
+                    const t = e.target as HTMLElement;
+                    if (t.tagName === "INPUT") return; // let EditableQty input handle its own keys
+                    if (e.key === "ArrowUp" || e.key === "+" || e.key === "=") {
+                      e.preventDefault();
+                      if (!(!item.trackIndividually && item.quantity >= item.availableQty)) adjustQty(item, 1);
+                    } else if (e.key === "ArrowDown" || e.key === "-") {
+                      e.preventDefault();
+                      if (item.quantity > 1) adjustQty(item, -1);
+                    }
+                  }}
+                >
                   <button
-                    className="size-9 grid place-items-center rounded-l-lg rounded-r-none text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                    aria-label="ลดจำนวน"
+                    className="size-9 grid place-items-center rounded-l-lg rounded-r-none text-muted-foreground hover:text-foreground transition-colors active:scale-90 disabled:opacity-30"
                     onClick={() => adjustQty(item, -1)}
                     disabled={item.quantity <= 1}
                   >
@@ -226,7 +249,8 @@ export default function ConfirmDispensePage() {
                     />
                   </div>
                   <button
-                    className="size-9 grid place-items-center rounded-l-none rounded-r-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                    aria-label="เพิ่มจำนวน"
+                    className="size-9 grid place-items-center rounded-l-none rounded-r-lg text-muted-foreground hover:text-foreground transition-colors active:scale-90 disabled:opacity-30"
                     onClick={() => adjustQty(item, 1)}
                     disabled={!item.trackIndividually && item.quantity >= item.availableQty}
                   >
@@ -234,9 +258,10 @@ export default function ConfirmDispensePage() {
                   </button>
                 </div>
               </div>
-            </article>
+            </motion.article>
           );
         })}
+        </AnimatePresence>
         </div>
       </div>
 

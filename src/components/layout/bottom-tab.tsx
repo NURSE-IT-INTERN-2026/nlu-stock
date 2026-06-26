@@ -15,11 +15,11 @@ import type { SessionUser } from "@/types";
 import { useAlerts } from "@/hooks/use-alerts";
 
 const tabs = [
-  { href: "/", label: "Home", icon: LayoutDashboard },
-  { href: "/items", label: "Items", icon: Package },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/dispense", label: "Dispense", icon: ShoppingCart },
-  { href: "/receive", label: "Receive", icon: Truck },
+  { href: "/", label: "หน้าหลัก", icon: LayoutDashboard },
+  { href: "/items", label: "พัสดุ", icon: Package },
+  { href: "/alerts", label: "แจ้งเตือน", icon: Bell },
+  { href: "/dispense", label: "เบิก", icon: ShoppingCart },
+  { href: "/receive", label: "รับเข้า", icon: Truck },
 ];
 
 interface BottomTabProps {
@@ -76,26 +76,26 @@ export function BottomTab({ user }: BottomTabProps) {
             render={(props) => (
               <button {...props} className="flex flex-col items-center gap-1 px-3 py-1.5 text-xs text-muted-foreground">
                 <MoreHorizontal className="h-6 w-6" />
-                <span>More</span>
+                <span>เพิ่มเติม</span>
               </button>
             )}
           />
           <SheetContent side="bottom" className="h-auto rounded-t-xl">
-            <SheetTitle className="sr-only">More menu</SheetTitle>
+            <SheetTitle className="sr-only">เมนูเพิ่มเติม</SheetTitle>
             <div className="space-y-1 pb-4">
               <Link
                 href="/maintenance"
                 className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
               >
                 <Wrench className="h-4 w-4" />
-                Maintenance
+                บำรุงรักษา
               </Link>
               <Link
                 href="/reports"
                 className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
               >
                 <BarChart3 className="h-4 w-4" />
-                Reports
+                รายงาน
               </Link>
               {user.role === "ADMIN" && (
                 <Link
@@ -103,7 +103,7 @@ export function BottomTab({ user }: BottomTabProps) {
                   className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
                 >
                   <Settings className="h-4 w-4" />
-                  Settings
+                  ตั้งค่า
                 </Link>
               )}
               <button
@@ -112,7 +112,7 @@ export function BottomTab({ user }: BottomTabProps) {
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-destructive hover:bg-accent"
               >
                 <LogOut className="h-4 w-4" />
-                Logout
+                ออกจากระบบ
               </button>
             </div>
           </SheetContent>

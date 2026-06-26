@@ -42,8 +42,8 @@ interface ItemRecord {
 type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint";
 
 const ALERT_BADGE: Record<string, string> = {
-  lowStock: "bg-orange-500/15 text-orange-600 border-orange-500/30",
-  nearExpiry: "bg-warning/15 text-warning border-warning/30",
+  lowStock: "bg-orange-500/15 text-orange-700 border-orange-500/30",
+  nearExpiry: "bg-warning/15 text-warning-foreground border-warning/30",
   overdueMaint: "bg-destructive/15 text-destructive border-destructive/30",
 };
 

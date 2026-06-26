@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-26T02:47:25Z",
+  "title": "Design System: NLU Stock",
+  "extensions": {
+    "colorMeta": {
+      "signal-orange": {
+        "role": "primary",
+        "displayName": "Signal Orange",
+        "canonical": "oklch(58% 0.19 40)",
+        "tonalRamp": ["oklch(20% 0.07 40)", "oklch(28% 0.09 40)", "oklch(42% 0.14 40)", "oklch(55% 0.18 40)", "oklch(62% 0.19 40)", "oklch(72% 0.16 40)", "oklch(84% 0.10 40)", "oklch(94% 0.04 40)"]
+      },
+      "signal-orange-deep": {
+        "role": "primary",
+        "displayName": "Signal Orange Deep",
+        "canonical": "oklch(55% 0.18 40)",
+        "tonalRamp": ["oklch(20% 0.07 40)", "oklch(28% 0.09 40)", "oklch(42% 0.14 40)", "oklch(55% 0.18 40)", "oklch(62% 0.19 40)", "oklch(72% 0.16 40)", "oklch(84% 0.10 40)", "oklch(94% 0.04 40)"]
+      },
+      "teal-success": {
+        "role": "tertiary",
+        "displayName": "Teal Success",
+        "canonical": "oklch(60% 0.13 185)",
+        "tonalRamp": ["oklch(20% 0.05 185)", "oklch(26% 0.07 185)", "oklch(38% 0.10 185)", "oklch(50% 0.13 185)", "oklch(60% 0.13 185)", "oklch(72% 0.10 185)", "oklch(83% 0.07 185)", "oklch(93% 0.03 185)"]
+      },
+      "amber-warning": {
+        "role": "tertiary",
+        "displayName": "Amber Warning",
+        "canonical": "oklch(72% 0.16 75)",
+        "tonalRamp": ["oklch(30% 0.05 75)", "oklch(40% 0.09 75)", "oklch(55% 0.15 75)", "oklch(65% 0.16 75)", "oklch(72% 0.16 75)", "oklch(80% 0.13 75)", "oklch(88% 0.09 75)", "oklch(95% 0.04 75)"]
+      },
+      "danger-red": {
+        "role": "secondary",
+        "displayName": "Danger Red",
+        "canonical": "oklch(55% 0.20 25)",
+        "tonalRamp": ["oklch(18% 0.08 25)", "oklch(22% 0.10 25)", "oklch(35% 0.16 25)", "oklch(45% 0.20 25)", "oklch(55% 0.20 25)", "oklch(65% 0.17 25)", "oklch(78% 0.10 25)", "oklch(93% 0.05 25)"]
+      },
+      "info-blue": {
+        "role": "tertiary",
+        "displayName": "Info Blue",
+        "canonical": "oklch(58% 0.12 240)",
+        "tonalRamp": ["oklch(18% 0.06 240)", "oklch(22% 0.08 240)", "oklch(36% 0.10 240)", "oklch(48% 0.12 240)", "oklch(58% 0.12 240)", "oklch(68% 0.10 240)", "oklch(80% 0.07 240)", "oklch(93% 0.04 240)"]
+      },
+      "page-bg": {
+        "role": "neutral",
+        "displayName": "Cool Clinic Page",
+        "canonical": "oklch(97% 0.003 264)",
+        "tonalRamp": ["oklch(15% 0.003 264)", "oklch(20% 0.003 264)", "oklch(35% 0.004 264)", "oklch(43% 0.006 264)", "oklch(60% 0.005 264)", "oklch(75% 0.004 264)", "oklch(90% 0.003 264)", "oklch(97% 0.003 264)"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Cool Ink",
+        "canonical": "oklch(20% 0.003 264)",
+        "tonalRamp": ["oklch(15% 0.003 264)", "oklch(20% 0.003 264)", "oklch(35% 0.004 264)", "oklch(43% 0.006 264)", "oklch(60% 0.005 264)", "oklch(75% 0.004 264)", "oklch(90% 0.003 264)", "oklch(97% 0.003 264)"]
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "oklch(43% 0.006 264)",
+        "tonalRamp": ["oklch(15% 0.003 264)", "oklch(20% 0.003 264)", "oklch(35% 0.004 264)", "oklch(43% 0.006 264)", "oklch(60% 0.005 264)", "oklch(75% 0.004 264)", "oklch(90% 0.003 264)", "oklch(97% 0.003 264)"]
+      },
+      "card-white": {
+        "role": "neutral",
+        "displayName": "Card White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0.003 264)", "oklch(20% 0.003 264)", "oklch(35% 0.004 264)", "oklch(43% 0.006 264)", "oklch(60% 0.005 264)", "oklch(75% 0.004 264)", "oklch(90% 0.003 264)", "oklch(100% 0 0)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Metric values and key counts — the numbers that define a glance (extrabold, leading-none)." },
+      "title": { "displayName": "Title", "purpose": "Card titles and panel headers (medium, text-base)." },
+      "body": { "displayName": "Body", "purpose": "The workhorse — text-sm for desktop density." },
+      "label": { "displayName": "Label", "purpose": "Metric titles, table headers, metadata — text-xs, tracking-wide, sentence-case Thai." }
+    },
+    "shadows": [
+      { "name": "card-rest", "value": "0 10px 15px -3px rgba(0,0,0,0.04)", "purpose": "Barely-there contact shadow under resting cards — reads as a surface, not floating." },
+      { "name": "interactive-hover", "value": "0 4px 6px -1px rgba(0,0,0,0.06)", "purpose": "Hover lift on clickable cards (paired with translateY(-2px))." },
+      { "name": "focus-ring", "value": "0 0 0 3px oklch(62% 0.19 40 / 0.5)", "purpose": "The single shared focus ring on every interactive element." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "ease-out-quart — default for state transitions (150–200ms)." },
+      { "name": "ease-emphasis", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "ease-out-expo — slow reveals (400ms)." },
+      { "name": "duration-fast", "value": "150ms", "purpose": "Button/control state changes." },
+      { "name": "duration-normal", "value": "200ms", "purpose": "Card hover lift, fade-in." },
+      { "name": "duration-slow", "value": "400ms", "purpose": "Slow fade-in reveals." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px", "purpose": "Metric grid 1→2 columns; input text-base→text-sm." },
+      { "name": "lg", "value": "1024px", "purpose": "Sidebar appears (mobile → bottom tab); metric grid →4 columns." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Signal Orange fill for the primary action in any cluster. Compact h-8, subtle press.",
+      "html": "<button class=\"ds-btn-primary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"/><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"/></svg>เพิ่มรายการ</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border:1px solid transparent;background:var(--primary);color:var(--primary-foreground);font:500 0.875rem/1 Sarabun,system-ui,sans-serif;border-radius:var(--radius-lg);cursor:pointer;transition:background .15s cubic-bezier(0.25,1,0.5,1),transform .15s cubic-bezier(0.25,1,0.5,1);}.ds-btn-primary:hover{background:oklch(55% 0.18 40);}.ds-btn-primary:active{transform:translateY(1px);}.ds-btn-primary:focus-visible{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px oklch(62% 0.19 40/0.5);}.ds-btn-primary:disabled{opacity:.5;pointer-events:none;}.ds-btn-primary svg{width:16px;height:16px;}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action on white with a hairline border; hover fills muted gray.",
+      "html": "<button class=\"ds-btn-outline\">ยกเลิก</button>",
+      "css": ".ds-btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border:1px solid var(--border);background:var(--background);color:var(--foreground);font:500 0.875rem/1 Sarabun,system-ui,sans-serif;border-radius:var(--radius-lg);cursor:pointer;transition:background .15s cubic-bezier(0.25,1,0.5,1);}.ds-btn-outline:hover{background:var(--muted);}.ds-btn-outline:focus-visible{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px oklch(62% 0.19 40/0.5);}.ds-btn-outline:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Tinted red fill (danger/10) with full-saturation text — never solid red. Restraint over alarm.",
+      "html": "<button class=\"ds-btn-destructive\">ลบ</button>",
+      "css": ".ds-btn-destructive{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border:1px solid transparent;background:oklch(55% 0.20 25/0.10);color:var(--destructive);font:500 0.875rem/1 Sarabun,system-ui,sans-serif;border-radius:var(--radius-lg);cursor:pointer;transition:background .15s cubic-bezier(0.25,1,0.5,1);}.ds-btn-destructive:hover{background:oklch(55% 0.20 25/0.20);}.ds-btn-destructive:focus-visible{outline:none;border-color:oklch(55% 0.20 25/0.4);box-shadow:0 0 0 3px oklch(55% 0.20 25/0.2);}.ds-btn-destructive:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Compact h-8 field with hairline border. Shared focus ring on focus; red ring when invalid.",
+      "html": "<input class=\"ds-input\" placeholder=\"ค้นหารายการพัสดุ…\" />",
+      "css": ".ds-input{height:32px;width:100%;min-width:0;padding:0 10px;border:1px solid var(--input);background:transparent;color:var(--foreground);border-radius:var(--radius-lg);font:0.875rem Sarabun,system-ui,sans-serif;outline:none;transition:border-color .15s cubic-bezier(0.25,1,0.5,1),box-shadow .15s cubic-bezier(0.25,1,0.5,1);}.ds-input::placeholder{color:var(--muted-foreground);}.ds-input:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px oklch(62% 0.19 40/0.5);}.ds-input:disabled{background:oklch(90% 0.003 264/0.5);opacity:.5;cursor:not-allowed;}.ds-input[aria-invalid=\"true\"]{border-color:var(--destructive);box-shadow:0 0 0 3px oklch(55% 0.20 25/0.2);}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Pure-white surface, rounded-2xl, barely-there contact shadow. Depth from contrast, not shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\"><h3 class=\"ds-card-title\">รายการพัสดุ</h3></div><div class=\"ds-card-body\">เนื้อหาของการ์ด — ใช้ text-sm สำหรับเนื้อหาหลัก</div></div>",
+      "css": ".ds-card{display:flex;flex-direction:column;gap:16px;background:var(--card);color:var(--card-foreground);padding:16px 0;border-radius:var(--radius-2xl);box-shadow:0 10px 15px -3px rgba(0,0,0,0.04);overflow:hidden;}.ds-card-title{margin:0;padding:0 16px;font:500 1rem/1.375 Sarabun,system-ui,sans-serif;color:var(--foreground);}.ds-card-body{padding:0 16px;font:0.875rem/1.5 Sarabun,system-ui,sans-serif;color:var(--muted-foreground);}"
+    },
+    {
+      "name": "Pill Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Fully-round status pill (rounded-4xl). Hues mirror button semantics; status pairs hue + icon.",
+      "html": "<span class=\"ds-badge ds-badge-warn\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>ใกล้หมด</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:var(--radius-4xl);font:500 0.75rem/1 Sarabun,system-ui,sans-serif;white-space:nowrap;}.ds-badge-primary{background:var(--primary);color:var(--primary-foreground);}.ds-badge-warn{background:oklch(72% 0.16 75/0.12);color:oklch(48% 0.15 75);}.ds-badge-danger{background:oklch(55% 0.20 25/0.10);color:var(--destructive);}.ds-badge svg{width:12px;height:12px;}"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "button-primary",
+      "description": "Signature navigation item. Active state is the system's one committed orange surface; default uses a tinted icon tile.",
+      "html": "<a class=\"ds-nav-item ds-nav-active\"><span class=\"ds-nav-tile\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/></svg></span><span class=\"ds-nav-label\">แดชบอร์ด</span></a>",
+      "css": ".ds-nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-xl);font:500 0.875rem Sarabun,system-ui,sans-serif;color:var(--sidebar-foreground);text-decoration:none;transition:background .15s cubic-bezier(0.25,1,0.5,1);}.ds-nav-item:hover{background:var(--sidebar-accent);}.ds-nav-tile{display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;border-radius:var(--radius-lg);background:oklch(94% 0.04 40);}.ds-nav-tile svg{width:16px;height:16px;color:oklch(62% 0.19 40);}.ds-nav-active{background:oklch(62% 0.19 40);color:#fff;font-weight:600;}.ds-nav-active:hover{background:oklch(62% 0.19 40);}.ds-nav-active .ds-nav-tile{background:rgba(255,255,255,0.2);}.ds-nav-active .ds-nav-tile svg{color:#fff;}"
+    },
+    {
+      "name": "Dashboard Metric Card",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Signature status tile — always a clickable filter, never decorative. Extrabold value, tinted status icon, hover lift + active scale.",
+      "html": "<div class=\"ds-metric\"><button class=\"ds-metric-btn\"><div class=\"ds-metric-top\"><div><p class=\"ds-metric-label\">ใกล้หมด / ต่ำกว่าจุดสั่งซื้อ</p><p class=\"ds-metric-value\">12</p></div><span class=\"ds-metric-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg></span></div><p class=\"ds-metric-sub\">ต่ำกว่าจุดสั่งซื้อ</p></button></div>",
+      "css": ".ds-metric{background:var(--card);border-radius:var(--radius-2xl);box-shadow:0 10px 15px -3px rgba(0,0,0,0.04);transition:box-shadow .2s cubic-bezier(0.25,1,0.5,1),transform .2s cubic-bezier(0.25,1,0.5,1);}.ds-metric-btn{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px 16px;cursor:pointer;font:inherit;}.ds-metric-top{display:flex;align-items:center;justify-content:space-between;}.ds-metric-label{margin:0;font:500 0.75rem/1.25 Sarabun,system-ui,sans-serif;letter-spacing:0.025em;color:var(--muted-foreground);}.ds-metric-value{margin:2px 0 0;font:800 1.5rem/1 Sarabun,system-ui,sans-serif;letter-spacing:-0.025em;color:var(--foreground);}.ds-metric-icon{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:var(--radius-lg);background:oklch(72% 0.16 75/0.10);}.ds-metric-icon svg{width:14px;height:14px;color:oklch(72% 0.16 75);}.ds-metric-sub{margin:4px 0 0;font:0.75rem/1 Sarabun,system-ui,sans-serif;color:var(--muted-foreground);}.ds-metric:hover{box-shadow:0 4px 6px -1px rgba(0,0,0,0.06);transform:translateY(-2px);}.ds-metric:active{transform:scale(0.98);}.ds-metric:focus-within{outline:none;box-shadow:0 0 0 2px var(--primary),0 0 0 4px var(--card);}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Supply Station",
+    "overview": "NLU Stock is the supply counter at a Thai nursing institute — the place a staff member walks to between rounds, glances at, and acts on. Everything in its place, status legible at arm's length, no decoration between the user and the task. Clarity is the design; trust is the byproduct.\n\nThis is a Restrained product surface with one Committed accent. Cool clinic neutrals (a near-white at hue 264, chroma ~0.003) carry 90%+ of every screen; Signal Orange appears only where the user must act or the system must signal. Density is deliberate: h-8 controls, text-sm body, tight type scale — tight enough to show real data, generous enough to stay calm. It is not consumer e-commerce and not heavy ERP. Thai is primary; Sarabun is the single typeface.",
+    "keyCharacteristics": [
+      "Status-first: stock levels, pending requests, item state surfaced immediately through four semantic hues, never through color alone.",
+      "Compact, not cramped: h-8 controls, text-sm body, ~1.15 type ratio, comfortable gap-4/gap-6 rhythm.",
+      "One committed accent: Signal Orange is rare; its rarity on a near-white field is what makes it read as 'act here.'",
+      "Soft-lifted depth: flat at rest; the faintest shadow and a hover lift mark only interactive cards. White cards on cool-gray page do the structural work.",
+      "Thai-first typography: Sarabun for sans, heading, and mono alike — one family, tuned by weight."
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Signal Orange occupies ≤10% of any screen. It marks primary actions, current selection, and focus — nothing decorative. If orange appears on more than one element per cluster without earning it, the signal is broken.", "section": "colors" },
+      { "name": "The Status-Not-Decoration Rule", "body": "Teal/amber/red/blue encode state. Never used as brand flourish, never full-saturation on inactive states, and never the only indicator — every status pairs its hue with an icon and Thai text label.", "section": "colors" },
+      { "name": "The Tinted-Destructive Rule", "body": "Destructive and warning actions use a low-opacity tint of their hue (/10–/20 background) with full-saturation text — never a solid red/amber button. Restraint prevents alarm fatigue on a screen full of pending alerts.", "section": "colors" },
+      { "name": "The One-Family Rule", "body": "No display font, no serif pairing, no monospace. Sarabun at the right weight answers every role.", "section": "typography" },
+      { "name": "The Fixed-Scale Rule", "body": "Type sizes are fixed rem, never clamp(). Users work at consistent DPI; a fluid heading that shrinks in a sidebar reads as broken.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "Surfaces hold no shadow when idle. Shadow is a state event (hover, elevation, focus), never ambient decoration.", "section": "elevation" },
+      { "name": "The Ladder-Not-Shadow Rule", "body": "Structural depth (page → sidebar → card → popover) is shown by stepping lightness, not stacking shadows. Dark mode: 22% → 25% → 28%.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Signal Orange to ≤10% of any screen — primary actions, focus rings, active nav, leading chart series only (The Signal Rule).",
+      "Do encode every state with one of the four semantic hues AND reinforce it with a Lucide icon + Thai text label. Color is never the only indicator.",
+      "Do render destructive and warning actions as tinted fills (/10–/20) with full-saturation text, never solid red/amber.",
+      "Do use the shared 3px focus ring (focus-visible:ring-3 ring-ring/50) on every interactive element.",
+      "Do build structure with the lightness ladder (page 97% → sidebar 98% → white card → white popover), not stacked shadows.",
+      "Do ship every interactive component with default, hover, focus-visible, active, disabled, and error states.",
+      "Do keep the type scale fixed rem, one Sarabun family across all roles.",
+      "Do validate early — surface code duplicates, name conflicts, low-stock states before save, not after."
+    ],
+    "donts": [
+      "Don't use warm cream/sand/beige backgrounds. The neutral field is cool (hue 264) — 'Generic SaaS cream/beige (anonymous)' is refused by construction.",
+      "Don't make the interface feel like consumer e-commerce (retail flourish) or heavy ERP (dense corporate chrome, nested panels).",
+      "Don't add border-left/border-right greater than 1px as a colored stripe — ever.",
+      "Don't use gradient text, decorative glassmorphism, or the hero-metric vanity template. Metric tiles here are functional filters, not stat-flexing.",
+      "Don't repeat identical icon-heading-text cards endlessly, and don't put a tiny uppercase tracked eyebrow or 01/02/03 numbered markers above every section.",
+      "Don't add a second typeface, a display font, or a monospace. One Sarabun family, tuned by weight.",
+      "Don't cast visible shadows on resting surfaces, or use solid full-saturation accents on inactive states.",
+      "Don't let long Thai headings overflow their container at narrow breakpoints — test at every width."
+    ]
+  }
+}

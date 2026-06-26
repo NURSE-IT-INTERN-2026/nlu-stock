@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Package, QrCode, ShoppingCart, ArrowDownToLine,
   Flag, Undo2,
@@ -16,6 +17,7 @@ import { formatSubCode } from "@/lib/constants";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { returnItem } from "@/lib/api";
+import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 
 interface SubItemRecord {
   id: string;
@@ -45,6 +47,7 @@ interface ItemData {
   availableQty: number;
   totalQty: number;
   subItems: SubItemRecord[];
+  lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   images: string[];
 }
 
@@ -77,6 +80,41 @@ const CONDITION_LABELS: Record<string, string> = {
 
 export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onRefresh }: Props) {
   const canAct = userRole === "ADMIN" || userRole === "STAFF";
+  const { addItem, items: cartItems } = useCart();
+  const router = useRouter();
+
+  // Add to dispense cart with the same smart defaults as the dispense grid
+  // (FIFO lot / next sub-item), then toast with a shortcut to review the cart.
+  const handleDispense = () => {
+    const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
+    const result = buildCartItem(
+      {
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        imageUrl: item.imageUrl,
+        categoryName: item.category.name,
+        dispenseType: item.category.profile?.dispenseType ?? "COUNT",
+        trackIndividually: item.trackIndividually,
+        issueUnit: item.issueUnit.name,
+        availableQty: item.availableQty,
+        location: item.location
+          ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
+          : null,
+        lots: (item.lots ?? []).map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
+        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode })),
+      },
+      usedSubIds,
+    );
+    if (!result.ok) {
+      toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
+      return;
+    }
+    addItem(result.cartItem);
+    toast.success(`เพิ่ม "${item.name}" เข้าตะกร้า`, {
+      action: { label: "ดูตะกร้า", onClick: () => router.push("/dispense/cart") },
+    });
+  };
 
   const checkedOutSubs = useMemo(
     () => item.subItems.filter((s) => s.status === "CHECKED_OUT"),
@@ -189,7 +227,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <section className="animate-in fade-in slide-in-from-2 duration-300">
             <SectionHeading eyebrow="การจัดการ" title="จัดการสต็อก" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <ActionTile icon={ShoppingCart} label="เบิก" tone="primary" onClick={() => { window.location.href = `/dispense?item=${item.id}`; }} />
+              <ActionTile icon={ShoppingCart} label="เพิ่มเข้าตะกร้า" tone="primary" onClick={handleDispense} />
               <ActionTile icon={ArrowDownToLine} label="รับเข้า" tone="default" onClick={() => { window.location.href = `/receive?item=${item.id}`; }} />
               <ActionTile icon={Package} label="ปรับสต็อก" tone="default" onClick={onAdjust} />
               <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />

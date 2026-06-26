@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo, type ComponentProps } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +12,7 @@ import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { searchDispenseItems } from "@/lib/api";
-import { useCart } from "@/components/dispense/cart-context";
+import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/dashboard/pagination";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -175,13 +177,20 @@ interface SearchItem {
 
 function DispenseContent() {
   const { itemCount, getItemQty, items: cartItems, updateItem, removeItem, addItem } = useCart();
-  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [items, setItems] = useState<SearchItem[]>([]);
   const { categories } = useCategories();
   const { locations } = useLocations();
-  const [filterProfile, setFilterProfile] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
-  const [filterLocation, setFilterLocation] = useState<LocationFilter>({});
+  const [filterProfile, setFilterProfile] = useState(searchParams.get("profile") ?? "");
+  const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
+  const [filterLocation, setFilterLocation] = useState<LocationFilter>(() => ({
+    building: searchParams.get("building") ?? undefined,
+    floor: searchParams.get("floor") ?? undefined,
+    room: searchParams.get("room") ?? undefined,
+    detail: searchParams.get("detail") ?? undefined,
+  }));
 
   const profiles = useMemo<ProfileOption[]>(() => {
     const map = new Map<string, ProfileOption>();
@@ -193,10 +202,11 @@ function DispenseContent() {
   const [loading, setLoading] = useState(true);
   const [scannerOpen, setScannerOpen] = useState(false);
   const prevCount = useRef(itemCount);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
   const [total, setTotal] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const skipPageEffect = useRef(false);
+  const restoredScroll = useRef(false);
   const PAGE_SIZE = 18;
 
   const debounced = useDebounce(query, 300);
@@ -242,93 +252,60 @@ function DispenseContent() {
     gridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync filters to URL so back-navigation restores them
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (debounced) p.set("q", debounced);
+    if (filterProfile) p.set("profile", filterProfile);
+    if (filterCategory) p.set("category", filterCategory);
+    if (filterLocation.building) p.set("building", filterLocation.building);
+    if (filterLocation.floor) p.set("floor", filterLocation.floor);
+    if (filterLocation.room) p.set("room", filterLocation.room);
+    if (filterLocation.detail) p.set("detail", filterLocation.detail);
+    if (page > 1) p.set("page", String(page));
+    const qs = p.toString();
+    router.replace(qs ? `/dispense?${qs}` : "/dispense", { scroll: false });
+  }, [debounced, filterProfile, filterCategory, filterLocation, page, router]);
+
+  // Restore grid scroll position after back-navigation
+  useEffect(() => {
+    if (restoredScroll.current || items.length === 0) return;
+    const saved = Number(sessionStorage.getItem("dispense-scroll"));
+    if (saved) gridRef.current?.scrollTo({ top: saved });
+    restoredScroll.current = true;
+    sessionStorage.removeItem("dispense-scroll");
+  }, [items]);
+
   const handlePageChange = (p: number) => {
     setPage(p);
   };
 
   const handleAdd = (item: SearchItem) => {
-    const dispenseType = item.category.profile.dispenseType;
-    const isConsumable = dispenseType === "CONSUMABLE";
-    const isTracked = item.trackIndividually && item.subItems.length > 0;
-
-    const loc = item.location ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail } : null;
-
-    if (isConsumable && item.lots.length > 0) {
-      // Auto-pick FIFO lot (lots already sorted by expiry ASC from API)
-      const lot = item.lots[0];
-      addItem({
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
+    const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
+    const result = buildCartItem(
+      {
+        id: item.id,
+        code: item.code,
+        name: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        dispenseType,
-        trackIndividually: false,
+        dispenseType: item.category.profile.dispenseType,
+        trackIndividually: item.trackIndividually,
         issueUnit: item.issueUnit.name,
-        quantity: 1,
-        lotId: lot.id,
-        lotNumber: lot.lotNumber,
-        subItemId: null,
-        subCode: null,
         availableQty: item.availableQty,
-        location: loc,
-        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, quantity: l.remainingQty })),
-        subItems: [],
-      });
-    } else if (isTracked) {
-      // Auto-pick next available sub-item not already in cart
-      const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
-      const nextSub = item.subItems.find((s) => !usedSubIds.has(s.id));
-      if (!nextSub) {
-        toast.error("No more available sub-items", { id: "no-sub" });
-        return;
-      }
-      addItem({
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
-        imageUrl: item.imageUrl,
-        categoryName: item.category.name,
-        dispenseType,
-        trackIndividually: true,
-        issueUnit: item.issueUnit.name,
-        quantity: 1,
-        lotId: null,
-        lotNumber: null,
-        subItemId: nextSub.id,
-        subCode: nextSub.subCode,
-        availableQty: item.availableQty,
-        location: loc,
-        lots: [],
+        location: item.location
+          ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
+          : null,
+        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
         subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode })),
-      });
-    } else {
-      // Simple item or consumable without lots — just add qty 1
-      if (item.availableQty <= 0) {
-        toast.error("Item out of stock", { id: "no-stock" });
-        return;
-      }
-      const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;
-      addItem({
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
-        imageUrl: item.imageUrl,
-        categoryName: item.category.name,
-        dispenseType,
-        trackIndividually: false,
-        issueUnit: item.issueUnit.name,
-        quantity: 1,
-        lotId: null,
-        lotNumber: null,
-        subItemId: hasSingleSubItem ? item.subItems[0].id : null,
-        subCode: hasSingleSubItem ? item.subItems[0].subCode : null,
-        availableQty: item.availableQty,
-        location: loc,
-        lots: [],
-        subItems: [],
-      });
+      },
+      usedSubIds,
+    );
+    if (!result.ok) {
+      toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
+      return;
     }
+    addItem(result.cartItem);
   };
 
   const handleQrScan = async (code: string) => {
@@ -340,10 +317,10 @@ function DispenseContent() {
       if (found && found.code === code) {
         handleAdd(found);
       } else {
-        toast.error(`Item "${code}" not found`, { id: "qr-not-found" });
+        toast.error(`ไม่พบรหัส "${code}"`, { id: "qr-not-found" });
       }
     } catch {
-      toast.error("Search failed", { id: "qr-fail" });
+      toast.error("ค้นหาไม่สำเร็จ", { id: "qr-fail" });
     } finally {
       setLoading(false);
     }
@@ -411,45 +388,52 @@ return (
                 key={item.id}
                 className="@container flex flex-col gap-3 rounded-2xl border p-3 hover:bg-muted/50 transition-colors"
               >
-                {/* Cover image — rounded square, full width */}
-                <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Package className="h-10 w-10 text-muted-foreground/50" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="flex flex-col items-start gap-1">
-                    <Badge className={`text-[11px] @[15rem]:text-xs shrink-0 max-w-[140px] truncate ${item.category.profile.color ?? ""}`}>
-                      {item.category.name}
-                    </Badge>
-                    <span className="font-mono text-xs @[15rem]:text-sm text-muted-foreground">{item.code}</span>
+                <Link
+                  href={`/items/${item.id}`}
+                  onClick={() => sessionStorage.setItem("dispense-scroll", String(gridRef.current?.scrollTop ?? 0))}
+                  className="flex flex-col flex-1 min-w-0 gap-3 text-left"
+                >
+                  {/* Cover image — rounded square, full width */}
+                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Package className="h-10 w-10 text-muted-foreground/50" />
+                    )}
                   </div>
-                  <span className="text-sm @[15rem]:text-base font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.25rem] @[15rem]:min-h-[2.75rem]">{item.name}</span>
-                  <p className="text-xs @[15rem]:text-sm text-muted-foreground">
-                    คงเหลือ: {item.trackIndividually
-                      ? `${item.subItems.length} ชิ้น`
-                      : `${item.availableQty} ${item.issueUnit.name}`}
-                  </p>
-                  <p className="text-[11px] @[15rem]:text-xs text-muted-foreground/70 truncate min-h-[0.875rem] @[15rem]:min-h-[1rem]">
-                    {(item.location && !locActive)
-                      ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
-                      : ""}
-                  </p>
 
-                  {/* Qty control — bottom row, in flow */}
-                  <div className="mt-auto pt-2 flex justify-end">
+                  {/* Content */}
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge className={`text-[11px] @[15rem]:text-xs shrink-0 max-w-[140px] truncate ${item.category.profile.color ?? ""}`}>
+                        {item.category.name}
+                      </Badge>
+                      <span className="font-mono text-xs @[15rem]:text-sm text-muted-foreground">{item.code}</span>
+                    </div>
+                    <span className="text-sm @[15rem]:text-base font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.25rem] @[15rem]:min-h-[2.75rem]">{item.name}</span>
+                    <p className="text-xs @[15rem]:text-sm text-muted-foreground">
+                      คงเหลือ: {item.trackIndividually
+                        ? `${item.subItems.length} ชิ้น`
+                        : `${item.availableQty} ${item.issueUnit.name}`}
+                    </p>
+                    <p className="text-[11px] @[15rem]:text-xs text-muted-foreground/70 truncate min-h-[0.875rem] @[15rem]:min-h-[1rem]">
+                      {(item.location && !locActive)
+                        ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
+                        : ""}
+                    </p>
+                  </div>
+                </Link>
+
+                {/* Qty control — bottom row, in flow */}
+                <div className="pt-2 flex justify-end">
                     {inCart > 0 && cartEntry ? (
-                      <div className="flex w-full items-center justify-between gap-0.5 bg-background border rounded-full px-0.5">
+                      <div className="animate-cart-pop flex w-full items-center justify-between gap-0.5 bg-background border rounded-full px-0.5">
                         <button
-                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (cartEntry.quantity <= 1) {
@@ -469,7 +453,7 @@ return (
                           }}
                         />
                         <button
-                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
+                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90 disabled:opacity-30"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (atMax) return;
@@ -486,7 +470,7 @@ return (
                       </div>
                     ) : (
                       <button
-                        className="h-8 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors disabled:opacity-30"
+                        className="h-8 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors active:scale-95 disabled:opacity-30"
                         onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
                         disabled={!item.trackIndividually && item.availableQty <= 0}
                       >
@@ -494,7 +478,6 @@ return (
                       </button>
                     )}
                   </div>
-                </div>
               </div>
               );
             })}
