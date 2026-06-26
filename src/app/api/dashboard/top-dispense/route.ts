@@ -8,15 +8,22 @@ export async function GET(request: NextRequest) {
 
   const params = getSearchParams(request);
   const categoryId = params.get("categoryId") || undefined;
+  const profileId = params.get("profileId") || undefined;
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const itemFilter = categoryId
+    ? { item: { categoryId } }
+    : profileId
+      ? { item: { category: { profileId } } }
+      : {};
 
   const groups = await prisma.dispenseRecord.groupBy({
     by: ["itemId"],
     where: {
       dispensedAt: { gte: startOfMonth },
-      ...(categoryId && { item: { categoryId } }),
+      ...itemFilter,
     },
     _sum: { quantity: true },
     orderBy: { _sum: { quantity: "desc" } },

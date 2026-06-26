@@ -6,7 +6,6 @@ import {
   getDashboardRecentReceive,
   getDashboardTopDispense,
   getDashboardUsageBySubject,
-  getDashboardStatusOverview,
   getDashboardDispenseMonthly,
 } from "@/lib/api";
 import {
@@ -14,7 +13,6 @@ import {
   ReceiveRecordArraySchema,
   TopDispenseDataArraySchema,
   UsageByTypeDataArraySchema,
-  StatusDataArraySchema,
   MonthlyDispenseDataArraySchema,
 } from "@/lib/dashboard-types";
 
@@ -36,24 +34,17 @@ export function useRecentReceive() {
   });
 }
 
-export function useTopDispense(categoryId?: string) {
+export function useTopDispense(categoryId?: string, profileId?: string) {
   return useQuery({
-    queryKey: ["dashboard", "top-dispense", categoryId ?? "all"],
-    queryFn: async () => validate(TopDispenseDataArraySchema, await getDashboardTopDispense(categoryId)),
+    queryKey: ["dashboard", "top-dispense", categoryId ?? "all", profileId ?? "all"],
+    queryFn: async () => validate(TopDispenseDataArraySchema, await getDashboardTopDispense(categoryId, profileId)),
   });
 }
 
-export function useUsageBySubject(categoryId?: string) {
+export function useUsageBySubject(categoryId?: string, profileId?: string) {
   return useQuery({
-    queryKey: ["dashboard", "usage-by-subject", categoryId ?? "all"],
-    queryFn: async () => validate(UsageByTypeDataArraySchema, await getDashboardUsageBySubject(categoryId)),
-  });
-}
-
-export function useStatusOverview() {
-  return useQuery({
-    queryKey: ["dashboard", "status-overview"],
-    queryFn: async () => validate(StatusDataArraySchema, await getDashboardStatusOverview()),
+    queryKey: ["dashboard", "usage-by-subject", categoryId ?? "all", profileId ?? "all"],
+    queryFn: async () => validate(UsageByTypeDataArraySchema, await getDashboardUsageBySubject(categoryId, profileId)),
   });
 }
 

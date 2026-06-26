@@ -76,10 +76,12 @@ export function MaintenanceScheduleTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <ReportFilters config={filterConfig} values={filters} onChange={setFilters} />
-        <ExportButtons reportType="maintenance-schedule" filters={filters} />
-      </div>
+      <ReportFilters
+        config={filterConfig}
+        values={filters}
+        onChange={setFilters}
+        actions={<ExportButtons reportType="maintenance-schedule" filters={filters} />}
+      />
       <ReportDataTable columns={columns} data={data} loading={loading} />
     </div>
   );

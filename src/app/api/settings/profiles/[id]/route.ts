@@ -4,7 +4,7 @@ import { profileUpdateSchema } from "@/lib/validators";
 import { NextRequest } from "next/server";
 
 // Behavior fields can only change while the profile has no items (see validators/profile.ts).
-const BEHAVIOR_FIELDS = ["code", "dispenseType", "assetTracking", "setTracking", "isComposite"] as const;
+const BEHAVIOR_FIELDS = ["code", "dispenseType", "assetTracking", "setTracking"] as const;
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(request);

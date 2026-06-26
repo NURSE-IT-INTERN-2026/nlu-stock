@@ -2,11 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip,
 } from "recharts";
 import { BarChart3 } from "lucide-react";
 import { useThemeColor } from "@/lib/resolve-color";
 import type { TopDispenseData } from "@/lib/dashboard-types";
+import { ChartContainer } from "./chart-container";
 
 interface TopDispenseChartProps {
   data: TopDispenseData[];
@@ -89,14 +90,16 @@ export function TopDispenseChart({ data }: TopDispenseChartProps) {
           <TopDispenseEmpty />
         ) : (
           <div className="flex-1 min-h-[260px]" role="img" aria-label={`รายการเบิกมากที่สุด: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 24, bottom: 5, left: 4 }}>
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" width={140} tick={<ThaiTick />} tickLine={false} interval={0} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="totalQuantity" fill={fillColor} radius={[0, 4, 4, 0]} animationDuration={400} animationEasing="ease-out" />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChartContainer>
+              {({ width, height }) => (
+                <BarChart data={chartData} width={width} height={height} layout="vertical" margin={{ top: 5, right: 24, bottom: 5, left: 4 }}>
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" width={140} tick={<ThaiTick />} tickLine={false} interval={0} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="totalQuantity" fill={fillColor} radius={[0, 4, 4, 0]} animationDuration={400} animationEasing="ease-out" />
+                </BarChart>
+              )}
+            </ChartContainer>
           </div>
         )}
       </CardContent>

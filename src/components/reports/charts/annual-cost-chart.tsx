@@ -2,9 +2,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell, Tooltip, Legend,
 } from "recharts";
 import { useMemo } from "react";
+import { ChartContainer } from "@/components/dashboard/chart-container";
 
 function resolveToHex(cssVar: string): string {
   if (typeof window === "undefined") return "#888";
@@ -60,25 +61,29 @@ export function AnnualCostChart({ data }: AnnualCostChartProps) {
         <CardTitle className="text-base font-semibold">Cost Breakdown</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie
-              data={pieData}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={80}
-              dataKey="value"
-              label={({ name, value }) => `${name}: ฿${value.toLocaleString()}`}
-            >
-              {pieData.map((_, i) => (
-                <Cell key={i} fill={colors[i % colors.length]} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(v) => `฿${Number(v).toLocaleString()}`} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+        <ChartContainer height={260}>
+          {({ width, height }) => (
+            <PieChart width={width} height={height}>
+              <Pie
+                data={pieData}
+                animationDuration={400}
+                animationEasing="ease-out"
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={80}
+                dataKey="value"
+                label={({ name, value }) => `${name}: ฿${value.toLocaleString()}`}
+              >
+                {pieData.map((_, i) => (
+                  <Cell key={i} fill={colors[i % colors.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => `฿${Number(v).toLocaleString()}`} />
+              <Legend />
+            </PieChart>
+          )}
+        </ChartContainer>
       </CardContent>
     </Card>
   );

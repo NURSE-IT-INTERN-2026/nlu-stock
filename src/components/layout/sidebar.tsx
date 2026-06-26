@@ -19,9 +19,9 @@ import { cn } from "@/lib/utils";
 import type { SessionUser } from "@/types";
 
 const navItems = [
-  { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard },
+  { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard, hideForChildren: true },
   { href: "/items", label: "รายการพัสดุ", icon: Package },
-  { href: "/dispense", label: "เบิก-จ่าย", icon: ShoppingCart },
+  { href: "/dispense", label: "เบิก-ยืมพัสดุ", icon: ShoppingCart },
   { href: "/receive", label: "รับเข้าพัสดุ", icon: Truck },
   { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench },
   { href: "/reports", label: "รายงาน & สถิติ", icon: BarChart3 },
@@ -43,7 +43,9 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
   }
 
   const filteredNav = navItems.filter(
-    (item) => !item.adminOnly || user.role === "ADMIN"
+    (item) =>
+      (!item.adminOnly || user.role === "ADMIN") &&
+      (!item.hideForChildren || user.role !== "CHILDREN")
   );
 
   return (

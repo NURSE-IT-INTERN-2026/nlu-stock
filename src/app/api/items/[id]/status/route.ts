@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { statusChangeSchema } from "@/lib/validators";
+import { recomputeItemCounts } from "@/lib/stock";
 import { NextRequest } from "next/server";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (data.subItemId) {
     const subItem = await prisma.subItem.findUnique({ where: { id: data.subItemId } });
     if (!subItem || subItem.itemId !== id) return notFound("Sub-item not found");
+    if (data.newStatus === subItem.status) return json(subItem); // no-op: no log, no recompute
 
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.subItem.update({
@@ -38,6 +40,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
 
+      // Recompute counts for tracked items after a per-piece status change (no-op for non-tracked).
+      await recomputeItemCounts(tx, id);
       return updated;
     });
 

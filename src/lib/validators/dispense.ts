@@ -8,10 +8,7 @@ export const cartItemSchema = z.object({
   dispenseType: z.enum(["CONSUMABLE", "COUNT", "ITEM"]),
   trackIndividually: z.boolean(),
   issueUnit: z.string(),
-  subUnit: z.string(),
-  conversionFactor: z.number().int().min(1),
   quantity: z.number().int().min(1),
-  quantitySub: z.number().int().min(0).default(0),
   lotId: z.string().optional().nullable(),
   lotNumber: z.string().optional().nullable(),
   subItemId: z.string().optional().nullable(),
@@ -44,11 +41,8 @@ export const dispenseRequestSchema = z.object({
     subItemId: z.string().optional().nullable(),
     lotId: z.string().optional().nullable(),
     quantity: z.number().int().min(1),
-    quantitySub: z.number().int().min(0),
   })).min(1, "At least one item required"),
   usageType: z.enum(["COURSE", "ACTIVITY", "OTHER"]).optional().nullable(),
   usageNote: z.string().max(500).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
 });
-
-export type DispenseRequest = z.infer<typeof dispenseRequestSchema>;

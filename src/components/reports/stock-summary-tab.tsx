@@ -10,7 +10,7 @@ import { UsageBySubjectChart } from "@/components/dashboard/usage-by-subject-cha
 import { useTopDispense, useUsageBySubject } from "@/hooks/use-dashboard-queries";
 import { getReport } from "@/lib/api";
 
-const filterConfig: FilterConfig = { categories: true };
+const filterConfig: FilterConfig = { profiles: true, categories: true };
 
 interface Row {
   categoryId: string;
@@ -32,13 +32,14 @@ export function StockSummaryTab() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterValues>({});
 
-  const topQuery = useTopDispense(filters.categoryId);
-  const usageQuery = useUsageBySubject(filters.categoryId);
+  const topQuery = useTopDispense(filters.categoryId, filters.profileId);
+  const usageQuery = useUsageBySubject(filters.categoryId, filters.profileId);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = {};
     if (filters.categoryId) params.categoryId = filters.categoryId;
+    else if (filters.profileId) params.profileId = filters.profileId;
     const json = (await getReport("stock-summary", params)) as Row[];
     setData(json);
     setLoading(false);
@@ -50,10 +51,12 @@ export function StockSummaryTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <ReportFilters config={filterConfig} values={filters} onChange={setFilters} />
-        <ExportButtons reportType="stock-summary" filters={filters} />
-      </div>
+      <ReportFilters
+        config={filterConfig}
+        values={filters}
+        onChange={setFilters}
+        actions={<ExportButtons reportType="stock-summary" filters={filters} />}
+      />
       <StockSummaryChart data={data} />
       <div className="grid gap-4 md:grid-cols-2">
         <TopDispenseChart data={topQuery.data ?? []} />

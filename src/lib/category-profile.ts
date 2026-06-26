@@ -11,7 +11,6 @@ export interface ProfileLike {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
-  isComposite: boolean;
 }
 
 function req(p: ProfileLike | null | undefined): ProfileLike {
@@ -33,9 +32,36 @@ export function isItemTracked(p: ProfileLike | null | undefined): boolean {
   return req(p).dispenseType === "ITEM";
 }
 
-/** KIT: dispense → deduct linked component stock. */
-export function isComposite(p: ProfileLike | null | undefined): boolean {
-  return req(p).isComposite;
+// ── Profile-driven item field enforcement (D4) ──
+
+/** Fixed-asset fields only meaningful when profile.assetTracking is true. */
+const ASSET_FIELDS = [
+  "model", "purchaseDate", "purchasePrice",
+  "vendorCompany", "vendorContact", "vendorPhone",
+  "warrantyMonths", "maintenanceCycleMonths",
+  "lastMaintenanceDate", "nextMaintenanceDate", "manualUrl",
+] as const;
+
+/**
+ * Strip/clamp item payload fields the profile doesn't permit, so stored data
+ * can't drift from what the form exposes. Mutates in place; Prisma skips
+ * deleted keys. Call after parsing, before the write.
+ */
+export function sanitizeItemByProfile(
+  profile: ProfileLike | null | undefined,
+  data: Record<string, unknown>,
+): void {
+  if (!profile) return;
+  if (!profile.assetTracking) {
+    for (const f of ASSET_FIELDS) delete data[f];
+  }
+  if (!profile.setTracking) {
+    data.setSize = 1;
+    data.borrowable = false;
+  }
+  if (profile.dispenseType !== "CONSUMABLE") {
+    delete data.storageRequirements;
+  }
 }
 
 // ── Display labels (server-side; client reads profile.name/icon/color directly) ──

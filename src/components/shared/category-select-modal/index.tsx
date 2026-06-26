@@ -48,7 +48,6 @@ export function CategorySelectModal({
   onClose,
   onSelect,
   title = "เลือกหมวดหมู่",
-  allowedProfileIds,
 }: CategorySelectModalProps) {
   const [isDesktop, setIsDesktop] = useState(false);
 
@@ -208,7 +207,6 @@ export function CategorySelectModal({
             selectedId={state.selectedExisting?.id ?? null}
             onSelectExisting={handleSelectExisting}
             onSelectCreateNew={handleSelectCreateNew}
-            allowedProfileIds={allowedProfileIds}
           />
         )}
         {state.step === "confirm-existing" && state.selectedExisting && (

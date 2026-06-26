@@ -36,8 +36,6 @@ interface ItemData {
   trackIndividually: boolean;
   status: string;
   issueUnit: { id: string; name: string };
-  subUnit: { id: string; name: string };
-  conversionFactor: number;
   minThreshold: number;
   location: LocationType | null;
   imageUrl: string | null;
@@ -192,31 +190,33 @@ export default function ItemDetailPage() {
         )}
 
         {/* ── Cover image + Title + Stock at-a-glance ── */}
-        <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 pb-6 border-b border-border">
-          {coverSrc && (
-            <div className="relative w-full sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
-              <img src={coverSrc} alt={item.name} className="size-full object-cover" />
-              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
-                Cover
-              </span>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-8 pb-6 border-b border-border">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center lg:flex-1 lg:min-w-0">
+            {coverSrc && (
+              <div className="relative w-48 sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
+                <img src={coverSrc} alt={item.name} className="size-full object-cover" />
+                <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                  Cover
+                </span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <BadgePill label={item.category.profile?.name ?? item.category.name} />
+                <span>·</span>
+                <span className="font-mono">{item.code}</span>
+                {/* Live status dot */}
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={cn("size-2 rounded-full", stockStatus.color)} />
+                  <span>{stockStatus.label}</span>
+                </span>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance">
+                {item.name}
+              </h1>
+              {item.nameEn && <p className="text-sm text-muted-foreground mt-1">{item.nameEn}</p>}
+              {item.description && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{item.description}</p>}
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <BadgePill label={item.category.profile?.name ?? item.category.name} />
-              <span>·</span>
-              <span className="font-mono">{item.code}</span>
-              {/* Live status dot */}
-              <span className="inline-flex items-center gap-1.5">
-                <span className={cn("size-2 rounded-full", stockStatus.color)} />
-                <span>{stockStatus.label}</span>
-              </span>
-            </div>
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance">
-              {item.name}
-            </h1>
-            {item.nameEn && <p className="text-sm text-muted-foreground mt-1">{item.nameEn}</p>}
-            {item.description && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{item.description}</p>}
           </div>
 
           {/* Stock summary */}
@@ -229,7 +229,7 @@ export default function ItemDetailPage() {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="mt-6 flex items-center gap-1 border-b border-border">
+        <div className="mt-6 flex items-center gap-1 border-b border-border overflow-x-auto">
           {tabs.filter((t) => t.show).map((t) => (
             <TabBtn key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
               {t.label}
@@ -258,7 +258,7 @@ export default function ItemDetailPage() {
           )}
 
           {tab === "subcodes" && item.trackIndividually && item.subItems.length > 1 && (
-            <ItemDetailSubcodes subItems={item.subItems} itemId={item.id} canAct={!!canAct} onRefresh={fetchItem} />
+            <ItemDetailSubcodes subItems={item.subItems} itemId={item.id} itemCode={item.code} canAct={!!canAct} onRefresh={fetchItem} />
           )}
 
           {tab === "history" && (
@@ -279,6 +279,8 @@ export default function ItemDetailPage() {
         availableQty={item.availableQty}
         totalQty={item.totalQty}
         lots={item.lots?.map((l) => ({ id: l.id, lotNumber: l.lotNumber, remainingQty: l.remainingQty, expiryDate: l.expiryDate }))}
+        trackIndividually={item.trackIndividually}
+        subItems={item.subItems?.map((s) => ({ id: s.id, subCode: s.subCode, status: s.status }))}
         checkedOutCount={item.trackIndividually
           ? item.subItems.filter(s => s.status === "CHECKED_OUT").length
           : item.totalQty - item.availableQty}
@@ -326,7 +328,7 @@ function TabBtn({
       <Icon className="size-4" />
       {children}
       {active && (
-        <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-primary rounded-full" />
+        <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
       )}
     </button>
   );
@@ -363,7 +365,7 @@ function StockSummary({ available, total, unit, minThreshold }: {
   return (
     <div className="shrink-0 min-w-[220px]">
       <div className="flex items-baseline gap-2">
-        <span className="text-4xl font-semibold tabular-nums">{available}</span>
+        <span className="text-3xl sm:text-4xl font-semibold tabular-nums">{available}</span>
         <span className="text-muted-foreground">/ {total} {unit}</span>
       </div>
       <div className="flex items-center gap-1.5 mt-1.5">

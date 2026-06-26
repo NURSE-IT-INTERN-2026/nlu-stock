@@ -14,7 +14,6 @@ export const profileCreateSchema = z.object({
   dispenseType: z.nativeEnum(DispenseType),
   assetTracking: z.boolean().default(false),
   setTracking: z.boolean().default(false),
-  isComposite: z.boolean().default(false),
   icon: z.string().min(1).default("Package"),
   color: z.string().min(1),
   sortOrder: z.number().int().min(0).default(0),
@@ -34,8 +33,4 @@ export const profileUpdateSchema = z.object({
   dispenseType: z.nativeEnum(DispenseType).optional(),
   assetTracking: z.boolean().optional(),
   setTracking: z.boolean().optional(),
-  isComposite: z.boolean().optional(),
 });
-
-export type ProfileCreateInput = z.infer<typeof profileCreateSchema>;
-export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;

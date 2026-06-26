@@ -42,10 +42,12 @@ export function UsageBySubjectTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <ReportFilters config={filterConfig} values={filters} onChange={setFilters} />
-        <ExportButtons reportType="usage-by-subject" filters={filters} />
-      </div>
+      <ReportFilters
+        config={filterConfig}
+        values={filters}
+        onChange={setFilters}
+        actions={<ExportButtons reportType="usage-by-subject" filters={filters} />}
+      />
       <UsageBySubjectChart data={data} />
       <ReportDataTable columns={columns} data={data} loading={loading} />
     </div>

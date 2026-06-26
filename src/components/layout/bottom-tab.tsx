@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/lib/api";
 import {
@@ -17,6 +17,7 @@ import { useAlerts } from "@/hooks/use-alerts";
 const tabs = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/items", label: "Items", icon: Package },
+  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/dispense", label: "Dispense", icon: ShoppingCart },
   { href: "/receive", label: "Receive", icon: Truck },
 ];
@@ -34,6 +35,9 @@ export function BottomTab({ user }: BottomTabProps) {
     return pathname.startsWith(href);
   }
 
+  // CHILDREN can't see the dashboard — hide the Home tab
+  const visibleTabs = tabs.filter((t) => !(t.href === "/" && user.role === "CHILDREN"));
+
   async function handleLogout() {
     await logout();
     window.location.href = "/login";
@@ -42,9 +46,9 @@ export function BottomTab({ user }: BottomTabProps) {
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card">
       <div className="flex items-center justify-around h-16">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
-          const showBadge = tab.href === "/" && alerts.total > 0;
+          const showBadge = tab.href === "/alerts" && alerts.total > 0;
           return (
             <Link
               key={tab.href}
@@ -60,7 +64,7 @@ export function BottomTab({ user }: BottomTabProps) {
               <span>{tab.label}</span>
               {showBadge && (
                 <span className="absolute -top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
-                  {alerts.total > 9 ? "9+" : alerts.total}
+                  {alerts.total}
                 </span>
               )}
             </Link>

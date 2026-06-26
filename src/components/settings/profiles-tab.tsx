@@ -44,7 +44,6 @@ interface FormState {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
-  isComposite: boolean;
   icon: string;
   color: string;
   description: string;
@@ -52,7 +51,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: "", code: "", dispenseType: "CONSUMABLE",
-  assetTracking: false, setTracking: false, isComposite: false,
+  assetTracking: false, setTracking: false,
   icon: "Package", color: PROFILE_COLOR_OPTIONS[0].value, description: "",
 };
 
@@ -88,7 +87,7 @@ export function ProfilesTab() {
     setEditing(p);
     setForm({
       name: p.name, code: p.code, dispenseType: p.dispenseType,
-      assetTracking: p.assetTracking, setTracking: p.setTracking, isComposite: p.isComposite,
+      assetTracking: p.assetTracking, setTracking: p.setTracking,
       icon: p.icon, color: p.color, description: p.description ?? "",
     });
     setDialogOpen(true);
@@ -108,13 +107,12 @@ export function ProfilesTab() {
           dispenseType: form.dispenseType,
           assetTracking: form.assetTracking,
           setTracking: form.setTracking,
-          isComposite: form.isComposite,
         });
         toast.success("อัปเดตประเภทสำเร็จ");
       } else {
         await createProfile({
           name: form.name, code: form.code, dispenseType: form.dispenseType,
-          assetTracking: form.assetTracking, setTracking: form.setTracking, isComposite: form.isComposite,
+          assetTracking: form.assetTracking, setTracking: form.setTracking,
           icon: form.icon, color: form.color, description: form.description || undefined,
         });
         toast.success("สร้างประเภทสำเร็จ");
@@ -205,7 +203,6 @@ export function ProfilesTab() {
                     <div className="flex flex-wrap gap-1">
                       {p.assetTracking && <Badge variant="secondary" className="text-[10px]">ทรัพย์สิน</Badge>}
                       {p.setTracking && <Badge variant="secondary" className="text-[10px]">ชุด</Badge>}
-                      {p.isComposite && <Badge variant="secondary" className="text-[10px]">ประกอบ</Badge>}
                     </div>
                   </TableCell>
                   <TableCell>{p._count?.subCategories ?? 0}</TableCell>
@@ -271,10 +268,6 @@ export function ProfilesTab() {
                 <Label htmlFor="p-set" className="text-sm">ติดตามเป็นชุด (setSize)</Label>
                 <Switch id="p-set" checked={form.setTracking} onCheckedChange={(v) => setForm({ ...form, setTracking: v })} />
               </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="p-comp" className="text-sm">ประกอบด้วยพัสดุย่อย (deduct สต็อก)</Label>
-                <Switch id="p-comp" checked={form.isComposite} onCheckedChange={(v) => setForm({ ...form, isComposite: v })} />
-              </div>
               {editing && <p className="text-xs text-amber-600 mt-1">⚠ เปลี่ยนพฤติกรรมไม่ได้ถ้าประเภทนี้มีพัสดุอยู่</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -283,7 +276,7 @@ export function ProfilesTab() {
                 <Select value={form.icon} onValueChange={(v) => setForm({ ...form, icon: v ?? "Package" })}>
                   <SelectTrigger id="p-icon"><SelectValue>{form.icon}</SelectValue></SelectTrigger>
                   <SelectContent>
-                    {PROFILE_ICON_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.value}</SelectItem>)}
+                    {PROFILE_ICON_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

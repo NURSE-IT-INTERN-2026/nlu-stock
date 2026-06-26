@@ -8,14 +8,19 @@ import { BottomTab } from "@/components/layout/bottom-tab";
 import { Header } from "@/components/layout/header";
 import { useSession } from "@/components/layout/auth-guard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { AlertProvider } from "@/hooks/use-alerts";
 import { CartProvider } from "@/components/dispense/cart-context";
 import { PageHeaderProvider } from "@/components/layout/page-header-context";
 
+// Pages that manage their own height/scroll (app-shell style) — drop main's vertical padding so they fill the viewport.
+const FULL_BLEED = new Set(["/receive", "/items"]);
+
 const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
   "/items": "รายการพัสดุทั้งหมด",
-  "/dispense": "เบิกพัสดุ",
+  "/alerts": "การแจ้งเตือน",
+  "/dispense": "เบิก-ยืมพัสดุ",
   "/receive": "รับพัสดุเข้า",
   "/maintenance": "การซ่อมบำรุง",
   "/reports": "รายงาน",
@@ -24,7 +29,7 @@ const pageTitles: Record<string, string> = {
 
 function getTitle(pathname: string) {
   if (pathname.startsWith("/items/") && pathname !== "/items") return "รายละเอียดพัสดุ";
-  if (pathname === "/dispense/confirm") return "ยืนยันการเบิก";
+  if (pathname === "/dispense/cart") return "ยืนยันการเบิก";
   return pageTitles[pathname] || "NLU Stock";
 }
 
@@ -84,7 +89,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         />
         <div className="flex flex-1 flex-col min-w-0">
           <Header title={getTitle(pathname)} user={user} sidebarCollapsed={sidebarCollapsed} />
-          <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">
+          <main className={cn(
+            "flex-1 overflow-y-auto",
+            FULL_BLEED.has(pathname) ? "px-6 pt-3 pb-20 lg:px-6 lg:pb-3" : "p-6 pb-20 lg:pb-6",
+          )}>
             {children}
           </main>
         </div>

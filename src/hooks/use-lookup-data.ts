@@ -36,6 +36,3 @@ export function useLocations() {
 
   return { locations, loading };
 }
-
-export function invalidateCategoriesCache() { categoriesCache = null; }
-export function invalidateLocationsCache() { locationsCache = null; }

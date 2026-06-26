@@ -15,13 +15,11 @@ interface StepSelectProps {
   selectedId: string | null;
   onSelectExisting: (cat: CategoryOption) => void;
   onSelectCreateNew: () => void;
-  /** Only show categories whose profile id is in this list. If omitted, show all. */
-  allowedProfileIds?: string[];
   /** Only show categories whose profile has this dispenseType. If omitted, show all. */
   allowedDispenseType?: "CONSUMABLE" | "COUNT" | "ITEM";
 }
 
-export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, allowedProfileIds, allowedDispenseType }: StepSelectProps) {
+export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, allowedDispenseType }: StepSelectProps) {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -40,7 +38,6 @@ export function StepSelect({ selectedId, onSelectExisting, onSelectCreateNew, al
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
   const filtered = categories
-    .filter((c) => !allowedProfileIds || (c.profile?.id && allowedProfileIds.includes(c.profile.id)))
     .filter((c) => !allowedDispenseType || c.profile?.dispenseType === allowedDispenseType)
     .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()));
 
