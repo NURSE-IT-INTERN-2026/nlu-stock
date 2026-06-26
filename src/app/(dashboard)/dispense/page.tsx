@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo, type ComponentProps } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Plus, Minus, Search, QrCode, Package, Layers, Check, X, Boxes, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, type LucideIcon } from "lucide-react";
+import { Plus, Minus, Search, QrCode, Package, X } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
@@ -15,10 +15,8 @@ import { searchDispenseItems } from "@/lib/api";
 import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/dashboard/pagination";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
-import type { CategoryOption, ProfileOption } from "@/lib/api";
+import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
+import type { ProfileOption } from "@/lib/api";
 
 function CardEditableQty({ value, max, onChange }: {
   value: number;
@@ -72,94 +70,6 @@ function CardEditableQty({ value, max, onChange }: {
 }
 
 
-const PROFILE_ICONS: Record<string, LucideIcon> = {
-  Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes,
-};
-
-function ProfilePicker({ profiles, value, onChange }: {
-  profiles: ProfileOption[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = profiles.find((p) => p.id === value);
-  const Icon = selected ? (PROFILE_ICONS[selected.icon] ?? Boxes) : Boxes;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={(props: ComponentProps<"button">) => (
-          <button {...props} className={cn(
-            "inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium border transition-colors",
-            value ? "bg-primary/10 border-primary/40 text-foreground" : "bg-background border-border text-foreground/80 hover:bg-muted",
-          )}>
-            <Icon className="size-4 text-muted-foreground shrink-0" />
-            <span className="min-w-0 max-w-[150px] truncate">{selected?.name ?? "ทุกประเภท"}</span>
-          </button>
-        )}
-      />
-      <PopoverContent align="start" className="w-60 p-1.5">
-        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 font-medium")} onClick={() => { onChange(""); setOpen(false); }}>
-          <Boxes className="size-4" />
-          <span className="flex-1">ทุกประเภท</span>
-          {!value && <Check className="size-4 text-primary" />}
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 overflow-y-auto">
-          {profiles.map((p) => {
-            const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
-            return (
-              <button key={p.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === p.id && "bg-primary/10 font-medium")} onClick={() => { onChange(p.id); setOpen(false); }}>
-                <PIcon className="size-4 shrink-0" />
-                <span className="flex-1 min-w-0 truncate">{p.name}</span>
-                {value === p.id && <Check className="size-4 text-primary shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function CategoryPicker({ categories, value, onChange }: {
-  categories: CategoryOption[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = categories.find((c) => c.id === value);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={(props: ComponentProps<"button">) => (
-          <button {...props} className={cn(
-            "inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium border transition-colors",
-            value ? "bg-primary/10 border-primary/40 text-foreground" : "bg-background border-border text-foreground/80 hover:bg-muted",
-          )}>
-            <Layers className="size-4 text-muted-foreground shrink-0" />
-            <span className="min-w-0 max-w-[150px] truncate">{selected?.name ?? "ทุกหมวดหมู่"}</span>
-          </button>
-        )}
-      />
-      <PopoverContent align="start" className="w-56 p-1.5">
-        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 font-medium")} onClick={() => { onChange(""); setOpen(false); }}>
-          <span className="flex-1">ทุกหมวดหมู่</span>
-          {!value && <Check className="size-4 text-primary" />}
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 overflow-y-auto">
-          {categories.map((c) => (
-            <button key={c.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === c.id && "bg-primary/10 font-medium")} onClick={() => { onChange(c.id); setOpen(false); }}>
-              <span className="flex-1 min-w-0 truncate">{c.name}</span>
-              {value === c.id && <Check className="size-4 text-primary shrink-0" />}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 interface SearchItem {
   id: string;
   code: string;
@@ -193,11 +103,9 @@ function DispenseContent() {
   }));
 
   const profiles = useMemo<ProfileOption[]>(() => {
-    const map = new Map<string, ProfileOption>();
-    for (const c of categories) if (c.profile) map.set(c.profile.id, c.profile);
+    const map = new Map<string, ProfileOption>();    for (const c of categories) if (c.profile) map.set(c.profile.id, c.profile);
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
-  const scopedCategories = filterProfile ? categories.filter((c) => c.profile?.id === filterProfile) : categories;
   const locActive = Boolean(filterLocation.building || filterLocation.floor || filterLocation.room || filterLocation.detail);
   const [loading, setLoading] = useState(true);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -354,8 +262,12 @@ return (
 
         {/* Row 2: filter pickers */}
         <div className="flex flex-wrap items-center gap-2">
-          <ProfilePicker profiles={profiles} value={filterProfile} onChange={(id) => { setFilterProfile(id); setFilterCategory(""); }} />
-          <CategoryPicker categories={scopedCategories} value={filterCategory} onChange={setFilterCategory} />
+          <CategoryPicker
+            profiles={profiles}
+            categories={categories}
+            value={{ profileId: filterProfile, categoryId: filterCategory || null }}
+            onChange={({ profileId, categoryId }) => { setFilterProfile(profileId); setFilterCategory(categoryId ?? ""); }}
+          />
           <LocationPicker locations={locations} value={filterLocation} onChange={setFilterLocation} />
           <div className="basis-full sm:basis-auto flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto">
             <span className="tabular-nums">
@@ -399,6 +311,7 @@ return (
                       <img
                         src={item.imageUrl}
                         alt={item.name}
+                        loading="lazy"
                         className="h-full w-full object-cover"
                       />
                     ) : (
