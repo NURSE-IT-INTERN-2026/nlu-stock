@@ -42,7 +42,7 @@ Source of truth: `prisma/schema.prisma`. Summary:
 **Dispense behavior by `dispenseType`:**
 - `CONSUMABLE` → pick lot (FIFO), decrement `Lot.remainingQty` (optimistic-locked).
 - `COUNT` → qty, decrement `Item.availableQty`.
-- `ITEM` → pick sub-item, set `SubItem.status = CHECKED_OUT`.
+- `ITEM` → pick sub-item, set `SubItem.status = ON_LOAN`.
 
 **Stock counters** (ADR-0002): `Lot.receivedQty` immutable, `Lot.remainingQty` decremented on dispense. `Item.totalQty` / `availableQty` are maintained counters (single-source derivation deferred — too risky in dev).
 
@@ -123,6 +123,15 @@ Prioritized. Each is independently grabbable.
 ### D. Deferred (Phase 2 / later — do not touch now)
 
 Entra ID SSO, NodeMailer email alerts, borrow/return + sets, Kit/BOM (re-introduce here), single-source qty derivation (ADR-0002 future work).
+
+### E. Follow-ups from the เบิก/รับ/คืน DoD (2026-07-02)
+
+- **E1 — Dispense-history report: show real return condition.** The report's Status column
+  shows only "Dispensed" / "Returned" (from `returnedAt`). It cannot tell ปกติ vs ชำรุด vs สูญหาย
+  because `DispenseRecord` stores no return condition — the outcome lives in `StockAdjustment`
+  (LOST / DAMAGED_PENDING_REPAIR) and per-piece `ItemStatusLog`. Fix needs **either** a new
+  `DispenseRecord.returnCondition` field (+ backfill) **or** a join to those tables in the report
+  query. Non-blocking for the DoD; agreed to log now so it isn't lost.
 
 ---
 

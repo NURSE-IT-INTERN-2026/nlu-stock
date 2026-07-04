@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
 
   const data = locations.map((l) => ({
     id: l.id,
+    building: l.building,
+    floor: l.floor,
+    room: l.room,
+    detail: l.detail,
     name: [l.building, l.floor, l.room, l.detail].filter(Boolean).join(" / "),
   }));
 

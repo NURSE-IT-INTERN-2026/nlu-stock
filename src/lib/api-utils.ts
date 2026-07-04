@@ -25,7 +25,17 @@ export function forbidden() {
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
-export async function requireAuth(request: NextRequest): Promise<AuthResult> {
+// ponytail: shared catch tail — the `err instanceof Error ? err.message : fallback`
+// → 400 block was copy-pasted across write routes. status overridable (500 for opaque ones).
+export function handleError(err: unknown, fallback: string, status = 400) {
+  const message = err instanceof Error ? err.message : fallback;
+  console.error(`${fallback}:`, message);
+  return NextResponse.json({ error: message }, { status });
+}
+
+// request is unused (getSessionUser reads cookies via next/headers); optional so handlers
+// without a request param (e.g. returns GET) can call requireAuth() directly.
+export async function requireAuth(_request?: NextRequest): Promise<AuthResult> {
   const user = await getSessionUser();
   if (!user) return { user: null, denied: unauthorized() };
   return { user, denied: null };

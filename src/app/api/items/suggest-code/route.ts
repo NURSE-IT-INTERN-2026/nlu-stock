@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { requireAuth } from "@/lib/api-utils";
 
 /**
  * GET /api/items/suggest-code?prefix=XXX
@@ -15,8 +15,8 @@ import { getSessionUser } from "@/lib/auth";
  *   { suggestedCode: "NLU-BOOK-043", nextNumber: "043" }
  */
 export async function GET(req: NextRequest) {
-  const session = await getSessionUser();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireAuth(req);
+  if (auth.denied) return auth.denied;
 
   const prefix = (new URL(req.url).searchParams.get("prefix") ?? "").toUpperCase();
   if (!prefix) return NextResponse.json({ error: "prefix required" }, { status: 400 });

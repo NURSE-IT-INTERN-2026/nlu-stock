@@ -143,12 +143,12 @@ export function UsersTab() {
   );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 h-full min-h-0">
       <div className="flex justify-end">
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
       </div>
 
-      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -178,7 +178,7 @@ export function UsersTab() {
                 <TableCell><Badge variant="outline">{ROLE_LABELS[user.role] || user.role}</Badge></TableCell>
                 <TableCell>
                   {user.isActive
-                    ? <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-success/15 text-success border-success/30">ใช้งาน</span>
+                    ? <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-success/15 text-success-700 border-success/30">ใช้งาน</span>
                     : <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border-border">ปิดใช้งาน</span>}
                 </TableCell>
                 <TableCell>

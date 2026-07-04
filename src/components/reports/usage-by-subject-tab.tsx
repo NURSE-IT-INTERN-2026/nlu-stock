@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
-import { UsageBySubjectChart } from "./charts/usage-by-subject-chart";
+import { UsageBySubjectChart } from "@/components/dashboard/usage-by-subject-chart";
 import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { dateRange: true, categories: true };

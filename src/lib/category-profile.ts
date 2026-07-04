@@ -22,11 +22,6 @@ function req(p: ProfileLike | null | undefined): ProfileLike {
   return p;
 }
 
-/** ใช้แล้วทิ้ง → lot tracking, นับ remaining. */
-export function isConsumable(p: ProfileLike | null | undefined): boolean {
-  return req(p).dispenseType === "CONSUMABLE";
-}
-
 /** ยืม-คืน รายชิ้น → subItems. */
 export function isItemTracked(p: ProfileLike | null | undefined): boolean {
   return req(p).dispenseType === "ITEM";
@@ -63,11 +58,3 @@ export function sanitizeItemByProfile(
     delete data.storageRequirements;
   }
 }
-
-// ── Display labels (server-side; client reads profile.name/icon/color directly) ──
-
-export const DISPENSE_TYPE_LABELS: Record<ProfileLike["dispenseType"], string> = {
-  CONSUMABLE: "ใช้แล้วทิ้ง",
-  COUNT: "ยืม-คืน นับจำนวน",
-  ITEM: "ยืม-คืน รายชิ้น",
-};

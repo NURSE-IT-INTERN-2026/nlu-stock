@@ -1,9 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Wrench } from "lucide-react";
+import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MaintenanceRecord {
@@ -64,126 +62,150 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
     [item.nextMaintenanceDate],
   );
 
+  const statusTone: "success" | "warning" | "destructive" =
+    maintStatus.variant === "destructive" ? "destructive" : maintStatus.variant === "secondary" ? "warning" : "success";
+
+  const assetFields = [
+    item.model && { label: "รุ่น", value: item.model },
+    item.purchaseDate && { label: "วันที่ซื้อ", value: new Date(item.purchaseDate).toLocaleDateString("th-TH") },
+    item.purchasePrice != null && { label: "ราคา", value: `฿${item.purchasePrice.toLocaleString()}` },
+    item.vendorCompany && { label: "บริษัท", value: item.vendorCompany },
+    item.vendorContact && { label: "ตัวแทน", value: item.vendorContact },
+    item.vendorPhone && { label: "เบอร์โทร", value: item.vendorPhone },
+    item.warrantyMonths > 0 && { label: "รับประกัน", value: `${item.warrantyMonths} เดือน` },
+    { label: "รอบบำรุงรักษา", value: `${item.maintenanceCycleMonths} เดือน` },
+    item.lastMaintenanceDate && { label: "ครั้งล่าสุด", value: new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH") },
+    item.nextMaintenanceDate && { label: "ครั้งถัดไป", value: new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH") },
+  ].filter(Boolean) as { label: string; value: string }[];
+
   return (
-    <div className="space-y-4">
-      {/* ── Card-light: Fixed Asset Info ── */}
-      <section className="rounded-lg border divide-y">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-muted-foreground">Fixed Asset Info</h3>
-            <Badge variant={maintStatus.variant}>{maintStatus.label}</Badge>
-          </div>
-          <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
-            {item.model && (
-              <div>
-                <dt className="text-muted-foreground">Model</dt>
-                <dd>{item.model}</dd>
-              </div>
-            )}
-            {item.purchaseDate && (
-              <div>
-                <dt className="text-muted-foreground">Purchase</dt>
-                <dd>{new Date(item.purchaseDate).toLocaleDateString("th-TH")}</dd>
-              </div>
-            )}
-            {item.purchasePrice != null && (
-              <div>
-                <dt className="text-muted-foreground">Price</dt>
-                <dd>฿{item.purchasePrice.toLocaleString()}</dd>
-              </div>
-            )}
-            {item.vendorCompany && (
-              <div>
-                <dt className="text-muted-foreground">บริษัท</dt>
-                <dd>{item.vendorCompany}</dd>
-              </div>
-            )}
-            {item.vendorContact && (
-              <div>
-                <dt className="text-muted-foreground">ตัวแทน</dt>
-                <dd>{item.vendorContact}</dd>
-              </div>
-            )}
-            {item.vendorPhone && (
-              <div>
-                <dt className="text-muted-foreground">เบอร์โทร</dt>
-                <dd>{item.vendorPhone}</dd>
-              </div>
-            )}
-            {item.warrantyMonths > 0 && (
-              <div>
-                <dt className="text-muted-foreground">รับประกัน</dt>
-                <dd>{item.warrantyMonths} เดือน</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-muted-foreground">Cycle</dt>
-              <dd>{item.maintenanceCycleMonths} months</dd>
+    <section className="rounded-2xl border border-border bg-card overflow-hidden">
+      <SectionHeader
+        eyebrow="การซ่อมบำรุง"
+        title="แผน & ประวัติซ่อมบำรุง"
+        right={canAct ? (
+          <button
+            onClick={onRecordMaintenance}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition font-medium whitespace-nowrap"
+          >
+            <Wrench className="size-3.5" /> บันทึกการซ่อม
+          </button>
+        ) : undefined}
+      />
+
+      {/* ── Stat cards ── */}
+      <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
+        <StatCard
+          label="รอบถัดไป"
+          value={item.nextMaintenanceDate ? new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH") : "—"}
+          icon={CalendarDays}
+        />
+        <StatCard label="จำนวนการซ่อมบำรุง" value={`${maintenanceRecords.length} ครั้ง`} icon={Wrench} />
+        <StatCard label="สถานะ" value={maintStatus.label} icon={ShieldAlert} tone={statusTone} />
+      </div>
+
+      {/* ── Fixed asset info ── */}
+      <div className="p-4 sm:p-5 border-b border-border">
+        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลครุภัณฑ์</div>
+        <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+          {assetFields.map((f) => (
+            <div key={f.label}>
+              <dt className="text-muted-foreground text-xs">{f.label}</dt>
+              <dd className="font-medium mt-0.5">{f.value}</dd>
             </div>
-            {item.lastMaintenanceDate && (
-              <div>
-                <dt className="text-muted-foreground">Last Maint</dt>
-                <dd>{new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH")}</dd>
-              </div>
-            )}
-            {item.nextMaintenanceDate && (
-              <div>
-                <dt className="text-muted-foreground">Next Maint</dt>
-                <dd>{new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH")}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-      </section>
+          ))}
+        </dl>
+      </div>
 
-      {canAct && (
-        <Button onClick={onRecordMaintenance}>
-          <Wrench className="h-4 w-4 mr-1" />Record Maintenance
-        </Button>
-      )}
-
-      {/* ── Maintenance History ── */}
-      <div>
-        <h4 className="text-sm font-medium mb-3">Maintenance History</h4>
+      {/* ── Maintenance history ── */}
+      <div className="p-4 sm:p-5">
+        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ประวัติการซ่อมบำรุง</div>
         {maintenanceRecords.length === 0 ? (
-          <p className="text-muted-foreground text-sm text-center py-6">No maintenance records</p>
+          <p className="text-center py-8 text-sm text-muted-foreground">ยังไม่มีประวัติการซ่อมบำรุง</p>
         ) : (
-          <div className="space-y-2">
-            {maintenanceRecords.map((rec, idx) => (
-              <div
+          <ul className="space-y-3">
+            {maintenanceRecords.map((rec) => (
+              <li
                 key={rec.id}
-                className={cn(
-                  "p-3 rounded-lg border",
-                  idx % 2 === 1 && "bg-muted/20",
-                )}
+                className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20"
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="outline" className="text-xs">{TYPE_LABELS[rec.type] || rec.type}</Badge>
-                  <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
-                    {RESULT_LABELS[rec.result] || rec.result}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {new Date(rec.performedAt).toLocaleDateString("th-TH")}
-                  </span>
+                <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
+                  <Wrench className="size-4" />
                 </div>
-                {rec.issue && <p className="text-sm font-medium">{rec.issue}</p>}
-                {rec.description && <p className="text-sm text-muted-foreground">{rec.description}</p>}
-                <div className="text-xs text-muted-foreground mt-1">
-                  by {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
-                </div>
-                {rec.attachmentUrls.length > 0 && (
-                  <div className="flex gap-2 mt-1">
-                    {rec.attachmentUrls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
-                        {url.endsWith(".pdf") ? `PDF ${i + 1}` : `Photo ${i + 1}`}
-                      </a>
-                    ))}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                      <CalendarDays className="size-3" />
+                      {new Date(rec.performedAt).toLocaleDateString("th-TH")}
+                    </span>
+                    <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">
+                      {TYPE_LABELS[rec.type] || rec.type}
+                    </span>
+                    <span className={cn(
+                      "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
+                      rec.result === "AVAILABLE"
+                        ? "bg-success/10 text-success-700 border-success/20"
+                        : "bg-primary/10 text-primary border-primary/20",
+                    )}>
+                      {RESULT_LABELS[rec.result] || rec.result}
+                    </span>
                   </div>
-                )}
-              </div>
+                  {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
+                  {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
+                  </div>
+                  {rec.attachmentUrls.length > 0 && (
+                    <div className="flex gap-2 mt-1.5">
+                      {rec.attachmentUrls.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                          {url.endsWith(".pdf") ? `PDF ${i + 1}` : `รูป ${i + 1}`}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
+      </div>
+    </section>
+  );
+}
+
+function SectionHeader({ eyebrow, title, right }: { eyebrow?: string; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="px-4 sm:px-5 py-4 border-b border-border grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="min-w-0">
+        {eyebrow && <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{eyebrow}</div>}
+        <h2 className="text-lg font-semibold leading-tight mt-0.5 truncate">{title}</h2>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, tone = "primary" }: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: "primary" | "success" | "warning" | "destructive";
+}) {
+  const toneClass = {
+    primary: "bg-primary/5 text-primary border-primary/10",
+    success: "bg-success/10 text-success-700 border-success/20",
+    warning: "bg-warning/10 text-warning-700 border-warning/20",
+    destructive: "bg-destructive/10 text-destructive border-destructive/20",
+  }[tone];
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-4 grid grid-cols-[auto_1fr] items-center gap-3">
+      <div className={cn("size-10 shrink-0 rounded-lg grid place-items-center border", toneClass)}>
+        <Icon className="size-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{label}</div>
+        <div className="text-lg font-semibold leading-tight truncate">{value}</div>
       </div>
     </div>
   );

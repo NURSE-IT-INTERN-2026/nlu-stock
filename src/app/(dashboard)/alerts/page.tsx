@@ -2,8 +2,10 @@
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { motion } from "motion/react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Undo2 } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locationLabel } from "@/lib/constants";
 import {
@@ -16,6 +18,8 @@ import { usePageHeader } from "@/components/layout/page-header-context";
 import { getItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
+import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
+import { ReturnPanel } from "@/components/receive/return-panel";
 import { cn } from "@/lib/utils";
 
 interface UnitType { id: string; name: string }
@@ -39,11 +43,11 @@ interface ItemRecord {
   alertTypes: string[];
 }
 
-type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint";
+type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "overdueReturn" | "damagedPending";
 
 const ALERT_BADGE: Record<string, string> = {
-  lowStock: "bg-orange-500/15 text-orange-600 border-orange-500/30",
-  nearExpiry: "bg-warning/15 text-warning border-warning/30",
+  lowStock: "bg-orange-500/15 text-orange-700 border-orange-500/30",
+  nearExpiry: "bg-warning/15 text-warning-foreground border-warning/30",
   overdueMaint: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
@@ -105,13 +109,15 @@ function AlertsContent() {
     if (searchParams.get("lowStock") === "true") return "lowStock";
     if (searchParams.get("nearExpiry") === "true") return "nearExpiry";
     if (searchParams.get("overdueMaint") === "true") return "overdueMaint";
+    if (searchParams.get("overdueReturn") === "true") return "overdueReturn";
+    if (searchParams.get("damagedPending") === "true") return "damagedPending";
     return "all";
   }, [searchParams]);
 
   const selectAlertType = useCallback((key: AlertTypeKey) => {
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
-    for (const k of ["lowStock", "nearExpiry", "overdueMaint"]) params.delete(k);
+    for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending"]) params.delete(k);
     if (key !== "all") params.set(key, "true");
     const qs = params.toString();
     router.replace(qs ? `/alerts?${qs}` : "/alerts");
@@ -131,6 +137,12 @@ function AlertsContent() {
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); }, [setPage]);
 
   const fetchItems = useCallback(async () => {
+    // "แจ้งชำรุด" and "เกินกำหนดคืน" render their own worklist panels below instead of
+    // the item table — skip the item fetch entirely while either is active.
+    if (alertType === "damagedPending" || alertType === "overdueReturn") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
     if (filter.query) params.search = filter.query;
@@ -157,6 +169,8 @@ function AlertsContent() {
     { key: "lowStock", label: "สต็อกต่ำ", count: alerts.lowStock },
     { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
     { key: "overdueMaint", label: "เกินกำหนดซ่อม", count: alerts.overdueMaintenance },
+    { key: "overdueReturn", label: "เกินกำหนดคืน", count: alerts.overdueReturn },
+    { key: "damagedPending", label: "แจ้งชำรุด (รอส่งซ่อม)", count: alerts.damagedPending },
   ];
 
   // Reflect the active tab in the header breadcrumb ("การแจ้งเตือน › <tab>").
@@ -189,11 +203,11 @@ function AlertsContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-6">
       {/* Alert-type tabs — underline style, matches /settings. Sits ABOVE the filter
           bar so it reads as primary nav, distinct from the refinement pills below.
           Per-type color lives in the table badges; the tab strip stays uniform. */}
-      <div className="border-b">
+      <div className="border-b -mx-4 px-4 sm:-mx-6 sm:px-6">
         <nav className="flex gap-1 -mb-px overflow-x-auto">
           {alertChips.map((c) => {
             const active = alertType === c.key;
@@ -203,10 +217,10 @@ function AlertsContent() {
                 type="button"
                 onClick={() => selectAlertType(c.key)}
                 className={cn(
-                  "flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium transition-colors",
                   active
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
                 )}
               >
                 {c.label}
@@ -216,12 +230,37 @@ function AlertsContent() {
                     active ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
                   )}>{c.count}</span>
                 )}
+                {active && (
+                  <motion.span
+                    layoutId="alerts-tab"
+                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                    className="absolute -bottom-[2px] left-0 right-0 h-0.5 bg-primary"
+                  />
+                )}
               </button>
             );
           })}
         </nav>
       </div>
 
+      {alertType === "damagedPending" ? (
+        <div className="h-[72dvh] lg:h-[calc(100vh-340px)]">
+          <SubItemStatusPanel status="DAMAGED" actionLabel="ส่งซ่อม" emptyText="ไม่มีพัสดุที่แจ้งชำรุดอยู่" />
+        </div>
+      ) : alertType === "overdueReturn" ? (
+        <div className="flex flex-col h-[72dvh] lg:h-[calc(100vh-340px)] gap-3">
+          <div className="flex items-center justify-end shrink-0">
+            <Link href="/receive?tab=return&due=overdue" className={buttonVariants({ size: "sm", variant: "outline" })}>
+              <Undo2 className="size-3.5" />
+              ไปหน้ารับคืนพัสดุ
+            </Link>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ReturnPanel initialChip="overdue" />
+          </div>
+        </div>
+      ) : (
+      <>
       <ItemsFilterBar
         profiles={profiles}
         categories={categories}
@@ -236,7 +275,8 @@ function AlertsContent() {
       />
 
       <div className="rounded-2xl border overflow-hidden bg-card">
-        <div className="overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
+        {/* Desktop: table */}
+        <div className="hidden md:block overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
           <Table>
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -296,6 +336,47 @@ function AlertsContent() {
           </Table>
         </div>
 
+        {/* Mobile: stacked cards (no horizontal scroll) */}
+        <div className="divide-y divide-border md:hidden overflow-auto max-h-[72dvh]">
+          {loading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="px-4 py-2.5"><Skeleton className="h-10 w-full" /></div>
+            ))
+          ) : items.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">ไม่มีรายการแจ้งเตือน</div>
+          ) : items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => router.push(`/items/${item.id}`)}
+              className="flex w-full flex-col gap-1.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0 font-medium leading-tight">
+                  {item.name}
+                  {item.nameEn && <span className="text-muted-foreground"> ({item.nameEn})</span>}
+                </span>
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">{item.code}</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {item.alertTypes.map((t) => (
+                  <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
+                    {ALERT_LABEL[t] ?? t}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {item.alertTypes.map((t) => (
+                  <span key={t} className="text-xs text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
+                ))}
+              </div>
+              {item.location && (
+                <span className="text-xs text-muted-foreground">{locationLabel(item.location)}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* Fixed footer */}
         <div className="flex items-center border-t bg-card px-4 py-2">
           <div className="flex items-center gap-0.5">
@@ -343,6 +424,8 @@ function AlertsContent() {
           <span className="text-sm text-muted-foreground tabular-nums">{total} items</span>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

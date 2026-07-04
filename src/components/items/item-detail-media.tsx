@@ -65,7 +65,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
         const { url } = await uploadFile(formData);
         newUrls.push(url);
       } catch {
-        toast.error(`Failed to upload ${p.file.name}`);
+        toast.error(`อัปโหลด ${p.file.name} ไม่สำเร็จ`);
       }
     }
     // move from pending → uploaded
@@ -135,13 +135,21 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
   }, [allImages.length]);
 
   return (
-    <div className="max-w-3xl">
-      <SectionHeading title="รูปภาพ" hint={`${allImages.length}/8`} />
-
-      <div className={cn(
-        "grid gap-3",
-        allImages.length > 0 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-1",
-      )}>
+    <div>
+      <section className="rounded-2xl border border-border bg-card overflow-hidden">
+        <SectionHeader
+          eyebrow="แกลเลอรี"
+          title="รูปภาพ"
+          right={
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              <span className="text-foreground font-semibold">{allImages.length}</span> / 8
+            </span>
+          }
+        />
+        <div className={cn(
+          "p-4 sm:p-5 grid gap-3 sm:gap-4",
+          allImages.length > 0 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1",
+        )}>
         {/* Drop zone — staff only, hidden when full */}
         {canAct && allImages.length < 8 && (
           <button
@@ -194,7 +202,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
             onKeyDown={(e) => { if (e.key === "Enter") setLightboxIdx(i); }}
             className="relative group aspect-square rounded-2xl overflow-hidden border border-border bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:ring-2 hover:ring-primary/30 cursor-pointer"
           >
-            <img src={src} alt={`รูปที่ ${i + 1}`} className="size-full object-cover" />
+            <img src={src} alt={`รูปที่ ${i + 1}`} loading="lazy" className="size-full object-cover" />
             {canAct && (
               <button
                 type="button"
@@ -212,7 +220,8 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
             )}
           </div>
         ))}
-      </div>
+        </div>
+      </section>
 
       {/* ── Lightbox ── */}
       <Dialog open={lightboxOpen} onOpenChange={(open) => { if (!open) setLightboxIdx(-1); }}>
@@ -271,14 +280,14 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
   );
 }
 
-function SectionHeading({ eyebrow, title, hint }: { eyebrow?: string; title: string; hint?: string }) {
+function SectionHeader({ eyebrow, title, right }: { eyebrow?: string; title: string; right?: React.ReactNode }) {
   return (
-    <div className="mb-4 flex items-end justify-between">
-      <div>
-        {eyebrow && <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{eyebrow}</div>}
-        <h2 className="text-lg font-semibold mt-0.5">{title}</h2>
+    <div className="px-4 sm:px-5 py-4 border-b border-border grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="min-w-0">
+        {eyebrow && <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{eyebrow}</div>}
+        <h2 className="text-lg font-semibold leading-tight mt-0.5 truncate">{title}</h2>
       </div>
-      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+      {right}
     </div>
   );
 }

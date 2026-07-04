@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   const profileId = params.get("profileId");
   if (profileId) where.category = { profileId };
 
+  // Status multi-select.
   const status = params.get("status");
   if (status) {
     const list = status.split(",").filter(Boolean);
@@ -103,6 +104,7 @@ export async function GET(request: NextRequest) {
         location: true,
         issueUnit: true,
         _count: { select: { subItems: true } },
+        subItems: { select: { status: true } },
         lots: {
           where: { expiryDate: { gte: now, lte: in30Days } },
           orderBy: { expiryDate: "asc" },
@@ -113,13 +115,36 @@ export async function GET(request: NextRequest) {
     prisma.item.count({ where }),
   ]);
 
-  // Derive per-item alert types for the /alerts page (badge column).
+  // Derive per-item alert types (badge column on /alerts) + status-group counts (items table).
   const items = rawItems.map((item) => {
     const types: string[] = [];
     if (item.availableQty < item.minThreshold) types.push("lowStock");
     if (item.lots.length > 0) types.push("nearExpiry");
     if (item.nextMaintenanceDate && new Date(item.nextMaintenanceDate) < now) types.push("overdueMaint");
-    return { ...item, alertTypes: types };
+
+    // statusCounts: พร้อมใช้งาน / ถูกใช้งาน (ยืม+ใช้งาน) / ไม่พร้อมใช้งาน (ชำรุด+ส่งซ่อม+บำรุงรักษา).
+    // Tracked → count sub-items per group. Non-tracked → derive from qty.
+    let statusCounts: { available: number; inUse: number; unavailable: number };
+    if (item.trackIndividually) {
+      const c = { available: 0, inUse: 0, unavailable: 0 };
+      for (const s of item.subItems) {
+        if (s.status === ItemStatus.AVAILABLE) c.available++;
+        else if (s.status === ItemStatus.ON_LOAN || s.status === ItemStatus.IN_USE) c.inUse++;
+        else if (s.status === ItemStatus.DAMAGED || s.status === ItemStatus.UNDER_REPAIR || s.status === ItemStatus.PENDING_MAINTENANCE) c.unavailable++;
+      }
+      statusCounts = c;
+    } else {
+      statusCounts = {
+        available: item.availableQty,
+        inUse: Math.max(0, item.totalQty - item.availableQty),
+        unavailable: 0,
+      };
+    }
+
+    // Strip subItems (only needed for the counts above) so the list payload stays lean.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { subItems, ...rest } = item;
+    return { ...rest, alertTypes: types, statusCounts };
   });
 
   return json({ items, page, perPage, total });

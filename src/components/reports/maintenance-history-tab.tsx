@@ -5,7 +5,7 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { dateRange: true, maintenanceType: true };
@@ -27,7 +27,7 @@ const columns: Column<Row>[] = [
   {
     key: "performedAt",
     header: "Date",
-    render: (r) => format(new Date(r.performedAt), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.performedAt), "dd MMM yyyy"),
   },
   { key: "itemCode", header: "Code" },
   { key: "itemName", header: "Item" },

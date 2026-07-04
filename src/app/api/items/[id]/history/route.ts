@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 
 type TimelineEvent = {
   id: string;
-  type: "DISPENSE" | "RECEIVE" | "ADJUSTMENT" | "STATUS_CHANGE" | "MAINTENANCE";
+  type: "DISPENSE" | "RECEIVE" | "ADJUSTMENT" | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
   date: Date;
   description: string;
   user: string;
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const fetchAdjust = !typeFilter || typeFilter === "ADJUSTMENT";
   const fetchStatus = !typeFilter || typeFilter === "STATUS_CHANGE";
   const fetchMaint = !typeFilter || typeFilter === "MAINTENANCE";
+  const fetchLocation = !typeFilter || typeFilter === "LOCATION_CHANGE";
 
   const queries: Promise<void>[] = [];
 
@@ -138,6 +139,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             description: `${r.type} maintenance — ${r.result}`,
             user: r.performer.name,
             details: { type: r.type, result: r.result, cost: r.cost, issue: r.issue },
+          });
+        }
+      })
+    );
+  }
+
+  if (fetchLocation) {
+    queries.push(
+      prisma.locationChangeLog.findMany({
+        where: { itemId: id },
+        include: { changer: { select: { name: true } } },
+        orderBy: { changedAt: "desc" },
+        take: 100,
+      }).then((records) => {
+        for (const r of records) {
+          events.push({
+            id: r.id,
+            type: "LOCATION_CHANGE",
+            date: r.changedAt,
+            description: `ย้ายที่ตั้ง ${r.fromLabel ?? "—"} → ${r.toLabel ?? "ไม่ระบุ"}`,
+            user: r.changer.name,
+            details: { fromLabel: r.fromLabel, toLabel: r.toLabel },
           });
         }
       })

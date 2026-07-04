@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
 
@@ -31,7 +31,7 @@ const columns: Column<Row>[] = [
   {
     key: "dispensedAt",
     header: "Date",
-    render: (r) => format(new Date(r.dispensedAt), "dd MMM yyyy HH:mm"),
+    render: (r) => fmtDate(new Date(r.dispensedAt), "dd MMM yyyy HH:mm"),
   },
   { key: "itemCode", header: "Code" },
   { key: "itemName", header: "Item" },

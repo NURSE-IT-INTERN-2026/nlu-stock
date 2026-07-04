@@ -39,6 +39,3 @@ export function DashboardTables() {
     </div>
   );
 }
-
-/** @deprecated Use DashboardTables */
-export const DashboardCharts = DashboardTables;

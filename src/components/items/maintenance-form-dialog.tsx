@@ -348,7 +348,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                 value={attachmentUrl}
                 onChange={setAttachmentUrl}
                 accept="image/*,.pdf"
-                label="Upload Attachment"
+                label="แนบเอกสาร"
               />
             </div>
           </div>

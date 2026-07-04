@@ -2,16 +2,19 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, Info, Hash, Clock, Wrench,
+  ArrowLeft, Info, Hash, Clock, Wrench, Boxes,
   CheckCircle2, AlertTriangle, XCircle, ImageIcon,
 } from "lucide-react";
 import { useSession } from "@/components/layout/auth-guard";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { locationLabel } from "@/lib/constants";
+import { pic } from "@/lib/image";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getItem } from "@/lib/api";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
@@ -19,8 +22,10 @@ import { ItemDetailSubcodes } from "@/components/items/item-detail-subcodes";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
 import { StockAdjustmentDialog } from "@/components/items/stock-adjustment-dialog";
-import { ReportDamageDialog } from "@/components/items/report-damage-dialog";
+import { ReportStatusDialog } from "@/components/items/report-status-dialog";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
+import { MoveLocationDialog } from "@/components/items/move-location-dialog";
+import { EditItemDialog } from "@/components/shared/edit-item-dialog";
 
 interface CategoryType { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
@@ -61,9 +66,30 @@ interface ItemData {
   maintenanceRecords: { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }[];
   statusLogs: unknown[];
   adjustments: unknown[];
+  kitComponents: {
+    quantity: number;
+    name: string;
+    componentItem: { code: string; name: string; availableQty: number } | null;
+    unit: { name: string };
+  }[];
 }
 
-type TabKey = "overview" | "subcodes" | "history" | "maintenance" | "media";
+type TabKey = "overview" | "subcodes" | "history" | "maintenance" | "media" | "kit";
+
+// ── Stock usage breakdown (segmented bar + legend) ──
+const STOCK_STATUS_ORDER = [
+  "AVAILABLE", "ON_LOAN", "IN_USE", "PENDING_MAINTENANCE", "UNDER_REPAIR", "DAMAGED", "LOST", "DISPOSED",
+];
+const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: string }> = {
+  AVAILABLE: { label: "พร้อมใช้งาน", bar: "bg-success", dot: "bg-success" },
+  ON_LOAN: { label: "ถูกยืม", bar: "bg-primary", dot: "bg-primary" },
+  IN_USE: { label: "กำลังใช้งาน", bar: "bg-chart-3", dot: "bg-chart-3" },
+  PENDING_MAINTENANCE: { label: "รอบำรุงรักษา", bar: "bg-warning", dot: "bg-warning" },
+  UNDER_REPAIR: { label: "ส่งซ่อม", bar: "bg-warning", dot: "bg-warning" },
+  DAMAGED: { label: "ชำรุด", bar: "bg-warning", dot: "bg-warning" },
+  LOST: { label: "สูญหาย", bar: "bg-destructive", dot: "bg-destructive" },
+  DISPOSED: { label: "ตัดจำหน่าย", bar: "bg-destructive", dot: "bg-destructive" },
+};
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -74,8 +100,10 @@ export default function ItemDetailPage() {
   const [item, setItem] = useState<ItemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [adjustOpen, setAdjustOpen] = useState(false);
-  const [damageOpen, setDamageOpen] = useState(false);
+  const [statusAction, setStatusAction] = useState<"DAMAGED" | "LOST" | "DISPOSED" | null>(null);
   const [maintOpen, setMaintOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
 
   const fetchItem = useCallback(async () => {
@@ -101,13 +129,14 @@ export default function ItemDetailPage() {
     [user?.role],
   );
 
-  const tabs: { key: TabKey; label: string; icon: typeof Info; show: boolean }[] = useMemo(() => [
+  const tabs: { key: TabKey; label: string; icon: typeof Info; show: boolean }[] = [
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info, show: true },
     { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(item?.imageUrl || (item?.images?.length ?? 0) > 0) || !!canAct },
     { key: "subcodes", label: `รหัสย่อย${item?.subItems.length ? ` (${item.subItems.length})` : ""}`, icon: Hash, show: !!(item?.trackIndividually && item.subItems.length > 1) },
     { key: "history", label: "ประวัติ", icon: Clock, show: true },
     { key: "maintenance", label: "การซ่อมบำรุง", icon: Wrench, show: true },
-  ], [item?.trackIndividually, item?.subItems.length, item?.imageUrl, item?.images?.length, canAct]);
+    { key: "kit", label: `ชุดประกอบ${item?.kitComponents?.length ? ` (${item.kitComponents.length})` : ""}`, icon: Boxes, show: !!(item?.kitComponents?.length) },
+  ];
 
   if (loading) {
     return (
@@ -160,7 +189,7 @@ export default function ItemDetailPage() {
 
   return (
     <div>
-      <div className="max-w-5xl">
+      <div className="max-w-6xl">
         {/* ── Expiry alert ── */}
         {hasExpiryAlert && (
           <div className="mb-6 space-y-2">
@@ -177,9 +206,9 @@ export default function ItemDetailPage() {
             )}
             {soonLots.length > 0 && (
               <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
-                <AlertTriangle className="size-5 text-warning shrink-0 mt-0.5" />
+                <AlertTriangle className="size-5 text-warning-700 shrink-0 mt-0.5" />
                 <div className="text-sm min-w-0">
-                  <span className="font-semibold text-warning">ใกล้หมดอายุ ({soonLots.length})</span>
+                  <span className="font-semibold text-warning-700">ใกล้หมดอายุ ({soonLots.length})</span>
                   <span className="text-muted-foreground ml-2">
                     {soonLots.map((l) => `Lot ${l.lotNumber} · ใน ${l.days} วัน`).join("  ·  ")}
                   </span>
@@ -189,62 +218,82 @@ export default function ItemDetailPage() {
           </div>
         )}
 
-        {/* ── Cover image + Title + Stock at-a-glance ── */}
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-8 pb-6 border-b border-border">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center lg:flex-1 lg:min-w-0">
-            {coverSrc && (
-              <div className="relative w-48 sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
-                <img src={coverSrc} alt={item.name} className="size-full object-cover" />
-                <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
-                  Cover
-                </span>
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                <BadgePill label={item.category.profile?.name ?? item.category.name} />
-                <span>·</span>
-                <span className="font-mono">{item.code}</span>
-                {/* Live status dot */}
-                <span className="inline-flex items-center gap-1.5">
-                  <span className={cn("size-2 rounded-full", stockStatus.color)} />
-                  <span>{stockStatus.label}</span>
-                </span>
-              </div>
-              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance">
-                {item.name}
-              </h1>
-              {item.nameEn && <p className="text-sm text-muted-foreground mt-1">{item.nameEn}</p>}
-              {item.description && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{item.description}</p>}
+        {/* ── Hero card: Cover + Title + Stock + Tabs ── */}
+        <section className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="grid gap-5 sm:gap-6 lg:gap-8 p-4 sm:p-6 grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]">
+            {/* Cover */}
+            <div className="relative w-full md:w-48 lg:w-56 aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-muted shadow-sm">
+              <img src={coverSrc ?? pic(item.code, 640, 480)} alt={item.name} className="size-full object-cover" />
+              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                Cover
+              </span>
             </div>
+
+            {/* Title block */}
+            <div className="flex flex-col justify-between min-w-0 py-1">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs mb-3">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
+                    {item.category.profile?.name ?? item.category.name}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-mono text-muted-foreground">{item.code}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={cn("size-1.5 rounded-full", stockStatus.color)} />
+                    <span className="text-muted-foreground">{stockStatus.label}</span>
+                  </span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold leading-none tracking-tight text-balance break-words">
+                  {item.name}
+                </h1>
+                {item.nameEn && <p className="text-muted-foreground mt-2 text-sm italic">{item.nameEn}</p>}
+                {item.description && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{item.description}</p>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-4">
+                <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">
+                  หน่วย <span className="text-foreground font-medium">{item.issueUnit.name}</span>
+                </span>
+                {item.location && (
+                  <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">
+                    {locationLabel(item.location)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Stock summary */}
+            <StockSummary
+              available={item.availableQty}
+              total={item.totalQty}
+              unit={item.issueUnit.name}
+              minThreshold={item.minThreshold}
+              trackIndividually={item.trackIndividually}
+              subItems={item.subItems}
+            />
           </div>
 
-          {/* Stock summary */}
-          <StockSummary
-            available={item.availableQty}
-            total={item.totalQty}
-            unit={item.issueUnit.name}
-            minThreshold={item.minThreshold}
-          />
-        </div>
-
-        {/* ── Tabs ── */}
-        <div className="mt-6 flex items-center gap-1 border-b border-border overflow-x-auto">
-          {tabs.filter((t) => t.show).map((t) => (
-            <TabBtn key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
-              {t.label}
-            </TabBtn>
-          ))}
-        </div>
+          {/* ── Tabs ── */}
+          <div className="border-t border-border px-2 sm:px-6 flex items-center gap-1 bg-muted/30 overflow-x-auto">
+            {tabs.filter((t) => t.show).map((t) => (
+              <TabBtn key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
+                {t.label}
+              </TabBtn>
+            ))}
+          </div>
+        </section>
 
         {/* ── Tab content with fade ── */}
-        <div className="mt-8 animate-in fade-in duration-200" key={tab}>
+        <div className="mt-5 animate-in fade-in duration-200" key={tab}>
           {tab === "overview" && (
             <ItemDetailOverview
               item={item}
               userRole={user?.role || ""}
               onAdjust={() => setAdjustOpen(true)}
-              onReportDamage={() => setDamageOpen(true)}
+              onReportDamage={() => setStatusAction("DAMAGED")}
+              onReportStatus={(s) => setStatusAction(s)}
+              onMoveLocation={() => setMoveOpen(true)}
+              onEdit={() => setEditOpen(true)}
               onRefresh={fetchItem}
             />
           )}
@@ -268,6 +317,10 @@ export default function ItemDetailPage() {
           {tab === "maintenance" && (
             <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} onRecordMaintenance={() => setMaintOpen(true)} />
           )}
+
+          {tab === "kit" && item.kitComponents.length > 0 && (
+            <KitComponentsTab components={item.kitComponents} />
+          )}
         </div>
       </div>
 
@@ -276,21 +329,24 @@ export default function ItemDetailPage() {
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
         itemId={item.id}
+        itemCode={item.code}
         availableQty={item.availableQty}
         totalQty={item.totalQty}
         lots={item.lots?.map((l) => ({ id: l.id, lotNumber: l.lotNumber, remainingQty: l.remainingQty, expiryDate: l.expiryDate }))}
         trackIndividually={item.trackIndividually}
         subItems={item.subItems?.map((s) => ({ id: s.id, subCode: s.subCode, status: s.status }))}
         checkedOutCount={item.trackIndividually
-          ? item.subItems.filter(s => s.status === "CHECKED_OUT").length
+          ? item.subItems.filter(s => s.status === "ON_LOAN").length
           : item.totalQty - item.availableQty}
         onSuccess={fetchItem}
       />
 
-      <ReportDamageDialog
-        open={damageOpen}
-        onOpenChange={setDamageOpen}
+      <ReportStatusDialog
+        open={statusAction !== null}
+        onOpenChange={(o) => { if (!o) setStatusAction(null); }}
         itemId={item.id}
+        itemCode={item.code}
+        status={statusAction ?? "DAMAGED"}
         trackIndividually={item.trackIndividually}
         subItems={item.subItems}
         onSuccess={fetchItem}
@@ -302,6 +358,22 @@ export default function ItemDetailPage() {
         itemId={item.id}
         maintenanceCycleMonths={item.maintenanceCycleMonths}
         onSuccess={fetchItem}
+      />
+
+      <MoveLocationDialog
+        key={moveOpen ? "open" : "closed"}
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
+        items={[{ id: item.id, code: item.code, name: item.name }]}
+        currentLocationId={item.location?.id ?? null}
+        onSuccess={fetchItem}
+      />
+
+      <EditItemDialog
+        open={editOpen}
+        itemId={item.id}
+        onOpenChange={setEditOpen}
+        onSaved={fetchItem}
       />
     </div>
   );
@@ -321,71 +393,144 @@ function TabBtn({
     <button
       onClick={onClick}
       className={cn(
-        "relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap",
-        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        "relative inline-flex items-center gap-2 px-3 sm:px-4 py-3.5 text-sm transition-colors whitespace-nowrap",
+        active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      <Icon className="size-4" />
+      <Icon className="size-4 shrink-0" />
       {children}
       {active && (
-        <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
+        <motion.span
+          layoutId="item-detail-tab"
+          transition={{ type: "spring", stiffness: 450, damping: 35 }}
+          className="absolute inset-x-3 -bottom-px h-0.5 bg-primary rounded-full"
+        />
       )}
     </button>
   );
 }
 
-function BadgePill({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium bg-muted/50">
-      {label}
-    </span>
-  );
-}
-
-function StockSummary({ available, total, unit, minThreshold }: {
+function StockSummary({ available, total, unit, minThreshold, trackIndividually, subItems }: {
   available: number; total: number; unit: string; minThreshold: number;
+  trackIndividually: boolean; subItems: { status: string }[];
 }) {
-  const pct = total > 0 ? Math.round((available / total) * 100) : 0;
   const isLow = available < minThreshold;
   const isOut = available === 0;
-  const gradientClass = isOut
-    ? "from-destructive to-destructive/70"
-    : isLow
-      ? "from-warning to-warning/70"
-      : "from-success to-success/70";
 
   const statusIcon = isOut
-    ? <XCircle className="size-3 text-destructive" />
+    ? <XCircle className="size-4 text-destructive" />
     : isLow
-      ? <AlertTriangle className="size-3 text-warning" />
-      : <CheckCircle2 className="size-3 text-success" />;
+      ? <AlertTriangle className="size-4 text-warning-700" />
+      : <CheckCircle2 className="size-4 text-success-700" />;
 
   const statusLabel = isOut ? "หมดสต็อก" : isLow ? "เหลือน้อย" : "มีในสต็อก";
 
+  // ── Usage breakdown segments ──
+  const segments: { key: string; label: string; bar: string; dot: string; count: number }[] = [];
+  if (trackIndividually && subItems.length > 0) {
+    const counts: Record<string, number> = {};
+    for (const s of subItems) counts[s.status] = (counts[s.status] ?? 0) + 1;
+    for (const key of STOCK_STATUS_ORDER) {
+      if (counts[key]) segments.push({ key, ...STOCK_STATUS_META[key], count: counts[key] });
+    }
+    for (const [key, count] of Object.entries(counts)) {
+      if (!STOCK_STATUS_ORDER.includes(key)) {
+        segments.push({ key, label: key.replace(/_/g, " "), bar: "bg-muted-foreground", dot: "bg-muted-foreground", count });
+      }
+    }
+  } else {
+    const used = Math.max(0, total - available);
+    if (available > 0) segments.push({ key: "AVAILABLE", ...STOCK_STATUS_META.AVAILABLE, count: available });
+    if (used > 0) segments.push({ key: "USED", label: "ถูกเบิก/ใช้งาน", bar: "bg-primary", dot: "bg-primary", count: used });
+  }
+
+  const usedPct = total > 0 ? Math.round(((total - available) / total) * 100) : 0;
+
   return (
-    <div className="shrink-0 min-w-[220px]">
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl sm:text-4xl font-semibold tabular-nums">{available}</span>
-        <span className="text-muted-foreground">/ {total} {unit}</span>
+    <div className="w-full xl:w-72 rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1">
+      <div className="flex items-baseline gap-1">
+        <span className="text-5xl sm:text-6xl font-semibold leading-none tabular-nums">{available}</span>
+        <span className="text-sm text-muted-foreground">/ {total} {unit}</span>
       </div>
-      <div className="flex items-center gap-1.5 mt-1.5">
+      <div className={cn(
+        "mt-3 inline-flex items-center gap-1.5 text-sm font-medium",
+        isOut ? "text-destructive" : isLow ? "text-warning-700" : "text-success-700",
+      )}>
         {statusIcon}
-        <span className={cn(
-          "text-xs font-medium",
-          isOut ? "text-destructive" : isLow ? "text-warning" : "text-success",
-        )}>
-          {statusLabel}
-        </span>
+        {statusLabel}
       </div>
-      <div className="mt-3 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-500", gradientClass)}
-          style={{ width: `${pct}%` }}
-        />
+
+      {/* Usage breakdown */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-xs mb-2">
+          <span className="text-muted-foreground">สัดส่วนการใช้งาน</span>
+          <span className="text-muted-foreground">
+            ใช้ไป <span className="font-semibold text-foreground tabular-nums">{usedPct}%</span>
+          </span>
+        </div>
+        <div className="flex h-2.5 rounded-full overflow-hidden bg-muted">
+          {segments.map((s) => (
+            <div
+              key={s.key}
+              className={cn("h-full", s.bar)}
+              style={{ width: `${total > 0 ? (s.count / total) * 100 : 0}%` }}
+              title={`${s.label}: ${s.count}`}
+            />
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
+          {segments.map((s) => (
+            <div key={s.key} className="flex items-center gap-1.5 text-xs min-w-0">
+              <span className={cn("size-2 rounded-full shrink-0", s.dot)} />
+              <span className="text-muted-foreground truncate">{s.label}</span>
+              <span className="ml-auto font-semibold tabular-nums">{s.count}</span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-        <span>ระดับสต็อก</span>
-        <span className="tabular-nums">{pct}%</span>
+    </div>
+  );
+}
+
+function KitComponentsTab({ components }: {
+  components: ItemData["kitComponents"];
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        ของที่ประกอบเป็นชุดนี้ {components.length} รายการ — จำนวนต่อ 1 ชุด
+      </p>
+      <div className="rounded-xl border overflow-hidden bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40">
+              <TableHead className="w-28 md:w-32">รหัส</TableHead>
+              <TableHead>ชื่อ</TableHead>
+              <TableHead className="w-28 md:w-32">คงเหลือ</TableHead>
+              <TableHead className="w-24 md:w-28 text-right">จำนวน/ชุด</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {components.map((c, i) => (
+              <TableRow key={i}>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {c.componentItem?.code ?? "—"}
+                </TableCell>
+                <TableCell className="font-medium">{c.componentItem?.name ?? c.name}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {c.componentItem ? (
+                    <span className={cn(c.componentItem.availableQty < c.quantity && "text-destructive font-medium")}>
+                      {c.componentItem.availableQty}
+                    </span>
+                  ) : "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {c.quantity} <span className="text-muted-foreground">{c.unit.name}</span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
