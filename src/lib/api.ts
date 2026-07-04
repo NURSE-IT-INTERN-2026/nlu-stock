@@ -279,6 +279,10 @@ export function getSettingsItems(params: Record<string, string>) {
   return request<{ items: unknown[]; total: number }>(`/api/settings/items?${qs}`);
 }
 
+export function getSettingsItem(id: string) {
+  return request<unknown>(`/api/settings/items/${id}`);
+}
+
 export function saveSettingsItem(data: Record<string, unknown>, id?: string) {
   const url = id ? `/api/settings/items/${id}` : "/api/settings/items";
   const method = id ? "PUT" : "POST";
@@ -336,6 +340,27 @@ export function createDispense(data: Record<string, unknown>) {
   });
 }
 
+// ─── Kit assembly ───
+
+export interface KitComponentInput {
+  componentItemId: string;
+  quantity: number; // จำนวนต่อ 1 ชุด
+}
+
+export interface AssembleKitPayload {
+  name: string;
+  issueUnitId: string;
+  components: KitComponentInput[];
+  assembleQty: number;
+}
+
+export function assembleKit(data: AssembleKitPayload) {
+  return request<{ kitItemId: string; kitCode: string; assembledQty: number }>("/api/kits", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Receive ───
 
 export function createReceive(data: Record<string, unknown>) {
@@ -384,11 +409,84 @@ export function bulkUpdateSubItemStatus(
   });
 }
 
-export function returnItem(itemId: string, data: { subItemId?: string; quantity?: number }) {
+export function returnItem(itemId: string, data: {
+  subItemId?: string;
+  dispenseRecordId?: string;
+  quantity?: number;
+  status?: string;
+  note?: string | null;
+  proofUrls?: string[];
+}) {
   return request<unknown>(`/api/items/${itemId}/return`, {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+// ─── Open loans (return tab) ───
+
+export interface OpenBorrow {
+  id: string; // dispense record id
+  quantity: number;
+  resolvedQty: number;
+  dispensedAt: string;
+  usageType: string | null;
+  usageNote: string | null;
+  notes: string | null;
+  recipient: string | null;
+  loanGroupId: string | null;
+  dueAt: string | null;
+  returnedAt: string | null;
+  itemId: string;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    imageUrl: string | null;
+    issueUnit: { name: string };
+    category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+  };
+  subItem: { id: string; subCode: string; serialNumber: string | null } | null;
+  staff: { name: string };
+}
+
+export function getOpenBorrows() {
+  return request<{ records: OpenBorrow[] }>("/api/returns");
+}
+
+export type ReturnCondition = "AVAILABLE" | "DAMAGED" | "LOST";
+
+export function returnLoanEntries(data: {
+  entries: { dispenseRecordId: string; subItemId: string; status: ReturnCondition; note?: string; photos?: string[] }[];
+  note?: string | null;
+  proofUrls?: string[];
+}) {
+  return request<{ success: boolean; count: number }>("/api/returns", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Sub-items by status (คืนเข้าพัสดุ / รับซ่อม tabs) ───
+
+export interface SubItemByStatus {
+  id: string;
+  subCode: string;
+  notes: string | null;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    imageUrl: string | null;
+    issueUnit: { name: string };
+    category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+  };
+}
+
+export function getSubItemsByStatus(status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED") {
+  return request<{ subItems: SubItemByStatus[] }>(`/api/sub-items?status=${status}`);
 }
 
 export function updateItem(itemId: string, data: Record<string, unknown>) {
@@ -454,7 +552,7 @@ export function getMaintenanceSummary() {
 // ─── Alerts ───
 
 export function getAlerts() {
-  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; total: number; totalItems: number; onLoan: number }>(
+  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; overdueReturn: number; damagedPending: number; total: number; totalItems: number; onLoan: number }>(
     "/api/alerts",
   );
 }

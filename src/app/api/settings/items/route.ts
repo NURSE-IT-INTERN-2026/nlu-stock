@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
-import { itemCreateSchema, forcedTrackIndividually } from "@/lib/validators";
-import { sanitizeItemByProfile } from "@/lib/category-profile";
+import { itemCreateSchema } from "@/lib/validators";
+import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { NextRequest } from "next/server";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, ItemStatus } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);
@@ -26,18 +26,52 @@ export async function GET(request: NextRequest) {
   const categoryId = params.get("categoryId");
   if (categoryId) where.categoryId = categoryId;
 
-  const status = params.get("status") as Prisma.EnumItemStatusFilter;
-  if (status) where.status = status;
+  const profileId = params.get("profileId");
+  if (profileId) where.category = { profileId };
+
+  const status = params.get("status");
+  if (status) {
+    const list = status.split(",").filter(Boolean);
+    if (list.length === 1) where.status = list[0] as ItemStatus;
+    else if (list.length > 1) where.status = { in: list as ItemStatus[] };
+  }
 
   const locationId = params.get("locationId");
   if (locationId) where.locationId = locationId;
 
+  // Location cascade: filter every record under a building/floor/room/detail node.
+  const building = params.get("building");
+  const floor = params.get("floor");
+  const room = params.get("room");
+  const detail = params.get("detail");
+  if (building || floor || room || detail) {
+    where.location = {
+      ...(building && { building }),
+      ...(floor && { floor }),
+      ...(room && { room }),
+      ...(detail && { detail }),
+    };
+  }
+
   const trackIndividually = params.get("trackIndividually");
   if (trackIndividually !== null) where.trackIndividually = trackIndividually === "true";
 
+  // Default: show all (active + inactive). Admin manages both here; inactive rows render faded client-side.
   const activeParam = params.get("active");
-  if (activeParam === "false") where.isActive = false;
-  else if (activeParam !== "all") where.isActive = true;
+  if (activeParam === "true") where.isActive = true;
+  else if (activeParam === "false") where.isActive = false;
+
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  if (params.get("lowStock") === "true") {
+    const lowStockIds = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
+    `;
+    where.id = { in: lowStockIds.map((r) => r.id) };
+  }
+  if (params.get("nearExpiry") === "true") where.lots = { some: { expiryDate: { gte: now, lte: in30Days } } };
+  if (params.get("onLoan") === "true") where.dispenseRecords = { some: { returnedAt: null } };
+  if (params.get("overdueMaint") === "true") where.nextMaintenanceDate = { lt: now };
 
   const [items, total] = await Promise.all([
     prisma.item.findMany({
@@ -46,7 +80,7 @@ export async function GET(request: NextRequest) {
       take,
       orderBy: { code: "asc" },
       include: {
-        category: true,
+        category: { include: { profile: true } },
         location: true,
         issueUnit: true,
         _count: { select: { subItems: true, dispenseRecords: true, receiveRecords: true } },
@@ -72,7 +106,7 @@ export async function POST(request: NextRequest) {
   // Enforce trackIndividually based on profile
   const cat = await prisma.categoryType.findUnique({ where: { id: data.categoryId }, include: { profile: true } });
   if (cat?.profile) {
-    data.trackIndividually = forcedTrackIndividually(cat.profile);
+    data.trackIndividually = isItemTracked(cat.profile);
     sanitizeItemByProfile(cat.profile, data);
   }
 

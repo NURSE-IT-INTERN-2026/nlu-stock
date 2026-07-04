@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, error, parseBody } from "@/lib/api-utils";
-import { forcedTrackIndividually } from "@/lib/validators";
+import { isItemTracked } from "@/lib/category-profile";
 import { embedItem } from "@/lib/gemini";
 import { z } from "zod";
 
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   const cat = await prisma.categoryType.findUnique({ where: { id: data.categoryId }, include: { profile: true } });
   if (!cat) return error("Category not found");
 
-  const trackIndividually = forcedTrackIndividually(cat.profile);
+  const trackIndividually = isItemTracked(cat.profile);
   // setSize only applies to set-tracked profiles (BOOK/TOY); clamp otherwise (D4).
   const setSize = cat.profile?.setTracking ? data.setSize : 1;
 

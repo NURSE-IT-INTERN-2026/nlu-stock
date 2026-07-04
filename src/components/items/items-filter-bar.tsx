@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { STATUS_LABELS, STATUS_PILLS } from "@/lib/constants";
+import { STATUS_COLORS, STATUS_LABELS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
 // Map profile.icon string → lucide component. Unknown → Boxes fallback.
@@ -63,18 +63,20 @@ export interface ItemsFilterBarProps {
   hideScan?: boolean;
   // When provided, renders a "ยืมอยู่" toggle (onLoan lives on /items, not /alerts).
   onLoanCount?: number;
+  // Optional trailing action rendered next to the scan button (e.g. "ประกอบชุด").
+  trailingAction?: React.ReactNode;
 }
 
 const STATUS_KEYS = Object.keys(STATUS_LABELS);
 
 const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpiry" | "overdueMaintenance"; activeCls: string; badgeCls: string }[] = [
-  { key: "lowStock", label: "สต๊อกต่ำ", countKey: "lowStock", activeCls: "bg-orange-500 text-white", badgeCls: "bg-white/25" },
+  { key: "lowStock", label: "สต๊อกต่ำ", countKey: "lowStock", activeCls: "bg-primary text-primary-foreground", badgeCls: "bg-white/25" },
   { key: "nearExpiry", label: "ใกล้หมดอายุ", countKey: "nearExpiry", activeCls: "bg-warning text-warning-foreground", badgeCls: "bg-black/10" },
   { key: "overdueMaint", label: "บำรุงเกินกำหนด", countKey: "overdueMaintenance", activeCls: "bg-destructive text-destructive-foreground", badgeCls: "bg-white/25" },
 ];
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount,
+  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount, trailingAction,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
@@ -82,7 +84,7 @@ export function ItemsFilterBar({
   const locLabel = formatLocation(value.location);
 
   const activeFiltersCount =
-    (value.categoryId ? 1 : 0) +
+    (value.profileId ? 1 : 0) +
     (locLabel ? 1 : 0) +
     value.status.length +
     (value.preset ? 1 : 0);
@@ -90,15 +92,15 @@ export function ItemsFilterBar({
   const update = (patch: Partial<FilterState>) => onChange({ ...value, ...patch });
 
   return (
-    <div className={cn("rounded-2xl border border-border/60 bg-card p-3 sm:p-4 space-y-3", className)}>
-      {/* Row 1: search + scan — stack on narrow screens so the search bar keeps full width */}
+    <div className={cn("rounded-2xl border border-border/60 bg-card p-2.5 sm:p-4 space-y-2 sm:space-y-3", className)}>
+      {/* Row 1: search + scan — search fills the row, scan is icon-only on mobile to save vertical space */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-0 basis-full sm:basis-auto">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             value={value.query}
             onChange={(e) => update({ query: e.target.value })}
-            placeholder="ค้นหารหัส, ชื่อพัสดุ, หรือสแกน QR…"
+            placeholder="ค้นหารหัส / ชื่อพัสดุ…"
             className="h-11 sm:h-12 pl-9 sm:pl-10 pr-9 text-base rounded-xl"
           />
           {value.query && (
@@ -113,25 +115,23 @@ export function ItemsFilterBar({
           )}
         </div>
         {!hideScan && (
-          <Button type="button" onClick={onScanQR} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
+          <Button type="button" onClick={onScanQR} aria-label="สแกน QR" className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center">
             <QrCode className="size-5" />
-            <span className="font-medium">สแกน QR</span>
+            <span className="font-medium hidden sm:inline">สแกน QR</span>
           </Button>
+        )}
+        {trailingAction && (
+          <div className="w-full sm:w-auto shrink-0">{trailingAction}</div>
         )}
       </div>
 
       {/* Filter pickers row */}
       <div className="flex flex-wrap items-center gap-2">
-        <ProfilePicker
+        <CategoryPicker
           profiles={profiles}
-          value={value.profileId}
-          onChange={(id) => update({ profileId: id ?? "", categoryId: null })}
-        />
-        <SubcategoryPicker
-          options={scopedCategories}
-          value={value.categoryId}
-          disabled={scopedCategories.length === 0}
-          onChange={(id) => update({ categoryId: id })}
+          categories={categories}
+          value={{ profileId: value.profileId, categoryId: value.categoryId }}
+          onChange={({ profileId, categoryId }) => update({ profileId, categoryId })}
         />
         <LocationPicker value={value.location} locations={locations} onChange={(loc) => update({ location: loc })} />
         <StatusPicker
@@ -166,8 +166,15 @@ export function ItemsFilterBar({
           <Separator className="bg-border/60" />
           <div className="flex flex-wrap items-center gap-1.5">
             <SlidersHorizontal className="size-3.5 text-muted-foreground mr-1" />
-            {value.categoryId && (
-              <ActiveChip label={`หมวด: ${scopedCategories.find((c) => c.id === value.categoryId)?.name ?? ""}`} onRemove={() => update({ categoryId: null })} />
+            {value.profileId && (
+              <ActiveChip
+                icon={<Layers className="size-3" />}
+                label={
+                  (profiles.find((p) => p.id === value.profileId)?.name ?? "") +
+                  (value.categoryId ? ` / ${scopedCategories.find((c) => c.id === value.categoryId)?.name ?? ""}` : "")
+                }
+                onRemove={() => update({ profileId: "", categoryId: null })}
+              />
             )}
             {locLabel && (
               <ActiveChip icon={<MapPin className="size-3" />} label={locLabel} onRemove={() => update({ location: {} })} />
@@ -190,7 +197,7 @@ function ActiveChip({ label, onRemove, icon, tone = "default" }: { label: string
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 rounded-full text-xs font-medium border",
-      tone === "alert" ? "bg-orange-500/15 text-orange-600 border-orange-500/30" : "bg-primary/10 text-foreground border-primary/20",
+      tone === "alert" ? "bg-orange-500/15 text-orange-700 border-orange-500/30" : "bg-primary/10 text-foreground border-primary/20",
     )}>
       {icon}
       {label}
@@ -222,66 +229,83 @@ function FilterButton({ active, icon: Icon, children, count, ...rest }: { active
   );
 }
 
-// ─── Profile (category) ───
-function ProfilePicker({ profiles, value, onChange }: { profiles: ProfileOption[]; value: string; onChange: (id: string | null) => void }) {
+// ─── Category cascade (profile → subcategory) ───
+// 2-level cascade mirroring LocationPicker. No schema change: CategoryType.profileId already holds main→sub.
+export function CategoryPicker({ profiles, categories, value, onChange }: {
+  profiles: ProfileOption[];
+  categories: CategoryOption[];
+  value: { profileId: string; categoryId: string | null };
+  onChange: (next: { profileId: string; categoryId: string | null }) => void;
+}) {
   const [open, setOpen] = React.useState(false);
-  const selected = profiles.find((p) => p.id === value);
-  const Icon = selected ? (PROFILE_ICONS[selected.icon] ?? Boxes) : Boxes;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={(props: React.ComponentProps<"button">) => (
-          <FilterButton {...props} active={!!value} icon={Icon}>{selected?.name ?? "ทุกประเภท"}</FilterButton>
-        )}
-      />
-      <PopoverContent align="start" className="w-60 p-1.5">
-        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 text-foreground font-medium")} onClick={() => { onChange(null); setOpen(false); }}>
-          <Boxes className="size-4" />
-          <span className="flex-1">ทุกประเภท</span>
-          {!value && <Check className="size-4 text-primary" />}
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 w-full overflow-y-auto overflow-x-hidden">
-          {profiles.map((p) => {
-            const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
-            return (
-              <button key={p.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === p.id && "bg-primary/10 text-foreground font-medium")} onClick={() => { onChange(p.id); setOpen(false); }}>
-                <PIcon className="size-4 shrink-0" />
-                <span className="flex-1 min-w-0 truncate">{p.name}</span>
-                {value === p.id && <Check className="size-4 text-primary shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+  const [draftProfile, setDraftProfile] = React.useState<string>(value.profileId);
+  const [draftCategory, setDraftCategory] = React.useState<string | null>(value.categoryId);
+  React.useEffect(() => { if (open) { setDraftProfile(value.profileId); setDraftCategory(value.categoryId); } }, [open, value.profileId, value.categoryId]);
 
-// ─── Subcategory ───
-function SubcategoryPicker({ options, value, onChange, disabled }: { options: CategoryOption[]; value: string | null; onChange: (id: string | null) => void; disabled?: boolean }) {
-  const [open, setOpen] = React.useState(false);
-  const selected = options.find((c) => c.id === value);
+  const profile = profiles.find((p) => p.id === draftProfile) ?? null;
+  const scoped = draftProfile ? categories.filter((c) => c.profile?.id === draftProfile) : categories;
+
+  const selProfile = profiles.find((p) => p.id === value.profileId);
+  const label = selProfile
+    ? (value.categoryId ? `${selProfile.name} / ${categories.find((c) => c.id === value.categoryId)?.name ?? ""}` : selProfile.name)
+    : null;
+
+  const apply = (p: string, c: string | null) => { onChange({ profileId: p, categoryId: c }); setOpen(false); };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        disabled={disabled}
         render={(props: React.ComponentProps<"button">) => (
-          <FilterButton {...props} active={!!value} icon={Layers}>{selected?.name ?? "หมวดหมู่ย่อย"}</FilterButton>
+          <FilterButton {...props} active={!!value.profileId} icon={Layers}>{label ?? "หมวดหมู่"}</FilterButton>
         )}
       />
-      <PopoverContent align="start" className="w-60 p-1.5">
-        <button className="w-full text-left text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-muted" onClick={() => { onChange(null); setOpen(false); }}>
-          ทุกหมวดหมู่ย่อย
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 w-full overflow-y-auto overflow-x-hidden">
-          {options.map((o) => (
-            <button key={o.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === o.id && "bg-primary/10 text-foreground")} onClick={() => { onChange(o.id); setOpen(false); }}>
-              <span className="flex-1 min-w-0 truncate">{o.name}</span>
-              {value === o.id && <Check className="size-4 text-primary shrink-0" />}
-            </button>
-          ))}
+      <PopoverContent align="start" sideOffset={6} className="w-[min(92vw,480px)] max-h-[70vh] p-0 overflow-hidden flex flex-col">
+        {/* breadcrumb */}
+        <div className="flex items-center gap-1 flex-wrap px-3 py-2.5 bg-muted/50 border-b border-border text-xs shrink-0">
+          <Layers className="size-3.5 text-primary" />
+          <Crumb label="ทุกหมวดหมู่" active={!draftProfile} onClick={() => { setDraftProfile(""); setDraftCategory(null); }} />
+          {draftProfile && (
+            <>
+              <ChevronRight className="size-3 text-muted-foreground" />
+              <Crumb label={profile?.name ?? draftProfile} active={!draftCategory} onClick={() => setDraftCategory(null)} />
+            </>
+          )}
+        </div>
+
+        {/* cascade columns */}
+        <div className="grid grid-cols-2 divide-x divide-border flex-1 min-h-0">
+          <CascadeColumn title="ประเภท">
+            {profiles.map((p) => {
+              const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
+              return (
+                <button key={p.id} onClick={() => {
+                  // no subcategories → dead-end, apply profile-only filter immediately
+                  if (!categories.some((c) => c.profile?.id === p.id)) { apply(p.id, null); return; }
+                  setDraftProfile(p.id); setDraftCategory(null);
+                }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors", draftProfile === p.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85")}>
+                  <PIcon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                  {draftProfile === p.id && <Check className="size-3.5 text-primary shrink-0" />}
+                </button>
+              );
+            })}
+          </CascadeColumn>
+          <CascadeColumn title="หมวดหมู่ย่อย" empty={!draftProfile}>
+            {scoped.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">ไม่มีหมวดหมู่ย่อย</div>
+            ) : scoped.map((c) => (
+              <CascadeRow key={c.id} label={c.name} selected={draftCategory === c.id} onClick={() => apply(draftProfile, c.id)} />
+            ))}
+          </CascadeColumn>
+        </div>
+
+        {/* footer */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-border bg-muted/30 shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => apply("", null)} className="h-8 text-muted-foreground">ล้างหมวดหมู่</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} className="h-8">ยกเลิก</Button>
+            <Button size="sm" onClick={() => apply(draftProfile, draftCategory)} className="h-8">ใช้ตัวกรองนี้</Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
@@ -319,17 +343,18 @@ function StatusPicker({ value, onChange, onLoanActive, onLoanCount, onLoanToggle
             <div className="h-px bg-border mb-1.5" />
           </>
         )}
-        <div className="text-xs font-medium text-muted-foreground px-1 pb-1.5">เลือกได้หลายรายการ</div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="text-xs font-medium text-muted-foreground px-1 pb-1">เลือกได้หลายรายการ</div>
+        <div className="space-y-0.5">
           {STATUS_KEYS.map((k) => {
             const active = value.includes(k);
             return (
               <button key={k} onClick={() => toggle(k)} className={cn(
-                "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium border transition min-w-0 max-w-full",
-                active ? `${STATUS_PILLS[k]} ring-2 ring-primary/30` : "bg-background border-border text-foreground/70 hover:bg-muted",
+                "w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm text-left transition-colors",
+                active ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85",
               )}>
-                {active && <Check className="size-3 shrink-0" />}
-                <span className="truncate">{STATUS_LABELS[k]}</span>
+                <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS[k] }} />
+                <span className="flex-1 min-w-0 truncate">{STATUS_LABELS[k]}</span>
+                {active && <Check className="size-4 text-primary shrink-0" />}
               </button>
             );
           })}
@@ -349,7 +374,7 @@ function AlertPicker({ value, alerts, onChange }: { value: PresetKey | null; ale
       <div className="flex items-center gap-1.5 mb-1.5 sm:mb-0">
         <Bell className="size-4 text-orange-500 shrink-0" />
         <span className="text-xs font-semibold text-foreground/80 sm:hidden">การแจ้งเตือน</span>
-        <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">Alerts</span>
+        <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">การแจ้งเตือน</span>
       </div>
       <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
         {PRESETS.map((a) => {
@@ -358,11 +383,11 @@ function AlertPicker({ value, alerts, onChange }: { value: PresetKey | null; ale
           return (
             <button key={a.key} type="button" onClick={() => onChange(active ? null : a.key)} className={cn(
               "flex flex-col items-center justify-center gap-1 min-h-9 px-1 py-1 sm:flex-row sm:inline-flex sm:h-7 sm:px-2 rounded-md text-xs font-medium transition text-center leading-tight",
-              active ? a.activeCls : "bg-orange-500/15 text-orange-600 hover:brightness-95",
+              active ? a.activeCls : "bg-orange-500/15 text-orange-700 hover:brightness-95",
             )}>
               <span className="leading-tight">{a.label}</span>
               {count > 0 && (
-                <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-600")}>{count}</span>
+                <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-700")}>{count}</span>
               )}
             </button>
           );
@@ -399,6 +424,11 @@ export function LocationPicker({ value, locations, onChange }: { value: Location
   const rooms = draft.building && draft.floor ? [...(tree.get(draft.building)?.get(draft.floor)?.keys() ?? [])] : [];
   const details = draft.building && draft.floor && draft.room ? [...(tree.get(draft.building)?.get(draft.floor)?.get(draft.room) ?? [])] : [];
 
+  // click a dead-end level (no children) → apply immediately, like a leaf
+  const floorsOf = (b?: string) => b ? [...(tree.get(b)?.keys() ?? [])] : [];
+  const roomsOf = (b?: string, f?: string) => b && f ? [...(tree.get(b)?.get(f)?.keys() ?? [])] : [];
+  const detailsOf = (b?: string, f?: string, r?: string) => b && f && r ? [...(tree.get(b)?.get(f)?.get(r) ?? [])] : [];
+
   const apply = (loc: LocationFilter) => { onChange(loc); setOpen(false); };
 
   return (
@@ -422,19 +452,22 @@ export function LocationPicker({ value, locations, onChange }: { value: Location
         {/* cascade columns */}
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-border flex-1 min-h-0">
           <CascadeColumn title="อาคาร">
-            {buildings.map((b) => (
-              <CascadeRow key={b} label={b} selected={draft.building === b} hasChildren onClick={() => setDraft({ building: b })} />
-            ))}
+            {buildings.map((b) => {
+              const kids = floorsOf(b);
+              return <CascadeRow key={b} label={b} selected={draft.building === b} hasChildren={kids.length > 0} onClick={() => kids.length === 0 ? apply({ building: b }) : setDraft({ building: b })} />;
+            })}
           </CascadeColumn>
           <CascadeColumn title="ชั้น" empty={!draft.building}>
-            {floors.map((f) => (
-              <CascadeRow key={f} label={f} selected={draft.floor === f} hasChildren onClick={() => setDraft({ building: draft.building, floor: f })} />
-            ))}
+            {floors.map((f) => {
+              const kids = roomsOf(draft.building, f);
+              return <CascadeRow key={f} label={f} selected={draft.floor === f} hasChildren={kids.length > 0} onClick={() => kids.length === 0 ? apply({ building: draft.building, floor: f }) : setDraft({ building: draft.building, floor: f })} />;
+            })}
           </CascadeColumn>
           <CascadeColumn title="ห้อง" empty={!draft.floor}>
-            {rooms.map((r) => (
-              <CascadeRow key={r} label={r ? `ห้อง ${r}` : "ไม่มีห้อง"} selected={draft.room === r} hasChildren onClick={() => setDraft({ building: draft.building, floor: draft.floor, room: r })} />
-            ))}
+            {rooms.map((r) => {
+              const kids = detailsOf(draft.building, draft.floor, r);
+              return <CascadeRow key={r} label={r ? `ห้อง ${r}` : "ไม่มีห้อง"} selected={draft.room === r} hasChildren={kids.length > 0} onClick={() => kids.length === 0 ? apply({ building: draft.building, floor: draft.floor, room: r }) : setDraft({ building: draft.building, floor: draft.floor, room: r })} />;
+            })}
           </CascadeColumn>
           <CascadeColumn title="รายละเอียด" empty={!draft.room}>
             {details.length === 0 ? (

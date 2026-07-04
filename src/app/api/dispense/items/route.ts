@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { requireAuth } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
-  const session = await getSessionUser();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireAuth(req);
+  if (auth.denied) return auth.denied;
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     prisma.item.findMany({
       where,
       include: {
-        category: { select: { name: true, profile: { select: { dispenseType: true, assetTracking: true, setTracking: true, color: true } } } },
+        category: { select: { name: true, profile: { select: { name: true, dispenseType: true, assetTracking: true, setTracking: true, color: true } } } },
         issueUnit: { select: { id: true, name: true } },
         lots: {
           where: { remainingQty: { gt: 0 } },

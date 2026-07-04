@@ -57,7 +57,7 @@ export function QrScanner({ open, onClose, onScan }: Props) {
           { fps: 10, qrbox: { width: 250, height: 250 } },
           (decoded: string) => {
             onScanRef.current(decoded);
-            toast.success(`Scanned: ${decoded}`);
+            toast.success(`สแกนสำเร็จ: ${decoded}`);
             stopScanner();
             onCloseRef.current();
           },
@@ -65,7 +65,7 @@ export function QrScanner({ open, onClose, onScan }: Props) {
         );
       } catch {
         if (!cancelled) {
-          toast.error("Cannot access camera. Use manual input.");
+          toast.error("เข้าถึงกล้องไม่ได้ กรุณาพิมพ์รหัสด้วยตนเอง");
           setManualMode(true);
         }
       }
@@ -98,14 +98,14 @@ export function QrScanner({ open, onClose, onScan }: Props) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
-            Scan QR Code
+            สแกน QR Code
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setManualMode(!manualMode)}
             >
               {manualMode ? <Camera className="h-4 w-4 mr-1" /> : <Keyboard className="h-4 w-4 mr-1" />}
-              {manualMode ? "Camera" : "Manual"}
+              {manualMode ? "กล้อง" : "พิมพ์รหัส"}
             </Button>
           </DialogTitle>
         </DialogHeader>
@@ -113,14 +113,14 @@ export function QrScanner({ open, onClose, onScan }: Props) {
         {manualMode ? (
           <div className="space-y-3">
             <Input
-              placeholder="Enter item code..."
+              placeholder="กรอกรหัสพัสดุ..."
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualSubmit()}
               autoFocus
             />
             <Button className="w-full" onClick={handleManualSubmit} disabled={!manualCode.trim()}>
-              Search
+              ค้นหา
             </Button>
           </div>
         ) : (
@@ -130,7 +130,7 @@ export function QrScanner({ open, onClose, onScan }: Props) {
               className="w-full min-h-[300px] rounded-lg overflow-hidden bg-muted"
             />
             <p className="text-xs text-center text-muted-foreground">
-              Point camera at QR code on item
+              นำกล้องไปที่ QR Code บนพัสดุ
             </p>
           </div>
         )}

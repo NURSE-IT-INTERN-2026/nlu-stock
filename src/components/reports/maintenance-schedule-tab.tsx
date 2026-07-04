@@ -5,7 +5,7 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { dateRange: true, locations: true };
@@ -43,13 +43,13 @@ const columns: Column<Row>[] = [
   {
     key: "nextMaintenanceDate",
     header: "Next Maintenance",
-    render: (r) => format(new Date(r.nextMaintenanceDate), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.nextMaintenanceDate), "dd MMM yyyy"),
   },
   { key: "maintenanceCycleMonths", header: "Cycle (mo)" },
   {
     key: "lastMaintenanceDate",
     header: "Last Done",
-    render: (r) => (r.lastMaintenanceDate ? format(new Date(r.lastMaintenanceDate), "dd MMM yyyy") : "—"),
+    render: (r) => (r.lastMaintenanceDate ? fmtDate(new Date(r.lastMaintenanceDate), "dd MMM yyyy") : "—"),
   },
   { key: "location", header: "Location" },
 ];

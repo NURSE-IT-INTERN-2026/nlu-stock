@@ -2,6 +2,16 @@
 export { ItemStatus, Role, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
 import type { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
 
+// ─── Item Condition (sub-item สภาพ) ───
+export const CONDITION_LABELS: Record<string, string> = {
+  NEW: "ใหม่",
+  OLD: "เก่า",
+  USABLE: "ใช้งานได้",
+  FAIR: "สภาพพอใช้",
+  UNUSABLE: "ใช้งานไม่ได้",
+  DAMAGED: "ชำรุด",
+};
+
 // ─── Category ───
 // NOTE: ประเภท (CategoryProfile) เป็น data แล้ว — label/color/icon อ่านจาก profile row ตรงๆ
 // (profile.name, profile.color, profile.icon). ไม่มี CATEGORY_LABELS/COLORS map อีก.
@@ -29,39 +39,33 @@ export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   COUNT_MISMATCH_SHORT: "นับแล้วขาด",
   COUNT_MISMATCH_OVER: "นับแล้วเกิน",
   DISPOSAL: "กำจัด (พ้นสภาพ)",
+  ASSEMBLY: "ประกอบเป็นชุด",
   OTHER: "อื่นๆ",
 };
 
 export const ADJUSTMENT_REASON_OPTIONS = Object.entries(ADJUSTMENT_REASON_LABELS)
   .map(([value, label]) => ({ value, label })) as { value: AdjustmentReason; label: string }[];
 
-// ─── Item Status (damage reporting subset) ───
-
-export const DAMAGE_STATUS_OPTIONS: { value: ItemStatus; label: string }[] = [
-  { value: "DAMAGED", label: "Damaged" },
-  { value: "UNDER_REPAIR", label: "Under Repair" },
-  { value: "LOST", label: "Lost" },
-  { value: "DISPOSED", label: "Disposed" },
-];
-
 export const STATUS_LABELS: Record<string, string> = {
-  AVAILABLE: "พร้อมใช้",
-  CHECKED_OUT: "เบิกแล้ว",
+  AVAILABLE: "พร้อมใช้งาน",
+  ON_LOAN: "ถูกยืม",
+  IN_USE: "ถูกใช้งาน",
   DAMAGED: "ชำรุด",
-  UNDER_REPAIR: "ซ่อมบำรุง",
+  UNDER_REPAIR: "ส่งซ่อม",
   LOST: "สูญหาย",
-  PENDING_MAINTENANCE: "รอบำรุง",
-  DISPOSED: "จำหน่าย",
+  PENDING_MAINTENANCE: "บำรุงรักษา",
+  DISPOSED: "ตัดจำหน่าย",
 };
 
 // Target statuses offered when adjusting a tracked (per-piece) item via the adjust dialog.
 export const TRACKED_ADJUST_STATUS_OPTIONS: { value: ItemStatus; label: string }[] = (
-  ["LOST", "DAMAGED", "DISPOSED", "UNDER_REPAIR"] as ItemStatus[]
+  ["LOST", "DISPOSED"] as ItemStatus[]
 ).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
 export const STATUS_COLORS: Record<string, string> = {
   AVAILABLE: "#22c55e",
-  CHECKED_OUT: "#3b82f6",
+  ON_LOAN: "#3b82f6",
+  IN_USE: "#6366f1",
   DAMAGED: "#ef4444",
   UNDER_REPAIR: "#f59e0b",
   LOST: "#a855f7",
@@ -71,7 +75,8 @@ export const STATUS_COLORS: Record<string, string> = {
 
 export const STATUS_PILLS: Record<string, string> = {
   AVAILABLE: "bg-success/15 text-success border-success/30",
-  CHECKED_OUT: "bg-info-500/15 text-info-500 border-info-500/30",
+  ON_LOAN: "bg-info-500/15 text-info-500 border-info-500/30",
+  IN_USE: "bg-indigo-500/15 text-indigo-500 border-indigo-500/30",
   DAMAGED: "bg-destructive/15 text-destructive border-destructive/30",
   UNDER_REPAIR: "bg-warning/15 text-warning-foreground border-warning/30",
   LOST: "bg-purple-500/15 text-purple-500 border-purple-500/30",
@@ -81,7 +86,8 @@ export const STATUS_PILLS: Record<string, string> = {
 
 export const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   AVAILABLE: "default",
-  CHECKED_OUT: "secondary",
+  ON_LOAN: "secondary",
+  IN_USE: "secondary",
   DAMAGED: "destructive",
   UNDER_REPAIR: "secondary",
   LOST: "destructive",

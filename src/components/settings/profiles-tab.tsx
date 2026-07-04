@@ -156,13 +156,13 @@ export function ProfilesTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 h-full min-h-0">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">จัดการประเภทหลัก — เพิ่ม/ซ่อน/ลบ ประเภทพัสดุ</p>
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มประเภท</Button>
       </div>
 
-      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -235,7 +235,7 @@ export function ProfilesTab() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editing ? "แก้ไขประเภท" : "เพิ่มประเภท"}</DialogTitle>
           </DialogHeader>

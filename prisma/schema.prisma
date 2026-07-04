@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 // Dispense behavior of a CategoryProfile (ประเภท). The only fixed enum.
@@ -19,7 +21,8 @@ enum DispenseType {
 
 enum ItemStatus {
   AVAILABLE
-  CHECKED_OUT
+  ON_LOAN
+  IN_USE
   DAMAGED
   UNDER_REPAIR
   LOST
@@ -40,6 +43,7 @@ enum AdjustmentReason {
   COUNT_MISMATCH_SHORT
   COUNT_MISMATCH_OVER
   DISPOSAL
+  ASSEMBLY
   OTHER
 }
 
@@ -84,16 +88,17 @@ model User {
   adjustments        StockAdjustment[]
   maintenanceRecords MaintenanceRecord[]
   statusChanges      ItemStatusLog[]
+  locationChanges    LocationChangeLog[]
 
   @@map("users")
 }
 
 // --- Categories ---
 model CategoryType {
-  id          String   @id @default(cuid())
-  name        String   @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
-  sortOrder   Int      @default(0)
+  sortOrder   Int     @default(0)
 
   // ประเภท (profile) — กำหนด dispense/track behavior
   profileId String
@@ -107,17 +112,17 @@ model CategoryType {
 // ประเภท (CategoryProfile) — addable from UI. behavior อยู่ใน dispenseType + flags.
 // icon/color/name/desc = cosmetic. code = prefix สำหรับ NLU-{code}-NNN.
 model CategoryProfile {
-  id             String       @id @default(cuid())
-  name           String       @unique
-  code           String       @unique
-  description    String?
-  dispenseType   DispenseType
-  assetTracking  Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
-  setTracking    Boolean      @default(false) // โชว์ setSize/borrowable (BOOK/TOY)
-  icon           String       @default("Package")
-  color          String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
-  sortOrder      Int          @default(0)
-  isActive       Boolean      @default(true)
+  id            String       @id @default(cuid())
+  name          String       @unique
+  code          String       @unique
+  description   String?
+  dispenseType  DispenseType
+  assetTracking Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
+  setTracking   Boolean      @default(false) // โชว์ setSize/borrowable (BOOK/TOY)
+  icon          String       @default("Package")
+  color         String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
+  sortOrder     Int          @default(0)
+  isActive      Boolean      @default(true)
 
   subCategories CategoryType[]
 
@@ -143,7 +148,8 @@ model Unit {
   id   String @id @default(cuid())
   name String @unique
 
-  items Item[] @relation("UnitItem")
+  items      Item[]  @relation("UnitItem")
+  kitBomItems KitBom[]
 
   @@map("units")
 }
@@ -169,9 +175,9 @@ model Item {
   isActive          Boolean      @default(true)
 
   // AI embedding (pgvector)
-  embedding         Unsupported("vector(768)")?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  embedding Unsupported("vector(768)")?
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
 
   // Running total
   totalQty     Int @default(0)
@@ -181,8 +187,8 @@ model Item {
   storageRequirements String?
 
   // Book/Toy set + borrowing (see ADR-0001)
-  setSize     Int     @default(1) // volumes per set; 1 = single
-  borrowable  Boolean @default(false)
+  setSize    Int     @default(1) // volumes per set; 1 = single
+  borrowable Boolean @default(false)
 
   // Fixed Asset fields (nullable, used when category = KRU, ELE)
   model                  String?
@@ -191,8 +197,8 @@ model Item {
   vendorCompany          String?
   vendorContact          String?
   vendorPhone            String?
-  warrantyMonths         Int        @default(0)
-  maintenanceCycleMonths Int        @default(12)
+  warrantyMonths         Int       @default(0)
+  maintenanceCycleMonths Int       @default(12)
   lastMaintenanceDate    DateTime?
   nextMaintenanceDate    DateTime?
   manualUrl              String?
@@ -200,11 +206,14 @@ model Item {
   // Relations
   subItems           SubItem[]
   lots               Lot[]
+  kitComponents      KitBom[] @relation("KitBomItems") // KIT "ภายในชุดประกอบด้วย" (BOM)
+  componentsInKits   KitBom[] @relation("KitComponents") // reverse: ถูกใช้เป็นส่วนประกอบในชุดอื่น
   dispenseRecords    DispenseRecord[]
   receiveRecords     ReceiveRecord[]
   adjustments        StockAdjustment[]
   maintenanceRecords MaintenanceRecord[]
   statusLogs         ItemStatusLog[]
+  locationChanges    LocationChangeLog[]
 
   @@index([categoryId, isActive])
   @@index([locationId])
@@ -214,22 +223,22 @@ model Item {
 
 // --- Sub-Items ---
 model SubItem {
-  id           String        @id @default(cuid())
+  id           String         @id @default(cuid())
   itemId       String
-  item         Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item         Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
   subCode      String
   name         String?
-  status       ItemStatus    @default(AVAILABLE)
+  status       ItemStatus     @default(AVAILABLE)
   condition    ItemCondition?
   serialNumber String?
   notes        String?
   imageUrl     String?
   images       String[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
-  dispenseRecords DispenseRecord[]
-  statusLogs      ItemStatusLog[]
+  dispenseRecords    DispenseRecord[]
+  statusLogs         ItemStatusLog[]
   maintenanceRecords MaintenanceRecord[]
 
   @@unique([itemId, subCode])
@@ -244,11 +253,11 @@ model Lot {
   item         Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   lotNumber    String
   expiryDate   DateTime?
-  receivedQty  Int      @default(0) // immutable: how much entered this lot
-  remainingQty Int      @default(0) // decremented on dispense; see ADR-0002
-  receivedDate DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  receivedQty  Int       @default(0) // immutable: how much entered this lot
+  remainingQty Int       @default(0) // decremented on dispense; see ADR-0002
+  receivedDate DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   dispenseRecords DispenseRecord[]
   receiveRecords  ReceiveRecord[]
@@ -259,27 +268,55 @@ model Lot {
   @@map("lots")
 }
 
+// --- Kit BOM (KIT "ภายในชุดประกอบด้วย") ---
+// componentItemId = link ไป tracked Item จริง (สำหรับ assemble: ตัด stock). nullable เพื่อรองรับ
+// free-text rows เดิม (name+qty+unit) ที่ import มาจาก Excel ก่อนมี feature assemble.
+model KitBom {
+  id              String  @id @default(cuid())
+  kitItemId       String
+  kitItem         Item    @relation("KitBomItems", fields: [kitItemId], references: [id], onDelete: Cascade)
+  componentItemId String?
+  componentItem   Item?   @relation("KitComponents", fields: [componentItemId], references: [id])
+  name            String
+  quantity        Int     @default(1)
+  unitId          String
+  unit            Unit    @relation(fields: [unitId], references: [id])
+  sortOrder       Int     @default(0)
+
+  @@index([kitItemId])
+  @@index([componentItemId])
+  @@map("kit_bom")
+}
+
 // --- Dispense ---
 model DispenseRecord {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   itemId      String
-  item        Item      @relation(fields: [itemId], references: [id])
+  item        Item       @relation(fields: [itemId], references: [id])
   subItemId   String?
-  subItem     SubItem?  @relation(fields: [subItemId], references: [id])
+  subItem     SubItem?   @relation(fields: [subItemId], references: [id])
   lotId       String?
-  lot         Lot?      @relation(fields: [lotId], references: [id])
+  lot         Lot?       @relation(fields: [lotId], references: [id])
   quantity    Int
+  resolvedQty Int        @default(0) // units no longer outstanding (returned + written off); returnedAt set when >= quantity
   usageType   UsageType?
   usageNote   String?
   staffId     String
-  staff       User      @relation(fields: [staffId], references: [id])
-  dispensedAt DateTime  @default(now())
+  staff       User       @relation(fields: [staffId], references: [id])
+  dispensedAt DateTime   @default(now())
   returnedAt  DateTime?
   notes       String?
+  recipient   String?
+  // Groups all lines of a single borrow event (1 dispense POST = 1 loanGroupId).
+  // Lets the return screen show one card per loan instead of merging by item.
+  loanGroupId String?
+  dueAt       DateTime?
+  returnProofUrls String[] @default([]) // photos uploaded when the loan is returned
 
   @@index([itemId, dispensedAt])
   @@index([staffId, dispensedAt])
   @@index([usageType, dispensedAt])
+  @@index([loanGroupId])
   @@map("dispense_records")
 }
 
@@ -339,7 +376,7 @@ model MaintenanceRecord {
   attachmentUrls    String[]
   nextMaintenanceAt DateTime?
 
-  createdAt         DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([subItemId])
   @@map("maintenance_records")
@@ -361,4 +398,21 @@ model ItemStatusLog {
   changedAt      DateTime   @default(now())
 
   @@map("item_status_logs")
+}
+
+// --- Location Change Log (audit trail for ย้ายที่ตั้ง) ---
+// fromLabel/toLabel denormalized: an audit log is point-in-time, so the
+// location name as it was at move time is what we want to show.
+model LocationChangeLog {
+  id        String   @id @default(cuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromLabel String?
+  toLabel   String?
+  changedBy String
+  changer   User     @relation(fields: [changedBy], references: [id])
+  changedAt DateTime @default(now())
+
+  @@index([itemId, changedAt])
+  @@map("location_change_logs")
 }

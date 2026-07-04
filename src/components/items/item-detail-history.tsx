@@ -2,18 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ShoppingCart, ArrowDownToLine, Package, RefreshCw, Wrench,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, MapPin, CalendarDays, User2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
 
 interface TimelineEvent {
   id: string;
-  type: "DISPENSE" | "RECEIVE" | "ADJUSTMENT" | "STATUS_CHANGE" | "MAINTENANCE";
+  type: "DISPENSE" | "RECEIVE" | "ADJUSTMENT" | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
   date: string;
   description: string;
   user: string;
@@ -26,23 +25,26 @@ const TYPE_ICONS: Record<string, typeof ShoppingCart> = {
   ADJUSTMENT: Package,
   STATUS_CHANGE: RefreshCw,
   MAINTENANCE: Wrench,
+  LOCATION_CHANGE: MapPin,
 };
 
-const TYPE_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  DISPENSE: "secondary",
-  RECEIVE: "default",
-  ADJUSTMENT: "outline",
-  STATUS_CHANGE: "secondary",
-  MAINTENANCE: "outline",
+const TYPE_BADGE: Record<string, string> = {
+  DISPENSE: "bg-primary/10 text-primary border-primary/20",
+  RECEIVE: "bg-success/10 text-success-700 border-success/20",
+  ADJUSTMENT: "bg-muted text-foreground border-border",
+  STATUS_CHANGE: "bg-warning/10 text-warning-700 border-warning/20",
+  MAINTENANCE: "bg-primary/5 text-primary border-primary/15",
+  LOCATION_CHANGE: "bg-muted text-foreground border-border",
 };
 
 const EVENT_CHIPS = [
-  { value: "", label: "All", activeClass: "bg-primary text-primary-foreground border-primary" },
-  { value: "DISPENSE", label: "Dispense", activeClass: "bg-blue-600 text-white border-blue-600" },
-  { value: "RECEIVE", label: "Receive", activeClass: "bg-emerald-600 text-white border-emerald-600" },
-  { value: "ADJUSTMENT", label: "Adjustment", activeClass: "bg-slate-600 text-white border-slate-600" },
-  { value: "STATUS_CHANGE", label: "Status", activeClass: "bg-amber-600 text-white border-amber-600" },
-  { value: "MAINTENANCE", label: "Maintenance", activeClass: "bg-purple-600 text-white border-purple-600" },
+  { value: "", label: "ทั้งหมด", activeClass: "bg-primary text-primary-foreground border-primary" },
+  { value: "DISPENSE", label: "เบิก", activeClass: "bg-blue-600 text-white border-blue-600" },
+  { value: "RECEIVE", label: "รับเข้า", activeClass: "bg-emerald-600 text-white border-emerald-600" },
+  { value: "ADJUSTMENT", label: "ปรับสต๊อก", activeClass: "bg-slate-600 text-white border-slate-600" },
+  { value: "STATUS_CHANGE", label: "เปลี่ยนสถานะ", activeClass: "bg-amber-600 text-white border-amber-600" },
+  { value: "MAINTENANCE", label: "บำรุงรักษา", activeClass: "bg-purple-600 text-white border-purple-600" },
+  { value: "LOCATION_CHANGE", label: "ที่ตั้ง", activeClass: "bg-sky-600 text-white border-sky-600" },
 ];
 
 interface Props {
@@ -72,69 +74,85 @@ export function ItemDetailHistory({ itemId }: Props) {
   const totalPages = Math.ceil(total / perPage);
 
   if (loading) {
-    return <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>;
+    return (
+      <section className="rounded-2xl border border-border bg-card overflow-hidden">
+        <SectionHeader eyebrow="กิจกรรม" title="ประวัติ" />
+        <div className="p-4 sm:p-5 space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+        </div>
+      </section>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      {/* ── Quick Filter Chips ── */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-muted-foreground mr-1">Type:</span>
-        {EVENT_CHIPS.map((chip) => (
-          <button
-            key={chip.value}
-            className={cn(
-              "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
-              typeFilter === chip.value
-                ? chip.activeClass
-                : "bg-muted/50 text-foreground/70 border-border hover:bg-muted",
-            )}
-            onClick={() => { setTypeFilter(chip.value); setPage(1); }}
-          >
-            {chip.label}
-          </button>
-        ))}
+    <section className="rounded-2xl border border-border bg-card overflow-hidden">
+      <SectionHeader eyebrow="กิจกรรม" title="ประวัติ" />
+
+      {/* ── Quick filter chips ── */}
+      <div className="px-4 sm:px-5 pt-4 flex items-center gap-2 overflow-x-auto">
+        <span className="text-sm text-muted-foreground shrink-0">Type:</span>
+        {EVENT_CHIPS.map((chip) => {
+          const active = typeFilter === chip.value;
+          return (
+            <button
+              key={chip.value}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:bg-muted",
+              )}
+              onClick={() => { setTypeFilter(chip.value); setPage(1); }}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Timeline ── */}
       {events.length === 0 ? (
-        <p className="text-muted-foreground text-center py-8">No history events</p>
+        <p className="text-center py-10 text-sm text-muted-foreground">ไม่มีรายการในหมวดนี้</p>
       ) : (
-        <div className="space-y-2">
-          {events.map((event, idx) => {
+        <ol className="p-4 sm:p-5 space-y-3">
+          {events.map((event) => {
             const Icon = TYPE_ICONS[event.type] || Package;
             return (
-              <div
+              <li
                 key={event.id}
-                className={cn(
-                  "flex items-start gap-3 p-3 rounded-lg border",
-                  idx % 2 === 1 && "bg-muted/20",
-                )}
+                className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20 hover:bg-muted/40 transition-colors"
               >
-                <div className="mt-0.5 p-2 rounded-full bg-muted shrink-0">
-                  <Icon className="h-4 w-4" />
+                <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
+                  <Icon className="size-4" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={TYPE_VARIANTS[event.type]} className="text-xs">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border",
+                      TYPE_BADGE[event.type] ?? "bg-muted text-foreground border-border",
+                    )}>
                       {event.type.replace(/_/g, " ")}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
+                    </span>
+                    <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                      <CalendarDays className="size-3" />
                       {new Date(event.date).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
-                  <p className="text-sm mt-1">{event.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">by {event.user}</p>
+                  <p className="text-sm font-medium">{event.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1">
+                    <User2 className="size-3" />
+                    by {event.user}
+                  </p>
                 </div>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ol>
       )}
 
       {/* ── Pagination ── */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-t border-border px-4 sm:px-5 py-3">
           <p className="text-sm text-muted-foreground">{total} events, page {page} of {totalPages}</p>
           <div className="flex gap-1">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
@@ -146,6 +164,18 @@ export function ItemDetailHistory({ itemId }: Props) {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+function SectionHeader({ eyebrow, title, right }: { eyebrow?: string; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="px-4 sm:px-5 py-4 border-b border-border grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="min-w-0">
+        {eyebrow && <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{eyebrow}</div>}
+        <h2 className="text-lg font-semibold leading-tight mt-0.5 truncate">{title}</h2>
+      </div>
+      {right}
     </div>
   );
 }

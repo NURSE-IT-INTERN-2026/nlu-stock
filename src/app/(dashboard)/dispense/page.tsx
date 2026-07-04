@@ -1,22 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo, type ComponentProps } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Plus, Minus, Search, QrCode, Package, Layers, Check, X, Boxes, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, type LucideIcon } from "lucide-react";
+import { Plus, Minus, Search, QrCode, X, Dices } from "lucide-react";
+import { pic } from "@/lib/image";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { searchDispenseItems } from "@/lib/api";
-import { useCart } from "@/components/dispense/cart-context";
+import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/dashboard/pagination";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
-import type { CategoryOption, ProfileOption } from "@/lib/api";
+import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
+import type { ProfileOption } from "@/lib/api";
 
 function CardEditableQty({ value, max, onChange }: {
   value: number;
@@ -50,14 +51,14 @@ function CardEditableQty({ value, max, onChange }: {
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        className="w-6 h-6 text-center text-xs font-semibold tabular-nums bg-background border rounded-full px-0 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        className="w-9 h-9 text-center text-sm font-semibold tabular-nums bg-background border rounded-full px-0 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
       />
     );
   }
 
   return (
     <button
-      className="w-5 text-center text-xs font-semibold tabular-nums"
+      className="min-w-8 h-9 text-center text-sm font-semibold tabular-nums"
       onClick={(e) => {
         e.stopPropagation();
         setDraft(String(value));
@@ -70,94 +71,6 @@ function CardEditableQty({ value, max, onChange }: {
 }
 
 
-const PROFILE_ICONS: Record<string, LucideIcon> = {
-  Package, Beaker, Hammer, Building2, Monitor, BookOpen, Puzzle, Boxes,
-};
-
-function ProfilePicker({ profiles, value, onChange }: {
-  profiles: ProfileOption[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = profiles.find((p) => p.id === value);
-  const Icon = selected ? (PROFILE_ICONS[selected.icon] ?? Boxes) : Boxes;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={(props: ComponentProps<"button">) => (
-          <button {...props} className={cn(
-            "inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium border transition-colors",
-            value ? "bg-primary/10 border-primary/40 text-foreground" : "bg-background border-border text-foreground/80 hover:bg-muted",
-          )}>
-            <Icon className="size-4 text-muted-foreground shrink-0" />
-            <span className="min-w-0 max-w-[150px] truncate">{selected?.name ?? "ทุกประเภท"}</span>
-          </button>
-        )}
-      />
-      <PopoverContent align="start" className="w-60 p-1.5">
-        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 font-medium")} onClick={() => { onChange(""); setOpen(false); }}>
-          <Boxes className="size-4" />
-          <span className="flex-1">ทุกประเภท</span>
-          {!value && <Check className="size-4 text-primary" />}
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 overflow-y-auto">
-          {profiles.map((p) => {
-            const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
-            return (
-              <button key={p.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === p.id && "bg-primary/10 font-medium")} onClick={() => { onChange(p.id); setOpen(false); }}>
-                <PIcon className="size-4 shrink-0" />
-                <span className="flex-1 min-w-0 truncate">{p.name}</span>
-                {value === p.id && <Check className="size-4 text-primary shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function CategoryPicker({ categories, value, onChange }: {
-  categories: CategoryOption[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = categories.find((c) => c.id === value);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={(props: ComponentProps<"button">) => (
-          <button {...props} className={cn(
-            "inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium border transition-colors",
-            value ? "bg-primary/10 border-primary/40 text-foreground" : "bg-background border-border text-foreground/80 hover:bg-muted",
-          )}>
-            <Layers className="size-4 text-muted-foreground shrink-0" />
-            <span className="min-w-0 max-w-[150px] truncate">{selected?.name ?? "ทุกหมวดหมู่"}</span>
-          </button>
-        )}
-      />
-      <PopoverContent align="start" className="w-56 p-1.5">
-        <button className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", !value && "bg-primary/10 font-medium")} onClick={() => { onChange(""); setOpen(false); }}>
-          <span className="flex-1">ทุกหมวดหมู่</span>
-          {!value && <Check className="size-4 text-primary" />}
-        </button>
-        <div className="h-px bg-border my-1" />
-        <div className="max-h-64 overflow-y-auto">
-          {categories.map((c) => (
-            <button key={c.id} className={cn("w-full text-left text-sm px-2 py-2 rounded-md flex items-center gap-2 hover:bg-muted", value === c.id && "bg-primary/10 font-medium")} onClick={() => { onChange(c.id); setOpen(false); }}>
-              <span className="flex-1 min-w-0 truncate">{c.name}</span>
-              {value === c.id && <Check className="size-4 text-primary shrink-0" />}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 interface SearchItem {
   id: string;
   code: string;
@@ -167,7 +80,7 @@ interface SearchItem {
   availableQty: number;
   issueUnit: { id: string; name: string };
   trackIndividually: boolean;
-  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; color: string } };
+  category: { name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; color: string } };
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;
@@ -175,28 +88,34 @@ interface SearchItem {
 
 function DispenseContent() {
   const { itemCount, getItemQty, items: cartItems, updateItem, removeItem, addItem } = useCart();
-  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [items, setItems] = useState<SearchItem[]>([]);
   const { categories } = useCategories();
   const { locations } = useLocations();
-  const [filterProfile, setFilterProfile] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
-  const [filterLocation, setFilterLocation] = useState<LocationFilter>({});
+  const [filterProfile, setFilterProfile] = useState(searchParams.get("profile") ?? "");
+  const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
+  const [filterLocation, setFilterLocation] = useState<LocationFilter>(() => ({
+    building: searchParams.get("building") ?? undefined,
+    floor: searchParams.get("floor") ?? undefined,
+    room: searchParams.get("room") ?? undefined,
+    detail: searchParams.get("detail") ?? undefined,
+  }));
 
   const profiles = useMemo<ProfileOption[]>(() => {
-    const map = new Map<string, ProfileOption>();
-    for (const c of categories) if (c.profile) map.set(c.profile.id, c.profile);
+    const map = new Map<string, ProfileOption>();    for (const c of categories) if (c.profile) map.set(c.profile.id, c.profile);
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
-  const scopedCategories = filterProfile ? categories.filter((c) => c.profile?.id === filterProfile) : categories;
   const locActive = Boolean(filterLocation.building || filterLocation.floor || filterLocation.room || filterLocation.detail);
   const [loading, setLoading] = useState(true);
   const [scannerOpen, setScannerOpen] = useState(false);
   const prevCount = useRef(itemCount);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
   const [total, setTotal] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const skipPageEffect = useRef(false);
+  const restoredScroll = useRef(false);
   const PAGE_SIZE = 18;
 
   const debounced = useDebounce(query, 300);
@@ -242,93 +161,90 @@ function DispenseContent() {
     gridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync filters to URL so back-navigation restores them
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (debounced) p.set("q", debounced);
+    if (filterProfile) p.set("profile", filterProfile);
+    if (filterCategory) p.set("category", filterCategory);
+    if (filterLocation.building) p.set("building", filterLocation.building);
+    if (filterLocation.floor) p.set("floor", filterLocation.floor);
+    if (filterLocation.room) p.set("room", filterLocation.room);
+    if (filterLocation.detail) p.set("detail", filterLocation.detail);
+    if (page > 1) p.set("page", String(page));
+    const qs = p.toString();
+    router.replace(qs ? `/dispense?${qs}` : "/dispense", { scroll: false });
+  }, [debounced, filterProfile, filterCategory, filterLocation, page, router]);
+
+  // Restore grid scroll position after back-navigation
+  useEffect(() => {
+    if (restoredScroll.current || items.length === 0) return;
+    const saved = Number(sessionStorage.getItem("dispense-scroll"));
+    if (saved) gridRef.current?.scrollTo({ top: saved });
+    restoredScroll.current = true;
+    sessionStorage.removeItem("dispense-scroll");
+  }, [items]);
+
   const handlePageChange = (p: number) => {
     setPage(p);
   };
 
-  const handleAdd = (item: SearchItem) => {
-    const dispenseType = item.category.profile.dispenseType;
-    const isConsumable = dispenseType === "CONSUMABLE";
-    const isTracked = item.trackIndividually && item.subItems.length > 0;
-
-    const loc = item.location ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail } : null;
-
-    if (isConsumable && item.lots.length > 0) {
-      // Auto-pick FIFO lot (lots already sorted by expiry ASC from API)
-      const lot = item.lots[0];
-      addItem({
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
+  const handleAdd = (item: SearchItem): boolean => {
+    const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
+    const result = buildCartItem(
+      {
+        id: item.id,
+        code: item.code,
+        name: item.name,
         imageUrl: item.imageUrl,
         categoryName: item.category.name,
-        dispenseType,
-        trackIndividually: false,
+        dispenseType: item.category.profile.dispenseType,
+        trackIndividually: item.trackIndividually,
         issueUnit: item.issueUnit.name,
-        quantity: 1,
-        lotId: lot.id,
-        lotNumber: lot.lotNumber,
-        subItemId: null,
-        subCode: null,
         availableQty: item.availableQty,
-        location: loc,
-        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, quantity: l.remainingQty })),
-        subItems: [],
-      });
-    } else if (isTracked) {
-      // Auto-pick next available sub-item not already in cart
-      const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
-      const nextSub = item.subItems.find((s) => !usedSubIds.has(s.id));
-      if (!nextSub) {
-        toast.error("No more available sub-items", { id: "no-sub" });
-        return;
-      }
-      addItem({
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
-        imageUrl: item.imageUrl,
-        categoryName: item.category.name,
-        dispenseType,
-        trackIndividually: true,
-        issueUnit: item.issueUnit.name,
-        quantity: 1,
-        lotId: null,
-        lotNumber: null,
-        subItemId: nextSub.id,
-        subCode: nextSub.subCode,
-        availableQty: item.availableQty,
-        location: loc,
-        lots: [],
-        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode })),
-      });
-    } else {
-      // Simple item or consumable without lots — just add qty 1
-      if (item.availableQty <= 0) {
-        toast.error("Item out of stock", { id: "no-stock" });
-        return;
-      }
-      const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;
-      addItem({
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
-        imageUrl: item.imageUrl,
-        categoryName: item.category.name,
-        dispenseType,
-        trackIndividually: false,
-        issueUnit: item.issueUnit.name,
-        quantity: 1,
-        lotId: null,
-        lotNumber: null,
-        subItemId: hasSingleSubItem ? item.subItems[0].id : null,
-        subCode: hasSingleSubItem ? item.subItems[0].subCode : null,
-        availableQty: item.availableQty,
-        location: loc,
-        lots: [],
-        subItems: [],
-      });
+        location: item.location
+          ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
+          : null,
+        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
+        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode, condition: s.condition })),
+      },
+      usedSubIds,
+    );
+    if (!result.ok) {
+      toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
+      return false;
     }
+    addItem(result.cartItem);
+    return true;
+  };
+
+  // ponytail: dev test helper — randomly add up to 10 items from the current list into the
+  // cart, guaranteeing ≥1 item per profile (ประเภท) so every type is covered.
+  const handleAutoAdd = () => {
+    const pool = items.filter((it) => (it.trackIndividually ? it.subItems.length > 0 : it.availableQty > 0));
+    const byProfile = new Map<string, SearchItem[]>();
+    for (const it of pool) {
+      const key = it.category.profile.name;
+      if (!byProfile.has(key)) byProfile.set(key, []);
+      byProfile.get(key)!.push(it);
+    }
+    const pickRand = (arr: SearchItem[]) => arr[Math.floor(Math.random() * arr.length)];
+
+    // 1 random per profile first → covers every type.
+    const picks: SearchItem[] = [];
+    for (const list of byProfile.values()) picks.push(pickRand(list));
+
+    // fill the rest up to 10 from the remaining pool.
+    const pickedIds = new Set(picks.map((p) => p.id));
+    const rest = pool.filter((it) => !pickedIds.has(it.id)).sort(() => Math.random() - 0.5);
+    for (const it of rest) {
+      if (picks.length >= 10) break;
+      picks.push(it);
+    }
+    picks.sort(() => Math.random() - 0.5);
+
+    const added = picks.filter(handleAdd).length;
+    if (added > 0) toast.success(`สุ่มเพิ่ม ${added} รายการเข้าตะกร้า (ครบ ${byProfile.size} ประเภท)`);
   };
 
   const handleQrScan = async (code: string) => {
@@ -340,10 +256,10 @@ function DispenseContent() {
       if (found && found.code === code) {
         handleAdd(found);
       } else {
-        toast.error(`Item "${code}" not found`, { id: "qr-not-found" });
+        toast.error(`ไม่พบรหัส "${code}"`, { id: "qr-not-found" });
       }
     } catch {
-      toast.error("Search failed", { id: "qr-fail" });
+      toast.error("ค้นหาไม่สำเร็จ", { id: "qr-fail" });
     } finally {
       setLoading(false);
     }
@@ -355,10 +271,10 @@ return (
       <div className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4 space-y-3 mb-4 shrink-0">
         {/* Row 1: search + scan */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-0 basis-full sm:basis-auto">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
-              placeholder="ค้นหารหัส, ชื่อพัสดุ, หรือสแกน QR…"
+              placeholder="ค้นหารหัส / ชื่อพัสดุ…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="h-11 sm:h-12 pl-9 sm:pl-10 pr-9 text-base rounded-xl"
@@ -369,16 +285,32 @@ return (
               </button>
             )}
           </div>
-          <Button type="button" onClick={() => setScannerOpen(true)} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
+          <Button type="button" onClick={() => setScannerOpen(true)} aria-label="สแกน QR" className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center">
             <QrCode className="size-5" />
-            <span className="font-medium">สแกน QR</span>
+            <span className="font-medium hidden sm:inline">สแกน QR</span>
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleAutoAdd}
+            disabled={items.length === 0}
+            aria-label="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า"
+            title="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า (≤10 ชิ้น, ครบทุกประเภท)"
+            className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center"
+          >
+            <Dices className="size-5" />
+            <span className="font-medium hidden sm:inline">สุ่มเพิ่ม</span>
           </Button>
         </div>
 
         {/* Row 2: filter pickers */}
         <div className="flex flex-wrap items-center gap-2">
-          <ProfilePicker profiles={profiles} value={filterProfile} onChange={(id) => { setFilterProfile(id); setFilterCategory(""); }} />
-          <CategoryPicker categories={scopedCategories} value={filterCategory} onChange={setFilterCategory} />
+          <CategoryPicker
+            profiles={profiles}
+            categories={categories}
+            value={{ profileId: filterProfile, categoryId: filterCategory || null }}
+            onChange={({ profileId, categoryId }) => { setFilterProfile(profileId); setFilterCategory(categoryId ?? ""); }}
+          />
           <LocationPicker locations={locations} value={filterLocation} onChange={setFilterLocation} />
           <div className="basis-full sm:basis-auto flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto">
             <span className="tabular-nums">
@@ -401,7 +333,7 @@ return (
             {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
           </p>
         ) : (
-          <div className="grid grid-cols-1 min-[390px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             {items.map((item) => {
               const inCart = getItemQty(item.id);
               const cartEntry = cartItems.find((c) => c.itemId === item.id);
@@ -411,45 +343,44 @@ return (
                 key={item.id}
                 className="@container flex flex-col gap-3 rounded-2xl border p-3 hover:bg-muted/50 transition-colors"
               >
-                {/* Cover image — rounded square, full width */}
-                <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Package className="h-10 w-10 text-muted-foreground/50" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="flex flex-col items-start gap-1">
-                    <Badge className={`text-[11px] @[15rem]:text-xs shrink-0 max-w-[140px] truncate ${item.category.profile.color ?? ""}`}>
-                      {item.category.name}
-                    </Badge>
-                    <span className="font-mono text-xs @[15rem]:text-sm text-muted-foreground">{item.code}</span>
+                <Link
+                  href={`/items/${item.id}`}
+                  onClick={() => sessionStorage.setItem("dispense-scroll", String(gridRef.current?.scrollTop ?? 0))}
+                  className="flex flex-col flex-1 min-w-0 gap-3 text-left"
+                >
+                  {/* Cover image — rounded square, full width */}
+                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted">
+                    <img src={item.imageUrl ?? pic(item.code)} alt={item.name} loading="lazy" className="h-full w-full object-cover" />
                   </div>
-                  <span className="text-sm @[15rem]:text-base font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.25rem] @[15rem]:min-h-[2.75rem]">{item.name}</span>
-                  <p className="text-xs @[15rem]:text-sm text-muted-foreground">
-                    คงเหลือ: {item.trackIndividually
-                      ? `${item.subItems.length} ชิ้น`
-                      : `${item.availableQty} ${item.issueUnit.name}`}
-                  </p>
-                  <p className="text-[11px] @[15rem]:text-xs text-muted-foreground/70 truncate min-h-[0.875rem] @[15rem]:min-h-[1rem]">
-                    {(item.location && !locActive)
-                      ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
-                      : ""}
-                  </p>
 
-                  {/* Qty control — bottom row, in flow */}
-                  <div className="mt-auto pt-2 flex justify-end">
+                  {/* Content */}
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge className={`text-[11px] @[15rem]:text-xs shrink-0 max-w-[140px] truncate ${item.category.profile.color ?? ""}`}>
+                        {item.category.name}
+                      </Badge>
+                      <span className="font-mono text-xs @[15rem]:text-sm text-muted-foreground">{item.code}</span>
+                    </div>
+                    <span className="text-sm @[15rem]:text-base font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.25rem] @[15rem]:min-h-[2.75rem]">{item.name}</span>
+                    <p className="text-xs @[15rem]:text-sm text-muted-foreground">
+                      คงเหลือ: {item.trackIndividually
+                        ? `${item.subItems.length} ชิ้น`
+                        : `${item.availableQty} ${item.issueUnit.name}`}
+                    </p>
+                    <p className="text-[11px] @[15rem]:text-xs text-muted-foreground/70 truncate min-h-[0.875rem] @[15rem]:min-h-[1rem]">
+                      {(item.location && !locActive)
+                        ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
+                        : ""}
+                    </p>
+                  </div>
+                </Link>
+
+                {/* Qty control — bottom row, in flow */}
+                <div className="pt-2 flex justify-end">
                     {inCart > 0 && cartEntry ? (
-                      <div className="flex w-full items-center justify-between gap-0.5 bg-background border rounded-full px-0.5">
+                      <div className="animate-cart-pop flex w-full items-center justify-between gap-0.5 bg-background border rounded-full px-0.5">
                         <button
-                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+                          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (cartEntry.quantity <= 1) {
@@ -469,7 +400,7 @@ return (
                           }}
                         />
                         <button
-                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors disabled:opacity-30"
+                          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90 disabled:opacity-30"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (atMax) return;
@@ -486,7 +417,7 @@ return (
                       </div>
                     ) : (
                       <button
-                        className="h-8 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors disabled:opacity-30"
+                        className="h-9 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors active:scale-95 disabled:opacity-30"
                         onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
                         disabled={!item.trackIndividually && item.availableQty <= 0}
                       >
@@ -494,7 +425,6 @@ return (
                       </button>
                     )}
                   </div>
-                </div>
               </div>
               );
             })}

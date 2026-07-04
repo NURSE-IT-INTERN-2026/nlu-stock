@@ -25,8 +25,8 @@ interface HeaderProps {
 const SEGMENT_LABELS: Record<string, string> = {
   items: "รายการพัสดุ",
   dispense: "เบิก-ยืมพัสดุ",
-  receive: "รับพัสดุเข้า",
-  reports: "รายงาน",
+  receive: "รับเข้า-คืนพัสดุ",
+  reports: "รายงาน & สถิติ",
   alerts: "การแจ้งเตือน",
   settings: "ตั้งค่าระบบ",
   cart: "ยืนยันการเบิก",
@@ -92,12 +92,12 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-3 px-6 h-20 border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-30 flex items-center gap-3 px-4 sm:px-6 h-16 sm:h-20 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
       {/* Left: brand (when sidebar collapsed) + breadcrumb */}
       {sidebarCollapsed && (
         <>
           <Link href="/" className="flex items-center gap-2 shrink-0 mr-1">
-            <Image src="/nurse-th.png" alt="NLU Stock" width={32} height={32} className="h-8 w-8 rounded-lg" />
+            <Image src="/nurse-th.png" alt="NLU Stock" width={40} height={40} className="size-10 rounded-lg" />
             <span className="font-bold text-lg tracking-tight hidden sm:inline">NLU Stock</span>
           </Link>
           <span className="text-muted-foreground/40 select-none" aria-hidden="true">|</span>
@@ -129,14 +129,14 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
         <button
           type="button"
           aria-label="ดูตะกร้า"
-          onClick={() => router.push("/dispense/cart")}
+          onClick={() => router.push("/cart")}
           className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors max-[425px]:hidden"
         >
           <ShoppingBasket className="size-5" />
           {itemCount > 0 && (
             <Badge
               key={itemCount}
-              className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-[10px]"
+              className="animate-cart-pop absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-[10px]"
             >
               {itemCount}
             </Badge>
@@ -166,7 +166,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
                 <p className="text-base font-semibold truncate max-w-[120px] leading-tight">{user.name}</p>
                 <p className="text-xs text-muted-foreground leading-tight">{user.role}</p>
               </div>
-              <div className="size-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-bold text-primary-foreground shrink-0">
+              <div className="size-9 sm:size-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-bold text-primary-foreground shrink-0">
                 {user.name.charAt(0).toUpperCase()}
               </div>
             </div>
@@ -180,7 +180,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="hidden max-[425px]:block" />
-            <DropdownMenuItem className="hidden max-[425px]:flex justify-between" onClick={() => router.push("/dispense/cart")}>
+            <DropdownMenuItem className="hidden max-[425px]:flex justify-between" onClick={() => router.push("/cart")}>
               <span className="flex items-center"><ShoppingBasket className="mr-2 h-4 w-4" />ตะกร้า</span>
               {itemCount > 0 && <span className="font-bold text-primary">{itemCount}</span>}
             </DropdownMenuItem>

@@ -37,6 +37,8 @@ export interface FilterValues {
   status?: string;
   year?: string;
   maintenanceType?: string;
+  from?: string; // status-log previousStatus (export only — not rendered)
+  to?: string;   // status-log newStatus (export only — not rendered)
 }
 
 export interface FilterConfig {
@@ -56,6 +58,7 @@ interface ReportFiltersProps {
   values: FilterValues;
   onChange: (values: FilterValues) => void;
   actions?: ReactNode;
+  leading?: ReactNode;
 }
 
 interface Option {
@@ -68,7 +71,7 @@ interface CategoryLite extends Option {
   profile?: { id: string } | null;
 }
 
-const dateInputCls = "h-9 w-[150px] rounded-lg border-border bg-background text-sm";
+const dateInputCls = "h-9 flex-1 min-w-0 sm:flex-none sm:w-[150px] rounded-lg border-border bg-background text-sm";
 
 function FilterSelect({
   icon: Icon,
@@ -87,7 +90,7 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className="h-9 min-w-[150px] gap-2 rounded-lg border-border bg-background">
+      <SelectTrigger className="h-9 min-w-[120px] max-w-full flex-1 sm:flex-none gap-2 rounded-lg border-border bg-background">
         <Icon className="size-4 text-muted-foreground shrink-0" />
         {/* ponytail: pass explicit label as children — Base UI Select.Value falls back to the
           raw value (id) when it can't resolve from unmounted popup items. Every other select
@@ -99,7 +102,7 @@ function FilterSelect({
   );
 }
 
-export function ReportFilters({ config, values, onChange, actions }: ReportFiltersProps) {
+export function ReportFilters({ config, values, onChange, actions, leading }: ReportFiltersProps) {
   const [categories, setCategories] = useState<CategoryLite[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [staff, setStaff] = useState<Option[]>([]);
@@ -139,10 +142,11 @@ export function ReportFilters({ config, values, onChange, actions }: ReportFilte
     : categories;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
+    <div data-testid="report-filters" className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
+        {leading}
         {config.dateRange && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex w-full items-center gap-1.5 sm:w-auto">
             <CalendarDays className="size-4 text-muted-foreground shrink-0" />
             <Input
               type="date"
@@ -286,15 +290,15 @@ export function ReportFilters({ config, values, onChange, actions }: ReportFilte
           </FilterSelect>
         )}
 
-        {/* Actions (export) + reset, pushed right */}
-        <div className="ml-auto flex items-center gap-2">
+        {/* Actions (export) + reset — full width & evenly split on mobile, pushed right on desktop */}
+        <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
           {actions}
           {activeCount > 0 && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onChange({})}
-              className="h-9 text-primary hover:text-primary hover:bg-primary/10"
+              className="h-9 w-full text-primary hover:text-primary hover:bg-primary/10 sm:w-auto"
             >
               <X className="size-3.5" />
               ล้างตัวกรอง

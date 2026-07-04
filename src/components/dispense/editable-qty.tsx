@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil } from "lucide-react";
 
 /** Inline-editable quantity: click to type, clamps to [1, max]. */
 export function EditableQty({ value, max, unit, onChange }: {
@@ -45,12 +44,11 @@ export function EditableQty({ value, max, unit, onChange }: {
     <button
       type="button"
       aria-label={`แก้ไขจำนวน ${value} ${unit}`}
-      className="flex items-center gap-0.5 w-14 justify-center group"
+      className="flex items-baseline gap-0.5 w-14 justify-center"
       onClick={() => { setDraft(String(value)); setEditing(true); }}
     >
       <span className="text-sm font-medium tabular-nums">{value}</span>
       <span className="text-xs text-muted-foreground">{unit}</span>
-      <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-colors" />
     </button>
   );
 }

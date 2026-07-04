@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
+import { useTheme } from "next-themes";
 
 // Shared canvas context for OKLCH → hex conversion (created once)
 let _ctx: CanvasRenderingContext2D | null = null;
@@ -14,9 +15,6 @@ function getCanvasCtx(): CanvasRenderingContext2D | null {
   return _ctx;
 }
 
-/**
- * Resolve a CSS custom property (e.g. "--chart-1") to a hex color string.
- */
 const FALLBACK_COLOR = "oklch(50% 0 0)";
 
 function resolveToHex(cssVar: string): string {
@@ -33,32 +31,11 @@ function resolveToHex(cssVar: string): string {
 }
 
 /**
- * Track whether the `<html>` element has the `.dark` class.
- * Re-renders on theme toggle so downstream `useThemeColor` recalculates.
- */
-function useIsDark(): boolean {
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const el = document.documentElement;
-    setDark(el.classList.contains("dark"));
-
-    const observer = new MutationObserver(() => {
-      setDark(el.classList.contains("dark"));
-    });
-    observer.observe(el, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
-  return dark;
-}
-
-/**
  * Resolve a CSS custom property to hex, re-resolving when the theme changes.
+ * ponytail: theme signal via next-themes (mounted in layout.tsx) instead of a hand-rolled MutationObserver.
  */
 export function useThemeColor(cssVar: string): string {
-  const dark = useIsDark();
+  const { resolvedTheme } = useTheme();
+  const dark = resolvedTheme === "dark";
   return useMemo(() => resolveToHex(cssVar), [cssVar, dark]);
 }
