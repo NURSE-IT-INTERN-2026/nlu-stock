@@ -1,26 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
-import { z } from "zod";
-
-const receiveItemSchema = z.object({
-  itemId: z.string().min(1),
-  quantity: z.number().int().min(1),
-  lotNumber: z.string().optional().nullable(),
-  expiryDate: z.string().optional().nullable(),
-  subCodes: z.array(z.string()).optional().nullable(),
-});
-
-const receiveRequestSchema = z.object({
-  items: z.array(receiveItemSchema).min(1, "At least one item required"),
-  notes: z.string().max(500).optional().nullable(),
-});
+import { receiveRequestSchema } from "@/lib/validators";
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionUser();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "INSTRUCTOR") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAuth(req);
+  if (auth.denied) return auth.denied;
+  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const body = await req.json();
   const parsed = receiveRequestSchema.safeParse(body);
@@ -126,7 +113,7 @@ export async function POST(req: NextRequest) {
             itemId: item.id,
             lotId,
             quantity: ri.quantity,
-            receivedBy: session.userId,
+            receivedBy: auth.user.userId,
             notes: notes ?? undefined,
           },
         });
@@ -138,8 +125,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, count: recordIds.length, ids: recordIds }, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Receive failed";
-    console.error("Receive error:", message);
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleError(err, "Receive failed");
   }
 }

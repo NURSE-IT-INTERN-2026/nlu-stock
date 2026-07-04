@@ -1,89 +1,125 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
-import { ItemStatus } from "@/generated/prisma/enums";
+import { resolveSubItemReturn, type ReturnStatus } from "@/lib/returns";
+import { AdjustmentReason, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
+
+const RETURN_STATUSES = ["AVAILABLE", "DAMAGED", "UNDER_REPAIR", "LOST"] as const;
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSessionUser();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "INSTRUCTOR") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAuth(_req);
+  if (auth.denied) return auth.denied;
+  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id: itemId } = await params;
-
   const body = await _req.json();
+
   const subItemId = body.subItemId as string | undefined;
+  const dispenseRecordId = body.dispenseRecordId as string | undefined;
+  const note = (body.note as string | undefined)?.trim() || null;
+  const rawStatus = (body.status as string | undefined) ?? "AVAILABLE";
+  if (!RETURN_STATUSES.includes(rawStatus as ReturnStatus)) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+  const status = rawStatus as ReturnStatus;
+  const proofUrls = Array.isArray(body.proofUrls) ? (body.proofUrls as string[]).filter(Boolean) : undefined;
 
   try {
     await prisma.$transaction(async (tx) => {
-      if (subItemId) {
-        // Tracked durable: return specific sub-item
-        const sub = await tx.subItem.findUnique({ where: { id: subItemId } });
-        if (!sub) throw new Error("Sub-item not found");
-        if (sub.status !== ItemStatus.CHECKED_OUT) throw new Error(`Sub-item is not checked out (status: ${sub.status})`);
+      const item = await tx.item.findUnique({ where: { id: itemId } });
+      if (!item) throw new Error("Item not found");
 
-        await tx.subItem.update({
-          where: { id: subItemId },
-          data: { status: ItemStatus.AVAILABLE },
-        });
-        await tx.itemStatusLog.create({
-          data: {
+      // Find the open dispense record this return/write-off resolves.
+      const findOpenDispense = (subFilter: string | null) =>
+        tx.dispenseRecord.findFirst({
+          where: {
+            ...(dispenseRecordId ? { id: dispenseRecordId } : {}),
             itemId,
-            subItemId,
-            previousStatus: ItemStatus.CHECKED_OUT,
-            newStatus: ItemStatus.AVAILABLE,
-            reason: "Returned",
-            changedBy: session.userId,
+            subItemId: subFilter,
+            returnedAt: null,
           },
-        });
-        // Mark the most recent dispense record as returned
-        const dispense = await tx.dispenseRecord.findFirst({
-          where: { itemId, subItemId, returnedAt: null },
           orderBy: { dispensedAt: "desc" },
         });
-        if (dispense) {
-          await tx.dispenseRecord.update({
-            where: { id: dispense.id },
-            data: { returnedAt: new Date() },
-          });
-        }
-        // Tracked durable: counts derive from subItem statuses.
+
+      if (subItemId) {
+        // ── Per-unit (ITEM type): flip sub-item status, resolve its dispense record ──
+        await resolveSubItemReturn(tx, {
+          itemId,
+          subItemId,
+          status,
+          note,
+          userId: auth.user.userId,
+          dispenseRecordId,
+          proofUrls,
+        });
+        // ponytail: tracked counts derive from sub-item statuses; no StockAdjustment needed for write-off.
         await recomputeItemCounts(tx, itemId);
       } else {
-        // Non-tracked durable: return quantity
-        const qty = body.quantity as number;
-        if (!qty || qty <= 0) throw new Error("Quantity required");
+        // ── Count-based (COUNT type): resolve N units from an open dispense record ──
+        const qty = Number(body.quantity);
+        if (!Number.isInteger(qty) || qty <= 0) throw new Error("Quantity required");
 
-        const item = await tx.item.findUnique({ where: { id: itemId } });
-        if (!item) throw new Error("Item not found");
+        const dispense = await findOpenDispense(null);
+        if (!dispense) throw new Error("No open loan record found");
 
-        const maxReturn = item.totalQty - item.availableQty;
-        if (qty > maxReturn) throw new Error(`Cannot return ${qty}, only ${maxReturn} was dispensed`);
+        const outstanding = dispense.quantity - dispense.resolvedQty;
+        if (qty > outstanding) throw new Error(`Cannot resolve ${qty}, only ${outstanding} outstanding`);
 
-        await tx.item.update({
-          where: { id: itemId },
-          data: { availableQty: { increment: qty } },
-        });
-        // Mark the most recent dispense record as returned
-        const dispense = await tx.dispenseRecord.findFirst({
-          where: { itemId, lotId: null, subItemId: null, returnedAt: null },
-          orderBy: { dispensedAt: "desc" },
-        });
-        if (dispense) {
-          await tx.dispenseRecord.update({
-            where: { id: dispense.id },
-            data: { returnedAt: new Date() },
+        if (status === "AVAILABLE") {
+          // Returned to usable stock
+          await tx.item.update({ where: { id: itemId }, data: { availableQty: { increment: qty } } });
+        } else {
+          // Written off (lost / damaged): remove from total, log a stock adjustment.
+          const reason = status === "LOST" ? AdjustmentReason.LOST : AdjustmentReason.DAMAGED_PENDING_REPAIR;
+          await tx.item.update({ where: { id: itemId }, data: { totalQty: { decrement: qty } } });
+          await tx.stockAdjustment.create({
+            data: {
+              itemId,
+              delta: -qty,
+              previousQty: item.totalQty,
+              newQty: item.totalQty - qty,
+              reason,
+              notes: note,
+              adjustedBy: auth.user.userId,
+            },
           });
+          // Damaged count-return → open a repair draft (subItemId null: not tracked per-piece)
+          // so it surfaces on the รับซ่อม tab like tracked damaged items do.
+          if (status === "DAMAGED") {
+            await tx.maintenanceRecord.create({
+              data: {
+                itemId,
+                type: MaintenanceType.CORRECTIVE,
+                result: MaintenanceResult.NEEDS_MORE_REPAIR,
+                performedAt: new Date(),
+                performedBy: auth.user.userId,
+                issue: note || `คืนพัสดุพร้อมแจ้งชำรุด (จำนวน ${qty})`,
+                attachmentUrls: proofUrls ?? [],
+              },
+            });
+          }
         }
+
+        const newResolved = dispense.resolvedQty + qty;
+        await tx.dispenseRecord.update({
+          where: { id: dispense.id },
+          data: {
+            resolvedQty: newResolved,
+            returnedAt: newResolved >= dispense.quantity ? new Date() : undefined,
+            ...(proofUrls && proofUrls.length > 0 ? { returnProofUrls: proofUrls } : {}),
+          },
+        });
+        // COUNT items: re-derive status (back to AVAILABLE once available === total).
+        await recomputeItemCounts(tx, itemId);
       }
     });
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Return failed";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleError(err, "Return failed");
   }
 }

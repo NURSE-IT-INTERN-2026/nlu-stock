@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NLU Stock — App Flow (Login → End)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --bg-grad-1: #eef2ff;
+    --bg-grad-2: #f8fafc;
+    --card: #ffffff;
+    --text: #1e293b;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --accent: #6366f1;
+    --accent-soft: #eef2ff;
+    --shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.18);
+  }
+  [data-theme="dark"] {
+    --bg: #0b1120;
+    --bg-grad-1: #0f172a;
+    --bg-grad-2: #111827;
+    --card: #111827;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #1f2937;
+    --accent: #818cf8;
+    --accent-soft: #1e293b;
+    --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans Thai", "Inter", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, var(--bg-grad-1), transparent 60%),
+      radial-gradient(1000px 500px at 110% 10%, var(--accent-soft), transparent 55%),
+      var(--bg);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+  header.top {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--card) 80%, transparent);
+    border-bottom: 1px solid var(--border);
+    padding: 14px clamp(16px, 4vw, 40px);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .brand .dot { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #ec4899); display: grid; place-items: center; color: #fff; font-size: 16px; }
+  .brand small { display: block; color: var(--muted); font-weight: 500; font-size: 12px; }
+  .top-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    padding: 8px 14px; border-radius: 10px; font: inherit; font-size: 14px; cursor: pointer;
+    transition: all .15s ease; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  main { max-width: 1400px; margin: 0 auto; padding: clamp(16px, 4vw, 40px); }
+  .hero { margin-bottom: 24px; }
+  .hero h1 { font-size: clamp(22px, 3.4vw, 34px); margin: 0 0 6px; letter-spacing: -0.02em; }
+  .hero p { color: var(--muted); margin: 0; max-width: 70ch; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 26px;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  .chip { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .swatch { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0,0,0,.08); }
+  .diagram-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    box-shadow: var(--shadow); padding: 18px; overflow: hidden;
+  }
+  .diagram-card .mermaid { display: flex; justify-content: center; }
+  .diagram-card svg { max-width: 100%; height: auto; cursor: grab; }
+  details.src { margin-top: 22px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); overflow: hidden; }
+  details.src summary { padding: 14px 18px; cursor: pointer; font-weight: 600; }
+  details.src pre { margin: 0; padding: 18px; overflow: auto; font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--border); max-height: 420px; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 16px 50px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="dot">📦</div>
+    <div>NLU Stock<small>Application Flow · Login → End</small></div>
+  </div>
+  <div class="top-actions">
+    <button class="btn" id="themeBtn">🌙 Dark</button>
+    <button class="btn" id="zoomOut">−</button>
+    <button class="btn" id="zoomIn">＋</button>
+    <button class="btn" id="reset" title="รีเซ็ตมุมมอง">⤢</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>แผนผัง Flow แอป NLU Stock</h1>
+    <p>ตั้งแต่หน้า Login ยันจบทุก module — แต่ละหน้ามีอะไรบ้าง, ปุ่มไหนทำอะไร, กดแล้วไปไหน, เรียก API อะไร. Phase 1 = เบิกจ่าย (ยังไม่มีคืน).</p>
+    <p style="color:var(--muted);font-size:13px;margin-top:8px;">💡 ลากเพื่อเลื่อน · หมุนล้อเมาส์ซูมเฉพาะจุด · ปุ่ม ⤢ รีเซ็ต</p>
+  </section>
+
+  <div class="legend">
+    <span class="chip"><span class="swatch" style="background:#dbeafe;border-color:#3b82f6"></span> หน้า (Page)</span>
+    <span class="chip"><span class="swatch" style="background:#ede9fe;border-color:#8b5cf6"></span> Modal / Dialog</span>
+    <span class="chip"><span class="swatch" style="background:#d1fae5;border-color:#10b981"></span> API Call</span>
+    <span class="chip"><span class="swatch" style="background:#fef3c7;border-color:#f59e0b"></span> การตัดสินใจ (Role/Condition)</span>
+    <span class="chip"><span class="swatch" style="background:#fce7f3;border-color:#ec4899"></span> เริ่ม/จบ</span>
+    <span class="chip"><span class="swatch" style="background:#f1f5f9;border-color:#64748b"></span> Action / ส่งผล</span>
+  </div>
+
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+  Start((เริ่ม)):::endpoint
+
+  %% ============ AUTH ============
+  Start --> Login
+  subgraph SG_AUTH["🔐 Login & Auth — /login"]
+    direction TB
+    Login["หน้า LOGIN /login<br/>━━━━━━━━━━<br/>🟦 4 ปุ่ม Quick Login: Admin · Staff · Instructor · Student<br/>🟦 ช่อง Email + ปุ่ม 'Sign In'<br/>🟦 แสดง error เมื่อ fail"]:::page
+    Login -->|กด login| API_AUTH["POST /api/auth/login<br/>(JWT httpOnly cookie · 24h)"]:::api
+    API_AUTH --> RoleQ{"ตรวจ Role?"}:::decision
+  end
+  RoleQ -- "ADMIN / STAFF / INSTRUCTOR" --> Home
+  RoleQ -- "CHILDREN (นักเรียน)" --> ItList
+  RoleQ -- "ยังไม่ login / หมดอายุ" --> Login
+
+  %% ============ SHELL ============
+  Home -.-> Shell
+  subgraph SG_SHELL["🧭 Shell — ทุกหน้าหลัง login"]
+    direction TB
+    Shell["HEADER (sticky)<br/>• 🔔 Alerts badge → /alerts<br/>• 🛒 Cart badge → /dispense/cart<br/>• 🌓 Theme toggle<br/>• 👤 User menu → logout (/login)<br/>━━━━━━━━━━<br/>SIDEBAR (desktop) · BOTTOM-TAB (mobile)<br/>• แดชบอร์ด / · พัสดุ · เบิก · รับเข้า<br/>• บำรุงรักษา · รายงาน · ตั้งค่า (ADMIN เท่านั้น)<br/>(mobile: เมนูเหล่านี้อยู่ใน 'เพิ่มเติม')"]:::page
+  end
+
+  Shell -->|แดชบอร์ด| Home
+  Shell -->|พัสดุ| ItList
+  Shell -->|เบิก| Dispense
+  Shell -->|รับเข้า| Receive
+  Shell -->|บำรุงรักษา| Maintain
+  Shell -->|รายงาน| Reports
+  Shell -->|ตั้งค่า ADMIN| Settings
+
+  %% ============ DASHBOARD ============
+  subgraph SG_HOME["🏠 แดชบอร์ด — / (CHILDREN เข้าไม่ได้)"]
+    direction TB
+    Home["หน้า DASHBOARD /<br/>━━━━━━━━━━<br/>📊 4 การ์ดสถิติ:<br/>• รายการพัสดุทั้งหมด → /items<br/>• ใกล้หมด/ต่ำกว่าจุดสั่ง → /alerts?lowStock=true<br/>• หมดอายุใน 30 วัน → /alerts?nearExpiry=true<br/>• ยืมอยู่/ยังไม่คืน → /items?onLoan=true<br/>📈 กราฟเบิกรายเดือน · สรุปตามประเภท"]:::page
+    Home -->|ดึงสถิติ| API_ALERTS1["GET /api/alerts"]:::api
+  end
+
+  %% ============ ITEMS LIST ============
+  subgraph SG_ITEMS["📋 รายการพัสดุ — /items"]
+    direction TB
+    ItList["หน้า ITEMS LIST /items<br/>━━━━━━━━━━<br/>🔍 ช่องค้นหา + ปุ่ม 'สแกน QR'<br/>🎛 Filter: ประเภท · สถานที่ · สถานะ · alert preset<br/>(สต็อกต่ำ / ใกล้หมดอายุ / เลยรอบบำรุง)<br/>🟦 ปุ่ม 'ประกอบชุด' (ADMIN/STAFF)<br/>📋 ตาราง: รหัส · ชื่อ · ประเภท · คงเหลือ · สถานที่ · สถานะ<br/>📄 Pagination"]:::page
+    ItList -->|ค้นหา/กรอง| API_ITEMS["GET /api/items (search, filter, page)"]:::api
+    ItList -->|กด 'สแกน QR'| MD_SCAN["QR Scanner Modal<br/>• กล้องสแกน / พิมพ์รหัส<br/>• สำเร็จ → กรอกช่องค้นหา"]:::modal
+    ItList -->|กด 'ประกอบชุด'| MD_KIT["Create Kit Modal (3 steps)<br/>1️⃣ ชื่อชุด + หน่วย<br/>2️⃣ เพิ่มส่วนประกอบ + จำนวน<br/>3️⃣ สรุป + จำนวนประกอบ → ตรวจ stock<br/>➜ POST /api/kits"]:::modal
+    ItList -->|คลิกแถว| ItDetail
+    ItList -->|กด '+' เพิ่ม| MD_ADD["Add Item Modal (3 steps)<br/>1️⃣ ชื่อ + ประเภทการใช้งาน<br/>2️⃣ ประเภท + สร้างรหัส NLU-XX-NNN<br/>3️⃣ สรุป → 'สร้างพัสดุ'<br/>➜ POST /api/items/quick-create"]:::modal
+  end
+
+  %% ============ ITEM DETAIL ============
+  subgraph SG_DETAIL["🔎 รายละเอียดพัสดุ — /items/:code"]
+    direction TB
+    ItDetail["หน้า ITEM DETAIL /items/:id<br/>━━━━━━━━━━<br/>🖼 ภาพปก · รหัส · สถานะ live · สรุป stock<br/>⚠️ Banner หมดอายุ/ใกล้หมดอายุ (ถ้ามี)<br/>📑 TABS: ข้อมูลทั่วไป · รูปภาพ · รหัสย่อย<br/>· ประวัติ · การซ่อมบำรุง · ชุดประกอบ"]:::page
+    ItDetail -->|ดึงข้อมูล| API_ITEM1["GET /api/items/:id"]:::api
+    ItDetail -->|ประวัติ| API_HIST["GET /api/items/:id/history"]:::api
+
+    ItDetail -->|Quick Action| QA{"เลือก action"}:::decision
+    QA -->|เพิ่มเข้าตะกร้า| Dispense
+    QA -->|รับเข้า| Receive
+    QA -->|ปรับสต็อก| MD_ADJ["Stock Adjust Dialog<br/>• tracked: เลือก sub-item + สถานะใหม่<br/>• count: เลือก lot + ตัวเลขนับ + เหตุผล + รูป<br/>➜ POST /api/items/:id/adjust"]:::modal
+    QA -->|แจ้งชำรุด| MD_DMG["Report Damage Dialog<br/>• เลือก sub-item + สถานะใหม่ + note + รูป<br/>➜ POST /api/items/:id/status"]:::modal
+    QA -->|บันทึกบำรุง| MD_MAINT2["Maintenance Form Dialog<br/>➜ POST /api/items/:id/maintenance"]:::modal
+    QA -->|พิมพ์ QR| MD_QR["QR Print Dialog<br/>• เลือกขนาด · พิมพ์"]:::modal
+    ItDetail -->|TAB รหัสย่อย บัล์ก| API_BULK["POST /api/items/:id/status/bulk"]:::api
+  end
+
+  %% ============ DISPENSE ============
+  subgraph SG_DISPENSE["🛒 เบิก-ยืมพัสดุ — /dispense → /dispense/cart"]
+    direction TB
+    Dispense["หน้า DISPENSE /dispense<br/>━━━━━━━━━━<br/>🔍 ค้นหา + สแกน QR + filter<br/>🟦 การ์ดพัสดุ grid: รูป/รหัส/ชื่อ/คงเหลือ<br/>• ปุ่ม +/- ปรับจำนวน → 'ใส่ตะกร้า'<br/>• คลิกการ์ด → /items/:id"]:::page
+    Dispense -->|ค้นหา| API_DP1["GET /api/dispense/items"]:::api
+    Dispense -->|ใส่ตะกร้า| CartCtx["Cart Context (client state)<br/>เลือก lot FIFO / sub-item ถัดไปอัตโนมัติ"]:::action
+    Dispense -->|กดไอคอนตะกร้า/header| Cart
+    Cart["หน้า CART /dispense/cart<br/>━━━━━━━━━━<br/>🛒 รายการ: lot/sub-item selector + qty + ลบ<br/>📝 'ใช้ใน' (รายวิชา/กิจกรรม/อื่นๆ) + note<br/>• ปุ่ม 'ล้างทั้งหมด'<br/>🟦 ปุ่ม 'ยืนยันการเบิก'"]:::page
+    Cart -->|ว่าง| Dispense
+    Cart -->|ยืนยัน| API_DP2["POST /api/dispense<br/>• CONSUMABLE: ลด lot.remainingQty + availableQty<br/>• COUNT/ITEM: ลด availableQty / mark sub CHECKED_OUT<br/>(Phase 1: เบิกจ่ายถาวร · ยังไม่มีคืน)"]:::api
+    API_DP2 -->|สำเร็จ| Dispense
+  end
+
+  %% ============ RECEIVE ============
+  subgraph SG_RECEIVE["📥 รับเข้าพัสดุ — /receive"]
+    direction TB
+    Receive["หน้า RECEIVE /receive<br/>━━━━━━━━━━<br/>🔍 ค้นหา + เพิ่มแถว (+ เพิ่มใหม่ → Add Item Modal)<br/>📝 แถว: จำนวน · lot no · วันหมดอายุ (consumable)<br/>· รหัสย่อย prefix (tracked)<br/>📝 Notes<br/>🟦 ปุ่ม 'บันทึกรับเข้า'"]:::page
+    Receive -->|ค้นหา| API_RC1["GET /api/dispense/items"]:::api
+    Receive -->|บันทึก| API_RC2["POST /api/receive<br/>• เพิ่ม lot + remainingQty<br/>• เพิ่ม sub-item<br/>• อัป availableQty/totalQty"]:::api
+    API_RC2 -->|สำเร็จ| Receive
+  end
+
+  %% ============ MAINTENANCE ============
+  subgraph SG_MAINT["🔧 บำรุงรักษา — /maintenance"]
+    direction TB
+    Maintain["หน้า MAINTENANCE /maintenance<br/>━━━━━━━━━━<br/>📊 3 การ์ด: เลยรอบ(แดง) · ใกล้ถึงรอบ(ส้ม) · เดือนนี้(เขียว)<br/>📋 ตารางครบกำหนด (คลิกแถว → เปิดฟอร์ม)<br/>🕓 ประวัติล่าสุด → ลิงก์ /reports?tab=maintenance-history<br/>➕ FAB 'บันทึกการบำรุง'"]:::page
+    Maintain -->|สถิติ| API_MT1["GET /api/maintenance/summary"]:::api
+    Maintain -->|ตาราง| API_MT2["GET /api/reports/maintenance-schedule"]:::api
+    Maintain -->|ประวัติ| API_MT3["GET /api/reports/maintenance-history"]:::api
+    Maintain -->|FAB / คลิกแถว| MD_MAINT3["Maintenance Form Dialog<br/>• ประเภท(ป้องกัน/ซ่อมแก้) · ผล · วันที่<br/>• ปัญหา · ค่าใช้จ่าย · ไฟล์แนบ · รอบถัดไป<br/>➜ POST /api/items/:id/maintenance"]:::modal
+    Maintain -->|ลิงก์ 'ดูทั้งหมด'| Reports
+  end
+
+  %% ============ REPORTS ============
+  subgraph SG_REPORTS["📈 รายงาน & สถิติ — /reports"]
+    direction TB
+    Reports["หน้า REPORTS /reports<br/>━━━━━━━━━━<br/>📑 8 TABS: สรุปสต็อก · ประวัติเบิก<br/>· ใช้งานรายวิชา · ใกล้หมดอายุ/สต็อกต่ำ<br/>· ค่าใช้จ่ายรายปี · พัสดุชำรุด<br/>· ตารางบำรุง · ประวัติบำรุง<br/>🎛 Filter: ช่วงวันที่ · staff · ประเภทใช้งาน · profile<br/>📊 Chart + ตาราง sortable/paginate<br/>📤 Export: CSV · Excel · PDF"]:::page
+    Reports -->|ข้อมูล| API_RP1["GET /api/reports/:type"]:::api
+    Reports -->|Export| API_RP2["GET /api/reports/export?type=&format=csv|xlsx|pdf"]:::api
+  end
+
+  %% ============ ALERTS ============
+  subgraph SG_ALERTS["🔔 แจ้งเตือน — /alerts"]
+    direction TB
+    Alerts["หน้า ALERTS /alerts<br/>━━━━━━━━━━<br/>📑 TABS: ทั้งหมด · สต็อกต่ำ · ใกล้หมดอายุ · เกินกำหนดซ่อม<br/>(แต่ละ tab มี badge นับ)<br/>🎛 Filter เดียวกับ /items<br/>📋 ตาราง → คลิกแถว → /items/:id"]:::page
+    Alerts -->|นับ| API_AL1["GET /api/alerts<br/>(low stock · near expiry · overdue maint)"]:::api
+    Alerts -->|รายการ| API_AL2["GET /api/items?alerts=true&lowStock=…"]:::api
+    Alerts -->|คลิกแถว| ItDetail
+  end
+
+  %% ============ SETTINGS ============
+  subgraph SG_SET["⚙️ ตั้งค่า — /settings (ADMIN เท่านั้น)"]
+    direction TB
+    Settings["หน้า SETTINGS /settings<br/>━━━━━━━━━━<br/>📑 6 TABS:<br/>• รายการพัสดุ — CRUD + QR print + expand sub-item<br/>• ประเภท (Profile) — CON/DUR/KRU/KIT…<br/>• หมวดหมู่ (Category) — CRUD + CategorySelectModal<br/>• สถานที่ (Location) — building/floor/room/detail<br/>• ผู้ใช้งาน (User) — role + active toggle<br/>• นำเข้าข้อมูล (Import)"]:::page
+    Settings -->|CRUD| API_SET["GET/POST/PUT/DELETE<br/>/api/settings/{items,profiles,categories,locations,users}"]:::api
+    Settings -->|Import| MD_IMPORT["Import Wizard<br/>1️⃣ เลือก type (categories→locations→items→sub-items→kit-bom) → ดาวน์โหลด template<br/>2️⃣ อัปโหลด CSV → preview<br/>3️⃣ Import → รายงานผล<br/>➜ POST /api/settings/import<br/>GET /api/settings/import?type="]:::modal
+  end
+
+  Logout((ออกจากระบบ /login)):::endpoint
+  Shell -.->|logout| Logout
+  Logout --> Login
+
+  %% ============ STYLES ============
+  classDef page fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5px,color:#1e3a8a;
+  classDef modal fill:#ede9fe,stroke:#8b5cf6,stroke-width:1.5px,color:#4c1d95;
+  classDef api fill:#d1fae5,stroke:#10b981,stroke-width:1.5px,color:#064e3b;
+  classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:1.5px,color:#78350f;
+  classDef endpoint fill:#fce7f3,stroke:#ec4899,stroke-width:2px,color:#831843;
+  classDef action fill:#f1f5f9,stroke:#64748b,stroke-width:1px,color:#334155;
+
+  classDef sgAuth fill:#fef2f2,stroke:#fecaca,color:#7f1d1d;
+  classDef sgShell fill:#eef2ff,stroke:#c7d2fe,color:#312e81;
+  classDef sgHome fill:#ecfdf5,stroke:#a7f3d0,color:#064e3b;
+  classDef sgItems fill:#eff6ff,stroke:#bfdbfe,color:#1e3a8a;
+  classDef sgDetail fill:#f0f9ff,stroke:#bae6fd,color:#0c4a6e;
+  classDef sgDispense fill:#fffbeb,stroke:#fde68a,color:#78350f;
+  classDef sgReceive fill:#f0fdf4,stroke:#bbf7d0,color:#14532d;
+  classDef sgMaint fill:#f5f3ff,stroke:#ddd6fe,color:#4c1d95;
+  classDef sgReports fill:#fdf2f8,stroke:#fbcfe8,color:#831843;
+  classDef sgAlerts fill:#fff7ed,stroke:#fed7aa,color:#7c2d12;
+  classDef sgSet fill:#f8fafc,stroke:#e2e8f0,color:#334155;
+
+  class SG_AUTH sgAuth;
+  class SG_SHELL sgShell;
+  class SG_HOME sgHome;
+  class SG_ITEMS sgItems;
+  class SG_DETAIL sgDetail;
+  class SG_DISPENSE sgDispense;
+  class SG_RECEIVE sgReceive;
+  class SG_MAINT sgMaint;
+  class SG_REPORTS sgReports;
+  class SG_ALERTS sgAlerts;
+  class SG_SET sgSet;
+    </pre>
+  </div>
+
+  <details class="src">
+    <summary>📜 ดู mermaid source (raw)</summary>
+    <pre id="src"></pre>
+  </details>
+</main>
+
+<footer>Phase 1 = เบิกจ่าย (dispense) · ยังไม่มี flow คืน · NLU Stock App Flow</footer>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  const dark = () => document.documentElement.getAttribute("data-theme") === "dark";
+  const MIN_ZOOM = 0.4, MAX_ZOOM = 3;
+  let zoom = 1, tx = 0, ty = 0;
+  let dragging = false, sx = 0, sy = 0, baseTx = 0, baseTy = 0;
+  const MERMAID_SRC = document.querySelector(".mermaid").textContent.trim(); // capture once, before render
+
+  function init() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "default",
+      securityLevel: "loose",
+      flowchart: { curve: "basis", htmlLabels: true, padding: 16, nodeSpacing: 50, rankSpacing: 60, useMaxWidth: true },
+      themeVariables: {
+        fontFamily: '"Noto Sans Thai", "Inter", sans-serif',
+        fontSize: "14px",
+      },
+    });
+    const el = document.querySelector(".mermaid");
+    el.removeAttribute("data-processed");
+    el.innerHTML = MERMAID_SRC; // reset to source on every (re)render
+    mermaid.run({ nodes: [el] }).then(() => apply());
+  }
+
+  function apply() {
+    const svg = document.querySelector(".diagram-card svg");
+    if (svg) {
+      svg.style.transformOrigin = "0 0";
+      svg.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    }
+    const card = document.querySelector(".diagram-card");
+    if (card) card.style.height = "auto";
+  }
+
+  function resetView() { zoom = 1; tx = 0; ty = 0; apply(); }
+
+  // zoom anchored at a screen point (cursor / card center) so the spot under the pointer stays put
+  function zoomAt(screenX, screenY, factor) {
+    const svg = document.querySelector(".diagram-card svg");
+    if (!svg) return;
+    const r = svg.getBoundingClientRect();
+    const px = (screenX - r.left) / zoom;
+    const py = (screenY - r.top) / zoom;
+    const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+    tx += px * (zoom - nz);
+    ty += py * (zoom - nz);
+    zoom = nz;
+    apply();
+  }
+
+  document.getElementById("themeBtn").addEventListener("click", (e) => {
+    const next = dark() ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    e.target.textContent = next === "dark" ? "☀️ Light" : "🌙 Dark";
+    init();
+  });
+
+  const cardCenter = () => {
+    const r = document.querySelector(".diagram-card").getBoundingClientRect();
+    return [r.left + r.width / 2, r.top + r.height / 2];
+  };
+  document.getElementById("zoomIn").addEventListener("click", () => zoomAt(...cardCenter(), 1.15));
+  document.getElementById("zoomOut").addEventListener("click", () => zoomAt(...cardCenter(), 1 / 1.15));
+  document.getElementById("reset").addEventListener("click", resetView);
+
+  // expose raw source
+  document.getElementById("src").textContent = MERMAID_SRC;
+
+  // wheel + drag pan on the diagram (mouse/trackpad only — touch keeps native scroll)
+  const surface = document.querySelector(".diagram-card");
+  surface.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+  }, { passive: false });
+
+  surface.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse") return;
+    dragging = true;
+    sx = e.clientX; sy = e.clientY;
+    baseTx = tx; baseTy = ty;
+    surface.setPointerCapture(e.pointerId);
+    surface.style.cursor = "grabbing";
+  });
+  surface.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    tx = baseTx + (e.clientX - sx);
+    ty = baseTy + (e.clientY - sy);
+    apply();
+  });
+  const endDrag = () => { dragging = false; surface.style.cursor = "grab"; };
+  surface.addEventListener("pointerup", endDrag);
+  surface.addEventListener("pointercancel", endDrag);
+
+  init();
+</script>
+</body>
+</html>

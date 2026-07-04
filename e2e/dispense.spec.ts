@@ -68,7 +68,7 @@ test("dispense ITEM: checks out a sub-item", async ({ request, uniqueCode }) => 
   const sub = (
     await pool.query(`SELECT status FROM sub_items WHERE id = $1`, [tracked.subId])
   ).rows[0];
-  expect(sub.status).toBe("CHECKED_OUT");
+  expect(sub.status).toBe("ON_LOAN");
 });
 
 test("concurrent dispense cannot drive stock negative (bug-1 guard)", async ({ request }) => {

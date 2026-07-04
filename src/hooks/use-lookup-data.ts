@@ -1,38 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getCategories, getLocations, type CategoryOption, type LocationOption } from "@/lib/api";
 
-// Module-level cache — shared across hook instances on the same page load
-let categoriesCache: CategoryOption[] | null = null;
-let locationsCache: LocationOption[] | null = null;
-
+// ponytail: react-query already powers the dashboard hooks — the hand-rolled module cache here
+// duplicated its fetch + dedupe. Same return shape ({ X, loading }) so the 6 callers are unchanged.
 export function useCategories() {
-  const [categories, setCategories] = useState<CategoryOption[]>(categoriesCache ?? []);
-  const [loading, setLoading] = useState(!categoriesCache);
-
-  useEffect(() => {
-    if (categoriesCache) { setCategories(categoriesCache); setLoading(false); return; }
-    getCategories()
-      .then((data) => { categoriesCache = data; setCategories(data); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { categories, loading };
+  const q = useQuery({ queryKey: ["lookup", "categories"], queryFn: getCategories });
+  return { categories: q.data ?? [], loading: q.isLoading };
 }
 
 export function useLocations() {
-  const [locations, setLocations] = useState<LocationOption[]>(locationsCache ?? []);
-  const [loading, setLoading] = useState(!locationsCache);
-
-  useEffect(() => {
-    if (locationsCache) { setLocations(locationsCache); setLoading(false); return; }
-    getLocations()
-      .then((data) => { locationsCache = data; setLocations(data); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { locations, loading };
+  const q = useQuery({ queryKey: ["lookup", "locations"], queryFn: getLocations });
+  return { locations: q.data ?? [], loading: q.isLoading };
 }

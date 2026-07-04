@@ -1,9 +1,20 @@
 import "dotenv/config";
+import { randomUUID } from "crypto";
 import { parse } from "csv-parse/sync";
 import { readFileSync } from "fs";
 import { join } from "path";
 
 const CSV_DIR = join(process.cwd(), "CSV");
+
+// Deterministic PRNG (mulberry32, fixed seed) so demo data — and the e2e visual
+// snapshots that read it — are byte-stable across reseeds. Replaces Math.random.
+let _rngState = 0x9e3779b9;
+function rng() {
+  _rngState = (_rngState + 0x6d2b79f5) | 0;
+  let t = Math.imul(_rngState ^ (_rngState >>> 15), 1 | _rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
 
 function readCsv(filename: string) {
   const raw = readFileSync(join(CSV_DIR, filename), "utf-8");
@@ -76,9 +87,10 @@ function parsePrice(raw: string): number | null {
 // Per-prefix running counter; setSize>1 appends the set segment.
 const prefixCounters: Record<string, number> = {};
 function nextCode(prefix: string, setSize = 1): string {
-  prefixCounters[prefix] = (prefixCounters[prefix] ?? 0) + 1;
-  const nnn = String(prefixCounters[prefix]).padStart(3, "0");
-  return setSize > 1 ? `NLU-${prefix}-${nnn}-S${String(setSize).padStart(2, "0")}` : `NLU-${prefix}-${nnn}`;
+  const p = PROFILE_ALIASES[prefix] ?? prefix;
+  prefixCounters[p] = (prefixCounters[p] ?? 0) + 1;
+  const nnn = String(prefixCounters[p]).padStart(3, "0");
+  return setSize > 1 ? `NLU-${p}-${nnn}-S${String(setSize).padStart(2, "0")}` : `NLU-${p}-${nnn}`;
 }
 
 // Extract set size from an old-format code (NLU-BOOK-013-001-S06 → 6), else 1.
@@ -86,23 +98,6 @@ function extractSetSize(oldCode: string): number {
   const m = oldCode.match(/-S(\d{2})$/);
   return m ? parseInt(m[1], 10) : 1;
 }
-
-// Canonical BOOK หมวด names (CSV col is unreliable/empty); number comes from the code.
-const BOOK_CAT_NAMES: Record<string, string> = {
-  "001": "ชุดส่งเสริมสุขภาพ",
-  "002": "ชุดส่งเสริมสุขภาพและสุขอนามัย",
-  "003": "ชุดส่งเสริมด้านสังคม",
-  "004": "ชุดส่งเสริมด้านคุณธรรม",
-  "005": "ด้านสติปัญญา ความคิด ความรู้ทั่วไป",
-  "006": "ด้านสติปัญญา ตัวเลข ภาษา สี",
-  "007": "ส่งเสริมการเรียนรู้ ด้านประสาทสัมผัส",
-  "008": "ส่งเสริมภาษา",
-  "009": "ส่งเสริมด้านคุณธรรม (นิทาน)",
-  "010": "แนวการเล่น ส่งเสริมกล้ามเนื้อมัดเล็ก",
-  "011": "นิทานเล่มใหญ่",
-  "012": "หนังสือสำหรับเยาวชน",
-  "013": "คู่มือสำหรับใช้อ้างอิง",
-};
 
 // Extract NLU code prefix for grouping
 // "NLU-KRU-001-001" → "NLU-KRU-001"
@@ -457,16 +452,12 @@ async function main() {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
     const setSize = extractSetSize(group.codes[0]);
-    const หมวดNum = (group.codes[0].split("-")[2] || "").trim();
-    const bookCatId = หมวดNum
-      ? await ensureSubCategory("BOOK", BOOK_CAT_NAMES[หมวดNum] || group.category || `หมวด ${หมวดNum}`)
-      : catBook.id;
 
     const item = await prisma.item.create({
       data: {
         code: nextCode("BOOK", setSize),
         name: stripTrailingNum(group.bookName),
-        categoryId: bookCatId,
+        categoryId: catBook.id,
         trackIndividually: true,
         setSize,
         issueUnitId: unitId("เล่ม"),
@@ -518,7 +509,6 @@ async function main() {
   }
 
   let toyItemCount = 0, toySubCount = 0;
-  const toyCatId = await ensureSubCategory("TOY", "สื่อการสอน/ของเล่นส่งเสริมพัฒนาการ");
   for (const [, group] of toyGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
@@ -528,7 +518,7 @@ async function main() {
       data: {
         code: nextCode("TOY", setSize),
         name: stripTrailingNum(group.toyName),
-        categoryId: toyCatId,
+        categoryId: catToy.id,
         trackIndividually: true,
         setSize,
         issueUnitId: unitId("ชิ้น"),
@@ -638,38 +628,62 @@ async function main() {
   // Sub:    0="", 1="", 2="", 3="", 4=ลำดับ, 5=ชื่อ, 6=จำนวน, 7=หน่วย, 8=หมายเหตุ
 
   let kitCount = 0;
+  let bomCount = 0;
+  let currentKitItemId: string | null = null;
 
   for (let i = 2; i < kitRows.length; i++) {
     const row = kitRows[i];
     if (!row || row.length < 2) continue;
     const seq = (row[0] || "").trim();
-    if (!seq) continue; // component sub-rows ignored — Kit feature removed (Phase 2)
 
-    // Parent row → plain item (อุปกรณ์ประกอบวิชา as consumable for now)
-    const nameRaw = (row[1] || "").trim();
-    const qtyStr = (row[2] || "").trim();
-    const unitRaw = (row[3] || "").trim();
-    const notes = (row[8] || row[4] || "").trim();
-    if (!nameRaw) continue;
+    if (seq) {
+      // Parent row → kit Item
+      const nameRaw = (row[1] || "").trim();
+      const qtyStr = (row[2] || "").trim();
+      const unitRaw = (row[3] || "").trim();
+      const notes = (row[8] || row[4] || "").trim();
+      if (!nameRaw) continue;
 
-    const qty = parseInt(qtyStr) || 1;
-    const unitName = parseUnit(unitRaw);
-    const code = nextCode("KIT");
+      const qty = parseInt(qtyStr) || 1;
+      const unitName = parseUnit(unitRaw);
+      const code = nextCode("KIT");
 
-    await prisma.item.create({
+      const created = await prisma.item.create({
+        data: {
+          code, name: nameRaw,
+          categoryId: catKit.id,
+          trackIndividually: false,
+          issueUnitId: unitId(unitName),
+          minThreshold: 0, locationId: defaultLocId,
+          totalQty: qty, availableQty: qty,
+          description: notes || null,
+        },
+      });
+      currentKitItemId = created.id;
+      kitCount++;
+      continue;
+    }
+
+    // Sub-row → KitBom component (free-text: componentItemId null — schema รองรับ)
+    if (!currentKitItemId) continue;
+    const compName = (row[5] || "").trim();
+    if (!compName) continue;
+    const compQty = parseInt((row[6] || "").trim()) || 1;
+    const compUnitName = parseUnit((row[7] || "").trim());
+    const compSeq = parseInt((row[4] || "").trim());
+    await prisma.kitBom.create({
       data: {
-        code, name: nameRaw,
-        categoryId: catKit.id,
-        trackIndividually: false,
-        issueUnitId: unitId(unitName),
-        minThreshold: 0, locationId: defaultLocId,
-        totalQty: qty, availableQty: qty,
-        description: notes || null,
+        kitItemId: currentKitItemId,
+        componentItemId: null,
+        name: compName,
+        quantity: compQty,
+        unitId: unitId(compUnitName),
+        sortOrder: isNaN(compSeq) ? bomCount : compSeq,
       },
     });
-    kitCount++;
+    bomCount++;
   }
-  console.log(`  ${kitCount} kit items`);
+  console.log(`  ${kitCount} kit items, ${bomCount} BOM components`);
 
   // ============================================================
   // Demo data for dashboard
@@ -688,7 +702,7 @@ async function main() {
       data: {
         itemId: item.id, lotNumber: `LOT-${item.code}`,
         receivedQty: item.totalQty, remainingQty: item.totalQty,
-        expiryDate: new Date(now.getTime() + (Math.random() * 365 + 30) * 24 * 60 * 60 * 1000),
+        expiryDate: new Date(now.getTime() + (rng() * 365 + 30) * 24 * 60 * 60 * 1000),
         receivedDate: day(60),
       },
     });
@@ -697,9 +711,9 @@ async function main() {
       data: { itemId: item.id, lotId: lot.id, quantity: item.totalQty, receivedBy: admin.id, receivedAt: day(60) },
     });
 
-    const dispenseCount = Math.floor(Math.random() * 3) + 1;
+    const dispenseCount = Math.floor(rng() * 3) + 1;
     for (let j = 0; j < dispenseCount; j++) {
-      const qty = Math.floor(Math.random() * 10) + 1;
+      const qty = Math.floor(rng() * 10) + 1;
       await prisma.dispenseRecord.create({
         data: {
           itemId: item.id, lotId: lot.id,
@@ -710,6 +724,25 @@ async function main() {
       });
     }
   }
+
+  // ============================================================
+  // Demo cover images (picsum, keyed by item code) — remove for prod
+  // ============================================================
+  const imgItems = await prisma.item.findMany({ select: { id: true, code: true } });
+  for (const it of imgItems) {
+    const seed = encodeURIComponent(it.code);
+    await prisma.item.update({
+      where: { id: it.id },
+      data: {
+        imageUrl: `https://picsum.photos/seed/${seed}/600/600`,
+        images: [
+          `https://picsum.photos/seed/${seed}-a/800/600`,
+          `https://picsum.photos/seed/${seed}-b/800/600`,
+        ],
+      },
+    });
+  }
+  console.log(`  ${imgItems.length} cover + gallery images (picsum)`);
 
   // ============================================================
   // Rich mock dispense data for this month (dashboard charts)
@@ -758,6 +791,9 @@ async function main() {
         usageType: m.usageType,
         staffId: admin.id,
         dispensedAt: day(m.daysAgo),
+        // Closed so these chart-only records don't pollute the รับคืน open-loan list.
+        resolvedQty: m.qty,
+        returnedAt: day(m.daysAgo),
       },
     });
   }
@@ -864,6 +900,160 @@ async function main() {
 
   console.log(`  ${Math.min(12, maintItems.length)} items with maintenance schedule`);
   console.log(`  ${Math.min(8, maintItems.length)} maintenance records`);
+
+  // ============================================================
+  // Demo open loans for the รับคืน screen (loanGroupId + dueAt + recipient)
+  // 3 borrow events: overdue / near-due / no-due; mix of tracked SubItems + count qty.
+  // ============================================================
+  console.log("Creating demo open loans (รับคืน)...");
+  const { recomputeItemCounts } = await import("../src/lib/stock");
+
+  // Find a tracked item with at least N AVAILABLE sub-items.
+  async function findTrackedWith(minAvail: number, exclude: string[] = []) {
+    const subs = await prisma.subItem.findMany({
+      where: { status: "AVAILABLE", item: { trackIndividually: true, isActive: true, id: { notIn: exclude } } },
+      select: { id: true, itemId: true },
+    });
+    const counts = new Map<string, string[]>();
+    for (const s of subs) {
+      const arr = counts.get(s.itemId) ?? [];
+      arr.push(s.id);
+      counts.set(s.itemId, arr);
+    }
+    for (const [itemId, ids] of counts) if (ids.length >= minAvail) return { itemId, subIds: ids };
+    return null;
+  }
+
+  const used = new Set<string>();
+  const pick = (n: number) => findTrackedWith(n, [...used]);
+  const loanA = await pick(2);
+  if (loanA) used.add(loanA.itemId);
+  const loanB = await pick(3);
+  if (loanB) used.add(loanB.itemId);
+  const loanC = await pick(1);
+  if (loanC) used.add(loanC.itemId);
+  const loanD = await pick(4);
+  if (loanD) used.add(loanD.itemId);
+  const loanE = await pick(1);
+  if (loanE) used.add(loanE.itemId);
+  const loanF = await pick(1);
+  if (loanF) used.add(loanF.itemId);
+  const countItem = await prisma.item.findFirst({
+    where: { trackIndividually: false, category: { profile: { code: "DUR" } }, availableQty: { gte: 5 }, isActive: true },
+  });
+  const countItem2 = await prisma.item.findFirst({
+    where: { trackIndividually: false, category: { profile: { code: "DUR" } }, availableQty: { gte: 10 }, isActive: true, id: { not: countItem?.id } },
+  });
+
+  const affectedTracked = new Set<string>();
+  let loanRecCount = 0;
+  let loanEventCount = 0;
+
+  type LoanOpts = { loanGroupId: string; recipient: string; at: Date; due: Date | null; usage: "COURSE" | "ACTIVITY" | "OTHER" };
+  async function loanTracked(subId: string, itemId: string, opts: LoanOpts) {
+    await prisma.subItem.update({ where: { id: subId }, data: { status: "ON_LOAN" } });
+    await prisma.dispenseRecord.create({
+      data: {
+        itemId, subItemId: subId, quantity: 1, resolvedQty: 0,
+        staffId: admin.id, dispensedAt: opts.at,
+        loanGroupId: opts.loanGroupId, dueAt: opts.due,
+        recipient: opts.recipient, usageType: opts.usage,
+      },
+    });
+    affectedTracked.add(itemId);
+    loanRecCount++;
+  }
+  // Already-returned tracked SubItem (partial-return scenario): SubItem back to AVAILABLE, record closed.
+  async function loanTrackedReturned(subId: string, itemId: string, opts: LoanOpts) {
+    await prisma.subItem.update({ where: { id: subId }, data: { status: "AVAILABLE" } });
+    await prisma.dispenseRecord.create({
+      data: {
+        itemId, subItemId: subId, quantity: 1, resolvedQty: 1,
+        staffId: admin.id, dispensedAt: opts.at,
+        loanGroupId: opts.loanGroupId, dueAt: opts.due,
+        recipient: opts.recipient, usageType: opts.usage,
+        returnedAt: new Date(opts.at.getTime() + 2 * 86400000),
+      },
+    });
+    affectedTracked.add(itemId);
+    loanRecCount++;
+  }
+  async function loanCountQty(itemId: string, qty: number, opts: LoanOpts) {
+    await prisma.item.update({ where: { id: itemId, availableQty: { gte: qty } }, data: { availableQty: { decrement: qty } } });
+    await prisma.dispenseRecord.create({
+      data: {
+        itemId, quantity: qty, resolvedQty: 0,
+        staffId: admin.id, dispensedAt: opts.at,
+        loanGroupId: opts.loanGroupId, dueAt: opts.due,
+        recipient: opts.recipient, usageType: opts.usage,
+      },
+    });
+    loanRecCount++;
+  }
+  // Partially-returned count loan: `resolved` units already back. Net available drop = qty - resolved.
+  async function loanCountPartial(itemId: string, qty: number, resolved: number, opts: LoanOpts) {
+    await prisma.item.update({ where: { id: itemId, availableQty: { gte: qty - resolved } }, data: { availableQty: { decrement: qty - resolved } } });
+    await prisma.dispenseRecord.create({
+      data: {
+        itemId, quantity: qty, resolvedQty: resolved,
+        staffId: admin.id, dispensedAt: opts.at,
+        loanGroupId: opts.loanGroupId, dueAt: opts.due,
+        recipient: opts.recipient, usageType: opts.usage,
+      },
+    });
+    loanRecCount++;
+  }
+  const bump = () => loanEventCount++;
+
+  // Loan 1 — ครูสมชาย, overdue: 2 tracked + 5 count (7/7)
+  if (loanA) {
+    bump();
+    const gid = randomUUID();
+    const o: LoanOpts = { loanGroupId: gid, recipient: "ครูสมชาย ใจดี", at: day(8), due: day(3), usage: "COURSE" };
+    await loanTracked(loanA.subIds[0], loanA.itemId, o);
+    await loanTracked(loanA.subIds[1], loanA.itemId, o);
+    if (countItem) await loanCountQty(countItem.id, 5, o);
+  }
+  // Loan 2 — ครูอารีย์, near-due: 3 tracked (3/3)
+  if (loanB) {
+    bump();
+    const gid = randomUUID();
+    const o: LoanOpts = { loanGroupId: gid, recipient: "ครูอารีย์ สายสมร", at: day(4), due: day(-2), usage: "ACTIVITY" };
+    for (let i = 0; i < 3; i++) await loanTracked(loanB.subIds[i], loanB.itemId, o);
+  }
+  // Loan 3 — นักเรียน ม.4/1, no due: 1 tracked (1/1)
+  if (loanC) {
+    bump();
+    const gid = randomUUID();
+    await loanTracked(loanC.subIds[0], loanC.itemId, { loanGroupId: gid, recipient: "นักเรียน ม.4/1", at: day(1), due: null, usage: "OTHER" });
+  }
+  // Loan 4 — ครูวิภา, overdue: 4 tracked, 2 already returned (ค้าง 2/4)
+  if (loanD) {
+    bump();
+    const gid = randomUUID();
+    const o: LoanOpts = { loanGroupId: gid, recipient: "ครูวิภา พรหม", at: day(10), due: day(5), usage: "COURSE" };
+    await loanTracked(loanD.subIds[0], loanD.itemId, o);
+    await loanTracked(loanD.subIds[1], loanD.itemId, o);
+    await loanTrackedReturned(loanD.subIds[2], loanD.itemId, o);
+    await loanTrackedReturned(loanD.subIds[3], loanD.itemId, o);
+  }
+  // Loan 5 — ห้องสมุด, near-due: count qty 10, 4 already returned (ค้าง 6/10)
+  if (countItem2) {
+    bump();
+    const gid = randomUUID();
+    await loanCountPartial(countItem2.id, 10, 4, { loanGroupId: gid, recipient: "ห้องสมุด NLU", at: day(6), due: day(-1), usage: "ACTIVITY" });
+  }
+  // Loan 6 — ครูทดสอบ, no due: 2 tracked from 2 different items (detail shows 2 item cards, 2/2)
+  if (loanE && loanF) {
+    bump();
+    const gid = randomUUID();
+    const o: LoanOpts = { loanGroupId: gid, recipient: "ครูทดสอบ ระบบ", at: day(2), due: null, usage: "OTHER" };
+    await loanTracked(loanE.subIds[0], loanE.itemId, o);
+    await loanTracked(loanF.subIds[0], loanF.itemId, o);
+  }
+
+  for (const iid of affectedTracked) await recomputeItemCounts(prisma as any, iid);
+  console.log(`  ${loanRecCount} open loan records across ${loanEventCount} borrow events`);
 
   // ============================================================
   // Stats

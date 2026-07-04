@@ -23,7 +23,7 @@ const navItems = [
   { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard, hideForChildren: true },
   { href: "/items", label: "รายการพัสดุ", icon: Package },
   { href: "/dispense", label: "เบิก-ยืมพัสดุ", icon: ShoppingCart },
-  { href: "/receive", label: "รับเข้าพัสดุ", icon: Truck },
+  { href: "/receive", label: "รับเข้า-คืนพัสดุ", icon: Truck },
   { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench },
   { href: "/reports", label: "รายงาน & สถิติ", icon: BarChart3 },
   { href: "/settings", label: "ตั้งค่า", icon: Settings, adminOnly: true },

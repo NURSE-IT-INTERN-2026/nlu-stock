@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NLU Stock — ระบบเบิก · ยืม · คืน (อธิบายแบบเข้าใจง่าย)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --text: #1f2a44;
+    --muted: #667085;
+    --border: #e6e9f0;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --amber: #d97706;
+    --amber-soft: #fffbeb;
+    --red: #dc2626;
+    --red-soft: #fef2f2;
+    --slate: #475569;
+    --shadow: 0 12px 34px -16px rgba(20, 30, 60, 0.28);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans Thai", system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #eef2ff 0%, transparent 60%), var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 96px; }
+
+  header.hero {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  header.hero .kicker {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  header.hero h1 { font-size: 34px; font-weight: 800; margin: 0 0 12px; letter-spacing: -0.01em; }
+  header.hero p { color: var(--muted); font-size: 16px; max-width: 640px; margin: 0 auto; }
+
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin: 28px 0 8px;
+  }
+  nav.toc a {
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--slate);
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 999px;
+    transition: all .15s ease;
+  }
+  nav.toc a:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+
+  section.feature {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    margin-top: 28px;
+    box-shadow: var(--shadow);
+    scroll-margin-top: 24px;
+  }
+  .feature-head { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .feature-num {
+    flex: none;
+    width: 44px; height: 44px;
+    display: grid; place-items: center;
+    background: var(--accent); color: #fff;
+    font-weight: 800; font-size: 18px;
+    border-radius: 14px;
+  }
+  .feature-head h2 { font-size: 23px; font-weight: 800; margin: 0; }
+  .feature-sub { color: var(--muted); font-size: 15px; margin: 2px 0 0; }
+
+  .plain {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 22px 0;
+    font-size: 15px;
+  }
+  .plain strong { color: var(--accent); }
+
+  .diagram {
+    border: 1px dashed var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    background: #fcfdff;
+    overflow-x: auto;
+    text-align: center;
+  }
+  .mermaid { font-family: "Noto Sans Thai", sans-serif !important; }
+
+  .result {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-top: 22px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: var(--green-soft);
+    border: 1px solid #c9f0dd;
+    font-size: 15px;
+  }
+  .result .ic { flex: none; font-size: 20px; line-height: 1.3; }
+  .result b { color: var(--green); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 4px; }
+  .chip {
+    font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .chip.ok  { background: var(--green-soft); color: var(--green); border-color:#c9f0dd; }
+  .chip.warn{ background: var(--amber-soft); color: var(--amber); border-color:#fde8bf; }
+  .chip.bad { background: var(--red-soft);   color: var(--red);   border-color:#fbd5d5; }
+  .chip.new { background: #f5f3ff; color: var(--accent); border-color:#ddd6fe; }
+
+  .note-new {
+    margin-top: 8px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .badge-new {
+    display:inline-block; font-size:11px; font-weight:700; color:#fff;
+    background: var(--accent); padding:2px 8px; border-radius:6px; margin-left:6px;
+    vertical-align: middle;
+  }
+
+  footer.legend {
+    margin-top: 44px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+  footer.legend .badge-new { margin: 0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="kicker">NLU STOCK · คู่มือทำความเข้าใจ</span>
+    <h1>ระบบเบิก · ยืม · คืนพัสดุ</h1>
+    <p>อธิบายการทำงานทีละขั้นแบบเข้าใจง่าย ว่าเมื่อกดปุ่มแต่ละอันแล้วเกิดอะไรขึ้นบ้าง และผลลัพธ์ไปแสดงที่ไหน
+       รายการที่มี <span class="badge-new">ใหม่</span> คือส่วนที่เพิ่งพัฒนาเพิ่มในรอบนี้</p>
+  </header>
+
+  <nav class="toc">
+    <a href="#f1">1 · เบิก–ยืมพัสดุ</a>
+    <a href="#f2">2 · ยืนยันการเบิก</a>
+    <a href="#f3">3 · รับเข้าพัสดุ</a>
+    <a href="#f4">4 · รับคืนพัสดุ</a>
+    <a href="#f5">5 · เตือนเกินกำหนดคืน</a>
+  </nav>
+
+  <!-- ───────────── FEATURE 1 ───────────── -->
+  <section class="feature" id="f1">
+    <div class="feature-head">
+      <div class="feature-num">1</div>
+      <div>
+        <h2>เบิก–ยืมพัสดุ</h2>
+        <p class="feature-sub">หยิบของใส่ตะกร้า ระบุผู้ยืม แล้วยืนยัน — ระบบตัดของออกจากสต๊อกให้อัตโนมัติ</p>
+      </div>
+    </div>
+
+    <div class="plain">
+      พัสดุในระบบมี <strong>3 แบบ</strong> และแต่ละแบบตัดสต๊อกไม่เหมือนกัน:
+      <br>• <strong>วัสดุสิ้นเปลือง</strong> (เช่น สำลี น้ำยา) — ตัดจาก “ล็อต” ที่ใกล้หมดอายุก่อนเสมอ
+      <br>• <strong>วัสดุคงทนแบบนับจำนวน</strong> (เช่น อุปกรณ์ทั่วไป) — ลดจำนวนคงเหลือลง
+      <br>• <strong>ครุภัณฑ์รายชิ้น</strong> (เช่น หุ่นฝึก เครื่องมือมีเลขครุภัณฑ์) — จับจองเป็นรายชิ้น ทำเครื่องหมายว่า “ถูกยืม”
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+    A([เจ้าหน้าที่ค้นหาพัสดุ]) --> B[เพิ่มลงตะกร้า]
+    B --> C[เลือกจำนวน / เลือกชิ้น<br/>ระบุผู้ยืม และกำหนดคืน ถ้ามี]
+    C --> D{กดยืนยันการเบิก}
+    D --> E{ของในคลังพอไหม?}
+    E -->|ไม่พอ| E1[[แจ้งเตือน ทำรายการไม่ได้]]
+    E -->|พอ| F{เป็นพัสดุแบบไหน?}
+    F -->|วัสดุสิ้นเปลือง| G1[ตัดจากล็อตที่ใกล้หมดอายุก่อน]
+    F -->|นับจำนวน| G2[ลดจำนวนคงเหลือ]
+    F -->|ครุภัณฑ์รายชิ้น| G3[ทำเครื่องหมายชิ้นนั้นว่า ถูกยืม]
+    G1 --> H([บันทึกประวัติการเบิก])
+    G2 --> H
+    G3 --> H
+      </pre>
+    </div>
+
+    <div class="result">
+      <span class="ic">✅</span>
+      <div><b>ผลลัพธ์:</b> ของถูกหักออกจากสต๊อกทันที และมีประวัติการเบิกบันทึกไว้ — ไปแสดงที่
+      หน้าแรก (กราฟ/รายการเบิกล่าสุด), เมนูรายงาน “ประวัติการเบิก”, และหน้ารายละเอียดพัสดุ</div>
+    </div>
+  </section>
+
+  <!-- ───────────── FEATURE 2 ───────────── -->
+  <section class="feature" id="f2">
+    <div class="feature-head">
+      <div class="feature-num">2</div>
+      <div>
+        <h2>ยืนยันการเบิก</h2>
+        <p class="feature-sub">ทุกอย่างในการกดยืนยันครั้งเดียว จะสำเร็จทั้งหมดหรือไม่สำเร็จทั้งหมด</p>
+      </div>
+    </div>
+
+    <div class="plain">
+      เมื่อกด “ยืนยัน” ระบบจะทำงานแบบ <strong>ทั้งหมดหรือไม่ทำเลย</strong> —
+      ถ้ามีของสักรายการในตะกร้าไม่พอ ระบบจะยกเลิกทั้งบิลและไม่ตัดสต๊อกอะไรเลย
+      เพื่อกันไม่ให้ตัวเลขคลังเพี้ยน และกันของติดลบเวลามีคนเบิกพร้อมกัน
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+    A([กดยืนยันการเบิก]) --> B[ตรวจทุกรายการในตะกร้า]
+    B --> C{มีรายการไหนของไม่พอ<br/>หรือชิ้นนั้นถูกยืมไปแล้ว?}
+    C -->|มี| D[[ยกเลิกทั้งบิล<br/>ไม่ตัดสต๊อกใด ๆ · แจ้งเหตุผล]]
+    C -->|ไม่มี| E[บันทึกใบเบิกทุกบรรทัด]
+    E --> F[ตัดสต๊อกตามชนิดพัสดุ]
+    F --> G([สำเร็จ · ล้างตะกร้า · กลับหน้าเบิก])
+      </pre>
+    </div>
+
+    <div class="result">
+      <span class="ic">✅</span>
+      <div><b>ผลลัพธ์:</b> ได้ใบเบิก 1 รายการที่จับกลุ่มทุกบรรทัดไว้ด้วยกัน (1 การยืม)
+      เพื่อให้ตอนรับคืนเห็นเป็น “การ์ดเดียว” ไม่กระจัดกระจาย</div>
+    </div>
+  </section>
+
+  <!-- ───────────── FEATURE 3 ───────────── -->
+  <section class="feature" id="f3">
+    <div class="feature-head">
+      <div class="feature-num">3</div>
+      <div>
+        <h2>รับเข้าพัสดุ</h2>
+        <p class="feature-sub">เพิ่มของเข้าคลัง — ของใหม่หรือเติมของเดิม</p>
+      </div>
+    </div>
+
+    <div class="plain">
+      หน้ารับเข้าใช้เพิ่มจำนวนของในคลัง ระบบจะขอข้อมูลต่างกันตามชนิดพัสดุ:
+      <br>• <strong>วัสดุสิ้นเปลือง</strong> ต้องระบุ “เลขล็อต” และวันหมดอายุ (ถ้ามีล็อตเดิมอยู่แล้วจะเติมเข้าไป)
+      <br>• <strong>ครุภัณฑ์รายชิ้น</strong> ต้องระบุ “รหัสรายชิ้น” ให้ครบตามจำนวนที่รับเข้า
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+    A([ค้นหาพัสดุที่จะรับเข้า]) --> B[ใส่จำนวนที่รับเข้า]
+    B --> C{เป็นพัสดุแบบไหน?}
+    C -->|วัสดุสิ้นเปลือง| D1[ใส่เลขล็อต + วันหมดอายุ]
+    C -->|ครุภัณฑ์รายชิ้น| D2[ใส่รหัสรายชิ้นให้ครบจำนวน]
+    C -->|นับจำนวน| D3[ระบุจำนวนอย่างเดียว]
+    D1 --> E{กดบันทึกรับเข้า}
+    D2 --> E
+    D3 --> E
+    E --> F[เพิ่มจำนวนคงเหลือในคลัง]
+    F --> G([บันทึกประวัติการรับเข้า])
+      </pre>
+    </div>
+
+    <div class="result">
+      <span class="ic">✅</span>
+      <div><b>ผลลัพธ์:</b> จำนวนคงเหลือเพิ่มขึ้นทันที มีประวัติการรับเข้า ไปแสดงที่รายงาน “ประวัติการรับเข้า”
+      และหน้ารายละเอียดพัสดุ</div>
+    </div>
+  </section>
+
+  <!-- ───────────── FEATURE 4 ───────────── -->
+  <section class="feature" id="f4">
+    <div class="feature-head">
+      <div class="feature-num">4</div>
+      <div>
+        <h2>รับคืนพัสดุ</h2>
+        <p class="feature-sub">รับของที่ยืมไปกลับเข้าคลัง พร้อมระบุสภาพ ปกติ / ชำรุด / สูญหาย</p>
+      </div>
+    </div>
+
+    <div class="plain">
+      หน้ารับคืนจะแสดง “รายการที่ยืมค้าง” เป็นการ์ดต่อ 1 การยืม เจ้าหน้าที่เลือกการยืมที่จะรับคืน
+      แล้วระบุสภาพของแต่ละชิ้น/แต่ละจำนวน:
+      <div class="chips">
+        <span class="chip ok">ปกติ → กลับเข้าคลัง ใช้ต่อได้</span>
+        <span class="chip bad">ชำรุด → เข้าคิวซ่อม</span>
+        <span class="chip warn">สูญหาย → ตัดออกจากคลัง</span>
+      </div>
+      <div class="note-new">
+        <span class="badge-new">ใหม่</span> เดิมการคืน “แบบนับจำนวน” เลือกได้แค่ปกติอย่างเดียว
+        ตอนนี้ระบุ <strong>ชำรุด/สูญหาย พร้อมจำนวน</strong> ได้แล้ว และถ้ามีของไม่ปกติ <strong>ต้องแนบรูปหลักฐาน</strong>
+        ก่อนจึงจะบันทึกได้
+      </div>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+    A([เปิดหน้ารับคืน]) --> B[เลือกการยืมที่จะรับคืน]
+    B --> C{ประเภทพัสดุ}
+
+    C -->|ครุภัณฑ์รายชิ้น| D1[ติ๊กเลือกชิ้น + เลือกสภาพแต่ละชิ้น]
+    C -->|นับจำนวน| D2[ใส่จำนวนที่คืน<br/>ติ๊กมีชำรุด/สูญหาย + ใส่จำนวน]
+
+    D1 --> E{มีของไม่ปกติไหม?}
+    D2 --> E
+    E -->|มี| F[ต้องแนบรูปหลักฐานก่อน]
+    E -->|ไม่มี| G[กดบันทึกการคืน]
+    F --> G
+
+    G --> H{สภาพของแต่ละส่วน}
+    H -->|ปกติ| I1[กลับเข้าคลัง พร้อมใช้งาน]
+    H -->|ชำรุด| I2[เข้าคิวซ่อม · เปิดใบซ่อมให้อัตโนมัติ]
+    H -->|สูญหาย| I3[ตัดออกจากคลัง บันทึกว่าสูญหาย]
+
+    I1 --> J([อัปเดตประวัติ · ปิดการยืมเมื่อคืนครบ])
+    I2 --> J
+    I3 --> J
+      </pre>
+    </div>
+
+    <div class="result">
+      <span class="ic">🔧</span>
+      <div><b>ของชำรุดไปไหน?</b> <span class="badge-new">ใหม่</span> ไม่ว่าจะเป็นครุภัณฑ์รายชิ้นหรือแบบนับจำนวน
+      พอทำเครื่องหมาย “ชำรุด” ระบบจะ <b>เปิดใบซ่อมให้อัตโนมัติ</b> ไปโผล่ที่หน้า “บำรุงรักษา” และรายงานประวัติการซ่อม
+      จึงไม่มีของชำรุดตกหล่นหายไปจากสายตา</div>
+    </div>
+  </section>
+
+  <!-- ───────────── FEATURE 5 ───────────── -->
+  <section class="feature" id="f5">
+    <div class="feature-head">
+      <div class="feature-num">5</div>
+      <div>
+        <h2>เตือนเมื่อเกินกำหนดคืน <span class="badge-new">ใหม่</span></h2>
+        <p class="feature-sub">ของที่ยืมเลยวันกำหนดคืน จะถูกนับขึ้นที่กระดิ่งแจ้งเตือนอัตโนมัติ</p>
+      </div>
+    </div>
+
+    <div class="plain">
+      ระบบจะตรวจเป็นระยะว่ามีการยืมไหนเลยวันกำหนดคืนแล้วบ้าง ถ้ามีจะ
+      <strong>นับรวมขึ้นที่ตัวเลขกระดิ่งแจ้งเตือน</strong> เหมือนกับ “เกินกำหนดซ่อม” และ “สต๊อกต่ำ”
+      ทำให้เจ้าหน้าที่เห็นได้จากทุกหน้า ไม่ต้องคอยเปิดเช็คเอง
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+    A([ระบบตรวจเป็นระยะทุก ~5 นาที]) --> B{มีการยืมที่เลยกำหนดคืนไหม?}
+    B -->|ไม่มี| B0([ไม่ขึ้นแจ้งเตือน])
+    B -->|มี| C[นับจำนวนขึ้นที่กระดิ่งแจ้งเตือน]
+    C --> D[คลิกกระดิ่ง เปิดหน้าการแจ้งเตือน]
+    D --> E[คลิกหัวข้อ เกินกำหนดคืน]
+    E --> F([พาไปหน้ารับคืน<br/>กรองเฉพาะรายการที่เกินกำหนดให้ทันที])
+      </pre>
+    </div>
+
+    <div class="result">
+      <span class="ic">🔔</span>
+      <div><b>ผลลัพธ์:</b> เห็นจำนวนของค้างคืนเกินกำหนดได้ทุกหน้า และคลิกเดียวไปถึงหน้ารับคืนที่กรองไว้ให้แล้ว
+      พร้อมทวงหรือรับคืนได้ทันที</div>
+    </div>
+  </section>
+
+  <footer class="legend">
+    <span class="badge-new">ใหม่</span> = ส่วนที่พัฒนาเพิ่มในรอบนี้ ·
+    เอกสารนี้อธิบายภาพรวมการใช้งาน ไม่ใช่รายละเอียดทางเทคนิค
+  </footer>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    fontFamily: "Noto Sans Thai, sans-serif",
+    themeVariables: {
+      primaryColor: "#eef2ff",
+      primaryBorderColor: "#4f46e5",
+      primaryTextColor: "#1f2a44",
+      lineColor: "#94a3b8",
+      fontSize: "15px"
+    },
+    flowchart: { curve: "basis", padding: 14, nodeSpacing: 40, rankSpacing: 46 }
+  });
+</script>
+</body>
+</html>

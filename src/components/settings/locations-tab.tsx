@@ -125,13 +125,13 @@ function LocationTree({
                 <TooltipProvider>
                   <div className="flex items-center gap-1">
                     <Tooltip>
-                      <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(row.loc!)} aria-label="แก้ไข" />}>
+                      <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7" onClick={() => onEdit(row.loc!)} aria-label="แก้ไข" />}>
                         <Pencil className="h-3 w-3" />
                       </TooltipTrigger>
                       <TooltipContent>แก้ไข</TooltipContent>
                     </Tooltip>
                     <Tooltip>
-                      <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(row.loc!)} aria-label="ลบ" />}>
+                      <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7" onClick={() => onDelete(row.loc!)} aria-label="ลบ" />}>
                         <Trash2 className="h-3 w-3 text-destructive" />
                       </TooltipTrigger>
                       <TooltipContent>ลบ</TooltipContent>
@@ -342,12 +342,12 @@ export function LocationsTab() {
   );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 h-full min-h-0">
       <div className="flex justify-end">
         <Button size="sm" onClick={() => openCreate()}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
       </div>
 
-      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
         {sortedLocations.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <MapPin className="h-8 w-8 text-muted-foreground/40" />

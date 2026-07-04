@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine } from "lucide-react";
+import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
+import { motion } from "motion/react";
+import { pic } from "@/lib/image";
 import { cn } from "@/lib/utils";
 import {
   searchDispenseItems,
@@ -19,6 +21,9 @@ import {
   getSubItems,
 } from "@/lib/api";
 import { AddItemModal } from "@/components/shared/add-item-modal";
+import { ReturnPanel } from "@/components/receive/return-panel";
+import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
+import { usePageHeader } from "@/components/layout/page-header-context";
 
 interface SearchItem {
   id: string;
@@ -67,8 +72,83 @@ function genCodes(prefix: string, start: number, qty: number, width: number): st
 export default function ReceivePage() {
   return (
     <Suspense>
-      <ReceiveContent />
+      <ReceiveShell />
     </Suspense>
+  );
+}
+
+type ReceiveTab = "receive" | "in_use" | "return" | "repair";
+
+const RECEIVE_TABS = [
+  { value: "receive", label: "รับเข้าพัสดุ", icon: ArrowDownToLine },
+  { value: "in_use", label: "คืนเข้าพัสดุ", icon: PackageCheck },
+  { value: "return", label: "รับคืน", icon: Undo2 },
+  { value: "repair", label: "รับซ่อม", icon: Wrench },
+] as const;
+
+function ReceiveShell() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawTab = searchParams.get("tab");
+  const tab: ReceiveTab =
+    RECEIVE_TABS.some((t) => t.value === rawTab) ? (rawTab as ReceiveTab) : "receive";
+  const initialDueChip = searchParams.get("due") === "overdue" ? "overdue" : undefined;
+  const changeTab = (value: ReceiveTab) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", value);
+    router.replace(`/receive?${params.toString()}`, { scroll: false });
+  };
+  const { setDetail } = usePageHeader();
+  const activeLabel = RECEIVE_TABS.find((t) => t.value === tab)?.label;
+  useEffect(() => {
+    setDetail(activeLabel ?? null);
+    return () => setDetail(null);
+  }, [activeLabel, setDetail]);
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="shrink-0">
+        <div className="border-b -mx-4 px-4 sm:-mx-6 sm:px-6">
+          <nav className="flex gap-1 -mb-px overflow-x-auto">
+            {RECEIVE_TABS.map(({ value, label, icon: Icon }) => {
+              const isActive = tab === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => changeTab(value as ReceiveTab)}
+                  className={`relative flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {label}
+                  {isActive && (
+                    <motion.span
+                      layoutId="receive-tab"
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      className="absolute -bottom-[2px] left-0 right-0 h-0.5 bg-primary"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 pt-4">
+        {tab === "receive" ? (
+          <ReceiveContent />
+        ) : tab === "in_use" ? (
+          <SubItemStatusPanel status="IN_USE" actionLabel="รับเข้า" emptyText="ไม่มีพัสดุที่ตั้งใช้งานอยู่" />
+        ) : tab === "return" ? (
+          <ReturnPanel initialChip={initialDueChip} />
+        ) : (
+          <SubItemStatusPanel status="UNDER_REPAIR" actionLabel="รับซ่อม" emptyText="ไม่มีพัสดุที่ส่งซ่อมอยู่" />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -194,7 +274,7 @@ function ReceiveContent() {
     for (const row of rows) {
       if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.code}`); return; }
       const isConsumable = row.item.category.profile.dispenseType === "CONSUMABLE";
-      if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุ Lot Number: ${row.item.code}`); return; }
+      if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุเลขล็อต: ${row.item.code}`); return; }
     }
     setSubmitting(true);
     try {
@@ -246,12 +326,8 @@ function ReceiveContent() {
         )}
       >
         {/* Thumbnail */}
-        <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted flex items-center justify-center">
-          {thumb ? (
-            <img src={thumb} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
-          ) : (
-            <Package className="h-5 w-5 text-muted-foreground" />
-          )}
+        <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted">
+          <img src={thumb ?? pic(item.code, 200)} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-base leading-snug text-foreground">{item.name}</p>
@@ -470,11 +546,6 @@ function ReceiveContent() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="pt-4 pb-3 shrink-0">
-        <h1 className="text-xl font-bold">รับเข้าพัสดุ</h1>
-        <p className="text-sm text-muted-foreground">เลือกพัสดุที่มีอยู่หรือเพิ่มรายการใหม่เข้าระบบ</p>
-      </div>
 
       {/* ── Desktop: 2-column ──────────────────────────────── */}
       <div className="hidden md:grid md:grid-cols-2 md:grid-rows-1 md:gap-4 flex-1 min-h-0 pb-4">

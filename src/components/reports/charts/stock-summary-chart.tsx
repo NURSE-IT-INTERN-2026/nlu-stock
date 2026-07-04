@@ -37,10 +37,10 @@ export function StockSummaryChart({ data }: StockSummaryChartProps) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Stock by Category</CardTitle>
+          <CardTitle className="text-base font-semibold">สต๊อกแยกตามหมวดหมู่</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-8">No data</p>
+          <p className="text-sm text-muted-foreground text-center py-8">ไม่มีข้อมูล</p>
         </CardContent>
       </Card>
     );

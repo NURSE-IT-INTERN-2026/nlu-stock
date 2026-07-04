@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -78,7 +78,7 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
                     aria-label={`${r.item.code} ${r.item.name}, ${r.quantity} ชิ้น`}
                   >
                     <TableCell className="text-sm whitespace-nowrap text-muted-foreground">
-                      {format(new Date(r.dispensedAt), "dd MMM HH:mm")}
+                      {fmtDate(new Date(r.dispensedAt), "dd MMM HH:mm")}
                     </TableCell>
                     <TableCell className="text-sm">
                       <span className="font-mono text-foreground font-semibold underline decoration-primary/30 underline-offset-2">{r.item.code}</span>{" "}

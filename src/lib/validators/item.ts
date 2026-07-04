@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
-import type { ProfileLike } from "@/lib/category-profile";
-import { isItemTracked } from "@/lib/category-profile";
 
 const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
@@ -38,11 +36,6 @@ export const itemUpdateSchema = itemBaseSchema.partial();
 
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
 export type ItemUpdateInput = z.infer<typeof itemUpdateSchema>;
-
-// Profile → forced trackIndividually. ITEM → true, else false (OPTIONAL dead).
-export function forcedTrackIndividually(profile: ProfileLike | null | undefined): boolean {
-  return isItemTracked(profile);
-}
 
 export const stockAdjustSchema = z.object({
   shelfCount: z.number().int().min(0, "Shelf count cannot be negative").optional(),

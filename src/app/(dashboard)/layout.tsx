@@ -14,7 +14,7 @@ import { CartProvider } from "@/components/dispense/cart-context";
 import { PageHeaderProvider } from "@/components/layout/page-header-context";
 
 // Pages that manage their own height/scroll (app-shell style) — drop main's vertical padding so they fill the viewport.
-const FULL_BLEED = new Set(["/receive", "/items"]);
+const FULL_BLEED = new Set(["/receive", "/items", "/settings"]);
 
 const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
@@ -29,7 +29,7 @@ const pageTitles: Record<string, string> = {
 
 function getTitle(pathname: string) {
   if (pathname.startsWith("/items/") && pathname !== "/items") return "รายละเอียดพัสดุ";
-  if (pathname === "/dispense/cart") return "ยืนยันการเบิก";
+  if (pathname === "/cart") return "ยืนยันการเบิก";
   return pageTitles[pathname] || "NLU Stock";
 }
 
@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <AlertProvider>
       <CartProvider>
       <PageHeaderProvider>
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex h-screen overflow-hidden" style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "4rem" : "16rem" }}>
         <Sidebar
           user={user}
           collapsed={sidebarCollapsed}
@@ -91,7 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Header title={getTitle(pathname)} user={user} sidebarCollapsed={sidebarCollapsed} />
           <main className={cn(
             "flex-1 overflow-y-auto",
-            FULL_BLEED.has(pathname) ? "px-6 pt-3 pb-20 lg:px-6 lg:pb-3" : "p-6 pb-20 lg:pb-6",
+            FULL_BLEED.has(pathname) ? "px-4 sm:px-6 pb-[calc(3.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(4rem+env(safe-area-inset-bottom))] lg:px-6 lg:pb-3" : "px-4 sm:px-6 pb-[calc(3.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-6",
           )}>
             {children}
           </main>

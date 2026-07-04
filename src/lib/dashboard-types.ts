@@ -50,7 +50,7 @@ export const MonthlyDispenseDataSchema = z.object({
   total: z.number(),
 });
 
-// ── Array schemas (for API response validation) ──
+// ── Array schemas (used by use-dashboard-queries for runtime response validation) ──
 
 export const DispenseRecordArraySchema = z.array(DispenseRecordSchema);
 export const ReceiveRecordArraySchema = z.array(ReceiveRecordSchema);

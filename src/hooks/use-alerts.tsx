@@ -7,6 +7,8 @@ interface AlertCounts {
   lowStock: number;
   nearExpiry: number;
   overdueMaintenance: number;
+  overdueReturn: number;
+  damagedPending: number;
   total: number;
   totalItems: number;
   onLoan: number;
@@ -18,7 +20,7 @@ interface AlertState extends AlertCounts {
   loaded: boolean;
 }
 
-const defaultState: AlertState = { lowStock: 0, nearExpiry: 0, overdueMaintenance: 0, total: 0, totalItems: 0, onLoan: 0, loaded: false };
+const defaultState: AlertState = { lowStock: 0, nearExpiry: 0, overdueMaintenance: 0, overdueReturn: 0, damagedPending: 0, total: 0, totalItems: 0, onLoan: 0, loaded: false };
 
 const AlertContext = createContext<AlertState>(defaultState);
 
@@ -27,7 +29,7 @@ export function useAlerts() {
 }
 
 function countsEqual(a: AlertCounts, b: AlertCounts) {
-  return a.lowStock === b.lowStock && a.nearExpiry === b.nearExpiry && a.overdueMaintenance === b.overdueMaintenance && a.total === b.total && a.totalItems === b.totalItems && a.onLoan === b.onLoan;
+  return a.lowStock === b.lowStock && a.nearExpiry === b.nearExpiry && a.overdueMaintenance === b.overdueMaintenance && a.overdueReturn === b.overdueReturn && a.damagedPending === b.damagedPending && a.total === b.total && a.totalItems === b.totalItems && a.onLoan === b.onLoan;
 }
 
 export function AlertProvider({ children }: { children: ReactNode }) {
