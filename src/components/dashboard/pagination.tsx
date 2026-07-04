@@ -34,7 +34,7 @@ export function Pagination({ page, total, pageSize, onChange }: PaginationProps)
 
   return (
     <PaginationNav className="border-t pt-2 mt-2">
-      <PaginationContent className="sm:flex-wrap [&_button]:h-7 [&_button]:min-w-7 [&_button]:px-1.5 [&_button]:text-xs [&_a]:h-7 [&_a]:min-w-7 [&_a]:px-1.5 [&_a]:text-xs">
+      <PaginationContent className="sm:flex-wrap [&_button]:h-9 [&_button]:min-w-9 [&_button]:px-1.5 [&_button]:text-xs [&_a]:h-9 [&_a]:min-w-9 [&_a]:px-1.5 [&_a]:text-xs sm:[&_button]:h-7 sm:[&_button]:min-w-7 sm:[&_a]:h-7 sm:[&_a]:min-w-7">
         <PaginationItem>
           <PaginationLink
             href="#"

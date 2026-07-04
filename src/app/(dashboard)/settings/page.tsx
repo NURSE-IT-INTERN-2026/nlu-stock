@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
+import { usePageHeader } from "@/components/layout/page-header-context";
 import { CategoriesTab } from "@/components/settings/categories-tab";
 import { LocationsTab } from "@/components/settings/locations-tab";
 import { ItemsMasterTab } from "@/components/settings/items-master-tab";
@@ -27,16 +29,17 @@ export default function SettingsPage() {
   const changeTab = (value: string) =>
     router.replace(`/settings?tab=${value}`, { scroll: false });
 
-  return (
-    <div className="space-y-0">
-      {/* Page header */}
-      <div className="pb-6">
-        <h1 className="text-xl font-semibold tracking-tight">ตั้งค่าระบบ</h1>
-        <p className="text-sm text-muted-foreground mt-1">จัดการพัสดุ หมวดหมู่ สถานที่ และผู้ใช้งาน</p>
-      </div>
+  const activeTabLabel = TABS.find((t) => t.value === activeTab)?.label;
+  const { setDetail } = usePageHeader();
+  useEffect(() => {
+    setDetail(activeTabLabel ?? null);
+    return () => setDetail(null);
+  }, [activeTabLabel, setDetail]);
 
+  return (
+    <div className="flex flex-col h-full min-h-0">
       {/* Horizontal tabs */}
-      <div className="border-b mb-6">
+      <div className="border-b mb-4 sm:mb-6 -mx-4 px-4 sm:-mx-6 sm:px-6">
         <nav className="flex gap-1 -mb-px overflow-x-auto">
           {TABS.map(({ value, label, icon: Icon }) => {
             const isActive = activeTab === value;
@@ -67,9 +70,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Content area */}
-      <div>
+      <div className="flex-1 min-h-0">
         {TABS.map(({ value, component: Component }) => (
-          <div key={value} className={activeTab === value ? "" : "hidden"}>
+          <div key={value} className={`h-full min-h-0 ${activeTab === value ? "" : "hidden"}`}>
             <Component />
           </div>
         ))}

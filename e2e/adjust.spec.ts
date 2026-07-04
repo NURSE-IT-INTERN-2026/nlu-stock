@@ -43,7 +43,7 @@ test("status change moves a sub-item to a new status", async ({ request, uniqueC
 
 test("return checks a sub-item back in after dispense", async ({ request, uniqueCode }) => {
   const tracked = await makeTracked(request, uniqueCode);
-  // dispense first → CHECKED_OUT
+  // dispense first → ON_LOAN
   await request.post("/api/dispense", {
     data: { items: [{ itemId: tracked.id, subItemId: tracked.subId, quantity: 1 }] },
   });

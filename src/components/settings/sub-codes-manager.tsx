@@ -50,7 +50,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
       const data = await getSubItems(itemId);
       setSubItems(data as SubItemRecord[]);
     } catch {
-      toast.error("Failed to load sub-codes");
+      toast.error("โหลดหน่วยย่อยไม่สำเร็จ");
     }
     setLoading(false);
   }, [itemId]);
@@ -79,7 +79,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
         });
-        toast.success("Sub-code updated");
+        toast.success("แก้ไขหน่วยย่อยแล้ว");
       } else {
         await createSubItem(itemId, {
           subCode: editForm.subCode,
@@ -89,12 +89,12 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
         });
-        toast.success("Sub-code created");
+        toast.success("เพิ่มหน่วยย่อยแล้ว");
       }
       setEditDialogOpen(false);
       fetchSubItems();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save");
+      toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     }
   }
 
@@ -199,7 +199,8 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="AVAILABLE">Available</SelectItem>
-                  <SelectItem value="CHECKED_OUT">Checked Out</SelectItem>
+                  <SelectItem value="ON_LOAN">Checked Out</SelectItem>
+                  <SelectItem value="IN_USE">In Use</SelectItem>
                   <SelectItem value="DAMAGED">Damaged</SelectItem>
                   <SelectItem value="UNDER_REPAIR">Under Repair</SelectItem>
                   <SelectItem value="LOST">Lost</SelectItem>

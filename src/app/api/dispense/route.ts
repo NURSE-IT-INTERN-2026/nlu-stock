@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { dispenseRequestSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 
 export async function POST(req: NextRequest) {
-  const session = await getSessionUser();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "INSTRUCTOR") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAuth(req);
+  if (auth.denied) return auth.denied;
+  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const body = await req.json();
   const parsed = dispenseRequestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { items, usageType, usageNote, notes } = parsed.data;
+  const { items, usageType, usageNote, notes, recipient, dueAt } = parsed.data;
+  const inRoom = parsed.data.loanType === "INUSE"; // trackIndividually → IN_USE instead of ON_LOAN
+
+  // One loanGroupId per borrow event → groups all lines for the return screen.
+  const loanGroupId = randomUUID();
+  const dueAtDate = inRoom ? null : dueAt ? new Date(dueAt) : null; // IN_USE: open-ended, no due date
 
   // Dedup check: no duplicate itemId+lotId+subItemId
   const keys = items.map((i) => `${i.itemId}-${i.lotId ?? ""}-${i.subItemId ?? ""}`);
@@ -40,6 +46,11 @@ export async function POST(req: NextRequest) {
 
         if (!item) throw new Error(`Item ${di.itemId} not found`);
 
+        // Guard: tracked durable must resolve to a SubItem — never dispense as aggregate.
+        if (item.trackIndividually && !di.subItemId) {
+          throw new Error(`${item.code}: พัสดุติดตามรายชิ้นต้องเลือก SubItem ก่อนเบิก (ติดต่อผู้ดูแลเพิ่ม SubItem)`);
+        }
+
         // Validate quantity vs available
         if (item.trackIndividually && di.subItemId) {
           const sub = item.subItems[0];
@@ -62,28 +73,32 @@ export async function POST(req: NextRequest) {
             quantity: di.quantity,
             usageType: usageType ?? undefined,
             usageNote: usageNote ?? undefined,
-            staffId: session.userId,
+            staffId: auth.user.userId,
             notes: notes ?? undefined,
+            recipient: recipient ?? undefined,
+            loanGroupId,
+            dueAt: dueAtDate ?? undefined,
           },
         });
         ids.push(record.id);
 
         // Apply stock effects
         if (item.trackIndividually && di.subItemId) {
-          // Tracked durable: update sub-item status
+          // Tracked durable: update sub-item status (ยืม ON_LOAN / ตั้งใช้ในห้อง IN_USE)
+          const newStatus = inRoom ? ItemStatus.IN_USE : ItemStatus.ON_LOAN;
           const sub = item.subItems[0];
           await tx.subItem.update({
             where: { id: di.subItemId },
-            data: { status: ItemStatus.CHECKED_OUT },
+            data: { status: newStatus },
           });
           await tx.itemStatusLog.create({
             data: {
               itemId: di.itemId,
               subItemId: di.subItemId,
               previousStatus: sub.status,
-              newStatus: ItemStatus.CHECKED_OUT,
+              newStatus,
               reason: "Dispensed",
-              changedBy: session.userId,
+              changedBy: auth.user.userId,
             },
           });
           // Tracked durable: counts derive from subItem statuses.
@@ -106,7 +121,7 @@ export async function POST(req: NextRequest) {
             throw new Error(`${item.code} available quantity underflow (counter out of sync with lots)`);
           }
         } else {
-          // Non-tracked item: deduct item availableQty (optimistic lock — no negative)
+          // Non-tracked item (COUNT): deduct item availableQty (optimistic lock — no negative)
           const updated = await tx.item.updateMany({
             where: { id: di.itemId, availableQty: { gte: di.quantity } },
             data: { availableQty: { decrement: di.quantity } },
@@ -114,6 +129,8 @@ export async function POST(req: NextRequest) {
           if (updated.count === 0) {
             throw new Error(`${item.code} has only ${item.availableQty} available, requested ${di.quantity}`);
           }
+          // COUNT items: available < total now means units are out on loan → derive ON_LOAN.
+          await recomputeItemCounts(tx, di.itemId);
         }
       }
 
@@ -122,8 +139,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, count: recordIds.length, ids: recordIds }, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Dispense failed";
-    console.error("Dispense error:", message);
-    return NextResponse.json({ error: message }, { status: 400 });
+    return handleError(err, "Dispense failed");
   }
 }

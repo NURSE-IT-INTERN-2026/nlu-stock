@@ -17,7 +17,7 @@ import {
 import { FileUpload } from "@/components/shared/file-upload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ADJUSTMENT_REASON_OPTIONS, TRACKED_ADJUST_STATUS_OPTIONS, STATUS_LABELS, STATUS_PILLS } from "@/lib/constants";
+import { ADJUSTMENT_REASON_OPTIONS, TRACKED_ADJUST_STATUS_OPTIONS, STATUS_LABELS, STATUS_PILLS, formatSubCode } from "@/lib/constants";
 import { adjustStock, bulkUpdateSubItemStatus } from "@/lib/api";
 
 export interface AdjustLot {
@@ -37,6 +37,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemId: string;
+  itemCode?: string;
   availableQty: number;
   totalQty: number;
   checkedOutCount: number;
@@ -45,12 +46,17 @@ interface Props {
   /** Tracked (per-piece) item: dialog switches to per-piece status mode. */
   trackIndividually?: boolean;
   subItems?: AdjustSubItem[];
+  /** When set, dialog locks to this single sub-item (no picker). */
+  fixedSubItemId?: string;
   onSuccess: () => void;
 }
 
-export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty, totalQty, checkedOutCount, lots, trackIndividually, subItems, onSuccess }: Props) {
+export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, availableQty, totalQty, checkedOutCount, lots, trackIndividually, subItems, fixedSubItemId, onSuccess }: Props) {
+  // Full sub-code shown to staff (e.g. NLU-KRU-001-C01); falls back to raw when no itemCode.
+  const fmtCode = (code: string) => formatSubCode(itemCode ?? "", code);
   const lotMode = !!lots && lots.length > 0;
   const trackedMode = !!trackIndividually;
+  const fixedMode = trackedMode && !!fixedSubItemId;
 
   // Count-mode state (lot / shelf)
   const [selectedLotId, setSelectedLotId] = useState("");
@@ -79,7 +85,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
   // Pre-select the first subItem when opening in tracked mode (only on open
   // transition, so clearing the selection isn't clobbered back to the first piece).
   useEffect(() => {
-    if (open && trackedMode && subItems && subItems.length > 0) {
+    if (open && trackedMode && !fixedMode && subItems && subItems.length > 0) {
       setSelectedSubIds(new Set([subItems[0].id]));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,10 +104,12 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
 
   const noChange = lotMode ? safe === lotPrev : safe !== null && newTotal !== null && newTotal === totalQty;
 
+  const effectiveSubIds = fixedMode && fixedSubItemId ? new Set([fixedSubItemId]) : selectedSubIds;
+
   const filteredSubs = (subItems ?? []).filter((s) =>
-    s.subCode.toLowerCase().includes(subSearch.trim().toLowerCase()),
+    fmtCode(s.subCode).toLowerCase().includes(subSearch.trim().toLowerCase()),
   );
-  const selectedSubs = (subItems ?? []).filter((s) => selectedSubIds.has(s.id));
+  const selectedSubs = (subItems ?? []).filter((s) => effectiveSubIds.has(s.id));
 
   function toggleSub(id: string) {
     setSelectedSubIds((prev) => {
@@ -113,7 +121,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
 
   async function handleSave() {
     if (trackedMode) {
-      if (selectedSubIds.size === 0 || !targetStatus) return;
+      if (effectiveSubIds.size === 0 || !targetStatus) return;
     } else {
       if (safe === null || !reason) return;
       if (lotMode && !selectedLotId) return;
@@ -122,7 +130,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
     try {
       if (trackedMode) {
         await bulkUpdateSubItemStatus(itemId, {
-          subItemIds: Array.from(selectedSubIds),
+          subItemIds: Array.from(effectiveSubIds),
           newStatus: targetStatus,
           notes: notes || null,
         });
@@ -144,11 +152,11 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
 
   const title = trackedMode ? "ปรับสถานะพัสดุรายชิ้น" : lotMode ? "แก้ยอด Lot" : "ปรับสต็อก";
   const subtitle = trackedMode
-    ? "เลือกชิ้นที่หาย/พัง/พ้นสภาพ แล้วเปลี่ยนสถานะ"
+    ? "เลือกชิ้นที่หาย/พ้นสภาพ แล้วเปลี่ยนสถานะ (สูญหาย/ตัดจำหน่าย)"
     : lotMode ? "ตรวจนับยอดจริงของ lot แล้วบันทึก" : "ตรวจนับของบนชั้นวางแล้วบันทึก";
 
   const canSave = trackedMode
-    ? selectedSubIds.size > 0 && !!targetStatus
+    ? effectiveSubIds.size > 0 && !!targetStatus
     : safe !== null && !!reason && (!lotMode || !!selectedLotId);
   const positive = lotMode ? safe! > lotPrev : newTotal! > totalQty;
 
@@ -182,6 +190,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
           {trackedMode ? (
             <>
               {/* Tracked mode: per-piece status */}
+              {!fixedMode && (
               <div className="space-y-2">
                 <Label>เลือกชิ้น <span className="text-destructive">*</span></Label>
                 <Popover open={subOpen} onOpenChange={setSubOpen}>
@@ -233,7 +242,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
                             )}
                           >
                             <Checkbox checked={selected} tabIndex={-1} className="pointer-events-none" />
-                            <span className="font-mono text-foreground">{s.subCode}</span>
+                            <span className="font-mono text-foreground">{fmtCode(s.subCode)}</span>
                             <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[10px]", STATUS_PILLS[s.status] ?? "text-muted-foreground border-border")}>
                               {STATUS_LABELS[s.status] ?? s.status}
                             </span>
@@ -253,12 +262,12 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
                           STATUS_PILLS[s.status] ?? "text-muted-foreground border-border",
                         )}
                       >
-                        <span className="font-mono">{s.subCode}</span>
+                        <span className="font-mono">{fmtCode(s.subCode)}</span>
                         <button
                           type="button"
                           onClick={() => toggleSub(s.id)}
                           className="rounded-full hover:bg-foreground/10 px-0.5"
-                          aria-label={`เอา ${s.subCode} ออก`}
+                          aria-label={`เอา ${fmtCode(s.subCode)} ออก`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -267,6 +276,19 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
                   </div>
                 )}
               </div>
+              )}
+
+              {fixedMode && selectedSubs[0] && (
+                <div className="space-y-2">
+                  <Label>ชิ้นที่ปรับ</Label>
+                  <div className="flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 text-sm">
+                    <span className="font-mono text-foreground">{fmtCode(selectedSubs[0].subCode)}</span>
+                    <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[10px]", STATUS_PILLS[selectedSubs[0].status] ?? "text-muted-foreground border-border")}>
+                      {STATUS_LABELS[selectedSubs[0].status] ?? selectedSubs[0].status}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>เปลี่ยนเป็นสถานะ <span className="text-destructive">*</span></Label>
@@ -278,9 +300,9 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedSubIds.size > 0 && targetStatus && (
+                {effectiveSubIds.size > 0 && targetStatus && (
                   <p className="text-sm text-muted-foreground">
-                    จะเปลี่ยน <span className="font-medium text-foreground">{selectedSubIds.size}</span> ชิ้น → <span className="font-medium text-foreground">{STATUS_LABELS[targetStatus]}</span>
+                    จะเปลี่ยน <span className="font-medium text-foreground">{effectiveSubIds.size}</span> ชิ้น → <span className="font-medium text-foreground">{STATUS_LABELS[targetStatus]}</span>
                   </p>
                 )}
               </div>

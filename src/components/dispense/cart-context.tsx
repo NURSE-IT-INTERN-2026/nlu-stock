@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { CartItem } from "@/lib/validators/dispense";
 
 interface CartState {
@@ -15,8 +15,32 @@ interface CartState {
 
 const CartContext = createContext<CartState | null>(null);
 
+const STORAGE_KEY = "dispense-cart";
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  // hydrated = we've loaded from localStorage; until then the persist effect stays silent
+  // so the initial [] never overwrites the saved cart on mount (StrictMode-safe).
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setItems(JSON.parse(raw));
+    } catch (e) {
+      console.error("[cart] load failed", e);
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {
+      console.error("[cart] persist failed", e);
+    }
+  }, [items, hydrated]);
 
   const addItem = useCallback((item: CartItem) => {
     setItems((prev) => {
@@ -110,7 +134,7 @@ export interface DispenseableItem {
   availableQty: number;
   location: { building: string; floor: string; room: string; detail: string | null } | null;
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
-  subItems: { id: string; subCode: string }[];
+  subItems: { id: string; subCode: string; condition?: string | null }[];
 }
 
 export type AddToCartResult =
@@ -172,21 +196,24 @@ export function buildCartItem(item: DispenseableItem, usedSubIds: Set<string | n
         subItemId: nextSub.id,
         subCode: nextSub.subCode,
         lots: [],
-        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode })),
+        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode, condition: s.condition ?? null })),
       },
     };
   }
 
+  // trackIndividually with no usable SubItem → never fall back to aggregate dispense
+  // (would create a subItemId=null record with no identity — the 9/9 bug).
+  if (item.trackIndividually) return { ok: false, reason: "no-sub" };
+
   if (item.availableQty <= 0) return { ok: false, reason: "no-stock" };
 
-  const hasSingleSubItem = item.trackIndividually && item.subItems.length === 1;
   return {
     ok: true,
     cartItem: {
       ...base,
       trackIndividually: false,
-      subItemId: hasSingleSubItem ? item.subItems[0].id : null,
-      subCode: hasSingleSubItem ? item.subItems[0].subCode : null,
+      subItemId: null,
+      subCode: null,
       lots: [],
       subItems: [],
     },

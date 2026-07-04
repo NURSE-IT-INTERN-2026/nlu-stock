@@ -13,7 +13,7 @@ interface FileUploadProps {
   variant?: "button" | "zone";
 }
 
-export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "Upload File", variant = "button" }: FileUploadProps) {
+export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "อัปโหลดไฟล์", variant = "button" }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -135,7 +135,7 @@ export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "
         <input ref={inputRef} type="file" accept={accept} onChange={handleFileChange} className="hidden" disabled={uploading} />
         <Button variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
           {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-          {uploading ? "Uploading..." : label}
+          {uploading ? "กำลังอัปโหลด..." : label}
         </Button>
       </div>
     </div>

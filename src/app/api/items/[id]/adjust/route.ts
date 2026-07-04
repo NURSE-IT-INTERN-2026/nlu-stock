@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { stockAdjustSchema } from "@/lib/validators";
+import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
       await tx.item.update({ where: { id }, data: { availableQty: newAvailable } });
+      await recomputeItemCounts(tx, id);
       await tx.itemStatusLog.create({
         data: {
           itemId: id,
@@ -59,10 +61,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ── Item-level shelf count (durables / coarse consumable).
-    // For tracked items: count CHECKED_OUT sub-items (dispense changes status, not qty)
+    // For tracked items: count ON_LOAN sub-items (dispense changes status, not qty)
     // For non-tracked items: diff between total and available
     const checkedOut = item.trackIndividually
-      ? await tx.subItem.count({ where: { itemId: id, status: ItemStatus.CHECKED_OUT } })
+      ? await tx.subItem.count({ where: { itemId: id, status: ItemStatus.ON_LOAN } })
       : item.totalQty - item.availableQty;
 
     const shelfCount = data.shelfCount ?? 0;
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         totalQty: newTotal,
       },
     });
+    await recomputeItemCounts(tx, id);
 
     await tx.itemStatusLog.create({
       data: {

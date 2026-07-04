@@ -6,7 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart } from "./charts/annual-cost-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { getReport } from "@/lib/api";
 
 const filterConfig: FilterConfig = { year: true, categories: true };
@@ -43,7 +43,7 @@ const purchaseColumns: Column<PurchaseRow>[] = [
   {
     key: "purchaseDate",
     header: "Date",
-    render: (r) => format(new Date(r.purchaseDate), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.purchaseDate), "dd MMM yyyy"),
   },
 ];
 
@@ -59,7 +59,7 @@ const repairColumns: Column<RepairRow>[] = [
   {
     key: "performedAt",
     header: "Date",
-    render: (r) => format(new Date(r.performedAt), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.performedAt), "dd MMM yyyy"),
   },
   { key: "performer", header: "By" },
 ];

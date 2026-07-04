@@ -8,20 +8,40 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { importRows } from "@/lib/api";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type ImportType = "items" | "categories" | "locations" | "sub-items";
+type ImportType = "items-kru" | "items-bat" | "items-dur" | "items-con" | "items-kit" | "categories" | "locations" | "sub-items" | "kit-bom";
 
 const COLUMN_REF: Record<ImportType, { required: string[]; optional: string[]; sample: Record<string, string> }> = {
-  items: {
+  "items-kru": {
     required: ["code", "name", "category"],
-    optional: ["nameEn", "trackIndividually", "issueUnit", "minThreshold", "building", "floor", "room", "detail", "description"],
-    sample: { code: "NLU-CON-001", name: "ปากกาลูกลื่น", category: "CON", issueUnit: "ชิ้น", minThreshold: "10" },
+    optional: ["nameEn", "unit", "building", "floor", "room", "detail", "model", "purchasePrice", "purchaseDate", "vendorCompany", "vendorContact", "vendorPhone", "warrantyMonths", "description"],
+    sample: { code: "NLU-KRU-002-001", name: "iPad", category: "อุปกรณ์อิเล็กทรอนิกส์", unit: "เครื่อง", model: "iPad Air 11" },
+  },
+  "items-bat": {
+    required: ["code", "name", "category"],
+    optional: ["nameEn", "unit", "building", "floor", "room", "detail", "setSize", "description"],
+    sample: { code: "NLU-BAT-013-001-S10-C01", name: "คู่มือพัฒนาการ", category: "หนังสือ", unit: "เล่ม", setSize: "10" },
+  },
+  "items-dur": {
+    required: ["code", "name", "category"],
+    optional: ["nameEn", "unit", "qty", "building", "floor", "room", "detail", "description"],
+    sample: { code: "NLU-DUR-001", name: "ถาดพลาสติก", category: "วัสดุคงทน", unit: "ใบ", qty: "20" },
+  },
+  "items-con": {
+    required: ["code", "name", "category"],
+    optional: ["nameEn", "unit", "qty", "building", "floor", "room", "detail", "description"],
+    sample: { code: "NLU-CON-001", name: "เครื่องดื่มหัวปลี", category: "วัสดุสิ้นเปลือง", unit: "กล่อง", qty: "504" },
+  },
+  "items-kit": {
+    required: ["code", "name", "category"],
+    optional: ["nameEn", "unit", "qty", "description"],
+    sample: { code: "NLU-KIT-001", name: "ชุดอุปกรณ์สอนดูแลเด็กทารก", category: "อุปกรณ์ประกอบวิชา", unit: "ชุด", qty: "35" },
   },
   categories: {
     required: ["name", "category"],
@@ -35,9 +55,30 @@ const COLUMN_REF: Record<ImportType, { required: string[]; optional: string[]; s
   },
   "sub-items": {
     required: ["itemCode", "subCode"],
-    optional: ["condition", "notes"],
-    sample: { itemCode: "ITM001", subCode: "ITM001-01", condition: "Good", notes: "" },
+    optional: ["serialNumber", "condition", "notes"],
+    sample: { itemCode: "NLU-KRU-002-001", subCode: "NLU-KRU-002-001-C01", serialNumber: "SN-001", condition: "NEW", notes: "" },
   },
+  "kit-bom": {
+    required: ["kitCode", "name"],
+    optional: ["qty", "unit", "sortOrder"],
+    sample: { kitCode: "NLU-KIT-001", name: "ตุ๊กตาทารก", qty: "1", unit: "ตัว", sortOrder: "1" },
+  },
+};
+
+const ITEM_IMPORT_TYPES: ImportType[] = ["items-kru", "items-bat", "items-dur", "items-con", "items-kit"];
+const REF_IMPORT_TYPES: ImportType[] = ["categories", "locations", "sub-items", "kit-bom"];
+
+// Base UI Select shows the raw id in the trigger unless SelectValue has explicit children.
+const IMPORT_LABELS: Record<ImportType, string> = {
+  "items-kru": "พัสดุ: ครุภัณฑ์/อิเล็กทรอนิกส์",
+  "items-bat": "พัสดุ: หนังสือ/ของเล่น",
+  "items-dur": "พัสดุ: วัสดุคงทน",
+  "items-con": "พัสดุ: วัสดุสิ้นเปลือง",
+  "items-kit": "พัสดุ: อุปกรณ์ประกอบวิชา",
+  "categories": "หมวดหมู่",
+  "locations": "สถานที่",
+  "sub-items": "รหัสย่อย",
+  "kit-bom": "ส่วนประกอบชุด (BOM)",
 };
 
 function parseCSV(text: string): Record<string, string>[] {
@@ -53,7 +94,7 @@ function parseCSV(text: string): Record<string, string>[] {
 }
 
 export function ImportTab() {
-  const [importType, setImportType] = useState<ImportType>("items");
+  const [importType, setImportType] = useState<ImportType>("items-con");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Record<string, string>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -78,7 +119,7 @@ export function ImportTab() {
   async function downloadTemplate() {
     try {
       const res = await fetch(`/api/settings/import?type=${importType}`);
-      if (!res.ok) { toast.error("Failed to download template"); return; }
+      if (!res.ok) { toast.error("ดาวน์โหลดเทมเพลตไม่สำเร็จ"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -87,7 +128,7 @@ export function ImportTab() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Failed to download template");
+      toast.error("ดาวน์โหลดเทมเพลตไม่สำเร็จ");
     }
   }
 
@@ -99,7 +140,7 @@ export function ImportTab() {
     const text = await file.text();
     const rows = parseCSV(text);
     if (rows.length === 0) {
-      toast.error("No data rows found");
+      toast.error("ไม่พบข้อมูลในไฟล์");
       setImporting(false);
       return;
     }
@@ -107,15 +148,15 @@ export function ImportTab() {
     try {
       const data = await importRows(importType, rows);
       setResult(data as { imported: number; errors: { row: number; message: string }[] });
-      toast.success(`Imported ${data.imported} rows`);
+      toast.success(`นำเข้าแล้ว ${data.imported} รายการ`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import failed");
+      toast.error(e instanceof Error ? e.message : "นำเข้าไม่สำเร็จ");
     }
     setImporting(false);
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 h-full min-h-0 overflow-y-auto">
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -126,12 +167,21 @@ export function ImportTab() {
             <div>
               <Label>ประเภทข้อมูล</Label>
               <Select value={importType} onValueChange={(v) => { setImportType(v as ImportType); setPreview([]); setFile(null); setResult(null); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue>{IMPORT_LABELS[importType]}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="items">พัสดุ</SelectItem>
-                  <SelectItem value="categories">หมวดหมู่</SelectItem>
-                  <SelectItem value="locations">สถานที่</SelectItem>
-                  <SelectItem value="sub-items">รหัสย่อย</SelectItem>
+                  <SelectGroup>
+                    <SelectLabel>พัสดุ</SelectLabel>
+                    {ITEM_IMPORT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{IMPORT_LABELS[t]}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel>อ้างอิง / อื่นๆ</SelectLabel>
+                    {REF_IMPORT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{IMPORT_LABELS[t]}</SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>

@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Plus, Minus, Search, QrCode, Package, X } from "lucide-react";
+import { Plus, Minus, Search, QrCode, X, Dices } from "lucide-react";
+import { pic } from "@/lib/image";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
@@ -50,14 +51,14 @@ function CardEditableQty({ value, max, onChange }: {
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        className="w-6 h-6 text-center text-xs font-semibold tabular-nums bg-background border rounded-full px-0 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        className="w-9 h-9 text-center text-sm font-semibold tabular-nums bg-background border rounded-full px-0 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
       />
     );
   }
 
   return (
     <button
-      className="w-5 text-center text-xs font-semibold tabular-nums"
+      className="min-w-8 h-9 text-center text-sm font-semibold tabular-nums"
       onClick={(e) => {
         e.stopPropagation();
         setDraft(String(value));
@@ -79,7 +80,7 @@ interface SearchItem {
   availableQty: number;
   issueUnit: { id: string; name: string };
   trackIndividually: boolean;
-  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; color: string } };
+  category: { name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; color: string } };
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;
@@ -188,7 +189,7 @@ function DispenseContent() {
     setPage(p);
   };
 
-  const handleAdd = (item: SearchItem) => {
+  const handleAdd = (item: SearchItem): boolean => {
     const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
     const result = buildCartItem(
       {
@@ -205,15 +206,45 @@ function DispenseContent() {
           ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
           : null,
         lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
-        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode })),
+        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode, condition: s.condition })),
       },
       usedSubIds,
     );
     if (!result.ok) {
       toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
-      return;
+      return false;
     }
     addItem(result.cartItem);
+    return true;
+  };
+
+  // ponytail: dev test helper — randomly add up to 10 items from the current list into the
+  // cart, guaranteeing ≥1 item per profile (ประเภท) so every type is covered.
+  const handleAutoAdd = () => {
+    const pool = items.filter((it) => (it.trackIndividually ? it.subItems.length > 0 : it.availableQty > 0));
+    const byProfile = new Map<string, SearchItem[]>();
+    for (const it of pool) {
+      const key = it.category.profile.name;
+      if (!byProfile.has(key)) byProfile.set(key, []);
+      byProfile.get(key)!.push(it);
+    }
+    const pickRand = (arr: SearchItem[]) => arr[Math.floor(Math.random() * arr.length)];
+
+    // 1 random per profile first → covers every type.
+    const picks: SearchItem[] = [];
+    for (const list of byProfile.values()) picks.push(pickRand(list));
+
+    // fill the rest up to 10 from the remaining pool.
+    const pickedIds = new Set(picks.map((p) => p.id));
+    const rest = pool.filter((it) => !pickedIds.has(it.id)).sort(() => Math.random() - 0.5);
+    for (const it of rest) {
+      if (picks.length >= 10) break;
+      picks.push(it);
+    }
+    picks.sort(() => Math.random() - 0.5);
+
+    const added = picks.filter(handleAdd).length;
+    if (added > 0) toast.success(`สุ่มเพิ่ม ${added} รายการเข้าตะกร้า (ครบ ${byProfile.size} ประเภท)`);
   };
 
   const handleQrScan = async (code: string) => {
@@ -240,10 +271,10 @@ return (
       <div className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4 space-y-3 mb-4 shrink-0">
         {/* Row 1: search + scan */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-0 basis-full sm:basis-auto">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
-              placeholder="ค้นหารหัส, ชื่อพัสดุ, หรือสแกน QR…"
+              placeholder="ค้นหารหัส / ชื่อพัสดุ…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="h-11 sm:h-12 pl-9 sm:pl-10 pr-9 text-base rounded-xl"
@@ -254,9 +285,21 @@ return (
               </button>
             )}
           </div>
-          <Button type="button" onClick={() => setScannerOpen(true)} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
+          <Button type="button" onClick={() => setScannerOpen(true)} aria-label="สแกน QR" className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center">
             <QrCode className="size-5" />
-            <span className="font-medium">สแกน QR</span>
+            <span className="font-medium hidden sm:inline">สแกน QR</span>
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleAutoAdd}
+            disabled={items.length === 0}
+            aria-label="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า"
+            title="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า (≤10 ชิ้น, ครบทุกประเภท)"
+            className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center"
+          >
+            <Dices className="size-5" />
+            <span className="font-medium hidden sm:inline">สุ่มเพิ่ม</span>
           </Button>
         </div>
 
@@ -290,7 +333,7 @@ return (
             {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
           </p>
         ) : (
-          <div className="grid grid-cols-1 min-[390px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             {items.map((item) => {
               const inCart = getItemQty(item.id);
               const cartEntry = cartItems.find((c) => c.itemId === item.id);
@@ -306,17 +349,8 @@ return (
                   className="flex flex-col flex-1 min-w-0 gap-3 text-left"
                 >
                   {/* Cover image — rounded square, full width */}
-                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <Package className="h-10 w-10 text-muted-foreground/50" />
-                    )}
+                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted">
+                    <img src={item.imageUrl ?? pic(item.code)} alt={item.name} loading="lazy" className="h-full w-full object-cover" />
                   </div>
 
                   {/* Content */}
@@ -346,7 +380,7 @@ return (
                     {inCart > 0 && cartEntry ? (
                       <div className="animate-cart-pop flex w-full items-center justify-between gap-0.5 bg-background border rounded-full px-0.5">
                         <button
-                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90"
+                          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (cartEntry.quantity <= 1) {
@@ -366,7 +400,7 @@ return (
                           }}
                         />
                         <button
-                          className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90 disabled:opacity-30"
+                          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90 disabled:opacity-30"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (atMax) return;
@@ -383,7 +417,7 @@ return (
                       </div>
                     ) : (
                       <button
-                        className="h-8 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors active:scale-95 disabled:opacity-30"
+                        className="h-9 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors active:scale-95 disabled:opacity-30"
                         onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
                         disabled={!item.trackIndividually && item.availableQty <= 0}
                       >

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { requireAuth, forbidden } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
@@ -21,9 +21,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSessionUser();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role === "INSTRUCTOR") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAuth(req);
+  if (auth.denied) return auth.denied;
+  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id: itemId } = await params;
   const body = await req.json();
@@ -40,7 +40,7 @@ export async function POST(
           type: data.type,
           result: data.result,
           performedAt: data.performedAt,
-          performedBy: session.userId,
+          performedBy: auth.user.userId,
           issue: data.issue ?? undefined,
           description: data.description ?? undefined,
           cost: data.cost ?? undefined,
@@ -62,10 +62,9 @@ export async function POST(
               previousStatus: sub.status,
               newStatus: ItemStatus.AVAILABLE,
               reason: "Maintenance completed",
-              changedBy: session.userId,
+              changedBy: auth.user.userId,
             },
           });
-          await recomputeItemCounts(tx, itemId);
         }
       }
 
@@ -74,9 +73,11 @@ export async function POST(
         data: {
           lastMaintenanceDate: data.performedAt,
           ...(data.nextMaintenanceAt && { nextMaintenanceDate: data.nextMaintenanceAt }),
-          ...(data.result === "AVAILABLE" && { status: "AVAILABLE" }),
         },
       });
+
+      // Derive item status from current state (tracked: sub-items; COUNT: out-on-loan qty).
+      await recomputeItemCounts(tx, itemId);
 
       return rec;
     });

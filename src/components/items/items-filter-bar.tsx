@@ -63,6 +63,8 @@ export interface ItemsFilterBarProps {
   hideScan?: boolean;
   // When provided, renders a "ยืมอยู่" toggle (onLoan lives on /items, not /alerts).
   onLoanCount?: number;
+  // Optional trailing action rendered next to the scan button (e.g. "ประกอบชุด").
+  trailingAction?: React.ReactNode;
 }
 
 const STATUS_KEYS = Object.keys(STATUS_LABELS);
@@ -74,7 +76,7 @@ const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpi
 ];
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount,
+  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount, trailingAction,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
@@ -90,15 +92,15 @@ export function ItemsFilterBar({
   const update = (patch: Partial<FilterState>) => onChange({ ...value, ...patch });
 
   return (
-    <div className={cn("rounded-2xl border border-border/60 bg-card p-3 sm:p-4 space-y-3", className)}>
-      {/* Row 1: search + scan — stack on narrow screens so the search bar keeps full width */}
+    <div className={cn("rounded-2xl border border-border/60 bg-card p-2.5 sm:p-4 space-y-2 sm:space-y-3", className)}>
+      {/* Row 1: search + scan — search fills the row, scan is icon-only on mobile to save vertical space */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-0 basis-full sm:basis-auto">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             value={value.query}
             onChange={(e) => update({ query: e.target.value })}
-            placeholder="ค้นหารหัส, ชื่อพัสดุ, หรือสแกน QR…"
+            placeholder="ค้นหารหัส / ชื่อพัสดุ…"
             className="h-11 sm:h-12 pl-9 sm:pl-10 pr-9 text-base rounded-xl"
           />
           {value.query && (
@@ -113,10 +115,13 @@ export function ItemsFilterBar({
           )}
         </div>
         {!hideScan && (
-          <Button type="button" onClick={onScanQR} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 shrink-0 w-full sm:w-auto justify-center">
+          <Button type="button" onClick={onScanQR} aria-label="สแกน QR" className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center">
             <QrCode className="size-5" />
-            <span className="font-medium">สแกน QR</span>
+            <span className="font-medium hidden sm:inline">สแกน QR</span>
           </Button>
+        )}
+        {trailingAction && (
+          <div className="w-full sm:w-auto shrink-0">{trailingAction}</div>
         )}
       </div>
 

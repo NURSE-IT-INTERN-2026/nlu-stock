@@ -1,29 +1,28 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import {
-  Package, ShoppingCart, BookOpen, AlertTriangle, Wallet,
-  Wrench, CalendarClock, History,
+  Package, ShoppingCart, BookOpen, Wallet,
+  Wrench, History, ArrowDownToLine,
 } from "lucide-react";
 import { StockSummaryTab } from "@/components/reports/stock-summary-tab";
 import { DispenseHistoryTab } from "@/components/reports/dispense-history-tab";
+import { ReceiveHistoryTab } from "@/components/reports/receive-history-tab";
 import { UsageBySubjectTab } from "@/components/reports/usage-by-subject-tab";
-import { NearExpiryLowStockTab } from "@/components/reports/near-expiry-low-stock-tab";
 import { AnnualCostTab } from "@/components/reports/annual-cost-tab";
 import { DamagedAssetsTab } from "@/components/reports/damaged-assets-tab";
-import { MaintenanceScheduleTab } from "@/components/reports/maintenance-schedule-tab";
 import { MaintenanceHistoryTab } from "@/components/reports/maintenance-history-tab";
+import { usePageHeader } from "@/components/layout/page-header-context";
 
 const TABS = [
   { value: "stock-summary", label: "สรุปสต็อก", icon: Package, component: StockSummaryTab },
   { value: "dispense-history", label: "ประวัติการเบิก", icon: ShoppingCart, component: DispenseHistoryTab },
+  { value: "receive-history", label: "ประวัติรับเข้า", icon: ArrowDownToLine, component: ReceiveHistoryTab },
   { value: "usage-by-subject", label: "การใช้งานรายวิชา", icon: BookOpen, component: UsageBySubjectTab },
-  { value: "near-expiry-low-stock", label: "ใกล้หมดอายุ / สต็อกต่ำ", icon: AlertTriangle, component: NearExpiryLowStockTab },
   { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", icon: Wallet, component: AnnualCostTab },
   { value: "damaged-assets", label: "พัสดุชำรุด", icon: Wrench, component: DamagedAssetsTab },
-  { value: "maintenance-schedule", label: "ตารางบำรุงรักษา", icon: CalendarClock, component: MaintenanceScheduleTab },
   { value: "maintenance-history", label: "ประวัติบำรุงรักษา", icon: History, component: MaintenanceHistoryTab },
 ] as const;
 
@@ -42,17 +41,19 @@ function ReportsContent() {
   const [activeTab, setActiveTab] = useState(
     tabParam && validTabs.includes(tabParam) ? tabParam : "stock-summary",
   );
+  const { setDetail } = usePageHeader();
+
+  // Reflect the active tab in the header breadcrumb ("รายงาน & สถิติ › <tab>").
+  const activeTabLabel = TABS.find((t) => t.value === activeTab)?.label ?? "สรุปสต็อก";
+  useEffect(() => {
+    setDetail(activeTabLabel);
+    return () => setDetail(null);
+  }, [activeTabLabel, setDetail]);
 
   return (
     <div className="space-y-0">
-      {/* Page header */}
-      <div className="pb-6">
-        <h1 className="text-xl font-semibold tracking-tight">รายงาน</h1>
-        <p className="text-sm text-muted-foreground mt-1">สรุปและวิเคราะห์ข้อมูลพัสดุ การเบิก และการบำรุงรักษา</p>
-      </div>
-
       {/* Horizontal tabs */}
-      <div className="border-b mb-6">
+      <div className="border-b mb-4 sm:mb-6 -mx-4 px-4 sm:-mx-6 sm:px-6">
         <nav className="flex gap-1 -mb-px overflow-x-auto">
           {TABS.map(({ value, label, icon: Icon }) => {
             const isActive = activeTab === value;

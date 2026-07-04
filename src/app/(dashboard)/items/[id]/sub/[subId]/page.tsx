@@ -6,7 +6,8 @@ import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, XCircle, Undo2, Package, Clock, Wrench, Info, Hash, Tag, FolderTree, Layers, MapPin, ClipboardList, QrCode, Image as ImageIcon, ShoppingCart, Flag } from "lucide-react";
+import { ArrowLeft, XCircle, Undo2, Package, Clock, Wrench, Info, Hash, Tag, FolderTree, Layers, MapPin, ClipboardList, QrCode, Image as ImageIcon, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2 } from "lucide-react";
+import { pic } from "@/lib/image";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
@@ -14,8 +15,12 @@ import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS, locationLabel, formatSubCode } from "@/lib/constants";
 import { getSubItem, getSubItems, returnItem, updateSubItem } from "@/lib/api";
+import { ActionTile } from "@/components/items/action-tile";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
-import { ReportDamageDialog } from "@/components/items/report-damage-dialog";
+import { ReportStatusDialog } from "@/components/items/report-status-dialog";
+import { MoveLocationDialog } from "@/components/items/move-location-dialog";
+import { EditItemDialog } from "@/components/shared/edit-item-dialog";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 
 interface ParentItem {
@@ -83,7 +88,7 @@ interface SubItemData {
 const TYPE_LABELS: Record<string, string> = { PREVENTIVE: "ป้องกัน", CORRECTIVE: "ซ่อมแก้ไข" };
 const RESULT_LABELS: Record<string, string> = { AVAILABLE: "พร้อมใช้งาน", NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม", DISPOSED: "จำหน่าย" };
 const CONDITION_LABELS: Record<string, string> = { NEW: "ใหม่", OLD: "เก่า", USABLE: "ใช้ได้", FAIR: "พอใช้", UNUSABLE: "ใช้ไม่ได้", DAMAGED: "ชำรุด" };
-const STATUS_DOT: Record<string, string> = { AVAILABLE: "bg-success", CHECKED_OUT: "bg-blue-500", DAMAGED: "bg-destructive", UNDER_REPAIR: "bg-warning", LOST: "bg-destructive", DISPOSED: "bg-muted-foreground", PENDING_MAINTENANCE: "bg-warning" };
+const STATUS_DOT: Record<string, string> = { AVAILABLE: "bg-success", ON_LOAN: "bg-blue-500", DAMAGED: "bg-destructive", UNDER_REPAIR: "bg-warning", LOST: "bg-destructive", DISPOSED: "bg-muted-foreground", PENDING_MAINTENANCE: "bg-warning" };
 
 type TabKey = "overview" | "media" | "subcodes" | "history" | "maintenance";
 
@@ -99,7 +104,9 @@ export default function SubItemDetailPage() {
   const [returning, setReturning] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
   const [maintOpen, setMaintOpen] = useState(false);
-  const [damageOpen, setDamageOpen] = useState(false);
+  const [statusAction, setStatusAction] = useState<"DAMAGED" | "LOST" | "DISPOSED" | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [siblings, setSiblings] = useState<{ id: string; subCode: string; status: string }[]>([]);
   const [qrDataUrl, setQrDataUrl] = useState("");
 
@@ -202,16 +209,10 @@ export default function SubItemDetailPage() {
       <div className="max-w-5xl">
         {/* ── Cover + Title ── */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 pb-6 border-b border-border">
-          {cover ? (
-            <div className="relative w-full sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
-              <img src={cover} alt={sub.name ?? fullCode} className="size-full object-cover" />
-              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
-            </div>
-          ) : (
-            <div className="grid place-items-center w-full sm:w-64 aspect-[4/3] rounded-2xl bg-muted text-muted-foreground shrink-0">
-              <Package className="size-10" />
-            </div>
-          )}
+          <div className="relative w-full sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
+            <img src={cover ?? pic(fullCode, 640, 480)} alt={sub.name ?? fullCode} className="size-full object-cover" />
+            <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-2">
               <span className="inline-flex items-center rounded-full border px-2 py-0.5 bg-background">{sub.item.category.profile?.name ?? sub.item.category.name}</span>
@@ -279,7 +280,7 @@ export default function SubItemDetailPage() {
                   </dl>
                 </section>
 
-                {sub.status === "CHECKED_OUT" && (
+                {sub.status === "ON_LOAN" && (
                   <section className="animate-in fade-in slide-in-from-2 duration-300">
                     <SectionHeading eyebrow="การเบิก" title="กำลังยืมอยู่" />
                     <div className="rounded-xl border border-blue-200 bg-blue-50/50 dark:bg-blue-950/30 p-4 flex items-center justify-between gap-3">
@@ -318,9 +319,22 @@ export default function SubItemDetailPage() {
                   <section className="animate-in fade-in slide-in-from-2 duration-300">
                     <SectionHeading eyebrow="การจัดการ" title="จัดการสต็อก" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <ActionTile icon={ShoppingCart} label="เบิก" tone="primary" onClick={() => router.push(`/dispense?item=${sub.item.id}`)} />
-                      <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={() => setDamageOpen(true)} />
-                      <ActionTile icon={Wrench} label="บันทึกซ่อม" tone="default" onClick={() => setMaintOpen(true)} />
+                      <ActionTile icon={ShoppingCart} label="เพิ่มเข้าตะกร้า" tone="primary" onClick={() => router.push(`/dispense?item=${sub.item.id}`)} />
+                      <ActionTile icon={ArrowDownToLine} label="รับเข้า" tone="default" onClick={() => router.push(`/receive?item=${sub.item.id}`)} />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<ActionTile icon={Package} label="ปรับสต็อก" tone="default" />} />
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => setStatusAction("LOST")}>
+                            <SearchX className="size-4" />สูญหาย
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setStatusAction("DISPOSED")}>
+                            <Trash2 className="size-4" />ตัดจำหน่าย
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={() => setStatusAction("DAMAGED")} />
+                      <ActionTile icon={MapPin} label="ย้ายที่ตั้ง" tone="default" onClick={() => setMoveOpen(true)} />
+                      <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={() => setEditOpen(true)} />
                     </div>
                   </section>
                 )}
@@ -486,13 +500,31 @@ export default function SubItemDetailPage() {
         onSuccess={fetchSub}
       />
 
-      <ReportDamageDialog
-        open={damageOpen}
-        onOpenChange={setDamageOpen}
+      <ReportStatusDialog
+        open={statusAction !== null}
+        onOpenChange={(o) => { if (!o) setStatusAction(null); }}
         itemId={sub.item.id}
+        itemCode={sub.item.code}
+        status={statusAction ?? "DAMAGED"}
         trackIndividually
         subItems={[{ id: sub.id, subCode: sub.subCode, status: sub.status }]}
         onSuccess={fetchSub}
+      />
+
+      <MoveLocationDialog
+        key={moveOpen ? "open" : "closed"}
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
+        items={[{ id: sub.item.id, code: sub.item.code, name: sub.item.name }]}
+        currentLocationId={sub.item.location?.id ?? null}
+        onSuccess={fetchSub}
+      />
+
+      <EditItemDialog
+        open={editOpen}
+        itemId={sub.item.id}
+        onOpenChange={setEditOpen}
+        onSaved={fetchSub}
       />
     </div>
   );
@@ -545,34 +577,5 @@ function SpecRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ cla
       <dt className="text-sm text-muted-foreground md:w-32">{label}</dt>
       <dd className="text-sm font-medium md:ml-auto md:text-right">{value}</dd>
     </div>
-  );
-}
-
-function ActionTile({ icon: Icon, label, tone, onClick }: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  tone: "primary" | "default" | "destructive";
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "group flex items-center gap-3 rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0",
-        tone === "primary" && "bg-primary text-primary-foreground border-primary hover:bg-primary/90",
-        tone === "default" && "bg-card border-border hover:border-primary/40",
-        tone === "destructive" && "bg-card border-border text-destructive hover:bg-destructive/5 hover:border-destructive/40",
-      )}
-    >
-      <span className={cn(
-        "grid place-items-center size-10 rounded-xl shrink-0",
-        tone === "primary" && "bg-primary-foreground/15",
-        tone === "default" && "bg-primary/10 text-primary",
-        tone === "destructive" && "bg-destructive/10 text-destructive",
-      )}>
-        <Icon className="size-5" />
-      </span>
-      <span className="font-medium text-sm">{label}</span>
-    </button>
   );
 }

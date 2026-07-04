@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
-import { itemUpdateSchema, forcedTrackIndividually } from "@/lib/validators";
-import { sanitizeItemByProfile } from "@/lib/category-profile";
+import { itemUpdateSchema } from "@/lib/validators";
+import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       issueUnit: true,
       subItems: { orderBy: { subCode: "asc" } },
       lots: { orderBy: { expiryDate: "asc" } },
+      _count: { select: { subItems: true, dispenseRecords: true, receiveRecords: true } },
     },
   });
 
@@ -45,7 +46,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (catId) {
     const cat = await prisma.categoryType.findUnique({ where: { id: catId }, include: { profile: true } });
     if (cat?.profile) {
-      data.trackIndividually = forcedTrackIndividually(cat.profile);
+      data.trackIndividually = isItemTracked(cat.profile);
       sanitizeItemByProfile(cat.profile, data);
     }
   }

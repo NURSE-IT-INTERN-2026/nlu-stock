@@ -3,7 +3,7 @@ import { requireAdmin, json, error } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { ItemCondition } from "@/generated/prisma/enums";
-import { forcedTrackIndividually } from "@/lib/validators/item";
+import { isItemTracked } from "@/lib/category-profile";
 
 interface ImportRow {
   [key: string]: string;
@@ -21,6 +21,24 @@ function safeErrorMessage(e: unknown): string {
     return "Database error";
   }
   return "Failed to import row";
+}
+
+function parseOptionalInt(v: string | undefined): number | null {
+  if (!v) return null;
+  const n = parseInt(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseOptionalFloat(v: string | undefined): number | null {
+  if (!v) return null;
+  const n = parseFloat(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseOptionalDate(v: string | undefined): Date | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 async function importItems(rows: ImportRow[]): Promise<ImportResult> {
@@ -55,12 +73,17 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         (l.detail ?? "") === (row.detail ?? "")
     );
 
-    const issueUnitName = row.issueUnit || "ชิ้น";
+    const issueUnitName = row.unit || "ชิ้น";
     const issueUnit = units.find((u) => u.name === issueUnitName);
     if (!issueUnit) {
       result.errors.push({ row: i + 1, message: `Unit "${issueUnitName}" not found` });
       continue;
     }
+
+    const trackIndividually = category.profile
+      ? isItemTracked(category.profile)
+      : row.trackIndividually === "true";
+    const qty = parseOptionalInt(row.qty) ?? 0; // ignored when trackIndividually (sub-items drive counts)
 
     validRows.push({
       index: i,
@@ -69,12 +92,23 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         name: row.name,
         nameEn: row.nameEn || null,
         category: { connect: { id: category.id } },
-        trackIndividually: category.profile
-          ? forcedTrackIndividually(category.profile)
-          : row.trackIndividually === "true",
+        trackIndividually,
         issueUnit: { connect: { id: issueUnit.id } },
         minThreshold: parseInt(row.minThreshold) || 0,
         location: location ? { connect: { id: location.id } } : undefined,
+        // Stock: count/consumable types (DUR/CON/KIT) take qty from the row;
+        // item-types (KRU/ELE/BAT) stay 0 — sub-items import reconciles them.
+        totalQty: trackIndividually ? 0 : qty,
+        availableQty: trackIndividually ? 0 : qty,
+        setSize: parseOptionalInt(row.setSize) ?? 1,
+        // Asset fields (KRU/ELE) — nullable, ignored for other profiles
+        model: row.model || null,
+        purchaseDate: parseOptionalDate(row.purchaseDate),
+        purchasePrice: parseOptionalFloat(row.purchasePrice),
+        vendorCompany: row.vendorCompany || null,
+        vendorContact: row.vendorContact || null,
+        vendorPhone: row.vendorPhone || null,
+        warrantyMonths: parseOptionalInt(row.warrantyMonths) ?? 0,
         description: row.description || null,
       },
     });
@@ -192,6 +226,7 @@ async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
     validRows.push({
       item: { connect: { id: item.id } },
       subCode: row.subCode,
+      serialNumber: row.serialNumber || null,
       condition: (row.condition as ItemCondition | null) || null,
       notes: row.notes || null,
     });
@@ -221,6 +256,60 @@ async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
   return result;
 }
 
+// KIT "ภายในชุดประกอบด้วย" — component rows for a kit item. Component is free text,
+// not a tracked Item (matches the real Excel BOM structure). Units must pre-exist.
+async function importKitBom(rows: ImportRow[]): Promise<ImportResult> {
+  const result: ImportResult = { imported: 0, errors: [] };
+
+  const units = await prisma.unit.findMany();
+  const unitByName = new Map(units.map((u) => [u.name, u]));
+  const itemCache = new Map<string, string>(); // kitCode -> itemId
+
+  const validRows: Prisma.KitBomCreateInput[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+
+    if (!row.kitCode || !row.name) {
+      result.errors.push({ row: i + 1, message: "kitCode and name are required" });
+      continue;
+    }
+
+    let itemId = itemCache.get(row.kitCode);
+    if (!itemId) {
+      const found = await prisma.item.findFirst({ where: { code: row.kitCode } });
+      if (!found) {
+        result.errors.push({ row: i + 1, message: `Kit "${row.kitCode}" not found` });
+        continue;
+      }
+      itemId = found.id;
+      itemCache.set(row.kitCode, itemId);
+    }
+
+    const unitName = row.unit || "ชิ้น";
+    const unit = unitByName.get(unitName);
+    if (!unit) {
+      result.errors.push({ row: i + 1, message: `Unit "${unitName}" not found` });
+      continue;
+    }
+
+    validRows.push({
+      kitItem: { connect: { id: itemId } },
+      name: row.name,
+      quantity: parseOptionalInt(row.qty) ?? 1,
+      unit: { connect: { id: unit.id } },
+      sortOrder: parseOptionalInt(row.sortOrder) ?? i,
+    });
+  }
+
+  if (validRows.length > 0) {
+    await prisma.$transaction(validRows.map((data) => prisma.kitBom.create({ data })));
+    result.imported = validRows.length;
+  }
+
+  return result;
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
@@ -233,23 +322,16 @@ export async function POST(request: NextRequest) {
       return error("Missing type or rows");
     }
 
+    // item variants (items-kru, items-bat, items-dur, items-con, items-kit) all share
+    // importItems — it derives behavior from the row's category, so lean per-category
+    // templates (each with only the relevant columns) all import through the one handler.
     let result: ImportResult;
-    switch (type) {
-      case "items":
-        result = await importItems(rows);
-        break;
-      case "categories":
-        result = await importCategories(rows);
-        break;
-      case "locations":
-        result = await importLocations(rows);
-        break;
-      case "sub-items":
-        result = await importSubItems(rows);
-        break;
-      default:
-        return error(`Unknown import type: ${type}`);
-    }
+    if (type === "categories") result = await importCategories(rows);
+    else if (type === "locations") result = await importLocations(rows);
+    else if (type === "sub-items") result = await importSubItems(rows);
+    else if (type === "kit-bom") result = await importKitBom(rows);
+    else if (type.startsWith("items")) result = await importItems(rows);
+    else return error(`Unknown import type: ${type}`);
 
     return json(result);
   } catch {
@@ -258,9 +340,25 @@ export async function POST(request: NextRequest) {
 }
 
 const TEMPLATES: Record<string, { headers: string[]; example: string[] }> = {
-  items: {
-    headers: ["code", "name", "nameEn", "category", "trackIndividually", "issueUnit", "minThreshold", "building", "floor", "room", "detail", "description"],
-    example: ["NLU-CON-001", "Pen", "Ballpoint Pen", "CON", "false", "ชิ้น", "10", "อาคาร A", "ชั้น 1", "ห้อง 101", "ตู้ 1", ""],
+  "items-kru": {
+    headers: ["code", "name", "nameEn", "category", "unit", "building", "floor", "room", "detail", "model", "purchasePrice", "purchaseDate", "vendorCompany", "vendorContact", "vendorPhone", "warrantyMonths", "description"],
+    example: ["NLU-KRU-002-001", "iPad", "iPad Air", "อุปกรณ์อิเล็กทรอนิกส์", "เครื่อง", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", "iPad Air 11", "13500", "2024-01-15", "Apple Thailand", "คุณ ก.", "02-123-4567", "12", ""],
+  },
+  "items-bat": {
+    headers: ["code", "name", "nameEn", "category", "unit", "building", "floor", "room", "detail", "setSize", "description"],
+    example: ["NLU-BAT-013-001-S10-C01", "คู่มือพัฒนาการ", "", "หนังสือ", "เล่ม", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", "10", ""],
+  },
+  "items-dur": {
+    headers: ["code", "name", "nameEn", "category", "unit", "qty", "building", "floor", "room", "detail", "description"],
+    example: ["NLU-DUR-001", "ถาดพลาสติก", "Plastic tray", "วัสดุคงทน", "ใบ", "20", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", ""],
+  },
+  "items-con": {
+    headers: ["code", "name", "nameEn", "category", "unit", "qty", "building", "floor", "room", "detail", "description"],
+    example: ["NLU-CON-001", "เครื่องดื่มหัวปลีแบบผง", "", "วัสดุสิ้นเปลือง", "กล่อง", "504", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", ""],
+  },
+  "items-kit": {
+    headers: ["code", "name", "nameEn", "category", "unit", "qty", "description"],
+    example: ["NLU-KIT-001", "ชุดอุปกรณ์สอนดูแลเด็กทารกหลังคลอด", "", "อุปกรณ์ประกอบวิชา", "ชุด", "35", ""],
   },
   categories: {
     headers: ["name", "category", "description", "sortOrder"],
@@ -268,11 +366,15 @@ const TEMPLATES: Record<string, { headers: string[]; example: string[] }> = {
   },
   locations: {
     headers: ["building", "floor", "room", "detail"],
-    example: ["อาคาร A", "ชั้น 1", "ห้อง 101", "ตู้ 1"],
+    example: ["อาคาร 2", "ชั้น 4", "402", "ตู้ 1"],
   },
   "sub-items": {
-    headers: ["itemCode", "subCode", "condition", "notes"],
-    example: ["ITM001", "ITM001-01", "Good", ""],
+    headers: ["itemCode", "subCode", "serialNumber", "condition", "notes"],
+    example: ["NLU-KRU-002-001", "NLU-KRU-002-001-C01", "SN-IPAD-001", "NEW", ""],
+  },
+  "kit-bom": {
+    headers: ["kitCode", "name", "qty", "unit", "sortOrder"],
+    example: ["NLU-KIT-001", "ตุ๊กตาทารก", "1", "ตัว", "1"],
   },
 };
 

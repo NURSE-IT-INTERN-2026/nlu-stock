@@ -1,16 +1,141 @@
 import { NextRequest } from "next/server";
+import * as XLSX from "xlsx";
+import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
-import { toCsv, toXlsx, toPdf } from "@/lib/export-utils";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
-import { USAGE_TYPE_LABELS } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, STATUS_LABELS } from "@/lib/constants";
+
+// ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
+function toCsv(data: Record<string, unknown>[], filename: string): Response {
+  if (data.length === 0) {
+    return new Response("", {
+      headers: {
+        "Content-Type": "text/csv",
+        "Content-Disposition": `attachment; filename="${filename}.csv"`,
+      },
+    });
+  }
+
+  const headers = Object.keys(data[0]);
+  const csvRows = [
+    headers.join(","),
+    ...data.map((row) =>
+      headers
+        .map((h) => {
+          const val = row[h];
+          const str = val === null || val === undefined ? "" : String(val);
+          return `"${str.replace(/"/g, '""')}"`;
+        })
+        .join(","),
+    ),
+  ];
+
+  return new Response(csvRows.join("\n"), {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}.csv"`,
+    },
+  });
+}
+
+function toXlsx(data: Record<string, unknown>[], filename: string, sheetName = "Report"): Response {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+  return new Response(buf, {
+    headers: {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${filename}.xlsx"`,
+    },
+  });
+}
+
+async function toPdf(
+  columns: { key: string; header: string; width: number }[],
+  data: Record<string, unknown>[],
+  filename: string,
+  title: string,
+): Promise<Response> {
+  const colWidths = columns.map((c) => c.width);
+  const totalWidth = colWidths.reduce((a, b) => a + b, 0);
+  const pageWidth = Math.max(totalWidth + 40, 595);
+  const margin = 20;
+
+  const pdfBuffer = await new Promise<Buffer>((resolve) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({
+      size: [pageWidth, 842],
+      margins: { top: margin, bottom: margin, left: margin, right: margin },
+      bufferPages: true,
+    });
+
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+
+    const rowHeight = 22;
+    const headerHeight = 26;
+    let y = margin;
+
+    doc.fontSize(16).font("Helvetica-Bold").text(title, margin, y, {
+      width: pageWidth - margin * 2,
+      align: "center",
+    });
+    y += 30;
+
+    function drawHeader() {
+      doc.rect(margin, y, pageWidth - margin * 2, headerHeight)
+        .fill("#f0f0f0")
+        .stroke();
+      let x = margin + 4;
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#333");
+      for (const col of columns) {
+        doc.text(col.header, x, y + 6, { width: col.width - 8, lineBreak: false });
+        x += col.width;
+      }
+      y += headerHeight;
+    }
+
+    drawHeader();
+
+    for (const row of data) {
+      if (y + rowHeight > 820) {
+        doc.addPage();
+        y = margin;
+        drawHeader();
+      }
+      let x = margin + 4;
+      doc.fontSize(8).font("Helvetica").fillColor("#555");
+      for (const col of columns) {
+        const val = row[col.key];
+        const str = val === null || val === undefined ? "" : String(val);
+        doc.text(str, x, y + 5, { width: col.width - 8, lineBreak: false });
+        x += col.width;
+      }
+      y += rowHeight;
+    }
+
+    doc.end();
+  });
+
+  return new Response(new Uint8Array(pdfBuffer), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}.pdf"`,
+    },
+  });
+}
 
 type ReportType =
   | "stock-summary"
   | "dispense-history"
+  | "receive-history"
+  | "status-log"
   | "usage-by-subject"
-  | "near-expiry-low-stock"
   | "annual-cost"
   | "damaged-assets"
   | "maintenance-schedule"
@@ -19,8 +144,9 @@ type ReportType =
 const REPORT_TYPES: ReportType[] = [
   "stock-summary",
   "dispense-history",
+  "receive-history",
+  "status-log",
   "usage-by-subject",
-  "near-expiry-low-stock",
   "annual-cost",
   "damaged-assets",
   "maintenance-schedule",
@@ -83,13 +209,95 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       return records.map((r) => ({
-        Date: format(r.dispensedAt, "yyyy-MM-dd HH:mm"),
+        Date: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
         "Item Code": r.item.code,
         "Item Name": r.item.name,
         Quantity: r.quantity,
         Staff: r.staff.name,
         Usage: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
         Notes: r.notes ?? "",
+      }));
+    }
+
+    case "receive-history": {
+      const where: Record<string, unknown> = {};
+      const dateFrom = params.get("dateFrom");
+      const dateTo = params.get("dateTo");
+      if (dateFrom || dateTo) {
+        where.receivedAt = {
+          ...(dateFrom && { gte: new Date(dateFrom) }),
+          ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
+        };
+      }
+      const categoryId = params.get("categoryId");
+      if (categoryId) where.item = { categoryId };
+      const staffId = params.get("staffId");
+      if (staffId) where.receivedBy = staffId;
+
+      const records = await prisma.receiveRecord.findMany({
+        where,
+        include: {
+          item: { select: { code: true, name: true, category: { select: { name: true } } } },
+          receiver: { select: { name: true } },
+          lot: { select: { lotNumber: true, expiryDate: true } },
+        },
+        orderBy: { receivedAt: "desc" },
+        take: 10000,
+      });
+
+      return records.map((r) => ({
+        Date: fmtDate(r.receivedAt, "yyyy-MM-dd HH:mm"),
+        "Item Code": r.item.code,
+        "Item Name": r.item.name,
+        Category: r.item.category?.name ?? "—",
+        Lot: r.lot?.lotNumber ?? "—",
+        Quantity: r.quantity,
+        "Expiry Date": r.lot?.expiryDate ? fmtDate(r.lot.expiryDate, "yyyy-MM-dd") : "",
+        Receiver: r.receiver.name,
+        Notes: r.notes ?? "",
+      }));
+    }
+
+    case "status-log": {
+      const where: Record<string, unknown> = {};
+      const from = params.get("from");
+      const to = params.get("to");
+      if (from) where.previousStatus = from;
+      if (to) where.newStatus = to;
+      const dateFrom = params.get("dateFrom");
+      const dateTo = params.get("dateTo");
+      if (dateFrom || dateTo) {
+        where.changedAt = {
+          ...(dateFrom && { gte: new Date(dateFrom) }),
+          ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
+        };
+      }
+      const categoryId = params.get("categoryId");
+      if (categoryId) where.item = { categoryId };
+      const staffId = params.get("staffId");
+      if (staffId) where.changedBy = staffId;
+
+      const records = await prisma.itemStatusLog.findMany({
+        where,
+        include: {
+          item: { select: { code: true, name: true, category: { select: { name: true } } } },
+          subItem: { select: { subCode: true } },
+          changer: { select: { name: true } },
+        },
+        orderBy: { changedAt: "desc" },
+        take: 10000,
+      });
+
+      return records.map((r) => ({
+        Date: fmtDate(r.changedAt, "yyyy-MM-dd HH:mm"),
+        "Item Code": r.item.code,
+        "Item Name": r.item.name,
+        Category: r.item.category?.name ?? "—",
+        "Sub-code": r.subItem?.subCode ?? "",
+        From: STATUS_LABELS[r.previousStatus] ?? r.previousStatus,
+        To: STATUS_LABELS[r.newStatus] ?? r.newStatus,
+        Reason: r.reason ?? "",
+        Changer: r.changer.name,
       }));
     }
 
@@ -119,52 +327,6 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           "Total Quantity": g._sum.quantity ?? 0,
         };
       });
-    }
-
-    case "near-expiry-low-stock": {
-      const categoryId = params.get("categoryId");
-      const itemWhere: Record<string, unknown> = { isActive: true };
-      if (categoryId) itemWhere.categoryId = categoryId;
-
-      const lowStock = await prisma.item.findMany({
-        where: { ...itemWhere, availableQty: { lt: prisma.item.fields.minThreshold } },
-        include: { category: { select: { name: true } } },
-        take: 10000,
-      });
-
-      const now = new Date();
-      const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-      const nearExpiry = await prisma.lot.findMany({
-        where: {
-          expiryDate: { gte: now, lte: in30Days },
-          item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
-        },
-        include: { item: { select: { code: true, name: true } } },
-        take: 10000,
-      });
-
-      const lowRows = lowStock.map((i) => ({
-        Type: "Low Stock",
-        Code: i.code,
-        Name: i.name,
-        Category: i.category.name,
-        "Available Qty": i.availableQty,
-        "Min Threshold": i.minThreshold,
-        "Expiry Date": "",
-      }));
-
-      const expiryRows = nearExpiry.map((l) => ({
-        Type: "Near Expiry",
-        Code: l.item.code,
-        Name: l.item.name,
-        Category: "",
-        "Available Qty": l.remainingQty,
-        "Min Threshold": "",
-        "Expiry Date": l.expiryDate ? format(l.expiryDate, "yyyy-MM-dd") : "",
-      }));
-
-      return [...lowRows, ...expiryRows];
     }
 
     case "annual-cost": {
@@ -203,7 +365,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         Name: p.name,
         Category: p.category.name,
         Cost: p.purchasePrice ?? 0,
-        Date: format(p.purchaseDate!, "yyyy-MM-dd"),
+        Date: fmtDate(p.purchaseDate!, "yyyy-MM-dd"),
         By: "",
       }));
 
@@ -213,7 +375,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         Name: r.item.name,
         Category: "",
         Cost: r.cost ?? 0,
-        Date: format(r.performedAt, "yyyy-MM-dd"),
+        Date: fmtDate(r.performedAt, "yyyy-MM-dd"),
         By: r.performer.name,
       }));
 
@@ -271,9 +433,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         Name: i.name,
         Category: i.category.name,
         Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
-        "Next Maintenance": i.nextMaintenanceDate ? format(i.nextMaintenanceDate, "yyyy-MM-dd") : "",
+        "Next Maintenance": i.nextMaintenanceDate ? fmtDate(i.nextMaintenanceDate, "yyyy-MM-dd") : "",
         "Cycle (months)": i.maintenanceCycleMonths,
-        "Last Maintenance": i.lastMaintenanceDate ? format(i.lastMaintenanceDate, "yyyy-MM-dd") : "",
+        "Last Maintenance": i.lastMaintenanceDate ? fmtDate(i.lastMaintenanceDate, "yyyy-MM-dd") : "",
       }));
     }
 
@@ -303,7 +465,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       return records.map((r) => ({
-        Date: format(r.performedAt, "yyyy-MM-dd"),
+        Date: fmtDate(r.performedAt, "yyyy-MM-dd"),
         "Item Code": r.item.code,
         "Item Name": r.item.name,
         Type: r.type,

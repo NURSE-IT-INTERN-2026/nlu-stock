@@ -27,7 +27,7 @@ interface SubItemRecord {
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   AVAILABLE: "default",
-  CHECKED_OUT: "secondary",
+  ON_LOAN: "secondary",
   DAMAGED: "destructive",
   UNDER_REPAIR: "secondary",
   LOST: "destructive",
@@ -35,12 +35,13 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
   PENDING_MAINTENANCE: "secondary",
 };
 
-const STATUS_OPTIONS = ["AVAILABLE", "DAMAGED", "UNDER_REPAIR", "LOST", "DISPOSED", "PENDING_MAINTENANCE"];
+const STATUS_OPTIONS = ["AVAILABLE", "IN_USE", "DAMAGED", "UNDER_REPAIR", "LOST", "DISPOSED", "PENDING_MAINTENANCE"];
 
 const STATUS_CHIPS = [
   { value: "ALL", label: "All" },
   { value: "AVAILABLE", label: "Available", activeClass: "bg-emerald-600 text-white border-emerald-600" },
-  { value: "CHECKED_OUT", label: "Checked Out", activeClass: "bg-blue-600 text-white border-blue-600" },
+  { value: "ON_LOAN", label: "Checked Out", activeClass: "bg-blue-600 text-white border-blue-600" },
+  { value: "IN_USE", label: "In Use", activeClass: "bg-indigo-600 text-white border-indigo-600" },
   { value: "DAMAGED", label: "Damaged", activeClass: "bg-red-600 text-white border-red-600" },
   { value: "UNDER_REPAIR", label: "Under Repair", activeClass: "bg-amber-600 text-white border-amber-600" },
   { value: "LOST", label: "Lost", activeClass: "bg-red-800 text-white border-red-800" },

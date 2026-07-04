@@ -23,7 +23,29 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /responsive\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/admin.json" },
+    },
+    // Responsive audit — runs only responsive.spec.ts across mobile→desktop widths.
+    {
+      name: "mobile-320",
+      testMatch: /responsive\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 320, height: 720 }, storageState: "e2e/.auth/admin.json" },
+    },
+    {
+      name: "mobile-375",
+      testMatch: /responsive\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 375, height: 812 }, storageState: "e2e/.auth/admin.json" },
+    },
+    {
+      name: "tablet-768",
+      testMatch: /responsive\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 }, storageState: "e2e/.auth/admin.json" },
+    },
+    {
+      name: "desktop-1024",
+      testMatch: /responsive\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1024, height: 768 }, storageState: "e2e/.auth/admin.json" },
     },
   ],
   webServer: {
