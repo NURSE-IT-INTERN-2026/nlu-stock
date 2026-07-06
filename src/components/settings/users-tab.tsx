@@ -149,14 +149,14 @@ export function UsersTab() {
       </div>
 
       <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead>ชื่อ</TableHead>
-              <TableHead>อีเมล</TableHead>
-              <TableHead>บทบาท</TableHead>
-              <TableHead>สถานะ</TableHead>
-              <TableHead className="w-[120px]">การดำเนินการ</TableHead>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="px-2">ชื่อ</TableHead>
+              <TableHead className="w-56 px-2">อีเมล</TableHead>
+              <TableHead className="w-28 px-2">บทบาท</TableHead>
+              <TableHead className="w-24 px-2">สถานะ</TableHead>
+              <TableHead className="w-[120px] px-2">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -172,16 +172,16 @@ export function UsersTab() {
                 </div>
               </TableCell></TableRow>
             ) : users.map((user) => (
-              <TableRow key={user.id} className={!user.isActive ? "opacity-50" : ""}>
-                <TableCell className="font-medium">{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell><Badge variant="outline">{ROLE_LABELS[user.role] || user.role}</Badge></TableCell>
-                <TableCell>
+              <TableRow key={user.id} className={`h-9 [&>td]:py-1 ${!user.isActive ? "opacity-50" : ""}`}>
+                <TableCell className="px-2"><span className="block truncate font-medium">{user.name}</span></TableCell>
+                <TableCell className="font-mono text-xs px-2"><span className="block truncate">{user.email}</span></TableCell>
+                <TableCell className="px-2"><Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{ROLE_LABELS[user.role] || user.role}</Badge></TableCell>
+                <TableCell className="px-2">
                   {user.isActive
-                    ? <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-success/15 text-success-700 border-success/30">ใช้งาน</span>
-                    : <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border-border">ปิดใช้งาน</span>}
+                    ? <span className="inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium bg-success/15 text-success-700 border-success/30">ใช้งาน</span>
+                    : <span className="inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium bg-muted text-muted-foreground border-border">ปิดใช้งาน</span>}
                 </TableCell>
-                <TableCell>
+                <TableCell className="px-2">
                   <TooltipProvider>
                     <div className="flex gap-1">
                       <Tooltip>

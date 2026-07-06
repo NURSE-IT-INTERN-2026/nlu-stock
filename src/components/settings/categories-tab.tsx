@@ -65,12 +65,12 @@ function dispenseTypeLabel(p: ProfileOption | null): string {
 
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
-    <TableRow>
-      <TableCell className="font-medium">{cat.name}</TableCell>
-      <TableCell><Badge variant="outline" className={cat.profile?.color}>{cat.profile?.name ?? "—"}</Badge></TableCell>
-      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(cat.profile)}</TableCell>
-      <TableCell>{cat._count.items}</TableCell>
-      <TableCell>
+    <TableRow className="h-9 [&>td]:py-1">
+      <TableCell className="px-2"><span className="block truncate font-medium">{cat.name}</span></TableCell>
+      <TableCell className="px-2"><Badge variant="outline" className={cn("px-1.5 py-0 leading-5 text-[11px]", cat.profile?.color)}>{cat.profile?.name ?? "—"}</Badge></TableCell>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap px-2">{dispenseTypeLabel(cat.profile)}</TableCell>
+      <TableCell className="text-xs px-2 tabular-nums">{cat._count.items}</TableCell>
+      <TableCell className="px-2">
         <TooltipProvider>
           <div className="flex gap-1">
             <Tooltip>
@@ -204,14 +204,14 @@ export function CategoriesTab() {
       </div>
 
       <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead>ชื่อหมวดหมู่</TableHead>
-              <TableHead>ประเภท</TableHead>
-              <TableHead>ประเภทการเบิกจ่าย</TableHead>
-              <TableHead>จำนวน</TableHead>
-              <TableHead className="w-[100px]">การดำเนินการ</TableHead>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="px-2">ชื่อหมวดหมู่</TableHead>
+              <TableHead className="w-32 px-2">ประเภท</TableHead>
+              <TableHead className="w-40 px-2">ประเภทการเบิกจ่าย</TableHead>
+              <TableHead className="w-20 px-2">จำนวน</TableHead>
+              <TableHead className="w-[100px] px-2">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

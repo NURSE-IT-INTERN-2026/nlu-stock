@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
@@ -225,14 +225,19 @@ const statusColumns: Column<StatusRow>[] = [
 ];
 
 function StatusLogTable({ from, to, leading }: { from: string; to?: string; leading?: ReactNode }) {
+  // Memoized so identity is stable across re-renders — otherwise ReportTable's
+  // fetchData (useCallback deps on extraParams) would change every render,
+  // re-triggering its effect and refetching in an unbounded loop.
+  const extraParams = useMemo(() => ({ from, to }), [from, to]);
+  const exportFilters = useMemo(() => ({ from, to }), [from, to]);
   return (
     <ReportTable<StatusRow>
       path="status-log"
       columns={statusColumns}
       filterConfig={COMMON_FILTERS}
       exportType="status-log"
-      extraParams={{ from, to }}
-      exportFilters={{ from, to }}
+      extraParams={extraParams}
+      exportFilters={exportFilters}
       leading={leading}
     />
   );

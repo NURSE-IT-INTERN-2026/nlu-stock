@@ -501,30 +501,30 @@ function KitComponentsTab({ components }: {
         ของที่ประกอบเป็นชุดนี้ {components.length} รายการ — จำนวนต่อ 1 ชุด
       </p>
       <div className="rounded-xl border overflow-hidden bg-card">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="bg-muted/40">
-              <TableHead className="w-28 md:w-32">รหัส</TableHead>
-              <TableHead>ชื่อ</TableHead>
-              <TableHead className="w-28 md:w-32">คงเหลือ</TableHead>
-              <TableHead className="w-24 md:w-28 text-right">จำนวน/ชุด</TableHead>
+            <TableRow className="bg-muted/40 [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="w-28 md:w-32 px-2">รหัส</TableHead>
+              <TableHead className="px-2">ชื่อ</TableHead>
+              <TableHead className="w-28 md:w-32 px-2">คงเหลือ</TableHead>
+              <TableHead className="w-24 md:w-28 text-right px-2">จำนวน/ชุด</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {components.map((c, i) => (
-              <TableRow key={i}>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {c.componentItem?.code ?? "—"}
+              <TableRow key={i} className="h-9 [&>td]:py-1">
+                <TableCell className="font-mono text-xs text-muted-foreground px-2">
+                  <span className="block truncate">{c.componentItem?.code ?? "—"}</span>
                 </TableCell>
-                <TableCell className="font-medium">{c.componentItem?.name ?? c.name}</TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="font-medium px-2"><span className="truncate min-w-0">{c.componentItem?.name ?? c.name}</span></TableCell>
+                <TableCell className="text-muted-foreground px-2">
                   {c.componentItem ? (
                     <span className={cn(c.componentItem.availableQty < c.quantity && "text-destructive font-medium")}>
                       {c.componentItem.availableQty}
                     </span>
                   ) : "—"}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="text-right tabular-nums px-2">
                   {c.quantity} <span className="text-muted-foreground">{c.unit.name}</span>
                 </TableCell>
               </TableRow>
