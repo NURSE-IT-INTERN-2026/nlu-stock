@@ -178,23 +178,23 @@ export function ItemDetailSubcodes({ subItems, itemId, itemCode, canAct, onRefre
 
       {/* ── Table ── */}
       <div className="rounded-md border">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow>
+            <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
               {canAct && (
-                <TableHead className="w-10">
+                <TableHead className="w-10 px-2">
                   <Checkbox
                     checked={selected.size === filteredSubItems.length && filteredSubItems.length > 0}
                     onCheckedChange={toggleAll}
                   />
                 </TableHead>
               )}
-              <TableHead className="w-10" />
-              <TableHead>Sub-code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="hidden md:table-cell">Condition</TableHead>
-              <TableHead className="hidden md:table-cell">Notes</TableHead>
+              <TableHead className="w-10 px-2" />
+              <TableHead className="w-36 px-2">Sub-code</TableHead>
+              <TableHead className="px-2">Name</TableHead>
+              <TableHead className="w-28 px-2">Status</TableHead>
+              <TableHead className="hidden md:table-cell w-32 px-2">Condition</TableHead>
+              <TableHead className="hidden md:table-cell w-40 px-2">Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -248,13 +248,13 @@ function SubItemRowGroup({
 
   return (
     <>
-      <TableRow className={cn(idx % 2 === 1 && "bg-muted/30")}>
+      <TableRow className={cn("h-9 [&>td]:py-1", idx % 2 === 1 && "bg-muted/30")}>
         {canAct && (
-          <TableCell>
+          <TableCell className="px-2">
             <Checkbox checked={selected} onCheckedChange={onToggleSelect} />
           </TableCell>
         )}
-        <TableCell>
+        <TableCell className="px-2">
           {expandable ? (
             <button type="button" aria-label={expanded ? "ย่อ" : "ขยาย"} onClick={onToggleExpand} className="text-muted-foreground hover:text-foreground transition-colors">
               {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -263,15 +263,15 @@ function SubItemRowGroup({
             <span className="w-4" />
           )}
         </TableCell>
-        <TableCell className="font-mono text-sm">{formatSubCode(itemCode, sub.subCode)}</TableCell>
-        <TableCell className="text-sm">{sub.name || "-"}</TableCell>
-        <TableCell>
+        <TableCell className="font-mono text-xs px-2"><span className="block truncate">{formatSubCode(itemCode, sub.subCode)}</span></TableCell>
+        <TableCell className="px-2"><span className="truncate min-w-0">{sub.name || "-"}</span></TableCell>
+        <TableCell className="px-2">
           <Badge variant={STATUS_VARIANTS[sub.status] || "secondary"}>
             {sub.status.replace(/_/g, " ")}
           </Badge>
         </TableCell>
-        <TableCell className="text-sm hidden md:table-cell">{sub.condition || "-"}</TableCell>
-        <TableCell className="text-sm max-w-[200px] truncate hidden md:table-cell">{sub.notes || "-"}</TableCell>
+        <TableCell className="text-xs px-2 hidden md:table-cell">{sub.condition || "-"}</TableCell>
+        <TableCell className="text-xs px-2 hidden md:table-cell"><span className="block truncate">{sub.notes || "-"}</span></TableCell>
       </TableRow>
       {expanded && expandable && (
         <TableRow className={cn("bg-muted/15", idx % 2 === 1 && "bg-muted/25")}>

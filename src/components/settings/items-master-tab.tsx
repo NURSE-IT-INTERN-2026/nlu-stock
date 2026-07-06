@@ -183,9 +183,9 @@ export function ItemsMasterTab() {
       {/* Table — hero zone, most visual weight */}
       <div className="rounded-2xl border overflow-hidden bg-card shadow-sm flex-1 min-h-0 flex flex-col">
         <div className="hidden md:block overflow-auto flex-1 min-h-0">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
               <TableHead className="w-[48px] pl-4">
                 <Checkbox
                   checked={items.length > 0 && items.every((i) => selectedIds.has(i.id))}
@@ -199,13 +199,13 @@ export function ItemsMasterTab() {
                   aria-label="เลือกทั้งหมด"
                 />
               </TableHead>
-              <TableHead>รหัส</TableHead>
-              <TableHead>ชื่อพัสดุ</TableHead>
-              <TableHead>หมวดหมู่</TableHead>
-              <TableHead>หน่วย</TableHead>
-              <TableHead>สถานที่</TableHead>
-              <TableHead>สถานะ</TableHead>
-              <TableHead className="w-[100px]">จัดการ</TableHead>
+              <TableHead className="w-28 px-2">รหัส</TableHead>
+              <TableHead className="px-2">ชื่อพัสดุ</TableHead>
+              <TableHead className="w-40 px-2">หมวดหมู่</TableHead>
+              <TableHead className="w-24 px-2">หน่วย</TableHead>
+              <TableHead className="w-44 px-2">สถานที่</TableHead>
+              <TableHead className="w-32 px-2">สถานะ</TableHead>
+              <TableHead className="w-[100px] px-2">จัดการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -230,7 +230,7 @@ export function ItemsMasterTab() {
             ) : items.map((item) => (
               <React.Fragment key={item.id}>
                 <TableRow
-                  className={`group ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                  className={`group h-9 [&>td]:py-1 ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
                   onClick={(e) => {
                     if (!(e.target as HTMLElement).closest("input[type='checkbox'], button, a")) {
                       if (item.trackIndividually && item._count.subItems > 1) {
@@ -250,33 +250,32 @@ export function ItemsMasterTab() {
                       aria-label={`เลือก ${item.code}`}
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    <div className="flex items-center gap-1">
+                  <TableCell className="font-mono text-xs px-2">
+                    <div className="flex items-center gap-1 min-w-0">
                       {item.trackIndividually && item._count.subItems > 1 && (
                         <button type="button" aria-label="ดู sub-codes" onClick={() => setExpandedRow(expandedRow === item.id ? null : item.id)} className="grid size-6 shrink-0 place-items-center hover:bg-muted rounded">
                           {expandedRow === item.id ? <ChevronDown className="h-3.5 w-3.5" /> : <ExpandIcon className="h-3.5 w-3.5" />}
                         </button>
                       )}
-                      {item.code}
+                      <span className="block truncate">{item.code}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div>
-                      <span className="font-medium">{item.name}</span>
-                      {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                  <TableCell className="px-2">
+                    <div className="min-w-0">
+                      <span className="truncate min-w-0 block"><span className="font-medium">{item.name}</span>{item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}</span>
                     </div>
-                    {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="text-xs mt-0.5">ติดตาม ({item._count.subItems})</Badge>}
-                    {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs mt-0.5 bg-amber-50 text-amber-700 border-amber-200">ยังไม่มี SubItem — เบิกไม่ได้</Badge>}
+                    {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px] mt-0.5">ติดตาม ({item._count.subItems})</Badge>}
+                    {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px] mt-0.5 bg-amber-50 text-amber-700 border-amber-200">ยังไม่มี SubItem — เบิกไม่ได้</Badge>}
                   </TableCell>
-                  <TableCell><Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
-                  <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
-                  <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
+                  <TableCell className="px-2"><Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
+                  <TableCell className="text-xs px-2"><span className="block truncate">{item.issueUnit.name}</span></TableCell>
+                  <TableCell className="text-xs px-2"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
+                  <TableCell className="px-2">
+                    <span className={`inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
                       {STATUS_THAI[item.status] ?? item.status.replace(/_/g, " ")}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2">
                     <TooltipProvider>
                       <div className="flex gap-1">
                         <Tooltip>

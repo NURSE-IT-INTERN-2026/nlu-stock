@@ -163,16 +163,16 @@ export function ProfilesTab() {
       </div>
 
       <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead>ประเภท</TableHead>
-              <TableHead>รหัส</TableHead>
-              <TableHead>การเบิกจ่าย</TableHead>
-              <TableHead>Flags</TableHead>
-              <TableHead>หมวด</TableHead>
-              <TableHead>เปิดใช้</TableHead>
-              <TableHead className="w-[100px]">การดำเนินการ</TableHead>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="px-2">ประเภท</TableHead>
+              <TableHead className="w-24 px-2">รหัส</TableHead>
+              <TableHead className="w-40 px-2">การเบิกจ่าย</TableHead>
+              <TableHead className="w-32 px-2">Flags</TableHead>
+              <TableHead className="w-20 px-2">หมวด</TableHead>
+              <TableHead className="w-20 px-2">เปิดใช้</TableHead>
+              <TableHead className="w-[100px] px-2">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -190,26 +190,26 @@ export function ProfilesTab() {
             ) : profiles.map((p) => {
               const Icon = profileIcon(p.icon);
               return (
-                <TableRow key={p.id} className={!p.isActive ? "opacity-50" : ""}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                <TableRow key={p.id} className={`h-9 [&>td]:py-1 ${!p.isActive ? "opacity-50" : ""}`}>
+                  <TableCell className="px-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className={`grid place-items-center size-7 rounded-lg ${p.color}`}><Icon className="h-4 w-4" /></span>
-                      <span className="font-medium">{p.name}</span>
+                      <span className="truncate min-w-0 font-medium">{p.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell><span className="font-mono text-xs">{p.code}</span></TableCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseLabel(p.dispenseType)}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-mono text-xs px-2"><span className="block truncate">{p.code}</span></TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap px-2">{dispenseLabel(p.dispenseType)}</TableCell>
+                  <TableCell className="px-2">
                     <div className="flex flex-wrap gap-1">
-                      {p.assetTracking && <Badge variant="secondary" className="text-[10px]">ทรัพย์สิน</Badge>}
-                      {p.setTracking && <Badge variant="secondary" className="text-[10px]">ชุด</Badge>}
+                      {p.assetTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ทรัพย์สิน</Badge>}
+                      {p.setTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ชุด</Badge>}
                     </div>
                   </TableCell>
-                  <TableCell>{p._count?.subCategories ?? 0}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs px-2 tabular-nums">{p._count?.subCategories ?? 0}</TableCell>
+                  <TableCell className="px-2">
                     <Switch checked={p.isActive} onCheckedChange={() => handleToggleActive(p)} aria-label="เปิด/ปิด" />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2">
                     <TooltipProvider>
                       <div className="flex gap-1">
                         <Tooltip>

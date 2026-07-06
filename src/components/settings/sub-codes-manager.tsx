@@ -137,34 +137,34 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow>
-              <TableHead>Sub-code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Condition</TableHead>
-              <TableHead>Serial No.</TableHead>
-              <TableHead>Notes</TableHead>
-              <TableHead className="w-[80px]">Actions</TableHead>
+            <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="w-36 px-2">Sub-code</TableHead>
+              <TableHead className="px-2">Name</TableHead>
+              <TableHead className="w-28 px-2">Status</TableHead>
+              <TableHead className="w-32 px-2">Condition</TableHead>
+              <TableHead className="w-40 px-2">Serial No.</TableHead>
+              <TableHead className="w-40 px-2">Notes</TableHead>
+              <TableHead className="w-[80px] px-2">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {subItems.length === 0 ? (
               <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
             ) : subItems.map((sub) => (
-              <TableRow key={sub.id}>
-                <TableCell className="font-mono text-sm">{formatSubCode(itemCode, sub.subCode)}</TableCell>
-                <TableCell className="text-sm">{sub.name || "-"}</TableCell>
-                <TableCell>
+              <TableRow key={sub.id} className="h-9 [&>td]:py-1">
+                <TableCell className="font-mono text-xs px-2"><span className="block truncate">{formatSubCode(itemCode, sub.subCode)}</span></TableCell>
+                <TableCell className="px-2"><span className="truncate min-w-0">{sub.name || "-"}</span></TableCell>
+                <TableCell className="px-2">
                   <Badge variant={sub.status === "AVAILABLE" ? "default" : sub.status === "DAMAGED" ? "destructive" : "secondary"}>
                     {sub.status}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-sm">{sub.condition || "-"}</TableCell>
-                <TableCell className="font-mono text-xs">{sub.serialNumber || "-"}</TableCell>
-                <TableCell className="text-sm max-w-[200px] truncate">{sub.notes || "-"}</TableCell>
-                <TableCell>
+                <TableCell className="text-xs px-2">{sub.condition || "-"}</TableCell>
+                <TableCell className="font-mono text-xs px-2"><span className="block truncate">{sub.serialNumber || "-"}</span></TableCell>
+                <TableCell className="text-xs px-2"><span className="block truncate">{sub.notes || "-"}</span></TableCell>
+                <TableCell className="px-2">
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(sub)}><Pencil className="h-3 w-3" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(sub)}><Trash2 className="h-3 w-3 text-destructive" /></Button>

@@ -244,13 +244,13 @@ export default function MaintenancePage() {
 
               <div className="overflow-hidden rounded-2xl border bg-card">
                 <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
-                  <Table>
+                  <Table className="table-fixed">
                     <TableHeader>
-                      <TableRow className="sticky top-0 z-10 border-b border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                        <TableHead>รหัสพัสดุ</TableHead>
-                        <TableHead>ชื่อ</TableHead>
-                        <TableHead>สถานะ</TableHead>
-                        <TableHead>กำหนด</TableHead>
+                      <TableRow className="sticky top-0 z-10 border-b border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                        <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
+                        <TableHead className="px-2">ชื่อ</TableHead>
+                        <TableHead className="w-24 px-2">สถานะ</TableHead>
+                        <TableHead className="w-32 px-2">กำหนด</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -285,24 +285,24 @@ export default function MaintenancePage() {
                               }
                             }}
                             aria-label={`${row.code} ${row.name}, ${isOverdue ? `เลยรอบ เกิน ${Math.abs(days)} วัน` : `ใกล้ถึงรอบ อีก ${days} วัน`}`}
-                            className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                            className="h-9 cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none [&>td]:py-1"
                           >
-                            <TableCell className="font-mono text-xs">{row.code}</TableCell>
-                            <TableCell>
+                            <TableCell className="font-mono text-xs px-2"><span className="block truncate">{row.code}</span></TableCell>
+                            <TableCell className="px-2">
                               <Link
                                 href={`/items/${row.id}`}
                                 onClick={(e) => e.stopPropagation()}
                                 className="font-medium hover:underline"
                               >
-                                {row.name}
+                                <span className="block truncate min-w-0">{row.name}</span>
                               </Link>
                             </TableCell>
-                            <TableCell>
-                              <Badge variant={isOverdue ? "destructive" : "secondary"}>
+                            <TableCell className="px-2">
+                              <Badge variant={isOverdue ? "destructive" : "secondary"} className="px-1.5 py-0 leading-5 text-[11px]">
                                 {isOverdue ? "เลยรอบ" : "ใกล้ถึงรอบ"}
                               </Badge>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="text-xs px-2">
                               <div className="flex flex-col gap-0.5">
                                 <span className="tabular-nums">
                                   {new Date(row.nextMaintenanceDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}

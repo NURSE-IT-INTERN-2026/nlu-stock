@@ -277,14 +277,14 @@ function AlertsContent() {
       <div className="rounded-2xl border overflow-hidden bg-card">
         {/* Desktop: table */}
         <div className="hidden md:block overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
-              <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <TableHead>รหัสพัสดุ</TableHead>
-                <TableHead>ชื่อ</TableHead>
-                <TableHead>การแจ้งเตือน</TableHead>
-                <TableHead>รายละเอียด</TableHead>
-                <TableHead>สถานที่</TableHead>
+              <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
+                <TableHead className="px-2">ชื่อ</TableHead>
+                <TableHead className="w-48 px-2">การแจ้งเตือน</TableHead>
+                <TableHead className="w-56 px-2">รายละเอียด</TableHead>
+                <TableHead className="w-44 px-2">สถานที่</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -305,31 +305,35 @@ function AlertsContent() {
               ) : items.map((item, idx) => (
                 <TableRow
                   key={item.id}
-                  className={`cursor-pointer hover:bg-muted/50 transition-colors ${idx % 2 === 1 ? "bg-muted/40" : ""}`}
+                  className={`h-9 cursor-pointer hover:bg-muted/50 transition-colors [&>td]:py-1 ${idx % 2 === 1 ? "bg-muted/40" : ""}`}
                   onClick={() => router.push(`/items/${item.id}`)}
                 >
-                  <TableCell className="font-mono text-sm">{item.code}</TableCell>
-                  <TableCell>
-                    <span className="font-medium">{item.name}</span>
-                    {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                  <TableCell className="font-mono text-xs px-2"><span className="block truncate">{item.code}</span></TableCell>
+                  <TableCell className="px-2">
+                    <div className="flex items-center min-w-0">
+                      <span className="truncate min-w-0">
+                        <span className="font-medium">{item.name}</span>
+                        {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                      </span>
+                    </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2">
                     <div className="flex flex-wrap gap-1">
                       {item.alertTypes.map((t) => (
-                        <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
+                        <span key={t} className={cn("inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5 whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
                           {ALERT_LABEL[t] ?? t}
                         </span>
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="text-xs px-2">
                     <div className="flex flex-col gap-0.5">
                       {item.alertTypes.map((t) => (
-                        <span key={t} className="text-xs text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
+                        <span key={t} className="text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
+                  <TableCell className="text-sm px-2"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>

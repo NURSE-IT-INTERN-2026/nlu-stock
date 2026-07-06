@@ -57,11 +57,11 @@ export function RecentReceiveTable({ data }: RecentReceiveTableProps) {
           <div className="overflow-x-auto" ref={tableRef}>
             <Table role="grid" className="table-fixed">
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[120px]">วันที่</TableHead>
-                  <TableHead>รายการ</TableHead>
-                  <TableHead className="w-[70px] text-right">จำนวน</TableHead>
-                  <TableHead className="hidden sm:table-cell w-[130px]">ผู้รับ</TableHead>
+                <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                  <TableHead className="w-32 px-2">วันที่</TableHead>
+                  <TableHead className="px-2">รายการ</TableHead>
+                  <TableHead className="w-20 px-2 text-right">จำนวน</TableHead>
+                  <TableHead className="hidden sm:table-cell w-32 px-2">ผู้รับ</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -70,20 +70,22 @@ export function RecentReceiveTable({ data }: RecentReceiveTableProps) {
                     key={r.id}
                     tabIndex={0}
                     role="row"
-                    className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    className="h-9 cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset [&>td]:py-1"
                     onClick={() => handleRowNav(r.item.id)}
                     onKeyDown={(e) => handleKeyDown(e, r.item.id)}
                     aria-label={`${r.item.code} ${r.item.name}, ${r.quantity} ชิ้น`}
                   >
-                    <TableCell className="text-sm whitespace-nowrap text-muted-foreground">
+                    <TableCell className="text-xs whitespace-nowrap text-muted-foreground px-2">
                       {fmtDate(new Date(r.receivedAt), "dd MMM HH:mm")}
                     </TableCell>
-                    <TableCell className="text-sm overflow-hidden">
-                      <span className="font-mono text-foreground font-semibold underline decoration-primary/30 underline-offset-2">{r.item.code}</span>{" "}
-                      <span className="hidden sm:inline text-foreground/80 font-medium truncate max-w-[160px] inline-block align-bottom">{r.item.name}</span>
+                    <TableCell className="px-2">
+                      <div className="flex items-center min-w-0 gap-1">
+                        <span className="font-mono text-xs text-foreground font-semibold underline decoration-primary/30 underline-offset-2 shrink-0">{r.item.code}</span>
+                        <span className="hidden sm:inline text-foreground/80 font-medium truncate min-w-0">{r.item.name}</span>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-right text-sm text-foreground font-bold">{r.quantity}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-sm text-foreground/80 font-medium">{r.receiver.name}</TableCell>
+                    <TableCell className="text-right text-sm text-foreground font-bold px-2">{r.quantity}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-xs text-foreground/80 font-medium px-2">{r.receiver.name}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

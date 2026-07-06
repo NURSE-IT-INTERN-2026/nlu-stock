@@ -67,9 +67,9 @@ export function ReportDataTable<T extends Record<string, any>>({
       <div className="hidden md:block">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
               {columns.map((col) => (
-                <TableHead key={col.key} className={col.className}>
+                <TableHead key={col.key} className={`px-2 ${col.className ?? ""}`}>
                   {col.header}
                 </TableHead>
               ))}
@@ -77,9 +77,9 @@ export function ReportDataTable<T extends Record<string, any>>({
           </TableHeader>
           <TableBody>
             {paged.map((row, i) => (
-              <TableRow key={i}>
+              <TableRow key={i} className="h-9 [&>td]:py-1">
                 {columns.map((col) => (
-                  <TableCell key={col.key} className={col.className}>
+                  <TableCell key={col.key} className={`px-2 ${col.className ?? ""}`}>
                     {col.render
                       ? col.render(row)
                       : (row[col.key] as React.ReactNode) ?? "—"}
