@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { bulkSubItemStatusSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
+import { STATUS_LABELS } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
 // Bulk per-piece status change for tracked items (adjust dialog). One atomic transaction,
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           subItemId: sub.id,
           previousStatus: sub.status,
           newStatus: data.newStatus,
-          reason: data.notes || `Adjusted to ${data.newStatus}`,
+          reason: data.notes || `ปรับสถานะเป็น ${STATUS_LABELS[data.newStatus] ?? data.newStatus}`,
           changedBy: auth.user.userId,
           imageUrl: data.imageUrl,
         },

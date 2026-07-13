@@ -61,7 +61,7 @@ export async function POST(
               subItemId: data.subItemId,
               previousStatus: sub.status,
               newStatus: ItemStatus.AVAILABLE,
-              reason: "Maintenance completed",
+              reason: "บำรุงรักษาเสร็จสิ้น",
               changedBy: auth.user.userId,
             },
           });

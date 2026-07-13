@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, type ComponentProps } from "react";
-import { Package, X, Check, ChevronDown } from "lucide-react";
+import { Package, X, Check, ChevronDown, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,10 +48,12 @@ interface Props {
   subItems?: AdjustSubItem[];
   /** When set, dialog locks to this single sub-item (no picker). */
   fixedSubItemId?: string;
+  /** When set, count-mode locks the reason (e.g. "DAMAGED") — opens as a damage report that decrements qty. */
+  fixedReason?: string;
   onSuccess: () => void;
 }
 
-export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, availableQty, totalQty, checkedOutCount, lots, trackIndividually, subItems, fixedSubItemId, onSuccess }: Props) {
+export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, availableQty, totalQty, checkedOutCount, lots, trackIndividually, subItems, fixedSubItemId, fixedReason, onSuccess }: Props) {
   // Full sub-code shown to staff (e.g. NLU-KRU-001-C01); falls back to raw when no itemCode.
   const fmtCode = (code: string) => formatSubCode(itemCode ?? "", code);
   const lotMode = !!lots && lots.length > 0;
@@ -90,6 +92,11 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Lock the reason when opened in fixed-reason mode (e.g. damage report on a consumable).
+  useEffect(() => {
+    if (open && fixedReason) setReason(fixedReason);
+  }, [open, fixedReason]);
 
   const parsed = count !== "" ? parseInt(count) : null;
   const safe = parsed !== null && !isNaN(parsed) ? parsed : null;
@@ -136,10 +143,10 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
         });
         toast.success("ปรับสถานะรายชิ้นแล้ว");
       } else if (lotMode) {
-        await adjustStock(itemId, { lotId: selectedLotId, lotCount: safe, reason, notes: notes || null, imageEvidence: imageEvidence || null });
+        await adjustStock(itemId, { lotId: selectedLotId, lotCount: safe!, reason, notes: notes || null, imageEvidence: imageEvidence || null });
         toast.success("แก้ยอด Lot แล้ว");
       } else {
-        await adjustStock(itemId, { shelfCount: safe, reason, notes: notes || null, imageEvidence: imageEvidence || null });
+        await adjustStock(itemId, { shelfCount: safe!, reason, notes: notes || null, imageEvidence: imageEvidence || null });
         toast.success("ปรับสต็อกแล้ว");
       }
       onOpenChange(false);
@@ -155,6 +162,17 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
     ? "เลือกชิ้นที่หาย/พ้นสภาพ แล้วเปลี่ยนสถานะ (สูญหาย/ตัดจำหน่าย)"
     : lotMode ? "ตรวจนับยอดจริงของ lot แล้วบันทึก" : "ตรวจนับของบนชั้นวางแล้วบันทึก";
 
+  // Damage-report mode (consumable): override copy + icon to match the "แจ้งชำรุด" tile.
+  // AdjustmentReason has no plain DAMAGED; DAMAGED_PENDING_REPAIR is the damaged-stock bucket.
+  const isDamage = fixedReason === "DAMAGED_PENDING_REPAIR";
+  const fixedReasonLabel = fixedReason
+    ? ADJUSTMENT_REASON_OPTIONS.find((r) => r.value === fixedReason)?.label ?? fixedReason
+    : null;
+  const effectiveTitle = fixedReasonLabel ? (isDamage ? "แจ้งชำรุด" : `บันทึก${fixedReasonLabel}`) : title;
+  const effectiveSubtitle = fixedReasonLabel
+    ? "ตัดยอดของที่ชำรุด/เสีย พร้อมบันทึกเหตุผล"
+    : subtitle;
+
   const canSave = trackedMode
     ? effectiveSubIds.size > 0 && !!targetStatus
     : safe !== null && !!reason && (!lotMode || !!selectedLotId);
@@ -163,17 +181,17 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
-        <DialogTitle className="sr-only">{title}</DialogTitle>
+        <DialogTitle className="sr-only">{effectiveTitle}</DialogTitle>
 
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Package className="h-4 w-4" />
+            <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", isDamage ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")}>
+              {isDamage ? <TriangleAlert className="h-4 w-4" /> : <Package className="h-4 w-4" />}
             </div>
             <div>
-              <p className="text-base font-semibold text-foreground">{title}</p>
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
+              <p className="text-base font-semibold text-foreground">{effectiveTitle}</p>
+              <p className="text-xs text-muted-foreground">{effectiveSubtitle}</p>
             </div>
           </div>
           <button
@@ -293,7 +311,11 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
               <div className="space-y-2">
                 <Label>เปลี่ยนเป็นสถานะ <span className="text-destructive">*</span></Label>
                 <Select value={targetStatus} onValueChange={(v) => setTargetStatus(v ?? "")}>
-                  <SelectTrigger><SelectValue placeholder="เลือกสถานะ" /></SelectTrigger>
+                  <SelectTrigger className="bg-card">
+                    <SelectValue placeholder="เลือกสถานะ">
+                      {TRACKED_ADJUST_STATUS_OPTIONS.find((o) => o.value === targetStatus)?.label}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {TRACKED_ADJUST_STATUS_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -319,7 +341,15 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
                 <div className="space-y-2">
                   <Label>Lot <span className="text-destructive">*</span></Label>
                   <Select value={selectedLotId} onValueChange={(v) => { if (v) setSelectedLotId(v); }}>
-                    <SelectTrigger><SelectValue placeholder="เลือก lot" /></SelectTrigger>
+                    <SelectTrigger className="bg-card">
+                      <SelectValue placeholder="เลือก lot">
+                        {(() => {
+                          const l = lots?.find((x) => x.id === selectedLotId);
+                          if (!l) return undefined;
+                          return `${l.lotNumber} — เหลือ ${l.remainingQty}${l.expiryDate ? ` (หมดอายุ ${new Date(l.expiryDate).toLocaleDateString()})` : ""}`;
+                        })()}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {lots!.map((l) => (
                         <SelectItem key={l.id} value={l.id}>
@@ -337,11 +367,11 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
                 {lotMode ? (
                   <>
                     <div>
-                      <span className="text-xs text-muted-foreground">Lot คงเหลือ (ระบบ)</span>
+                      <span className="text-xs text-muted-foreground">ยอด lot นี้ (ระบบ)</span>
                       <p className="font-semibold text-foreground">{lotPrev}</p>
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground">รวมทั้งหมด (available)</span>
+                      <span className="text-xs text-muted-foreground">ยอดรวมทุก lot (available)</span>
                       <p className="font-semibold text-foreground">{availableQty}</p>
                     </div>
                   </>
@@ -375,7 +405,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
                     noChange ? "text-muted-foreground" : positive ? "text-green-600" : "text-destructive",
                   )}>
                     {lotMode
-                      ? `Lot: ${lotPrev} → ${safe} (${safe >= lotPrev ? "+" : ""}${safe - lotPrev})`
+                      ? `ยอด lot นี้ ${lotPrev} → ${safe} (${safe >= lotPrev ? `เพิ่ม ${safe - lotPrev}` : `ลดลง ${lotPrev - safe}`})`
                       : `รวมใหม่: ${newTotal} (${positive ? `+${newTotal! - totalQty}` : `${newTotal! - totalQty}`})`}
                   </p>
                 )}
@@ -383,14 +413,28 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
 
               <div className="space-y-2">
                 <Label>เหตุผล <span className="text-destructive">*</span></Label>
-                <Select value={reason} onValueChange={(v) => setReason(v ?? "")}>
-                  <SelectTrigger><SelectValue placeholder="เลือกเหตุผล" /></SelectTrigger>
-                  <SelectContent>
-                    {ADJUSTMENT_REASON_OPTIONS.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {fixedReasonLabel ? (
+                  <div className={cn(
+                    "flex items-center rounded-md border px-3 py-2 text-sm font-medium",
+                    isDamage ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-input bg-card text-foreground",
+                  )}>
+                    {isDamage && <TriangleAlert className="size-4 mr-2" />}
+                    {fixedReasonLabel}
+                  </div>
+                ) : (
+                  <Select value={reason} onValueChange={(v) => setReason(v ?? "")}>
+                    <SelectTrigger className="bg-card">
+                      <SelectValue placeholder="เลือกเหตุผล">
+                        {ADJUSTMENT_REASON_OPTIONS.find((r) => r.value === reason)?.label}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ADJUSTMENT_REASON_OPTIONS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">

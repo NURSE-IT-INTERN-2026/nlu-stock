@@ -3,6 +3,7 @@ import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/
 import { stockAdjustSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
+import { ADJUSTMENT_REASON_LABELS } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           itemId: id,
           previousStatus: item.status,
           newStatus: item.status,
-          reason: `Lot ${lot.lotNumber} adjusted: ${prev} → ${data.lotCount} (${delta >= 0 ? "+" : ""}${delta}) (${data.reason})`,
+          reason: `แก้ยอด Lot ${lot.lotNumber}: ${prev} → ${data.lotCount} (${delta >= 0 ? "+" : ""}${delta}) (เหตุผล:${ADJUSTMENT_REASON_LABELS[data.reason] ?? data.reason})`,
           changedBy: auth.user.userId,
         },
       });
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         itemId: id,
         previousStatus: item.status,
         newStatus: item.status,
-        reason: `Stock adjusted: ${item.availableQty} → ${newAvailable} on shelf (${newTotal} total, ${checkedOut} checked out) (${data.reason})`,
+        reason: `ปรับสต็อก: ${item.availableQty} → ${newAvailable} บนชั้นวาง (รวม ${newTotal}, ถูกเบิก ${checkedOut}) (เหตุผล:${ADJUSTMENT_REASON_LABELS[data.reason] ?? data.reason})`,
         changedBy: auth.user.userId,
       },
     });
