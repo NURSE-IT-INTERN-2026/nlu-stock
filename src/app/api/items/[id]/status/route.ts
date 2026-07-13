@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { statusChangeSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
+import { STATUS_LABELS } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           subItemId: data.subItemId,
           previousStatus: subItem.status,
           newStatus: data.newStatus,
-          reason: data.notes || `Status changed to ${data.newStatus}`,
+          reason: data.notes || `เปลี่ยนสถานะเป็น ${STATUS_LABELS[data.newStatus] ?? data.newStatus}`,
           changedBy: auth.user.userId,
           imageUrl: data.imageUrl,
         },

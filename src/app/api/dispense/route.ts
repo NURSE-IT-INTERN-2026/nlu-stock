@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
               subItemId: di.subItemId,
               previousStatus: sub.status,
               newStatus,
-              reason: "Dispensed",
+              reason: "เบิก",
               changedBy: auth.user.userId,
             },
           });
