@@ -124,18 +124,18 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground text-sm p-4">Loading sub-codes...</div>;
+  if (loading) return <div className="text-muted-foreground text-sm p-4">กำลังโหลดรหัสย่อย...</div>;
 
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
-        <h4 className="text-sm font-medium">Sub-codes ({subItems.length})</h4>
+        <h4 className="text-sm font-medium">รหัสย่อย ({subItems.length})</h4>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setBatchDialogOpen(true)}>
-            <Hash className="h-3.5 w-3.5 mr-1" />Batch Generate
+            <Hash className="h-3.5 w-3.5 mr-1" />สร้างเป็นชุด
           </Button>
           <Button size="sm" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5 mr-1" />Add
+            <Plus className="h-3.5 w-3.5 mr-1" />เพิ่ม
           </Button>
         </div>
       </div>
@@ -144,18 +144,18 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
-              <TableHead className="w-36 px-2">Sub-code</TableHead>
-              <TableHead className="px-2">Name</TableHead>
-              <TableHead className="w-28 px-2">Status</TableHead>
-              <TableHead className="w-32 px-2">Condition</TableHead>
-              <TableHead className="w-40 px-2">Serial No.</TableHead>
-              <TableHead className="w-40 px-2">Notes</TableHead>
-              <TableHead className="w-[80px] px-2">Actions</TableHead>
+              <TableHead className="w-36 px-2">รหัสย่อย</TableHead>
+              <TableHead className="px-2">ชื่อ</TableHead>
+              <TableHead className="w-28 px-2">สถานะ</TableHead>
+              <TableHead className="w-32 px-2">สภาพ</TableHead>
+              <TableHead className="w-40 px-2">หมายเลขซีเรียล</TableHead>
+              <TableHead className="w-40 px-2">หมายเหตุ</TableHead>
+              <TableHead className="w-[80px] px-2">การจัดการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {subItems.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">No sub-codes</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">ยังไม่มีรหัสย่อย</TableCell></TableRow>
             ) : subItems.map((sub) => (
               <TableRow key={sub.id} className="h-9 [&>td]:py-1">
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{formatSubCode(itemCode, sub.subCode)}</span></TableCell>
@@ -189,16 +189,16 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           <div className="space-y-4">
             {!editing && (
               <div>
-                <Label>Sub-code</Label>
-                <Input value={editForm.subCode} onChange={(e) => setEditForm({ ...editForm, subCode: e.target.value })} placeholder="e.g. ITM001-01" />
+                <Label>รหัสย่อย</Label>
+                <Input value={editForm.subCode} onChange={(e) => setEditForm({ ...editForm, subCode: e.target.value })} placeholder="เช่น ITM001-01" />
               </div>
             )}
             <div>
-              <Label>Name</Label>
-              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="e.g. โต๊ะเขียนหนังสือ #1" />
+              <Label>ชื่อ</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="เช่น โต๊ะเขียนหนังสือ #1" />
             </div>
             <div>
-              <Label>Status</Label>
+              <Label>สถานะ</Label>
               <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v ?? "AVAILABLE" })}>
                 <SelectTrigger><SelectValue>{labelFor(STATUS_LABELS, editForm.status)}</SelectValue></SelectTrigger>
                 <SelectContent>
@@ -209,7 +209,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               </Select>
             </div>
             <div>
-              <Label>Condition</Label>
+              <Label>สภาพ</Label>
               <Select value={editForm.condition} onValueChange={(v) => setEditForm({ ...editForm, condition: v ?? NO_CONDITION })}>
                 <SelectTrigger><SelectValue>{editForm.condition === NO_CONDITION ? "ไม่ระบุ" : labelFor(CONDITION_LABELS, editForm.condition)}</SelectValue></SelectTrigger>
                 <SelectContent>
@@ -221,18 +221,18 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               </Select>
             </div>
             <div>
-              <Label>Serial Number</Label>
-              <Input value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} placeholder="e.g. 12-6515-020-0001" />
+              <Label>หมายเลขซีเรียล</Label>
+              <Input value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} placeholder="เช่น 12-6515-020-0001" />
             </div>
             <div>
-              <Label>Notes</Label>
+              <Label>หมายเหตุ</Label>
               <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>ยกเลิก</Button>
             <Button onClick={handleSave} disabled={!editing && !editForm.subCode}>
-              {editing ? "Save" : "Create"}
+              {editing ? "บันทึก" : "สร้าง"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -242,32 +242,32 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
       <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Batch Generate Sub-codes</DialogTitle>
+            <DialogTitle>สร้างรหัสย่อยเป็นชุด</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Prefix</Label>
+              <Label>คำนำหน้า</Label>
               <Input value={batchForm.prefix} onChange={(e) => setBatchForm({ ...batchForm, prefix: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Start Number</Label>
+                <Label>เลขเริ่มต้น</Label>
                 <Input type="number" value={batchForm.startNumber} onChange={(e) => setBatchForm({ ...batchForm, startNumber: parseInt(e.target.value) || 0 })} />
               </div>
               <div>
-                <Label>End Number</Label>
+                <Label>เลขสิ้นสุด</Label>
                 <Input type="number" value={batchForm.endNumber} onChange={(e) => setBatchForm({ ...batchForm, endNumber: parseInt(e.target.value) || 0 })} />
               </div>
             </div>
             <Separator />
             <p className="text-sm text-muted-foreground">
-              Will generate {Math.max(0, batchForm.endNumber - batchForm.startNumber + 1)} sub-codes:
+              จะสร้าง {Math.max(0, batchForm.endNumber - batchForm.startNumber + 1)} รหัสย่อย:
               {" "}{batchForm.prefix}{String(batchForm.startNumber).padStart(String(batchForm.endNumber).length, "0")} — {batchForm.prefix}{batchForm.endNumber}
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleBatchCreate} disabled={batchForm.endNumber < batchForm.startNumber}>Generate</Button>
+            <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={handleBatchCreate} disabled={batchForm.endNumber < batchForm.startNumber}>สร้าง</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
