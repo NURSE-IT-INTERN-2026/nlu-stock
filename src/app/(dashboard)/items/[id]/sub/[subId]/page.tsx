@@ -5,15 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, XCircle, Undo2, Package, Clock, Wrench, Info, Hash, Tag, FolderTree, Layers, MapPin, ClipboardList, QrCode, Image as ImageIcon, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2 } from "lucide-react";
+import { ArrowLeft, XCircle, Undo2, Package, Clock, Wrench, Info, Hash, Tag, FolderTree, Layers, MapPin, ClipboardList, QrCode, Image as ImageIcon, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2, RefreshCw, CalendarDays, User2, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { pic } from "@/lib/image";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
-import { STATUS_LABELS, locationLabel, formatSubCode } from "@/lib/constants";
+import { STATUS_LABELS, locationLabel, formatSubCode, EVENT_TYPE_LABELS, labelFor } from "@/lib/constants";
 import { getSubItem, getSubItems, returnItem, updateSubItem } from "@/lib/api";
 import { ActionTile } from "@/components/items/action-tile";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -29,6 +28,10 @@ interface ParentItem {
   name: string;
   nameEn: string | null;
   trackIndividually: boolean;
+  imageUrl: string | null;
+  maintenanceCycleMonths: number;
+  lastMaintenanceDate: string | null;
+  nextMaintenanceDate: string | null;
   category: { id: string; name: string; profile: { name: string } | null };
   location: { id: string; building: string; floor: string; room: string; detail: string | null } | null;
   issueUnit: { id: string; name: string };
@@ -85,10 +88,57 @@ interface SubItemData {
   maintenanceRecords: MaintenanceRecord[];
 }
 
-const TYPE_LABELS: Record<string, string> = { PREVENTIVE: "ป้องกัน", CORRECTIVE: "ซ่อมแก้ไข" };
+const TYPE_LABELS: Record<string, string> = { PREVENTIVE: "ตรวจบำรุง", CORRECTIVE: "ซ่อมแซม" };
 const RESULT_LABELS: Record<string, string> = { AVAILABLE: "พร้อมใช้งาน", NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม", DISPOSED: "จำหน่าย" };
 const CONDITION_LABELS: Record<string, string> = { NEW: "ใหม่", OLD: "เก่า", USABLE: "ใช้ได้", FAIR: "พอใช้", UNUSABLE: "ใช้ไม่ได้", DAMAGED: "ชำรุด" };
 const STATUS_DOT: Record<string, string> = { AVAILABLE: "bg-success", ON_LOAN: "bg-blue-500", DAMAGED: "bg-destructive", UNDER_REPAIR: "bg-warning", LOST: "bg-destructive", DISPOSED: "bg-muted-foreground", PENDING_MAINTENANCE: "bg-warning" };
+
+// Status → icon + tone for the hero status card
+const STATUS_META: Record<string, { icon: typeof CheckCircle2; tone: "success" | "primary" | "warning" | "destructive" }> = {
+  AVAILABLE: { icon: CheckCircle2, tone: "success" },
+  ON_LOAN: { icon: Undo2, tone: "primary" },
+  IN_USE: { icon: ShoppingCart, tone: "primary" },
+  PENDING_MAINTENANCE: { icon: Wrench, tone: "warning" },
+  UNDER_REPAIR: { icon: Wrench, tone: "warning" },
+  DAMAGED: { icon: ShieldAlert, tone: "warning" },
+  LOST: { icon: XCircle, tone: "destructive" },
+  DISPOSED: { icon: XCircle, tone: "destructive" },
+};
+const TONE_CLASS: Record<string, string> = {
+  success: "text-success-700 bg-success/10 border-success/20",
+  primary: "text-primary bg-primary/10 border-primary/20",
+  warning: "text-warning-700 bg-warning/10 border-warning/20",
+  destructive: "text-destructive bg-destructive/10 border-destructive/20",
+};
+const TONE_BAR: Record<string, string> = {
+  success: "bg-success", primary: "bg-primary", warning: "bg-warning", destructive: "bg-destructive",
+};
+
+// ── History (sub-item timeline: dispense + status + maintenance) ──
+type HistType = "DISPENSE" | "STATUS_CHANGE" | "MAINTENANCE";
+const HIST_ICONS: Record<HistType, typeof Package> = {
+  DISPENSE: ShoppingCart, STATUS_CHANGE: RefreshCw, MAINTENANCE: Wrench,
+};
+const HIST_BADGE: Record<HistType, string> = {
+  DISPENSE: "bg-primary/10 text-primary border-primary/20",
+  STATUS_CHANGE: "bg-warning/10 text-warning-700 border-warning/20",
+  MAINTENANCE: "bg-primary/5 text-primary border-primary/15",
+};
+const HIST_CHIPS: { value: HistType | ""; label: string }[] = [
+  { value: "", label: "ทั้งหมด" },
+  { value: "DISPENSE", label: "เบิก" },
+  { value: "STATUS_CHANGE", label: "เปลี่ยนสถานะ" },
+  { value: "MAINTENANCE", label: "บำรุงรักษา" },
+];
+
+// Next-maintenance-date → tone (overdue / soon / ok)
+function maintTone(nextDate: string | null): { tone: "success" | "warning" | "destructive" | "primary" } {
+  if (!nextDate) return { tone: "primary" };
+  const diff = (new Date(nextDate).getTime() - Date.now()) / 86_400_000;
+  if (diff < 0) return { tone: "destructive" };
+  if (diff <= 30) return { tone: "warning" };
+  return { tone: "success" };
+}
 
 type TabKey = "overview" | "media" | "subcodes" | "history" | "maintenance";
 
@@ -103,6 +153,7 @@ export default function SubItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [returning, setReturning] = useState(false);
   const [tab, setTab] = useState<TabKey>("overview");
+  const [histFilter, setHistFilter] = useState<HistType | "">("");
   const [maintOpen, setMaintOpen] = useState(false);
   const [statusAction, setStatusAction] = useState<"DAMAGED" | "LOST" | "DISPOSED" | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -147,12 +198,31 @@ export default function SubItemDetailPage() {
     [sub],
   );
 
-  const timeline = useMemo(() => {
+  const historyEvents = useMemo<{ id: string; type: HistType; date: string; description: string; user: string }[]>(() => {
     if (!sub) return [];
-    const dispense = sub.dispenseRecords.map((d) => ({ kind: "dispense" as const, at: d.dispensedAt, record: d }));
-    const status = sub.statusLogs.map((l) => ({ kind: "status" as const, at: l.changedAt, record: l }));
-    return [...dispense, ...status].sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+    const dispense = sub.dispenseRecords.map((d) => ({
+      id: d.id, type: "DISPENSE" as const, date: d.dispensedAt,
+      description: `เบิกออก${d.returnedAt ? " · คืนแล้ว" : ""}${d.usageNote ? ` · ${d.usageNote}` : ""}`,
+      user: d.staff.name,
+    }));
+    const status = sub.statusLogs.map((l) => ({
+      id: l.id, type: "STATUS_CHANGE" as const, date: l.changedAt,
+      description: `${STATUS_LABELS[l.previousStatus] ?? l.previousStatus} → ${STATUS_LABELS[l.newStatus] ?? l.newStatus}${l.reason ? ` · ${l.reason}` : ""}`,
+      user: l.changer.name,
+    }));
+    const maint = sub.maintenanceRecords.map((r) => ({
+      id: r.id, type: "MAINTENANCE" as const, date: r.performedAt,
+      description: `${TYPE_LABELS[r.type] ?? r.type} · ${RESULT_LABELS[r.result] ?? r.result}${r.issue ? ` · ${r.issue}` : ""}`,
+      user: r.performer.name,
+    }));
+    return [...dispense, ...status, ...maint]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [sub]);
+
+  const filteredEvents = useMemo(
+    () => (histFilter ? historyEvents.filter((e) => e.type === histFilter) : historyEvents),
+    [historyEvents, histFilter],
+  );
 
   const tabs: { key: TabKey; label: string; icon: typeof Info }[] = useMemo(() => [
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info },
@@ -200,125 +270,150 @@ export default function SubItemDetailPage() {
   }
 
   const fullCode = formatSubCode(sub.item.code, sub.subCode);
-  const cover = sub.imageUrl ?? sub.images?.[0] ?? null;
+  const cover = sub.imageUrl ?? sub.images?.[0] ?? sub.item.imageUrl ?? null;
   const fmtDate = (s: string) => new Date(s).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
   const fmtDay = (s: string) => new Date(s).toLocaleDateString("th-TH");
 
+  const detailRows: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; mono?: boolean }[] = [
+    { icon: Hash, label: "รหัส", value: fullCode, mono: true },
+    { icon: Tag, label: "ชื่อ", value: sub.name ?? sub.item.name },
+    { icon: FolderTree, label: "ประเภท", value: sub.item.category.profile?.name ?? sub.item.category.name },
+    { icon: Layers, label: "หมวดหมู่", value: sub.item.category.name },
+    { icon: Hash, label: "สถานะ", value: STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ") },
+    ...(sub.condition ? [{ icon: ClipboardList, label: "สภาพ", value: CONDITION_LABELS[sub.condition] ?? sub.condition }] : []),
+    ...(sub.serialNumber ? [{ icon: Hash, label: "หมายเลขซีเรียล", value: sub.serialNumber, mono: true }] : []),
+    { icon: Layers, label: "หน่วยเบิก", value: sub.item.issueUnit.name },
+    { icon: MapPin, label: "ที่ตั้ง", value: sub.item.location ? locationLabel(sub.item.location) : "-" },
+    { icon: Clock, label: "วันที่สร้าง", value: fmtDay(sub.createdAt) },
+  ];
+
+  const qrBlock = (
+    <div className="border-t border-border p-4 sm:p-5 grid grid-cols-[auto_1fr] gap-4 sm:gap-5 items-center bg-muted/20">
+      <div className="size-20 sm:size-24 shrink-0 rounded-xl border border-border bg-card p-2 grid place-items-center">
+        {qrDataUrl ? (
+          <img src={qrDataUrl} alt={`QR for ${fullCode}`} className="size-full rounded-md" />
+        ) : (
+          <QrCode className="size-12 text-foreground animate-pulse" />
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-widest text-muted-foreground">QR code</div>
+        <div className="text-sm text-muted-foreground mt-1 truncate">สแกนเพื่อค้นหาพัสดุย่อย</div>
+        <div className="font-mono text-sm font-semibold mt-0.5 truncate">{fullCode}</div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      <div className="max-w-5xl">
-        {/* ── Cover + Title ── */}
-        <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 pb-6 border-b border-border">
-          <div className="relative w-full sm:w-64 aspect-[4/3] rounded-2xl overflow-hidden border border-border bg-muted shadow-sm shrink-0">
-            <img src={cover ?? pic(fullCode, 640, 480)} alt={sub.name ?? fullCode} className="size-full object-cover" />
-            <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-2">
-              <span className="inline-flex items-center rounded-full border px-2 py-0.5 bg-background">{sub.item.category.profile?.name ?? sub.item.category.name}</span>
-              <span>·</span>
-              <span className="font-mono">{fullCode}</span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className={cn("size-2 rounded-full", STATUS_DOT[sub.status] || "bg-muted-foreground")} />
-                <span>{STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")}</span>
-              </span>
+      <div className="max-w-6xl">
+        {/* ── Hero card: Cover + Title + Status + Tabs ── */}
+        <section className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="grid gap-5 sm:gap-6 lg:gap-8 p-4 sm:p-6 grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]">
+            {/* Cover */}
+            <div className="relative w-full md:w-48 lg:w-56 aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-muted shadow-sm">
+              <img src={cover ?? pic(fullCode, 640, 480)} alt={sub.name ?? fullCode} className="size-full object-cover" />
+              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance">{sub.name ?? sub.item.name}</h1>
-            {sub.item.nameEn && <p className="text-sm text-muted-foreground mt-1">{sub.item.nameEn}</p>}
-            {(sub.condition || sub.serialNumber) && (
-              <div className="mt-3 flex flex-wrap gap-2">
+
+            {/* Title block */}
+            <div className="flex flex-col justify-between min-w-0 py-1">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs mb-3">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
+                    {sub.item.category.profile?.name ?? sub.item.category.name}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-mono text-muted-foreground">{fullCode}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={cn("size-1.5 rounded-full", STATUS_DOT[sub.status] || "bg-muted-foreground")} />
+                    <span className="text-muted-foreground">{STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")}</span>
+                  </span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold leading-none tracking-tight text-balance break-words">
+                  {sub.name ?? sub.item.name}
+                </h1>
+                {sub.item.nameEn && <p className="text-muted-foreground mt-2 text-sm italic">{sub.item.nameEn}</p>}
+                {sub.notes && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{sub.notes}</p>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-4">
                 {sub.condition && (
-                  <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium bg-muted/50 text-muted-foreground border-border">
-                    สภาพ: {CONDITION_LABELS[sub.condition] ?? sub.condition}
+                  <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">
+                    สภาพ <span className="text-foreground font-medium">{CONDITION_LABELS[sub.condition] ?? sub.condition}</span>
                   </span>
                 )}
                 {sub.serialNumber && (
-                  <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium bg-muted/50 text-muted-foreground border-border font-mono">
-                    S/N: {sub.serialNumber}
+                  <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground font-mono">
+                    S/N <span className="text-foreground font-medium">{sub.serialNumber}</span>
                   </span>
                 )}
+                <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">
+                  หน่วย <span className="text-foreground font-medium">{sub.item.issueUnit.name}</span>
+                </span>
+                <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">
+                  {sub.item.location ? locationLabel(sub.item.location) : "ไม่ระบุที่ตั้ง"}
+                </span>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* ── Tabs ── */}
-        <div className="mt-6 flex items-center gap-1 border-b border-border">
-          {tabs.map((t) => (
-            <TabBtn key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
-              {t.label}
-            </TabBtn>
-          ))}
-        </div>
+            {/* Status summary */}
+            <StatusSummary
+              status={sub.status}
+              activeLoan={activeDispense}
+              canAct={canAct}
+              onReturn={onReturn}
+              returning={returning}
+            />
+          </div>
+
+          {/* ── Tabs ── */}
+          <div className="border-t border-border px-2 sm:px-6 flex items-center gap-1 bg-muted/30 overflow-x-auto">
+            {tabs.map((t) => (
+              <TabBtn key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
+                {t.label}
+              </TabBtn>
+            ))}
+          </div>
+        </section>
 
         {/* ── Tab content ── */}
-        <div className="mt-8 space-y-6 animate-in fade-in duration-200" key={tab}>
+        <div className="mt-5 space-y-6 animate-in fade-in duration-200" key={tab}>
           {tab === "overview" && (
-            <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-10">
-              {/* ═══ LEFT ═══ */}
-              <div className="space-y-10">
-                <section className="animate-in fade-in slide-in-from-2 duration-300">
-                  <SectionHeading eyebrow="ข้อมูลพัสดุย่อย" title="รายละเอียด" />
-                  <dl className="divide-y divide-border">
-                    <SpecRow icon={Hash} label="รหัส" value={<span className="font-mono">{fullCode}</span>} />
-                    <SpecRow icon={Tag} label="ชื่อ" value={sub.name ?? sub.item.name} />
-                    <SpecRow icon={FolderTree} label="ประเภท" value={sub.item.category.profile?.name ?? sub.item.category.name} />
-                    <SpecRow icon={Layers} label="หมวดหมู่" value={sub.item.category.name} />
-                    <SpecRow icon={Hash} label="สถานะ" value={STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")} />
-                    {sub.condition && (
-                      <SpecRow icon={ClipboardList} label="สภาพ" value={CONDITION_LABELS[sub.condition] ?? sub.condition} />
-                    )}
-                    {sub.serialNumber && (
-                      <SpecRow icon={Hash} label="หมายเลขซีเรียล" value={<span className="font-mono">{sub.serialNumber}</span>} />
-                    )}
-                    <SpecRow icon={Layers} label="หน่วยเบิก" value={sub.item.issueUnit.name} />
-                    <SpecRow icon={MapPin} label="ที่ตั้ง" value={sub.item.location ? locationLabel(sub.item.location) : "-"} />
-                    <SpecRow icon={Clock} label="วันที่สร้าง" value={fmtDay(sub.createdAt)} />
-                    {sub.notes && (
-                      <SpecRow icon={ClipboardList} label="หมายเหตุ" value={sub.notes} />
-                    )}
-                  </dl>
-                </section>
+            <div className="space-y-5">
+              <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-5 items-start">
+                {/* ── Details ── */}
+                <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                  <SectionHeader eyebrow="ข้อมูลพัสดุย่อย" title="รายละเอียด" />
+                  <div className="divide-y divide-border">
+                    {detailRows.map((d, i) => {
+                      const Icon = d.icon;
+                      return (
+                        <div
+                          key={i}
+                          className={cn(
+                            "grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5",
+                            i % 2 === 1 && "bg-muted/30",
+                          )}
+                        >
+                          <span className="size-8 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
+                            <Icon className="size-4" />
+                          </span>
+                          <span className="text-sm text-muted-foreground min-w-0 truncate">{d.label}</span>
+                          <span className={cn("text-sm text-foreground font-medium text-right min-w-0 truncate", d.mono && "font-mono")}>
+                            {d.value}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                {sub.status === "ON_LOAN" && (
-                  <section className="animate-in fade-in slide-in-from-2 duration-300">
-                    <SectionHeading eyebrow="การเบิก" title="กำลังยืมอยู่" />
-                    <div className="rounded-xl border border-blue-200 bg-blue-50/50 dark:bg-blue-950/30 p-4 flex items-center justify-between gap-3">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">ผู้ยืม</span>
-                        {activeDispense && <span className="ml-2 text-blue-600 font-medium">→ {activeDispense.staff.name}</span>}
-                      </div>
-                      {canAct && (
-                        <Button size="sm" variant="outline" onClick={onReturn} disabled={returning}>
-                          <Undo2 className="h-3.5 w-3.5 mr-1" />คืน
-                        </Button>
-                      )}
-                    </div>
-                  </section>
-                )}
-
-                <section className="animate-in fade-in slide-in-from-2 duration-300">
-                  <SectionHeading eyebrow="พัสดุหลัก" title="สังกัด" />
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/items/${sub.item.code}`)}
-                    className="w-full text-left rounded-xl border p-4 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Package className="size-4 text-muted-foreground" />
-                      <span className="font-medium">{sub.item.name}{sub.item.nameEn && <span className="text-muted-foreground ml-1">({sub.item.nameEn})</span>}</span>
-                      <span className="ml-auto font-mono text-xs text-muted-foreground">{sub.item.code}</span>
-                    </div>
-                  </button>
-                </section>
-              </div>
-
-              {/* ═══ RIGHT ═══ */}
-              <div className="space-y-10">
-                {canAct && (
-                  <section className="animate-in fade-in slide-in-from-2 duration-300">
-                    <SectionHeading eyebrow="การจัดการ" title="จัดการสต็อก" />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* ── Manage (staff) or QR (viewer) ── */}
+                {canAct ? (
+                  <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                    <SectionHeader eyebrow="การจัดการ" title="จัดการสต็อก" />
+                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <ActionTile icon={ShoppingCart} label="เพิ่มเข้าตะกร้า" tone="primary" onClick={() => router.push(`/dispense?item=${sub.item.id}`)} />
                       <ActionTile icon={ArrowDownToLine} label="รับเข้า" tone="default" onClick={() => router.push(`/receive?item=${sub.item.id}`)} />
                       <DropdownMenu>
@@ -336,26 +431,16 @@ export default function SubItemDetailPage() {
                       <ActionTile icon={MapPin} label="ย้ายที่ตั้ง" tone="default" onClick={() => setMoveOpen(true)} />
                       <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={() => setEditOpen(true)} />
                     </div>
-                  </section>
-                )}
-
-                <section className="animate-in fade-in slide-in-from-2 duration-300">
-                  <SectionHeading title="QR code" />
-                  <div className="flex gap-5 items-start">
-                    <div className="size-36 rounded-2xl border border-border bg-card grid place-items-center shrink-0">
-                      {qrDataUrl ? (
-                        <img src={qrDataUrl} alt={`QR for ${fullCode}`} className="size-32 rounded-lg" />
-                      ) : (
-                        <QrCode className="size-24 text-foreground animate-pulse" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 pt-1">
-                      <div className="text-sm text-muted-foreground">สแกนเพื่อค้นหาพัสดุย่อย</div>
-                      <div className="font-mono font-medium mt-1 break-all">{fullCode}</div>
-                    </div>
+                    {qrBlock}
                   </div>
-                </section>
-              </div>
+                ) : (
+                  <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                    <SectionHeader title="QR code" />
+                    {qrBlock}
+                  </div>
+                )}
+              </section>
+
             </div>
           )}
 
@@ -369,14 +454,17 @@ export default function SubItemDetailPage() {
           )}
 
           {tab === "subcodes" && (
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <h2 className="font-medium">รหัสย่อย ({siblings.length})</h2>
-                <Button size="sm" variant="outline" onClick={() => router.push(`/items/${sub.item.code}`)}>
-                  <Package className="h-3.5 w-3.5 mr-1" />พัสดุหลัก
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <section className="rounded-2xl border border-border bg-card overflow-hidden">
+              <SectionHeader
+                eyebrow="พัสดุหลัก"
+                title={`รหัสย่อย (${siblings.length})`}
+                right={
+                  <Button size="sm" variant="outline" onClick={() => router.push(`/items/${sub.item.code}`)}>
+                    <Package className="h-3.5 w-3.5 mr-1" />พัสดุหลัก
+                  </Button>
+                }
+              />
+              <div className="p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {siblings.map((s) => {
                   const isCurrent = s.id === sub.id;
                   return (
@@ -394,98 +482,166 @@ export default function SubItemDetailPage() {
                   );
                 })}
               </div>
-            </div>
+            </section>
           )}
 
           {tab === "history" && (
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="size-4 text-muted-foreground" />
-                <h2 className="font-medium">ประวัติ</h2>
-              </div>
-              {timeline.length === 0 ? (
-                <p className="text-sm text-muted-foreground">ไม่มีประวัติ</p>
-              ) : (
-                <ol className="relative border-l border-border ml-1.5 space-y-4">
-                  {timeline.map((e) => (
-                    <li key={`${e.kind}-${e.record.id}`} className="ml-4 relative">
-                      <span className="absolute -left-[1.55rem] top-1 size-2.5 rounded-full bg-primary/60 ring-4 ring-background" />
-                      {e.kind === "dispense" ? (
-                        <div className="text-sm space-y-0.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium">เบิกออก</span>
-                            <span className="text-muted-foreground">→ {e.record.staff.name}</span>
-                            {e.record.returnedAt && (
-                              <span className="rounded-full bg-emerald-100 text-emerald-700 px-1.5 text-[10px]">คืนแล้ว</span>
-                            )}
-                          </div>
-                          {e.record.usageNote && <p className="text-muted-foreground">{e.record.usageNote}</p>}
-                          <p className="text-xs text-muted-foreground">{fmtDate(e.at)}</p>
-                        </div>
-                      ) : (
-                        <div className="text-sm space-y-0.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium">
-                              {STATUS_LABELS[e.record.previousStatus] ?? e.record.previousStatus}
-                              {" → "}
-                              {STATUS_LABELS[e.record.newStatus] ?? e.record.newStatus}
-                            </span>
-                            <span className="text-muted-foreground">โดย {e.record.changer.name}</span>
-                          </div>
-                          {e.record.reason && <p className="text-muted-foreground">{e.record.reason}</p>}
-                          {e.record.imageUrl && <img src={e.record.imageUrl} alt="" className="mt-1 size-16 rounded-md object-cover border" />}
-                          <p className="text-xs text-muted-foreground">{fmtDate(e.at)}</p>
-                        </div>
+            <section className="rounded-2xl border border-border bg-card overflow-hidden">
+              <SectionHeader eyebrow="กิจกรรม" title="ประวัติ" />
+
+              {/* ── Quick filter chips ── */}
+              <div className="px-4 sm:px-5 pt-4 flex items-center gap-2 overflow-x-auto">
+                <span className="text-sm text-muted-foreground shrink-0">Type:</span>
+                {HIST_CHIPS.map((chip) => {
+                  const active = histFilter === chip.value;
+                  return (
+                    <button
+                      key={chip.value}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors",
+                        active
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:bg-muted",
                       )}
-                    </li>
-                  ))}
+                      onClick={() => setHistFilter(chip.value)}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* ── Timeline ── */}
+              {filteredEvents.length === 0 ? (
+                <p className="text-center py-10 text-sm text-muted-foreground">ไม่มีรายการในหมวดนี้</p>
+              ) : (
+                <ol className="p-4 sm:p-5 space-y-3">
+                  {filteredEvents.map((e) => {
+                    const Icon = HIST_ICONS[e.type] || Package;
+                    return (
+                      <li
+                        key={`${e.type}-${e.id}`}
+                        className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20"
+                      >
+                        <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
+                          <Icon className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border",
+                              HIST_BADGE[e.type],
+                            )}>
+                              {labelFor(EVENT_TYPE_LABELS, e.type)}
+                            </span>
+                            <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                              <CalendarDays className="size-3" />
+                              {fmtDate(e.date)}
+                            </span>
+                          </div>
+                          <p className="text-sm font-medium">{e.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1">
+                            <User2 className="size-3" /> by {e.user}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
-            </div>
+            </section>
           )}
 
           {tab === "maintenance" && (
-            <div className="rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <h2 className="font-medium">ประวัติการซ่อมบำรุง</h2>
-                {canAct && (
+            <section className="rounded-2xl border border-border bg-card overflow-hidden">
+              <SectionHeader
+                eyebrow="ซ่อมบำรุง"
+                title="แผน & ประวัติซ่อมบำรุง"
+                right={canAct ? (
                   <Button size="sm" onClick={() => setMaintOpen(true)}>
                     <Wrench className="h-3.5 w-3.5 mr-1" />บันทึกการซ่อม
                   </Button>
+                ) : undefined}
+              />
+
+              {/* ── Stat cards ── */}
+              <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
+                <StatCard label="รอบถัดไป" value={sub.item.nextMaintenanceDate ? fmtDay(sub.item.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.item.nextMaintenanceDate).tone} />
+                <StatCard label="จำนวนการซ่อมบำรุง" value={`${sub.maintenanceRecords.length} ครั้ง`} icon={Wrench} />
+                <StatCard label="สถานะปัจจุบัน" value={STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")} icon={ShieldAlert} tone={STATUS_META[sub.status]?.tone ?? "primary"} />
+              </div>
+
+              {/* ── Maintenance schedule info ── */}
+              <div className="p-4 sm:p-5 border-b border-border">
+                <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลการบำรุงรักษา</div>
+                <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground text-xs">รอบบำรุงรักษา</dt>
+                    <dd className="font-medium mt-0.5">{sub.item.maintenanceCycleMonths ? `${sub.item.maintenanceCycleMonths} เดือน` : "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-xs">บำรุงล่าสุด</dt>
+                    <dd className="font-medium mt-0.5">
+                      {sub.item.lastMaintenanceDate
+                        ? fmtDay(sub.item.lastMaintenanceDate)
+                        : sub.maintenanceRecords[0] ? fmtDay(sub.maintenanceRecords[0].performedAt) : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-xs">รอบถัดไป</dt>
+                    <dd className="font-medium mt-0.5">{sub.item.nextMaintenanceDate ? fmtDay(sub.item.nextMaintenanceDate) : "—"}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* ── Maintenance history ── */}
+              <div className="p-4 sm:p-5">
+                <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ประวัติการซ่อมบำรุง</div>
+                {sub.maintenanceRecords.length === 0 ? (
+                  <p className="text-center py-8 text-sm text-muted-foreground">ยังไม่มีประวัติการซ่อมบำรุง</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {sub.maintenanceRecords.map((rec) => (
+                      <li key={rec.id} className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20">
+                        <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
+                          <Wrench className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                              <CalendarDays className="size-3" />{fmtDay(rec.performedAt)}
+                            </span>
+                            <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">
+                              {TYPE_LABELS[rec.type] ?? rec.type}
+                            </span>
+                            <span className={cn(
+                              "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
+                              rec.result === "AVAILABLE" ? "bg-success/10 text-success-700 border-success/20" : "bg-primary/10 text-primary border-primary/20",
+                            )}>
+                              {RESULT_LABELS[rec.result] ?? rec.result}
+                            </span>
+                          </div>
+                          {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
+                          {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
+                          </div>
+                          {rec.attachmentUrls.length > 0 && (
+                            <div className="flex gap-2 mt-1.5">
+                              {rec.attachmentUrls.map((url, i) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                                  {url.endsWith(".pdf") ? `PDF ${i + 1}` : `รูป ${i + 1}`}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
-              {sub.maintenanceRecords.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">ยังไม่มีบันทึกการซ่อมบำรุง</p>
-              ) : (
-                <div className="space-y-2">
-                  {sub.maintenanceRecords.map((rec, idx) => (
-                    <div key={rec.id} className={cn("p-3 rounded-lg border", idx % 2 === 1 && "bg-muted/20")}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="outline" className="text-xs">{TYPE_LABELS[rec.type] ?? rec.type}</Badge>
-                        <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
-                          {RESULT_LABELS[rec.result] ?? rec.result}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground ml-auto">{fmtDay(rec.performedAt)}</span>
-                      </div>
-                      {rec.issue && <p className="text-sm font-medium">{rec.issue}</p>}
-                      {rec.description && <p className="text-sm text-muted-foreground">{rec.description}</p>}
-                      <div className="text-xs text-muted-foreground mt-1">
-                        โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
-                      </div>
-                      {rec.attachmentUrls.length > 0 && (
-                        <div className="flex gap-2 mt-1">
-                          {rec.attachmentUrls.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
-                              {url.endsWith(".pdf") ? `PDF ${i + 1}` : `รูป ${i + 1}`}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            </section>
           )}
         </div>
       </div>
@@ -542,40 +698,106 @@ function TabBtn({
     <button
       onClick={onClick}
       className={cn(
-        "relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap",
-        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        "relative inline-flex items-center gap-2 px-3 sm:px-4 py-3.5 text-sm transition-colors whitespace-nowrap",
+        active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      <Icon className="size-4" />
+      <Icon className="size-4 shrink-0" />
       {children}
       {active && (
         <motion.span
-          layoutId="item-detail-tab"
+          layoutId="sub-item-detail-tab"
           transition={{ type: "spring", stiffness: 450, damping: 35 }}
-          className="absolute -bottom-px left-2 right-2 h-0.5 bg-primary rounded-full"
+          className="absolute inset-x-3 -bottom-px h-0.5 bg-primary rounded-full"
         />
       )}
     </button>
   );
 }
 
-function SectionHeading({ eyebrow, title }: { eyebrow?: string; title: string }) {
+// ── Status summary (right slot of hero — sub-item has no qty, status is the signal) ──
+function StatusSummary({ status, activeLoan, canAct, onReturn, returning }: {
+  status: string;
+  activeLoan: DispenseRecord | null;
+  canAct: boolean;
+  onReturn: () => void;
+  returning: boolean;
+}) {
+  const meta = STATUS_META[status] ?? { icon: Info, tone: "primary" as const };
+  const tone = meta.tone;
+  const Icon = meta.icon;
+  const label = STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+  const isOnLoan = status === "ON_LOAN" && activeLoan;
+
   return (
-    <div className="mb-4">
-      {eyebrow && <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{eyebrow}</div>}
-      <h2 className="text-lg font-semibold mt-0.5">{title}</h2>
+    <div className="w-full xl:w-72 rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">สถานะปัจจุบัน</div>
+      <div className="mt-3 flex items-center gap-3">
+        <span className={cn("size-12 grid place-items-center rounded-xl border", TONE_CLASS[tone])}>
+          <Icon className="size-6" />
+        </span>
+        <span className="text-3xl font-semibold leading-none">{label}</span>
+      </div>
+
+      {/* status bar — mirrors the parent's usage bar */}
+      <div className="mt-4 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">สัดส่วนการใช้งาน</span>
+        <span className="text-muted-foreground">
+          {isOnLoan ? "กำลังยืมอยู่" : status === "AVAILABLE" ? "พร้อมใช้งาน 100%" : label}
+        </span>
+      </div>
+      <div className="mt-2 flex h-2.5 rounded-full overflow-hidden bg-muted">
+        <div className={cn("h-full", TONE_BAR[tone])} style={{ width: "100%" }} />
+      </div>
+
+      {isOnLoan && (
+        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <div className="text-xs text-muted-foreground">ผู้ยืม</div>
+          <div className="font-medium text-primary mt-0.5">→ {activeLoan.staff.name}</div>
+          {canAct && (
+            <Button size="sm" variant="outline" className="mt-2 w-full" onClick={onReturn} disabled={returning}>
+              <Undo2 className="h-3.5 w-3.5 mr-1" />คืนพัสดุ
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function SpecRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode }) {
+function SectionHeader({ eyebrow, title, right }: { eyebrow?: string; title: string; right?: React.ReactNode }) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 py-3.5">
-      <span className="grid place-items-center size-8 rounded-lg bg-muted text-muted-foreground shrink-0">
+    <div className="px-4 sm:px-5 py-4 border-b border-border grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="min-w-0">
+        {eyebrow && <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{eyebrow}</div>}
+        <h2 className="text-lg font-semibold leading-tight mt-0.5 truncate">{title}</h2>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, tone = "primary" }: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: "primary" | "success" | "warning" | "destructive";
+}) {
+  const toneClass = {
+    primary: "bg-primary/5 text-primary border-primary/10",
+    success: "bg-success/10 text-success-700 border-success/20",
+    warning: "bg-warning/10 text-warning-700 border-warning/20",
+    destructive: "bg-destructive/10 text-destructive border-destructive/20",
+  }[tone];
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-4 grid grid-cols-[auto_1fr] items-center gap-3">
+      <div className={cn("size-10 shrink-0 rounded-lg grid place-items-center border", toneClass)}>
         <Icon className="size-4" />
-      </span>
-      <dt className="text-sm text-muted-foreground md:w-32">{label}</dt>
-      <dd className="text-sm font-medium md:ml-auto md:text-right">{value}</dd>
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{label}</div>
+        <div className="text-lg font-semibold leading-tight truncate">{value}</div>
+      </div>
     </div>
   );
 }

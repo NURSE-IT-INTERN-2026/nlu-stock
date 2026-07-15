@@ -1,14 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import {
   ShoppingCart, ArrowDownToLine, Package, RefreshCw, Wrench,
-  ChevronLeft, ChevronRight, MapPin, CalendarDays, User2,
+  MapPin, CalendarDays, User2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { EVENT_TYPE_LABELS, labelFor } from "@/lib/constants";
 
 interface TimelineEvent {
   id: string;
@@ -52,26 +56,26 @@ interface Props {
 }
 
 export function ItemDetailHistory({ itemId }: Props) {
-  const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [perPage] = useState(20);
+  const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState("");
+  const perPage = PAGE_SIZE.DEFAULT;
 
-  const fetchHistory = useCallback(async () => {
-    setLoading(true);
-    const qs = new URLSearchParams({ page: String(page), perPage: String(perPage) });
-    if (typeFilter) qs.set("type", typeFilter);
-    const data = await getItemHistory(itemId, qs.toString());
-    setEvents((data.events || []) as TimelineEvent[]);
-    setTotal((data as Record<string, unknown>).total as number || 0);
-    setLoading(false);
-  }, [itemId, page, perPage, typeFilter]);
+  const fetchPage = useCallback(
+    async (p: number) => {
+      const qs = new URLSearchParams({ page: String(p), perPage: String(perPage) });
+      if (typeFilter) qs.set("type", typeFilter);
+      const data = await getItemHistory(itemId, qs.toString());
+      return {
+        items: (data.events || []) as TimelineEvent[],
+        total: ((data as Record<string, unknown>).total as number) || 0,
+      };
+    },
+    [itemId, perPage, typeFilter],
+  );
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory]);
-
-  const totalPages = Math.ceil(total / perPage);
+  const {
+    items: events, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
+  } = usePagedList<TimelineEvent>({ fetchPage, pageSize: perPage, isMobile });
 
   if (loading) {
     return (
@@ -102,7 +106,7 @@ export function ItemDetailHistory({ itemId }: Props) {
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:bg-muted",
               )}
-              onClick={() => { setTypeFilter(chip.value); setPage(1); }}
+              onClick={() => setTypeFilter(chip.value)}
             >
               {chip.label}
             </button>
@@ -131,7 +135,7 @@ export function ItemDetailHistory({ itemId }: Props) {
                       "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border",
                       TYPE_BADGE[event.type] ?? "bg-muted text-foreground border-border",
                     )}>
-                      {event.type.replace(/_/g, " ")}
+                      {labelFor(EVENT_TYPE_LABELS, event.type)}
                     </span>
                     <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                       <CalendarDays className="size-3" />
@@ -152,16 +156,20 @@ export function ItemDetailHistory({ itemId }: Props) {
 
       {/* ── Pagination ── */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-border px-4 sm:px-5 py-3">
-          <p className="text-sm text-muted-foreground">{total} events, page {page} of {totalPages}</p>
-          <div className="flex gap-1">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="px-4 sm:px-5">
+          <p className="text-xs text-muted-foreground py-1">{total} รายการ</p>
+          {isMobile ? (
+            <Pagination
+              mode="loadMore"
+              shown={events.length}
+              total={total}
+              hasMore={hasNext}
+              isLoading={isLoadingMore}
+              onLoadMore={loadMore}
+            />
+          ) : (
+            <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
+          )}
         </div>
       )}
     </section>

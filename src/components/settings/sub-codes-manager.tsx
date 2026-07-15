@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
-import { formatSubCode } from "@/lib/constants";
+import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
 
 interface SubItemRecord {
   id: string;
@@ -101,11 +101,11 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   async function handleBatchCreate() {
     try {
       const data = await createSubItem(itemId, batchForm) as { created: number };
-      toast.success(`Created ${data.created} sub-codes`);
+      toast.success(`สร้าง ${data.created} หน่วยย่อย`);
       setBatchDialogOpen(false);
       fetchSubItems();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create sub-codes");
+      toast.error(e instanceof Error ? e.message : "สร้างหน่วยย่อยไม่สำเร็จ");
     }
   }
 
@@ -113,10 +113,10 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
     if (!confirm(`Delete "${formatSubCode(itemCode, sub.subCode)}"?`)) return;
     try {
       await deleteSubItem(sub.id);
-      toast.success("Sub-code deleted");
+      toast.success("ลบหน่วยย่อยแล้ว");
       fetchSubItems();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete");
+      toast.error(e instanceof Error ? e.message : "ลบหน่วยย่อยไม่สำเร็จ");
     }
   }
 
@@ -136,7 +136,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
         </div>
       </div>
 
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
@@ -158,10 +158,10 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
                 <TableCell className="px-2"><span className="truncate min-w-0">{sub.name || "-"}</span></TableCell>
                 <TableCell className="px-2">
                   <Badge variant={sub.status === "AVAILABLE" ? "default" : sub.status === "DAMAGED" ? "destructive" : "secondary"}>
-                    {sub.status}
+                    {labelFor(STATUS_LABELS, sub.status)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs px-2">{sub.condition || "-"}</TableCell>
+                <TableCell className="text-xs px-2">{sub.condition ? labelFor(CONDITION_LABELS, sub.condition) : "-"}</TableCell>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{sub.serialNumber || "-"}</span></TableCell>
                 <TableCell className="text-xs px-2"><span className="block truncate">{sub.notes || "-"}</span></TableCell>
                 <TableCell className="px-2">

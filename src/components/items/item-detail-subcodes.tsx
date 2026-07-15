@@ -13,7 +13,7 @@ import {
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatSubCode } from "@/lib/constants";
+import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
 import { bulkUpdateSubItemStatus } from "@/lib/api";
 
 interface SubItemRecord {
@@ -164,7 +164,7 @@ export function ItemDetailSubcodes({ subItems, itemId, itemCode, canAct, onRefre
                 </SelectTrigger>
                 <SelectContent>
                   {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>
+                    <SelectItem key={s} value={s}>{labelFor(STATUS_LABELS, s)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -267,10 +267,10 @@ function SubItemRowGroup({
         <TableCell className="px-2"><span className="truncate min-w-0">{sub.name || "-"}</span></TableCell>
         <TableCell className="px-2">
           <Badge variant={STATUS_VARIANTS[sub.status] || "secondary"}>
-            {sub.status.replace(/_/g, " ")}
+            {labelFor(STATUS_LABELS, sub.status)}
           </Badge>
         </TableCell>
-        <TableCell className="text-xs px-2 hidden md:table-cell">{sub.condition || "-"}</TableCell>
+        <TableCell className="text-xs px-2 hidden md:table-cell">{sub.condition ? labelFor(CONDITION_LABELS, sub.condition) : "-"}</TableCell>
         <TableCell className="text-xs px-2 hidden md:table-cell"><span className="block truncate">{sub.notes || "-"}</span></TableCell>
       </TableRow>
       {expanded && expandable && (
@@ -280,7 +280,7 @@ function SubItemRowGroup({
               {sub.condition && (
                 <div>
                   <dt className="text-muted-foreground text-xs">Condition</dt>
-                  <dd>{sub.condition}</dd>
+                  <dd>{labelFor(CONDITION_LABELS, sub.condition)}</dd>
                 </div>
               )}
               {sub.notes && (
