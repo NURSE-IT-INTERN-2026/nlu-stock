@@ -21,17 +21,7 @@ import { Loader2, Search, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/shared/file-upload";
 import { createMaintenance, searchDispenseItems } from "@/lib/api";
-
-const TYPE_LABELS = {
-  PREVENTIVE: "ป้องกัน",
-  CORRECTIVE: "ซ่อมแก้ไข",
-} as const;
-
-const RESULT_LABELS = {
-  AVAILABLE: "พร้อมใช้งาน",
-  NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
-  DISPOSED: "จำหน่าย",
-} as const;
+import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS } from "@/lib/constants";
 
 interface Props {
   open: boolean;
@@ -85,7 +75,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
     if (!q.trim()) { setSearchResults([]); return; }
     setSearching(true);
     try {
-      const data = await searchDispenseItems({ q, limit: "20" });
+      const data = await searchDispenseItems({ q, perPage: "20" });
       setSearchResults((data.items ?? []) as SearchItem[]);
     } catch {
       setSearchResults([]);
@@ -168,7 +158,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
 
         <div className="flex max-h-[85vh] flex-col overflow-hidden">
           {/* ── Header ── */}
-          <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Wrench className="h-4 w-4" />
@@ -181,14 +171,14 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
             <button
               onClick={resetAndClose}
               aria-label="ปิด"
-              className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
           {/* ── Body ── */}
-          <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6 space-y-5">
+          <div className="flex-1 overflow-y-auto bg-secondary/40 px-4 sm:px-6 py-6 space-y-5">
             {/* ── Item selector ── */}
             {hasDefaultItem ? (
               <div className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm space-y-1">
@@ -216,7 +206,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>พัสดุ <span className="text-destructive">*</span></Label>
+                <Label required>พัสดุ</Label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -224,7 +214,6 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="bg-card pl-9"
-                    autoFocus
                   />
                 </div>
                 {searching && (
@@ -255,16 +244,16 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>ประเภท</Label>
                 <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
                   <SelectTrigger className="bg-card w-full">
-                    <span className="text-foreground">{TYPE_LABELS[type]}</span>
+                    <span className="text-foreground">{MAINT_TYPE_LABELS[type]}</span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PREVENTIVE">{TYPE_LABELS.PREVENTIVE}</SelectItem>
-                    <SelectItem value="CORRECTIVE">{TYPE_LABELS.CORRECTIVE}</SelectItem>
+                    <SelectItem value="PREVENTIVE">{MAINT_TYPE_LABELS.PREVENTIVE}</SelectItem>
+                    <SelectItem value="CORRECTIVE">{MAINT_TYPE_LABELS.CORRECTIVE}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -272,12 +261,12 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                 <Label>ผลการตรวจ</Label>
                 <Select value={result} onValueChange={(v) => setResult(v as typeof result)}>
                   <SelectTrigger className="bg-card w-full">
-                    <span className="text-foreground">{RESULT_LABELS[result]}</span>
+                    <span className="text-foreground">{MAINT_RESULT_LABELS[result]}</span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="AVAILABLE">{RESULT_LABELS.AVAILABLE}</SelectItem>
-                    <SelectItem value="NEEDS_MORE_REPAIR">{RESULT_LABELS.NEEDS_MORE_REPAIR}</SelectItem>
-                    <SelectItem value="DISPOSED">{RESULT_LABELS.DISPOSED}</SelectItem>
+                    <SelectItem value="AVAILABLE">{MAINT_RESULT_LABELS.AVAILABLE}</SelectItem>
+                    <SelectItem value="NEEDS_MORE_REPAIR">{MAINT_RESULT_LABELS.NEEDS_MORE_REPAIR}</SelectItem>
+                    <SelectItem value="DISPOSED">{MAINT_RESULT_LABELS.DISPOSED}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -316,7 +305,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>ค่าใช้จ่าย (฿)</Label>
                 <Input
@@ -354,7 +343,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
           </div>
 
           {/* ── Footer ── */}
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-4 sm:px-6 py-4">
             <Button variant="ghost" onClick={resetAndClose}>ยกเลิก</Button>
             <Button disabled={submitting || !selectedItemId} onClick={handleSubmit} className="gap-1.5">
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
