@@ -96,6 +96,14 @@ export const TRACKED_ADJUST_STATUS_OPTIONS: { value: ItemStatus; label: string }
   ["LOST", "DISPOSED"] as ItemStatus[]
 ).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
+// Manual statuses a staff member may set on a sub-item via batch SET / edit dialog.
+// System-driven statuses are excluded — they're owned by other flows:
+//   ON_LOAN (dispense/borrow), IN_USE (receive/deploy),
+//   PENDING_MAINTENANCE (maintenance schedule), UNDER_REPAIR (maintenance record).
+export const MANUAL_SETTABLE_STATUS_OPTIONS: ItemStatus[] = [
+  "AVAILABLE", "DAMAGED", "LOST", "DISPOSED",
+];
+
 export const STATUS_COLORS: Record<string, string> = {
   AVAILABLE: "#22c55e",
   ON_LOAN: "#3b82f6",

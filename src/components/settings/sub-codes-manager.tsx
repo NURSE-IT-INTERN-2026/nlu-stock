@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
-import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
+import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor, MANUAL_SETTABLE_STATUS_OPTIONS } from "@/lib/constants";
 
 interface SubItemRecord {
   id: string;
@@ -196,9 +196,9 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
             <div>
               <Label>Status</Label>
               <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v ?? "AVAILABLE" })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue>{labelFor(STATUS_LABELS, editForm.status)}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {(["AVAILABLE", "ON_LOAN", "IN_USE", "DAMAGED", "UNDER_REPAIR", "LOST", "DISPOSED"] as const).map((s) => (
+                  {MANUAL_SETTABLE_STATUS_OPTIONS.map((s) => (
                     <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
                   ))}
                 </SelectContent>
