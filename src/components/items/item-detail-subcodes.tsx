@@ -13,7 +13,7 @@ import {
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
+import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor, MANUAL_SETTABLE_STATUS_OPTIONS } from "@/lib/constants";
 import { bulkUpdateSubItemStatus } from "@/lib/api";
 
 interface SubItemRecord {
@@ -34,8 +34,6 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
   DISPOSED: "destructive",
   PENDING_MAINTENANCE: "secondary",
 };
-
-const STATUS_OPTIONS = ["AVAILABLE", "IN_USE", "DAMAGED", "UNDER_REPAIR", "LOST", "DISPOSED", "PENDING_MAINTENANCE"];
 
 const STATUS_CHIPS = [
   { value: "ALL", label: "ทั้งหมด", activeClass: "bg-primary text-primary-foreground border-primary" },
@@ -161,10 +159,10 @@ export function ItemDetailSubcodes({ subItems, itemId, itemCode, canAct, onRefre
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
               <Select value={newStatus} onValueChange={(v) => { if (v) setNewStatus(v); }}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Set status..." />
+                  <SelectValue placeholder="Set status...">{newStatus ? labelFor(STATUS_LABELS, newStatus) : "Set status..."}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((s) => (
+                  {MANUAL_SETTABLE_STATUS_OPTIONS.map((s) => (
                     <SelectItem key={s} value={s}>{labelFor(STATUS_LABELS, s)}</SelectItem>
                   ))}
                 </SelectContent>
