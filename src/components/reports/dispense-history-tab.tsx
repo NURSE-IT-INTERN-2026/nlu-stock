@@ -54,7 +54,7 @@ function StatusBadge({ r }: { r: Row }) {
     const c = RETURN_COND[r.returnCondition];
     return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${c.cls}`}>{c.label}</span>;
   }
-  return <Badge variant="secondary">Returned</Badge>;
+  return <Badge variant="secondary">คืนแล้ว</Badge>;
 }
 
 const columns: Column<Row>[] = [

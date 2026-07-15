@@ -2,10 +2,8 @@
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { motion } from "motion/react";
-import { ChevronLeft, ChevronRight, CheckCircle2, Undo2 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { ChevronRight, CheckCircle2, MapPin, Package, Clock, Wrench } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locationLabel } from "@/lib/constants";
 import {
@@ -13,7 +11,10 @@ import {
 } from "@/components/ui/table";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
-import { usePagination } from "@/hooks/use-pagination";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { getItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
@@ -55,6 +56,15 @@ const ALERT_LABEL: Record<string, string> = {
   lowStock: "สต็อกต่ำ",
   nearExpiry: "ใกล้หมดอายุ",
   overdueMaint: "เกินกำหนดซ่อม",
+  overdueReturn: "คืนเกินกำหนด",
+  damagedPending: "ชำรุดรอดำเนินการ",
+};
+
+// Mobile row icon by alert type (desktop table keeps text badges only).
+const ALERT_ICON: Record<string, { icon: typeof Package; cls: string }> = {
+  lowStock: { icon: Package, cls: "bg-orange-500/10 text-orange-700 ring-orange-500/20" },
+  nearExpiry: { icon: Clock, cls: "bg-warning/10 text-warning-700 ring-warning/20" },
+  overdueMaint: { icon: Wrench, cls: "bg-destructive/10 text-destructive ring-destructive/20" },
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -91,11 +101,10 @@ function AlertsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setDetail } = usePageHeader();
-  const [items, setItems] = useState<ItemRecord[]>([]);
+  const isMobile = useIsMobile();
   const { categories } = useCategories();
   const { locations } = useLocations();
-  const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
-  const [loading, setLoading] = useState(true);
+  const perPage = PAGE_SIZE.DEFAULT;
 
   const profiles = useMemo<ProfileOption[]>(() => {
     const map = new Map<string, ProfileOption>();
@@ -115,13 +124,12 @@ function AlertsContent() {
   }, [searchParams]);
 
   const selectAlertType = useCallback((key: AlertTypeKey) => {
-    setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending"]) params.delete(k);
     if (key !== "all") params.set(key, "true");
     const qs = params.toString();
     router.replace(qs ? `/alerts?${qs}` : "/alerts");
-  }, [searchParams, router, setPage]);
+  }, [searchParams, router]);
 
   const [filter, setFilter] = useState<FilterState>(() => {
     const statusParam = searchParams.get("status");
@@ -134,17 +142,15 @@ function AlertsContent() {
       preset: null,
     };
   });
-  const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); }, [setPage]);
+  const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); }, []);
 
-  const fetchItems = useCallback(async () => {
+  const fetchPage = useCallback(async (p: number) => {
     // "แจ้งชำรุด" and "เกินกำหนดคืน" render their own worklist panels below instead of
     // the item table — skip the item fetch entirely while either is active.
     if (alertType === "damagedPending" || alertType === "overdueReturn") {
-      setLoading(false);
-      return;
+      return { items: [], total: 0 };
     }
-    setLoading(true);
-    const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
+    const params: Record<string, string> = { page: String(p), perPage: String(perPage) };
     if (filter.query) params.search = filter.query;
     if (filter.profileId) params.profileId = filter.profileId;
     if (filter.categoryId) params.categoryId = filter.categoryId;
@@ -157,12 +163,12 @@ function AlertsContent() {
     if (filter.location.detail) params.detail = filter.location.detail;
 
     const data = await getItems(params);
-    setItems((data.items || []) as ItemRecord[]);
-    setTotal(data.total || 0);
-    setLoading(false);
-  }, [page, perPage, filter, alertType, setTotal]);
+    return { items: (data.items || []) as ItemRecord[], total: data.total || 0 };
+  }, [filter, perPage, alertType]);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  const {
+    items, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
+  } = usePagedList<ItemRecord>({ fetchPage, pageSize: perPage, isMobile });
 
   const alertChips: { key: AlertTypeKey; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: alerts.total },
@@ -202,12 +208,16 @@ function AlertsContent() {
     );
   }
 
+  // Panel branches (damagedPending / overdueReturn) own their internal scroll — give them a
+  // flex root that fills main so only the panel scrolls, not the page (no double scrollbar).
+  const isPanel = alertType === "damagedPending" || alertType === "overdueReturn";
+
   return (
-    <div className="space-y-3 sm:space-y-6">
+    <div className={isPanel ? "flex flex-col h-full min-h-0 gap-3 sm:gap-6" : "space-y-3 sm:space-y-6"}>
       {/* Alert-type tabs — underline style, matches /settings. Sits ABOVE the filter
           bar so it reads as primary nav, distinct from the refinement pills below.
           Per-type color lives in the table badges; the tab strip stays uniform. */}
-      <div className="border-b -mx-4 px-4 sm:-mx-6 sm:px-6">
+      <div className="hidden md:block shrink-0 border-b -mx-4 px-4 sm:-mx-6 sm:px-6">
         <nav className="flex gap-1 -mb-px overflow-x-auto">
           {alertChips.map((c) => {
             const active = alertType === c.key;
@@ -243,21 +253,43 @@ function AlertsContent() {
         </nav>
       </div>
 
+      {/* Mobile: chip filter — desktop keeps the underline tabs above */}
+      <div className="md:hidden shrink-0 -mx-4 px-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex w-max items-center gap-2 pb-1">
+          {alertChips.map((c) => {
+            const active = alertType === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => selectAlertType(c.key)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition",
+                  active
+                    ? "bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-sm"
+                    : "border border-border/60 bg-card text-foreground hover:bg-accent"
+                )}
+              >
+                {c.label}
+                {c.count > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums",
+                    active ? "bg-white/25" : "bg-muted text-muted-foreground"
+                  )}>{c.count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {alertType === "damagedPending" ? (
-        <div className="h-[72dvh] lg:h-[calc(100vh-340px)]">
+        <div className="flex-1 min-h-0">
           <SubItemStatusPanel status="DAMAGED" actionLabel="ส่งซ่อม" emptyText="ไม่มีพัสดุที่แจ้งชำรุดอยู่" />
         </div>
       ) : alertType === "overdueReturn" ? (
-        <div className="flex flex-col h-[72dvh] lg:h-[calc(100vh-340px)] gap-3">
-          <div className="flex items-center justify-end shrink-0">
-            <Link href="/receive?tab=return&due=overdue" className={buttonVariants({ size: "sm", variant: "outline" })}>
-              <Undo2 className="size-3.5" />
-              ไปหน้ารับคืนพัสดุ
-            </Link>
-          </div>
-          <div className="flex-1 min-h-0">
-            <ReturnPanel initialChip="overdue" />
-          </div>
+        <div className="flex-1 min-h-0">
+          <ReturnPanel initialChip="overdue" />
         </div>
       ) : (
       <>
@@ -284,7 +316,7 @@ function AlertsContent() {
                 <TableHead className="px-2">ชื่อ</TableHead>
                 <TableHead className="w-48 px-2">การแจ้งเตือน</TableHead>
                 <TableHead className="w-56 px-2">รายละเอียด</TableHead>
-                <TableHead className="w-44 px-2">สถานที่</TableHead>
+                <TableHead className="w-44 px-2 hidden xl:table-cell">สถานที่</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -292,7 +324,7 @@ function AlertsContent() {
                 Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
                     {Array.from({ length: 5 }).map((_, j) => (
-                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      <TableCell key={j} className={j === 4 ? "hidden xl:table-cell" : undefined}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
@@ -333,100 +365,81 @@ function AlertsContent() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm px-2"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
+                  <TableCell className="text-sm px-2 hidden xl:table-cell"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
 
-        {/* Mobile: stacked cards (no horizontal scroll) */}
-        <div className="divide-y divide-border md:hidden overflow-auto max-h-[72dvh]">
+        {/* Mobile: standalone alert cards */}
+        <div className="md:hidden space-y-2 p-1">
           {loading ? (
-            Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="px-4 py-2.5"><Skeleton className="h-10 w-full" /></div>
+            Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-2xl" />
             ))
           ) : items.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">ไม่มีรายการแจ้งเตือน</div>
-          ) : items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => router.push(`/items/${item.id}`)}
-              className="flex w-full flex-col gap-1.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="min-w-0 font-medium leading-tight">
-                  {item.name}
-                  {item.nameEn && <span className="text-muted-foreground"> ({item.nameEn})</span>}
-                </span>
-                <span className="shrink-0 font-mono text-xs text-muted-foreground">{item.code}</span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {item.alertTypes.map((t) => (
-                  <span key={t} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
-                    {ALERT_LABEL[t] ?? t}
-                  </span>
-                ))}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {item.alertTypes.map((t) => (
-                  <span key={t} className="text-xs text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
-                ))}
-              </div>
-              {item.location && (
-                <span className="text-xs text-muted-foreground">{locationLabel(item.location)}</span>
-              )}
-            </button>
-          ))}
+            <div className="rounded-2xl border border-border/60 bg-card px-4 py-10 text-center text-sm text-muted-foreground">ไม่มีรายการแจ้งเตือน</div>
+          ) : items.map((item) => {
+            const primary = item.alertTypes.find((t) => ALERT_ICON[t]) ?? "lowStock";
+            const meta = ALERT_ICON[primary] ?? ALERT_ICON.lowStock;
+            const Icon = meta.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => router.push(`/items/${item.id}`)}
+                className="group flex w-full items-start gap-3 rounded-2xl border border-border/60 bg-card p-3 text-left shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+              >
+                <div className={cn("grid size-10 shrink-0 place-items-center rounded-xl ring-1", meta.cls)}>
+                  <Icon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    {item.alertTypes.map((t) => (
+                      <span key={t} className={cn("inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
+                        {ALERT_LABEL[t] ?? t}
+                      </span>
+                    ))}
+                    <span className="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground">{item.code}</span>
+                  </div>
+                  <p className="mt-1 truncate text-sm font-semibold leading-snug">
+                    {item.name}
+                    {item.nameEn && <span className="font-normal text-muted-foreground"> ({item.nameEn})</span>}
+                  </p>
+                  <div className="mt-0.5 flex flex-col gap-0.5">
+                    {item.alertTypes.map((t) => (
+                      <span key={t} className="text-xs text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
+                    ))}
+                  </div>
+                  {item.location && (
+                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <MapPin className="size-3 shrink-0" />
+                      <span className="truncate">{locationLabel(item.location)}</span>
+                    </p>
+                  )}
+                </div>
+                <ChevronRight className="size-4 shrink-0 self-center text-muted-foreground/40 transition group-hover:translate-x-0.5 group-hover:text-primary" />
+              </button>
+            );
+          })}
         </div>
 
-        {/* Fixed footer */}
-        <div className="flex items-center border-t bg-card px-4 py-2">
-          <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-7 w-7 p-0 text-xs">
-              &laquo;
-            </Button>
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-7 w-7 p-0">
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            {Array.from({ length: totalPages || 1 }, (_, i) => i + 1)
-              .filter((p) => {
-                if (totalPages <= 7) return true;
-                if (p === 1 || p === totalPages) return true;
-                if (Math.abs(p - page) <= 2) return true;
-                return false;
-              })
-              .reduce<(number | "...")[]>((acc, p, i, arr) => {
-                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("...");
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((p, i) =>
-                p === "..." ? (
-                  <span key={`dots-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
-                ) : (
-                  <Button
-                    key={p}
-                    variant={page === p ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setPage(p)}
-                    className="h-7 w-7 p-0 text-xs"
-                  >
-                    {p}
-                  </Button>
-                )
-              )}
-            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-7 w-7 p-0">
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-7 w-7 p-0 text-xs">
-              &raquo;
-            </Button>
-          </div>
-          <div className="flex-1" />
-          <span className="text-sm text-muted-foreground tabular-nums">{total} items</span>
-        </div>
+        {/* Pagination — desktop numbered, mobile load-more */}
+        {isMobile ? (
+          items.length > 0 && (
+            <Pagination
+              mode="loadMore"
+              shown={items.length}
+              total={total}
+              hasMore={hasNext}
+              isLoading={isLoadingMore}
+              onLoadMore={loadMore}
+            />
+          )
+        ) : (
+          <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
+        )}
       </div>
       </>
       )}
