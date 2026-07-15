@@ -28,6 +28,7 @@ import { StepSummary } from "./step-summary";
 import { StepSelect } from "../category-select-modal/step-select";
 import { StepCreateName } from "../category-select-modal/step-create-name";
 import { StepCreateConfirm } from "../category-select-modal/step-create-confirm";
+import { StepConfirmExisting } from "../category-select-modal/step-confirm-existing";
 
 const STEP_TITLES: Record<WizardStep, string> = {
   details: "ข้อมูลพัสดุ",
@@ -82,6 +83,7 @@ export function AddItemModal({
     catWizard: CategoryWizardState;
     codeMeta: CodeMeta | null;
     initialQty: number;
+    qtyValid: boolean;
   }>({
     step: "details",
     form: {
@@ -94,11 +96,13 @@ export function AddItemModal({
           profile: null,
       issueUnitId: "",
       issueUnitName: "",
+      description: "",
     },
     isSubmitting: false,
     catWizard: { ...INITIAL_CAT_WIZARD },
     codeMeta: null,
     initialQty: 1,
+    qtyValid: true,
   });
 
   const reset = useCallback(() => {
@@ -114,10 +118,12 @@ export function AddItemModal({
           profile: null,
         issueUnitId: "",
         issueUnitName: "",
+        description: "",
       },
       isSubmitting: false,
       codeMeta: null,
       initialQty: 1,
+      qtyValid: true,
       catWizard: { ...INITIAL_CAT_WIZARD },
     });
   }, [defaultCode]);
@@ -144,9 +150,9 @@ export function AddItemModal({
           issueUnitId: "",
           issueUnitName: "",
         },
-        copyCount: 1,
         codeMeta: null,
         initialQty: 1,
+        qtyValid: true,
       }));
     }
   }, [state.form.usageType]);
@@ -215,10 +221,12 @@ export function AddItemModal({
     (state.step === "category-units" &&
       state.form.code.trim() !== "" &&
       state.form.categoryId !== "" &&
-      state.form.issueUnitId !== "") ||
+      state.form.issueUnitId !== "" &&
+      state.qtyValid) ||
     state.step === "summary" ||
     (state.step === "cat-create-name" && state.catWizard.newCategoryName.trim() !== "" && state.catWizard.newCategoryProfileId !== "") ||
-    state.step === "cat-create-confirm";
+    state.step === "cat-create-confirm" ||
+    state.step === "cat-confirm-existing";
 
   const handleBack = useCallback(() => {
     if (state.step === "category-units") {
@@ -229,6 +237,8 @@ export function AddItemModal({
       setState((s) => ({ ...s, step: "category-units" }));
     } else if (state.step === "cat-create-name") {
       setState((s) => ({ ...s, step: "cat-select" }));
+    } else if (state.step === "cat-confirm-existing") {
+      setState((s) => ({ ...s, step: "cat-create-name", catWizard: { ...s.catWizard, selectedExisting: null } }));
     } else if (state.step === "cat-create-confirm") {
       setState((s) => ({ ...s, step: "cat-create-name" }));
     } else {
@@ -253,8 +263,9 @@ export function AddItemModal({
           copyCount: state.codeMeta?.copyCount ?? 1,
           setSize: state.codeMeta?.isSet ? state.codeMeta.setSize : 1,
           initialQty: isFlat ? state.initialQty : 0,
+          description: state.form.description || undefined,
         });
-        toast.success(`สร้างพัสดุ "${created.code}" สำเร็จ`);
+        toast.success(`สร้างพัสดุ "${created.name}" สำเร็จ`);
         onCreated(created);
         handleClose();
       } catch (e) {
@@ -277,6 +288,11 @@ export function AddItemModal({
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "สร้างหมวดหมู่ไม่สำเร็จ");
         setCatWizard((prev) => ({ ...prev, isSubmitting: false }));
+      }
+    } else if (state.step === "cat-confirm-existing") {
+      // User picked a similar existing category — apply it
+      if (state.catWizard.selectedExisting) {
+        applyCategory(state.catWizard.selectedExisting);
       }
     }
   }, [state, onCreated, handleClose, applyCategory, setCatWizard]);
@@ -429,6 +445,9 @@ export function AddItemModal({
             initialCodeMeta={state.codeMeta}
             initialQty={state.initialQty}
             onInitialQtyChange={(q) => setState((s) => ({ ...s, initialQty: q }))}
+            onQtyValidChange={(v) => setState((s) => ({ ...s, qtyValid: v }))}
+            description={state.form.description}
+            onDescriptionChange={(d) => setState((s) => ({ ...s, form: { ...s.form, description: d } }))}
           />
         )}
         {state.step === "summary" && (
@@ -441,6 +460,7 @@ export function AddItemModal({
             issueUnitName={state.form.issueUnitName}
             codeMeta={state.codeMeta}
             initialQty={state.initialQty}
+            description={state.form.description}
           />
         )}
 
@@ -475,6 +495,9 @@ export function AddItemModal({
             onDescriptionChange={(d) => setCatWizard((prev) => ({ ...prev, newCategoryDescription: d }))}
           />
         )}
+        {state.step === "cat-confirm-existing" && state.catWizard.selectedExisting && (
+          <StepConfirmExisting category={state.catWizard.selectedExisting} />
+        )}
       </div>
     );
   }
@@ -506,6 +529,11 @@ export function AddItemModal({
             <>
               <Check className="h-4 w-4" />
               {state.catWizard.isSubmitting ? "กำลังสร้าง..." : "สร้างหมวดหมู่"}
+            </>
+          ) : state.step === "cat-confirm-existing" ? (
+            <>
+              <Check className="h-4 w-4" />
+              เลือกหมวดหมู่นี้
             </>
           ) : (
             <>

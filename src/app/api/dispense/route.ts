@@ -44,24 +44,24 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        if (!item) throw new Error(`Item ${di.itemId} not found`);
+        if (!item) throw new Error("ไม่พบพัสดุ");
 
         // Guard: tracked durable must resolve to a SubItem — never dispense as aggregate.
         if (item.trackIndividually && !di.subItemId) {
-          throw new Error(`${item.code}: พัสดุติดตามรายชิ้นต้องเลือก SubItem ก่อนเบิก (ติดต่อผู้ดูแลเพิ่ม SubItem)`);
+          throw new Error(`${item.name}: พัสดุติดตามรายชิ้นต้องเลือกชิ้นย่อยก่อนเบิก (ติดต่อผู้ดูแลเพิ่มชิ้นย่อย)`);
         }
 
         // Validate quantity vs available
         if (item.trackIndividually && di.subItemId) {
           const sub = item.subItems[0];
-          if (!sub) throw new Error(`Sub-item ${di.subItemId} not found`);
-          if (sub.status !== ItemStatus.AVAILABLE) throw new Error(`Sub-item ${sub.subCode} is not available (status: ${sub.status})`);
+          if (!sub) throw new Error("ไม่พบชิ้นย่อย");
+          if (sub.status !== ItemStatus.AVAILABLE) throw new Error(`ชิ้นย่อย ${sub.subCode} ไม่พร้อมใช้งาน`);
         } else if (di.lotId) {
           const lot = item.lots[0];
-          if (!lot) throw new Error(`Lot ${di.lotId} not found`);
-          if (lot.remainingQty < di.quantity) throw new Error(`Lot ${lot.lotNumber} has only ${lot.remainingQty} ${item.issueUnit.name}, requested ${di.quantity}`);
+          if (!lot) throw new Error("ไม่พบล็อต");
+          if (lot.remainingQty < di.quantity) throw new Error(`ล็อต ${lot.lotNumber} เหลือเพียง ${lot.remainingQty} ${item.issueUnit.name} (ต้องการ ${di.quantity})`);
         } else if (!item.trackIndividually) {
-          if (item.availableQty < di.quantity) throw new Error(`${item.code} has only ${item.availableQty} available, requested ${di.quantity}`);
+          if (item.availableQty < di.quantity) throw new Error(`${item.name} เหลือเพียง ${item.availableQty} (ต้องการ ${di.quantity})`);
         }
 
         // Create DispenseRecord
@@ -111,14 +111,14 @@ export async function POST(req: NextRequest) {
           });
           if (updated.count === 0) {
             const lot = await tx.lot.findUnique({ where: { id: di.lotId } });
-            throw new Error(`Lot ${lot?.lotNumber ?? di.lotId} has only ${lot?.remainingQty ?? 0} ${item.issueUnit.name}, requested ${di.quantity}`);
+            throw new Error(`ล็อต ${lot?.lotNumber ?? di.lotId} เหลือเพียง ${lot?.remainingQty ?? 0} ${item.issueUnit.name} (ต้องการ ${di.quantity})`);
           }
           const itemUpdate = await tx.item.updateMany({
             where: { id: di.itemId, availableQty: { gte: di.quantity } },
             data: { availableQty: { decrement: di.quantity } },
           });
           if (itemUpdate.count === 0) {
-            throw new Error(`${item.code} available quantity underflow (counter out of sync with lots)`);
+            throw new Error(`${item.name} จำนวนคงเหลือไม่ตรง (ตัวนับไม่ sync กับล็อต)`);
           }
         } else {
           // Non-tracked item (COUNT): deduct item availableQty (optimistic lock — no negative)
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
             data: { availableQty: { decrement: di.quantity } },
           });
           if (updated.count === 0) {
-            throw new Error(`${item.code} has only ${item.availableQty} available, requested ${di.quantity}`);
+            throw new Error(`${item.name} เหลือเพียง ${item.availableQty} (ต้องการ ${di.quantity})`);
           }
           // COUNT items: available < total now means units are out on loan → derive ON_LOAN.
           await recomputeItemCounts(tx, di.itemId);

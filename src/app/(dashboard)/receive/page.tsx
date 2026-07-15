@@ -20,6 +20,11 @@ import {
   getItem,
   getSubItems,
 } from "@/lib/api";
+
+// ponytail: crypto.randomUUID needs a secure context (HTTPS/localhost); mobile over
+// plain http is non-secure so randomUUID is undefined — fall back to getRandomValues.
+const uid = () =>
+  crypto.randomUUID?.() ?? `r${crypto.getRandomValues(new Uint32Array(2)).join("-")}`;
 import { AddItemModal } from "@/components/shared/add-item-modal";
 import { ReturnPanel } from "@/components/receive/return-panel";
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
@@ -45,28 +50,39 @@ interface ReceiveRow {
   quantity: number;
   lotNumber: string;
   expiryDate: string;
+  unitCost: string;
   subCodes: string[];
-  subPrefix: string;
   subStart: number;
   subWidth: number;
+  existingLots: { lotNumber: string; expiryDate: string | null }[];
 }
 
-// Parse existing sub-codes to suggest a default prefix + next running number.
-function detectPrefixStart(subs: { subCode: string }[]): { prefix: string; start: number; width: number } {
-  if (!subs.length) return { prefix: "", start: 1, width: 2 };
-  const parsed = subs.map((s) => {
-    const m = s.subCode.match(/^([^\d]*?)(\d+)$/);
-    return m ? { prefix: m[1], num: parseInt(m[2], 10), width: m[2].length } : { prefix: s.subCode, num: 0, width: 0 };
-  });
-  const prefix = parsed[0].prefix;
-  const same = parsed.filter((p) => p.prefix === prefix);
-  const maxNum = same.reduce((mx, p) => Math.max(mx, p.num), 0);
-  const width = same.reduce((mx, p) => Math.max(mx, p.width), 2);
-  return { prefix, start: maxNum + 1, width };
+// Sub-codes are always "C" + padded number (C = copy). Continue numbering past existing copies.
+function detectNextStart(subs: { subCode: string }[]): { start: number; width: number } {
+  const parsed = subs
+    .map((s) => s.subCode.match(/^C(\d+)$/i))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map((m) => ({ num: parseInt(m[1], 10), width: m[1].length }));
+  if (!parsed.length) return { start: 1, width: 2 };
+  return {
+    start: parsed.reduce((mx, p) => Math.max(mx, p.num), 0) + 1,
+    width: parsed.reduce((mx, p) => Math.max(mx, p.width), 2),
+  };
 }
 
-function genCodes(prefix: string, start: number, qty: number, width: number): string[] {
-  return Array.from({ length: Math.max(0, qty) }, (_, i) => `${prefix}${String(start + i).padStart(width, "0")}`);
+function genCodes(start: number, qty: number, width: number): string[] {
+  return Array.from({ length: Math.max(0, qty) }, (_, i) => `C${String(start + i).padStart(width, "0")}`);
+}
+
+// Inline lot warning: is the typed lot an existing lot for this item, and does the
+// entered expiry line up? Returns null when no existing lot matches.
+function lotMatchInfo(row: Pick<ReceiveRow, "lotNumber" | "expiryDate" | "existingLots">) {
+  const match = row.existingLots.find((l) => l.lotNumber === row.lotNumber.trim());
+  if (!match) return null;
+  const exp = match.expiryDate;
+  if (!row.expiryDate) return { text: `⚠️ ล็อตนี้มีอยู่แล้ว${exp ? ` (หมดอายุ ${exp})` : ""} — ใส่วันที่ให้ตรงถ้า lot เดิม`, cls: "text-amber-600" };
+  if (row.expiryDate === exp) return { text: "✓ ตรง lot เดิม — จะรวมยอด", cls: "text-green-600" };
+  return { text: "✕ วันหมดอายุไม่ตรง lot เดิม — บันทึกไม่ผ่าน", cls: "text-red-600" };
 }
 
 export default function ReceivePage() {
@@ -198,7 +214,7 @@ function ReceiveContent() {
     setSearchLoading(true);
     setHasSearched(true);
     try {
-      const data = await searchDispenseItems({ q, limit: "20" });
+      const data = await searchDispenseItems({ q, perPage: "20" });
       setSearchResults((data.items ?? []) as SearchItem[]);
     } catch {
       setSearchResults([]);
@@ -216,18 +232,28 @@ function ReceiveContent() {
   const addItem = (item: SearchItem) => {
     setRows((prev) => {
       if (prev.some((r) => r.item.id === item.id)) {
-        toast.error(`${item.code} อยู่ในรายการแล้ว`);
+        toast.error(`${item.name} อยู่ในรายการแล้ว`);
         return prev;
       }
-      return [...prev, { id: crypto.randomUUID(), item, quantity: 1, lotNumber: "", expiryDate: "", subCodes: [], subPrefix: "", subStart: 1, subWidth: 2 }];
+      return [...prev, { id: uid(), item, quantity: 1, lotNumber: "", expiryDate: "", unitCost: "", subCodes: [], subStart: 1, subWidth: 2, existingLots: [] }];
     });
     setMobileTab("cart");
-    // Tracked items: prefill sub-code prefix + next number from existing copies.
+    // Tracked items: prefill next sub-code number from existing copies.
     if (item.trackIndividually) {
       getSubItems(item.id)
         .then((subs) => {
-          const { prefix, start, width } = detectPrefixStart(subs as { subCode: string }[]);
-          setRows((prev) => prev.map((r) => r.item.id === item.id ? { ...r, subPrefix: prefix, subStart: start, subWidth: width } : r));
+          const { start, width } = detectNextStart(subs as { subCode: string }[]);
+          setRows((prev) => prev.map((r) => r.item.id === item.id ? { ...r, subStart: start, subWidth: width } : r));
+        })
+        .catch(() => {});
+    }
+    // Consumables: load existing lots for the inline duplicate/expiry warning.
+    if (item.category.profile.dispenseType === "CONSUMABLE") {
+      getItem(item.id)
+        .then((data) => {
+          const lots = ((data as { lots?: { lotNumber: string; expiryDate: string | null }[] }).lots ?? [])
+            .map((l) => ({ lotNumber: l.lotNumber, expiryDate: l.expiryDate ? String(l.expiryDate).slice(0, 10) : null }));
+          setRows((prev) => prev.map((r) => r.item.id === item.id ? { ...r, existingLots: lots } : r));
         })
         .catch(() => {});
     }
@@ -251,7 +277,7 @@ function ReceiveContent() {
   useEffect(() => {
     let active = true;
     setSuggestedLoading(true);
-    searchDispenseItems({ limit: "15" })
+    searchDispenseItems({ perPage: "15" })
       .then((data) => {
         if (!active) return;
         setSuggested((data.items ?? []) as SearchItem[]);
@@ -272,9 +298,9 @@ function ReceiveContent() {
   const handleSubmit = async () => {
     if (rows.length === 0) { toast.error("เพิ่มพัสดุอย่างน้อย 1 รายการ"); return; }
     for (const row of rows) {
-      if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.code}`); return; }
+      if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.name}`); return; }
       const isConsumable = row.item.category.profile.dispenseType === "CONSUMABLE";
-      if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุเลขล็อต: ${row.item.code}`); return; }
+      if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุเลขล็อต: ${row.item.name}`); return; }
     }
     setSubmitting(true);
     try {
@@ -284,7 +310,8 @@ function ReceiveContent() {
           quantity: r.quantity,
           lotNumber: r.item.category.profile.dispenseType === "CONSUMABLE" ? r.lotNumber || null : null,
           expiryDate: r.expiryDate || null,
-          subCodes: r.item.trackIndividually ? genCodes(r.subPrefix || "C", r.subStart, r.quantity, r.subWidth) : null,
+          unitCost: r.unitCost ? Number(r.unitCost) : null,
+          subCodes: r.item.trackIndividually ? genCodes(r.subStart, r.quantity, r.subWidth) : null,
         })),
         notes: notes || null,
       };
@@ -293,8 +320,8 @@ function ReceiveContent() {
       setRows([]);
       setNotes("");
       setMobileTab("search");
-    } catch {
-      toast.error("เกิดข้อผิดพลาด กรุณาลองใหม่");
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "เกิดข้อผิดพลาด กรุณาลองใหม่");
     } finally {
       setSubmitting(false);
     }
@@ -460,43 +487,36 @@ function ReceiveContent() {
                     </div>
 
                     {/* Fields */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">จำนวน ({row.item.issueUnit.name})</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={row.quantity}
-                          onChange={(e) => updateRow(row.id, { quantity: parseInt(e.target.value) || 0 })}
-                          className="text-gray-900 h-8 text-sm"
-                        />
-                      </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">จำนวน ({row.item.issueUnit.name})</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={row.quantity}
+                        onChange={(e) => updateRow(row.id, { quantity: parseInt(e.target.value) || 0 })}
+                        className="text-gray-900 h-8 text-sm"
+                      />
                       {row.item.trackIndividually && (
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">คำนำหน้ารหัสย่อย</Label>
-                          <Input
-                            placeholder="เช่น C"
-                            value={row.subPrefix}
-                            onChange={(e) => updateRow(row.id, { subPrefix: e.target.value })}
-                            className="text-gray-900 h-8 text-sm"
-                          />
-                          <p className="text-[11px] text-muted-foreground font-mono break-all">
-                            จะสร้าง: {genCodes(row.subPrefix || "C", row.subStart, Math.max(1, row.quantity), row.subWidth).join(", ")}
-                          </p>
-                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono break-all">
+                          จะสร้าง: {genCodes(row.subStart, Math.max(1, row.quantity), row.subWidth).join(", ")}
+                        </p>
                       )}
                     </div>
 
                     {isConsumable && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Lot Number *</Label>
+                          <Label className="text-xs text-muted-foreground" required>Lot Number</Label>
                           <Input
-                            placeholder="LOT-001"
+                            placeholder="เลขล็อตจากผู้ผลิต"
                             value={row.lotNumber}
                             onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
                             className="text-gray-900 h-8 text-sm"
                           />
+                          {(() => {
+                            const m = lotMatchInfo(row);
+                            return m ? <p className={`text-[11px] font-medium ${m.cls}`}>{m.text}</p> : null;
+                          })()}
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">วันหมดอายุ</Label>
@@ -504,6 +524,19 @@ function ReceiveContent() {
                             type="date"
                             value={row.expiryDate}
                             onChange={(e) => updateRow(row.id, { expiryDate: e.target.value })}
+                            className="text-gray-900 h-8 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">ราคา/หน่วย</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            placeholder="-"
+                            value={row.unitCost}
+                            onChange={(e) => updateRow(row.id, { unitCost: e.target.value })}
                             className="text-gray-900 h-8 text-sm"
                           />
                         </div>
@@ -565,38 +598,42 @@ function ReceiveContent() {
         </Card>
       </div>
 
-      {/* ── Mobile: tabs ───────────────────────────────────── */}
+      {/* ── Mobile: tabs inside card ──────────────────────── */}
       <div className="flex md:hidden flex-col flex-1 min-h-0">
-        <div className="flex shrink-0 border-b bg-background">
-          <button
-            type="button"
-            className={cn(
-              "flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors",
-              mobileTab === "search" ? "border-primary text-primary" : "border-transparent text-muted-foreground",
-            )}
-            onClick={() => setMobileTab("search")}
-          >
-            <Search className="h-4 w-4" /> เพิ่มพัสดุ
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors",
-              mobileTab === "cart" ? "border-primary text-primary" : "border-transparent text-muted-foreground",
-            )}
-            onClick={() => setMobileTab("cart")}
-          >
-            <ClipboardList className="h-4 w-4" />
-            รายการ
-            {rows.length > 0 && (
-              <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
-                {rows.length}
-              </span>
-            )}
-          </button>
-        </div>
         <div className="flex-1 min-h-0 overflow-hidden p-3 flex flex-col">
-          {mobileTab === "search" ? SearchPanel : CartPanel}
+          <Card className="flex flex-col overflow-hidden flex-1 min-h-0 pt-0 pb-0 gap-0">
+            <div className="flex shrink-0 border-b">
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors",
+                  mobileTab === "search" ? "border-primary text-primary" : "border-transparent text-muted-foreground",
+                )}
+                onClick={() => setMobileTab("search")}
+              >
+                <Search className="h-4 w-4" /> เพิ่มพัสดุ
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors",
+                  mobileTab === "cart" ? "border-primary text-primary" : "border-transparent text-muted-foreground",
+                )}
+                onClick={() => setMobileTab("cart")}
+              >
+                <ClipboardList className="h-4 w-4" />
+                รายการ
+                {rows.length > 0 && (
+                  <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                    {rows.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            <CardContent className="flex-1 min-h-0 overflow-hidden py-3 flex flex-col">
+              {mobileTab === "search" ? SearchPanel : CartPanel}
+            </CardContent>
+          </Card>
         </div>
       </div>
 

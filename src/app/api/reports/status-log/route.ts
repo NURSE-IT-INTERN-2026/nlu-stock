@@ -60,6 +60,6 @@ export async function GET(request: NextRequest) {
     return json({ records: data, page, perPage, total });
   } catch (err) {
     console.error("status-log error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "โหลดสถานะไม่สำเร็จ" }, { status: 500 });
   }
 }
