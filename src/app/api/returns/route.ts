@@ -26,7 +26,7 @@ const ITEM_INCLUDE = {
       location: { select: { building: true, floor: true, room: true, detail: true } },
     },
   },
-  subItem: { select: { id: true, subCode: true, serialNumber: true } },
+  subItem: { select: { id: true, subCode: true, name: true, serialNumber: true } },
   staff: { select: { name: true } },
 } as const;
 

@@ -110,7 +110,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   }
 
   async function handleDelete(sub: SubItemRecord) {
-    if (!confirm(`Delete "${formatSubCode(itemCode, sub.subCode)}"?`)) return;
+    if (!confirm(`ลบ "${sub.name || formatSubCode(itemCode, sub.subCode)}"?`)) return;
     try {
       await deleteSubItem(sub.id);
       toast.success("ลบหน่วยย่อยแล้ว");
@@ -180,7 +180,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? `Edit ${editing.subCode}` : "Add Sub-code"}</DialogTitle>
+            <DialogTitle>{editing ? `แก้ไข ${editing.name || editing.subCode}` : "เพิ่มรหัสย่อย"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {!editing && (

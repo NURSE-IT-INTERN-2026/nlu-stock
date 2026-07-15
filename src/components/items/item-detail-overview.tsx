@@ -24,6 +24,7 @@ import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 interface SubItemRecord {
   id: string;
   subCode: string;
+  name: string | null;
   status: string;
   condition: string | null;
   serialNumber: string | null;
@@ -281,7 +282,10 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <div className="p-4 sm:p-5 space-y-2">
             {checkedOutSubs.map((sub) => (
               <div key={sub.id} className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/40">
-                <span className="font-mono text-sm">{formatSubCode(item.code, sub.subCode)}</span>
+                <div className="min-w-0">
+                  {sub.name && <p className="text-sm truncate">{sub.name}</p>}
+                  <span className="font-mono text-xs text-muted-foreground">{formatSubCode(item.code, sub.subCode)}</span>
+                </div>
                 <Button size="sm" variant="outline" onClick={() => handleReturn(sub.id)}>
                   <Undo2 className="h-3.5 w-3.5 mr-1" />คืน
                 </Button>

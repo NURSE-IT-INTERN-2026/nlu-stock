@@ -100,6 +100,7 @@ export default function ItemDetailPage() {
   const [item, setItem] = useState<ItemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustFixedReason, setAdjustFixedReason] = useState<string | null>(null);
   const [statusAction, setStatusAction] = useState<"DAMAGED" | "LOST" | "DISPOSED" | null>(null);
   const [maintOpen, setMaintOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -290,7 +291,12 @@ export default function ItemDetailPage() {
               item={item}
               userRole={user?.role || ""}
               onAdjust={() => setAdjustOpen(true)}
-              onReportDamage={() => setStatusAction("DAMAGED")}
+              onReportDamage={() => {
+                // Tracked (per-piece) asset → set the unit's status DAMAGED.
+                // Qty-based consumable → damage is a qty deduction with reason DAMAGED (keeps item AVAILABLE).
+                if (item.trackIndividually) setStatusAction("DAMAGED");
+                else { setAdjustFixedReason("DAMAGED_PENDING_REPAIR"); setAdjustOpen(true); }
+              }}
               onReportStatus={(s) => setStatusAction(s)}
               onMoveLocation={() => setMoveOpen(true)}
               onEdit={() => setEditOpen(true)}
@@ -327,14 +333,15 @@ export default function ItemDetailPage() {
       {/* ── Dialogs ── */}
       <StockAdjustmentDialog
         open={adjustOpen}
-        onOpenChange={setAdjustOpen}
+        onOpenChange={(o) => { setAdjustOpen(o); if (!o) setAdjustFixedReason(null); }}
+        fixedReason={adjustFixedReason ?? undefined}
         itemId={item.id}
         itemCode={item.code}
         availableQty={item.availableQty}
         totalQty={item.totalQty}
         lots={item.lots?.map((l) => ({ id: l.id, lotNumber: l.lotNumber, remainingQty: l.remainingQty, expiryDate: l.expiryDate }))}
         trackIndividually={item.trackIndividually}
-        subItems={item.subItems?.map((s) => ({ id: s.id, subCode: s.subCode, status: s.status }))}
+        subItems={item.subItems?.map((s) => ({ id: s.id, subCode: s.subCode, name: s.name, status: s.status }))}
         checkedOutCount={item.trackIndividually
           ? item.subItems.filter(s => s.status === "ON_LOAN").length
           : item.totalQty - item.availableQty}

@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Pagination } from "./pagination";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { USAGE_TYPE_LABELS } from "@/lib/constants";
 import type { DispenseRecord } from "@/lib/dashboard-types";
 
@@ -15,14 +16,12 @@ interface RecentDispenseTableProps {
   data: DispenseRecord[];
 }
 
-const PAGE_SIZE = 5;
-
 export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const sliced = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sliced = data.slice((page - 1) * PAGE_SIZE.DASHBOARD, page * PAGE_SIZE.DASHBOARD);
 
   const handlePageChange = useCallback((p: number) => {
     setPage(p);
@@ -45,7 +44,7 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
   );
 
   return (
-    <Card>
+    <Card className="pb-0">
       <CardHeader className="border-b py-3">
         <CardTitle className="text-base font-semibold text-foreground">
           รายการเบิกล่าสุด
@@ -82,8 +81,8 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
                     </TableCell>
                     <TableCell className="px-2">
                       <div className="flex items-center min-w-0 gap-1">
-                        <span className="font-mono text-xs text-foreground font-semibold underline decoration-primary/30 underline-offset-2 shrink-0">{r.item.code}</span>
-                        <span className="hidden sm:inline text-foreground/80 font-medium truncate min-w-0">{r.item.name}</span>
+                        <span className="text-foreground/80 font-medium truncate min-w-0">{r.item.name}</span>
+                        <span className="hidden sm:inline font-mono text-xs text-muted-foreground shrink-0">{r.item.code}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right text-sm text-foreground font-bold px-2">{r.quantity}</TableCell>
@@ -95,7 +94,7 @@ export function RecentDispenseTable({ data }: RecentDispenseTableProps) {
                 ))}
               </TableBody>
             </Table>
-            <Pagination page={page} total={data.length} pageSize={PAGE_SIZE} onChange={handlePageChange} />
+            <Pagination page={page} total={data.length} pageSize={PAGE_SIZE.DASHBOARD} onChange={handlePageChange} />
           </div>
         )}
       </CardContent>

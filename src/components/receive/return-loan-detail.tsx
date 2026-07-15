@@ -461,7 +461,10 @@ function TrackedRows({
                 className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.04] disabled:opacity-100 disabled:hover:bg-transparent"
               >
                 <Checkbox checked={done || isSel} disabled={done} tabIndex={-1} className="pointer-events-none" />
-                <span className="font-mono text-sm truncate flex-1">{formatSubCode(code, r.subItem!.subCode)}</span>
+                <div className="min-w-0 flex-1">
+                  {r.subItem!.name && <p className="text-sm truncate">{r.subItem!.name}</p>}
+                  <span className="font-mono text-xs text-muted-foreground truncate">{formatSubCode(code, r.subItem!.subCode)}</span>
+                </div>
                 {done ? (
                   <Badge variant="secondary" className="gap-1 text-xs"><Check className="h-3 w-3" /> คืนแล้ว</Badge>
                 ) : (

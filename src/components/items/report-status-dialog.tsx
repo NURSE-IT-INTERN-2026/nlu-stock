@@ -19,6 +19,7 @@ import { updateItemStatus } from "@/lib/api";
 interface SubItemOption {
   id: string;
   subCode: string;
+  name?: string | null;
   status: string;
 }
 
@@ -44,6 +45,9 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
   const meta = STATUS_ACTION_META[status];
   // Full sub-code shown to staff (e.g. NLU-KRU-001-C01); falls back to raw when no itemCode.
   const fmtCode = (code: string) => formatSubCode(itemCode ?? "", code);
+  // ponytail: name optional — most sub-items have one, code stays as the ID.
+  const subLabel = (sub: SubItemOption) =>
+    `${sub.name ? `${sub.name} · ` : ""}${fmtCode(sub.subCode)} (${STATUS_LABELS[sub.status] ?? sub.status})`;
   const [subItemId, setSubItemId] = useState("");
   const [notes, setNotes] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -124,21 +128,21 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
                 <Label>ชิ้นย่อย{!lockedSub && <span className="text-destructive"> *</span>}</Label>
                 {lockedSub ? (
                   <div className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-gray-900">
-                    {fmtCode(lockedSub.subCode)} ({STATUS_LABELS[lockedSub.status] ?? lockedSub.status})
+                    {subLabel(lockedSub)}
                   </div>
                 ) : (
                   <Select value={subItemId} onValueChange={(v) => setSubItemId(v ?? "")}>
                     <SelectTrigger className="bg-card w-full">
                       <span className={subItemId ? "text-foreground" : "text-muted-foreground"}>
                         {selectedSub
-                          ? `${fmtCode(selectedSub.subCode)} (${STATUS_LABELS[selectedSub.status] ?? selectedSub.status})`
+                          ? subLabel(selectedSub)
                           : "เลือกชิ้นย่อย"}
                       </span>
                     </SelectTrigger>
                     <SelectContent>
                       {subItems.map((sub) => (
                         <SelectItem key={sub.id} value={sub.id}>
-                          {fmtCode(sub.subCode)} ({STATUS_LABELS[sub.status] ?? sub.status})
+                          {subLabel(sub)}
                         </SelectItem>
                       ))}
                     </SelectContent>
