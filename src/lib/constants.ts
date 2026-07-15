@@ -1,6 +1,6 @@
 // Re-export enums from Prisma generated client — single source of truth
 export { ItemStatus, Role, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
-import type { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
+import type { ItemStatus, AdjustmentReason, Role, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
 
 // ─── Item Condition (sub-item สภาพ) ───
 export const CONDITION_LABELS: Record<string, string> = {
@@ -10,6 +10,40 @@ export const CONDITION_LABELS: Record<string, string> = {
   FAIR: "สภาพพอใช้",
   UNUSABLE: "ใช้งานไม่ได้",
   DAMAGED: "ชำรุด",
+};
+
+// ─── Role ───
+export const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: "ผู้ดูแล",
+  STAFF: "เจ้าหน้าที่",
+  INSTRUCTOR: "ผู้สอน",
+  CHILDREN: "นักศึกษา",
+};
+
+// ─── Maintenance ───
+export const MAINT_TYPE_LABELS: Record<MaintenanceType, string> = {
+  PREVENTIVE: "ตรวจบำรุง",
+  CORRECTIVE: "ซ่อมแซม",
+};
+
+export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
+  AVAILABLE: "พร้อมใช้งาน",
+  NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
+  DISPOSED: "ตัดจำหน่าย",
+};
+
+// ─── Timeline event type ───
+export type TimelineEventType =
+  | "DISPENSE" | "RECEIVE" | "ADJUSTMENT"
+  | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
+
+export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
+  DISPENSE: "เบิก",
+  RECEIVE: "รับเข้า",
+  ADJUSTMENT: "ปรับสต๊อก",
+  STATUS_CHANGE: "เปลี่ยนสถานะ",
+  MAINTENANCE: "บำรุงรักษา",
+  LOCATION_CHANGE: "ที่ตั้ง",
 };
 
 // ─── Category ───
@@ -105,4 +139,13 @@ export function locationLabel(loc: { building: string; floor: string; room: stri
 // subCode may be stored as suffix ("C01") or full ("ITM001-01"); show full, avoid doubling prefix.
 export function formatSubCode(itemCode: string, subCode: string): string {
   return subCode.startsWith(itemCode) ? subCode : `${itemCode}-${subCode}`;
+}
+
+// ─── Label lookup helper ───
+// Type-safe over E: the map must be exhaustive (Record<E, string>) so a missing
+// member errors at compile time, and `key` is typed E so a typo'd enum at the
+// call site is caught. When the source value is a plain `string` (e.g. API JSON),
+// cast at the boundary: labelFor(ROLE_LABELS, user.role as Role).
+export function labelFor<E extends string>(map: Record<E, string>, key: E): string {
+  return map[key] ?? key;
 }
