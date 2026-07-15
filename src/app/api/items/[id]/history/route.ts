@@ -1,11 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, getSearchParams, paginate } from "@/lib/api-utils";
-import { ADJUSTMENT_REASON_LABELS, STATUS_LABELS } from "@/lib/constants";
+import { ADJUSTMENT_REASON_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS } from "@/lib/constants";
 import { NextRequest } from "next/server";
-
-// ponytail: inline label maps — only used here, no need to promote to constants yet.
-const MAINT_TYPE_LABELS = { PREVENTIVE: "ป้องกัน", CORRECTIVE: "แก้ไข" } as const;
-const MAINT_RESULT_LABELS = { AVAILABLE: "ใช้งานได้", NEEDS_MORE_REPAIR: "ต้องซ่อมต่อ", DISPOSED: "ตัดจำหน่าย" } as const;
 
 type TimelineEvent = {
   id: string;

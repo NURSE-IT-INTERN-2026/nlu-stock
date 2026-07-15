@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
-import { STATUS_LABELS, locationLabel, formatSubCode, EVENT_TYPE_LABELS, labelFor } from "@/lib/constants";
+import { STATUS_LABELS, locationLabel, formatSubCode, EVENT_TYPE_LABELS, labelFor, CONDITION_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 import { getSubItem, getSubItems, returnItem, updateSubItem } from "@/lib/api";
 import { ActionTile } from "@/components/items/action-tile";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -88,9 +88,6 @@ interface SubItemData {
   maintenanceRecords: MaintenanceRecord[];
 }
 
-const TYPE_LABELS: Record<string, string> = { PREVENTIVE: "ตรวจบำรุง", CORRECTIVE: "ซ่อมแซม" };
-const RESULT_LABELS: Record<string, string> = { AVAILABLE: "พร้อมใช้งาน", NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม", DISPOSED: "จำหน่าย" };
-const CONDITION_LABELS: Record<string, string> = { NEW: "ใหม่", OLD: "เก่า", USABLE: "ใช้ได้", FAIR: "พอใช้", UNUSABLE: "ใช้ไม่ได้", DAMAGED: "ชำรุด" };
 const STATUS_DOT: Record<string, string> = { AVAILABLE: "bg-success", ON_LOAN: "bg-blue-500", DAMAGED: "bg-destructive", UNDER_REPAIR: "bg-warning", LOST: "bg-destructive", DISPOSED: "bg-muted-foreground", PENDING_MAINTENANCE: "bg-warning" };
 
 // Status → icon + tone for the hero status card
@@ -212,7 +209,7 @@ export default function SubItemDetailPage() {
     }));
     const maint = sub.maintenanceRecords.map((r) => ({
       id: r.id, type: "MAINTENANCE" as const, date: r.performedAt,
-      description: `${TYPE_LABELS[r.type] ?? r.type} · ${RESULT_LABELS[r.result] ?? r.result}${r.issue ? ` · ${r.issue}` : ""}`,
+      description: `${labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType)} · ${labelFor(MAINT_RESULT_LABELS, r.result as MaintenanceResult)}${r.issue ? ` · ${r.issue}` : ""}`,
       user: r.performer.name,
     }));
     return [...dispense, ...status, ...maint]
@@ -612,13 +609,13 @@ export default function SubItemDetailPage() {
                               <CalendarDays className="size-3" />{fmtDay(rec.performedAt)}
                             </span>
                             <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">
-                              {TYPE_LABELS[rec.type] ?? rec.type}
+                              {labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}
                             </span>
                             <span className={cn(
                               "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
                               rec.result === "AVAILABLE" ? "bg-success/10 text-success-700 border-success/20" : "bg-primary/10 text-primary border-primary/20",
                             )}>
-                              {RESULT_LABELS[rec.result] ?? rec.result}
+                              {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
                             </span>
                           </div>
                           {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}

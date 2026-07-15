@@ -7,10 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { X, ClipboardList, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Pagination } from "@/components/dashboard/pagination";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { MaintenanceScheduleTab } from "@/components/reports/maintenance-schedule-tab";
@@ -57,19 +59,6 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
 }
 
-const RESULT_LABELS: Record<string, string> = {
-  AVAILABLE: "พร้อมใช้งาน",
-  NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
-  DISPOSED: "จำหน่าย",
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  PREVENTIVE: "ป้องกัน",
-  CORRECTIVE: "ซ่อมแก้ไข",
-};
-
-const PAGE_SIZE = 10;
-
 const SCHEDULE_VIEWS = [
   { value: "urgent", label: "รายการที่ต้องบำรุง", Icon: ClipboardList },
   { value: "full", label: "ตารางบำรุงรักษา", Icon: CalendarClock },
@@ -115,7 +104,7 @@ export default function MaintenancePage() {
       setRecentRecords(hist.records ?? []);
       setSchedulePage(1);
     } catch {
-      if (!silent) toast.error("Failed to load maintenance data");
+      if (!silent) toast.error("โหลดข้อมูลบำรุงรักษาไม่สำเร็จ");
     } finally {
       if (!silent) setLoading(false);
     }
@@ -130,7 +119,7 @@ export default function MaintenancePage() {
   const filteredSchedule = filter === "all"
     ? scheduleItems
     : scheduleItems.filter((i) => i.maintenanceStatus === filter);
-  const pagedSchedule = filteredSchedule.slice((schedulePage - 1) * PAGE_SIZE, schedulePage * PAGE_SIZE);
+  const pagedSchedule = filteredSchedule.slice((schedulePage - 1) * PAGE_SIZE.COMPACT, schedulePage * PAGE_SIZE.COMPACT);
 
   const toggleFilter = (target: "overdue" | "due-soon") => {
     setView("urgent");
@@ -151,8 +140,8 @@ export default function MaintenancePage() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 sm:space-y-8 pb-4">
+    <div className="flex flex-col">
+      <div className="space-y-4 sm:space-y-8 pb-4">
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <DashboardMetricCard
@@ -320,7 +309,7 @@ export default function MaintenancePage() {
                 </div>
 
                 {/* Mobile: stacked cards (no horizontal scroll) */}
-                <div className="divide-y divide-border md:hidden overflow-auto max-h-[68dvh]">
+                <div className="divide-y divide-border md:hidden">
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="px-4 py-2.5"><Skeleton className="h-10 w-full" /></div>
@@ -371,15 +360,13 @@ export default function MaintenancePage() {
                 )}
               </div>
 
-              {!loading && filteredSchedule.length > PAGE_SIZE && (
-                <div className="mt-3">
-                  <Pagination
-                    page={schedulePage}
-                    total={filteredSchedule.length}
-                    pageSize={PAGE_SIZE}
-                    onChange={setSchedulePage}
-                  />
-                </div>
+              {!loading && filteredSchedule.length > PAGE_SIZE.COMPACT && (
+                <Pagination
+                  page={schedulePage}
+                  total={filteredSchedule.length}
+                  pageSize={PAGE_SIZE.COMPACT}
+                  onChange={setSchedulePage}
+                />
               )}
 
               {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. Count summary moved into the card footer above. */}
@@ -418,10 +405,10 @@ export default function MaintenancePage() {
                 >
                   <div className="mb-1 flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
-                      {TYPE_LABELS[rec.type] || rec.type}
+                      {labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}
                     </Badge>
                     <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
-                      {RESULT_LABELS[rec.result] || rec.result}
+                      {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
                     </Badge>
                     <span className="ml-auto text-xs text-muted-foreground">
                       {new Date(rec.performedAt).toLocaleDateString("th-TH")}

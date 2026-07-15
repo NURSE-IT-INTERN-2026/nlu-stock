@@ -13,7 +13,7 @@ import {
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatSubCode, CONDITION_LABELS } from "@/lib/constants";
+import { formatSubCode, CONDITION_LABELS, STATUS_LABELS } from "@/lib/constants";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { ActionTile } from "@/components/items/action-tile";
@@ -63,18 +63,6 @@ interface Props {
   onEdit: () => void;
   onRefresh: () => void;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  AVAILABLE: "พร้อมใช้งาน",
-  ON_LOAN: "ถูกยืม",
-  IN_USE: "ถูกใช้งาน",
-  DAMAGED: "ชำรุด",
-  UNDER_REPAIR: "ส่งซ่อม",
-  LOST: "สูญหาย",
-  PENDING_MAINTENANCE: "บำรุงรักษา",
-  DISPOSED: "ตัดจำหน่าย",
-};
-
 
 export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onReportStatus, onMoveLocation, onEdit, onRefresh }: Props) {
   const canAct = userRole === "ADMIN" || userRole === "STAFF";
