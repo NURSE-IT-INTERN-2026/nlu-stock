@@ -25,13 +25,13 @@ export async function POST(req: NextRequest) {
           include: { category: { include: { profile: true } } },
         });
 
-        if (!item) throw new Error(`Item ${ri.itemId} not found`);
+        if (!item) throw new Error("ไม่พบพัสดุ");
 
         const isConsumable = item.category.profile?.dispenseType === "CONSUMABLE";
 
         // Enforce lotNumber for consumable
         if (isConsumable && !ri.lotNumber?.trim()) {
-          throw new Error(`Lot number is required for consumable item: ${item.code}`);
+          throw new Error(`ต้องระบุเลขล็อตสำหรับพัสดุใช้แล้วทิ้ง: ${item.name}`);
         }
 
         // Lot handling for consumable
@@ -42,11 +42,33 @@ export async function POST(req: NextRequest) {
           });
 
           if (existingLot) {
+            // Refuse to merge a lot when the new expiry differs — silently
+            // overwriting the stored expiry would corrupt FEFO ordering.
+            if (
+              ri.expiryDate &&
+              existingLot.expiryDate &&
+              existingLot.expiryDate.getTime() !== new Date(ri.expiryDate).getTime()
+            ) {
+              throw new Error(
+                `ล็อต "${ri.lotNumber}" ของ ${item.name} มีอยู่แล้ว แต่วันหมดอายุไม่ตรงกัน กรุณาใช้เลขล็อตใหม่`
+              );
+            }
+            // Weighted-average unit cost when appending at a new price
+            let nextUnitCost = existingLot.unitCost;
+            if (ri.unitCost != null) {
+              const oldRemaining = existingLot.remainingQty;
+              const newRemaining = oldRemaining + ri.quantity;
+              nextUnitCost =
+                existingLot.unitCost != null && oldRemaining > 0
+                  ? (oldRemaining * existingLot.unitCost + ri.quantity * ri.unitCost) / newRemaining
+                  : ri.unitCost;
+            }
             await tx.lot.update({
               where: { id: existingLot.id },
               data: {
                 receivedQty: { increment: ri.quantity },
                 remainingQty: { increment: ri.quantity },
+                unitCost: nextUnitCost,
                 ...(ri.expiryDate && { expiryDate: new Date(ri.expiryDate) }),
               },
             });
@@ -59,6 +81,7 @@ export async function POST(req: NextRequest) {
                 expiryDate: ri.expiryDate ? new Date(ri.expiryDate) : null,
                 receivedQty: ri.quantity,
                 remainingQty: ri.quantity,
+                unitCost: ri.unitCost ?? null,
               },
             });
             lotId = newLot.id;
@@ -68,7 +91,7 @@ export async function POST(req: NextRequest) {
         // Tracked durables must supply exactly one sub-code per copy
         if (item.trackIndividually) {
           if (!ri.subCodes?.length || ri.subCodes.length !== ri.quantity) {
-            throw new Error(`${item.code}: tracked item needs ${ri.quantity} sub-code(s), got ${ri.subCodes?.length ?? 0}`);
+            throw new Error(`${item.name}: พัสดุติดตามรายชิ้นต้องการ ${ri.quantity} รหัสย่อย ได้รับ ${ri.subCodes?.length ?? 0}`);
           }
         }
 
@@ -91,7 +114,7 @@ export async function POST(req: NextRequest) {
           });
           if (existing.length > 0) {
             const dupes = existing.map((s) => s.subCode).join(", ");
-            throw new Error(`Sub-codes already exist for ${item.code}: ${dupes}`);
+            throw new Error(`รหัสย่อยซ้ำสำหรับ ${item.name}: ${dupes}`);
           }
 
           for (const subCode of ri.subCodes) {
