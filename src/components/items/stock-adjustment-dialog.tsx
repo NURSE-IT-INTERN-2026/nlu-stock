@@ -30,6 +30,7 @@ export interface AdjustLot {
 export interface AdjustSubItem {
   id: string;
   subCode: string;
+  name?: string | null;
   status: string;
 }
 
@@ -113,9 +114,10 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
 
   const effectiveSubIds = fixedMode && fixedSubItemId ? new Set([fixedSubItemId]) : selectedSubIds;
 
-  const filteredSubs = (subItems ?? []).filter((s) =>
-    fmtCode(s.subCode).toLowerCase().includes(subSearch.trim().toLowerCase()),
-  );
+  const filteredSubs = (subItems ?? []).filter((s) => {
+    const q = subSearch.trim().toLowerCase();
+    return fmtCode(s.subCode).toLowerCase().includes(q) || (s.name ?? "").toLowerCase().includes(q);
+  });
   const selectedSubs = (subItems ?? []).filter((s) => effectiveSubIds.has(s.id));
 
   function toggleSub(id: string) {
@@ -210,7 +212,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
               {/* Tracked mode: per-piece status */}
               {!fixedMode && (
               <div className="space-y-2">
-                <Label>เลือกชิ้น <span className="text-destructive">*</span></Label>
+                <Label required>เลือกชิ้น</Label>
                 <Popover open={subOpen} onOpenChange={setSubOpen}>
                   <PopoverTrigger
                     render={(props: ComponentProps<"button">) => (
@@ -260,6 +262,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
                             )}
                           >
                             <Checkbox checked={selected} tabIndex={-1} className="pointer-events-none" />
+                            {s.name && <span className="truncate text-foreground">{s.name}</span>}
                             <span className="font-mono text-foreground">{fmtCode(s.subCode)}</span>
                             <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[10px]", STATUS_PILLS[s.status] ?? "text-muted-foreground border-border")}>
                               {STATUS_LABELS[s.status] ?? s.status}
@@ -285,7 +288,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
                           type="button"
                           onClick={() => toggleSub(s.id)}
                           className="rounded-full hover:bg-foreground/10 px-0.5"
-                          aria-label={`เอา ${fmtCode(s.subCode)} ออก`}
+                          aria-label={`เอา ${s.name ?? fmtCode(s.subCode)} ออก`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -300,6 +303,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
                 <div className="space-y-2">
                   <Label>ชิ้นที่ปรับ</Label>
                   <div className="flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 text-sm">
+                    {selectedSubs[0].name && <span className="text-foreground">{selectedSubs[0].name}</span>}
                     <span className="font-mono text-foreground">{fmtCode(selectedSubs[0].subCode)}</span>
                     <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[10px]", STATUS_PILLS[selectedSubs[0].status] ?? "text-muted-foreground border-border")}>
                       {STATUS_LABELS[selectedSubs[0].status] ?? selectedSubs[0].status}
@@ -309,7 +313,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
               )}
 
               <div className="space-y-2">
-                <Label>เปลี่ยนเป็นสถานะ <span className="text-destructive">*</span></Label>
+                <Label required>เปลี่ยนเป็นสถานะ</Label>
                 <Select value={targetStatus} onValueChange={(v) => setTargetStatus(v ?? "")}>
                   <SelectTrigger className="bg-card">
                     <SelectValue placeholder="เลือกสถานะ">
@@ -339,7 +343,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
               {/* Lot picker — consumable mode */}
               {lotMode && (
                 <div className="space-y-2">
-                  <Label>Lot <span className="text-destructive">*</span></Label>
+                  <Label required>Lot</Label>
                   <Select value={selectedLotId} onValueChange={(v) => { if (v) setSelectedLotId(v); }}>
                     <SelectTrigger className="bg-card">
                       <SelectValue placeholder="เลือก lot">
@@ -390,7 +394,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
               </div>
 
               <div className="space-y-2">
-                <Label>{lotMode ? "นับจริงได้กี่ชิ้น (lot นี้)" : "นับจริงบนชั้นวาง"} <span className="text-destructive">*</span></Label>
+                <Label required>{lotMode ? "นับจริงได้กี่ชิ้น (lot นี้)" : "นับจริงบนชั้นวาง"}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -412,7 +416,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
               </div>
 
               <div className="space-y-2">
-                <Label>เหตุผล <span className="text-destructive">*</span></Label>
+                <Label required>เหตุผล</Label>
                 {fixedReasonLabel ? (
                   <div className={cn(
                     "flex items-center rounded-md border px-3 py-2 text-sm font-medium",

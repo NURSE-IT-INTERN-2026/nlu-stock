@@ -211,6 +211,7 @@ export interface QuickCreateItemPayload {
   copyCount?: number;
   setSize?: number;
   initialQty?: number;
+  description?: string;
 }
 
 export function quickCreateItem(data: QuickCreateItemPayload) {
@@ -261,7 +262,7 @@ export function deleteSettingsUser(id: string) {
 
 export function getItems(params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
-  return request<{ items: unknown[]; total: number }>(`/api/items?${qs}`);
+  return request<{ items: unknown[]; total: number; nextCursor?: string | null }>(`/api/items?${qs}`);
 }
 
 export function getItem(id: string) {
@@ -303,7 +304,7 @@ export function searchDispenseItems(params: {
   floor?: string;
   room?: string;
   detail?: string;
-  limit?: string;
+  perPage?: string;
   page?: string;
 }) {
   const qs = new URLSearchParams(
@@ -447,7 +448,7 @@ export interface OpenBorrow {
     category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
   };
-  subItem: { id: string; subCode: string; serialNumber: string | null } | null;
+  subItem: { id: string; subCode: string; name: string | null; serialNumber: string | null } | null;
   staff: { name: string };
 }
 
