@@ -20,6 +20,10 @@ import { Separator } from "@/components/ui/separator";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
 import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor, MANUAL_SETTABLE_STATUS_OPTIONS } from "@/lib/constants";
 
+// Sentinel for the "no condition" Select option. Base UI Select needs a concrete
+// value (not "") to match a SelectItem, so null condition ↔ "__NONE__".
+const NO_CONDITION = "__NONE__";
+
 interface SubItemRecord {
   id: string;
   subCode: string;
@@ -41,7 +45,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SubItemRecord | null>(null);
-  const [editForm, setEditForm] = useState({ subCode: "", name: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
+  const [editForm, setEditForm] = useState({ subCode: "", name: "", status: "AVAILABLE", condition: NO_CONDITION, serialNumber: "", notes: "" });
   const [batchForm, setBatchForm] = useState({ prefix: `${itemCode}-`, startNumber: 1, endNumber: 10 });
 
   const fetchSubItems = useCallback(async () => {
@@ -59,13 +63,13 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
 
   function openCreate() {
     setEditing(null);
-    setEditForm({ subCode: "", name: "", status: "AVAILABLE", condition: "", serialNumber: "", notes: "" });
+    setEditForm({ subCode: "", name: "", status: "AVAILABLE", condition: NO_CONDITION, serialNumber: "", notes: "" });
     setEditDialogOpen(true);
   }
 
   function openEdit(sub: SubItemRecord) {
     setEditing(sub);
-    setEditForm({ subCode: sub.subCode, name: sub.name || "", status: sub.status, condition: sub.condition || "", serialNumber: sub.serialNumber || "", notes: sub.notes || "" });
+    setEditForm({ subCode: sub.subCode, name: sub.name || "", status: sub.status, condition: sub.condition || NO_CONDITION, serialNumber: sub.serialNumber || "", notes: sub.notes || "" });
     setEditDialogOpen(true);
   }
 
@@ -75,7 +79,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
         await updateSubItem(editing.id, {
           status: editForm.status,
           name: editForm.name || null,
-          condition: editForm.condition || null,
+          condition: editForm.condition === NO_CONDITION ? null : editForm.condition,
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
         });
@@ -85,7 +89,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           subCode: editForm.subCode,
           name: editForm.name || null,
           status: editForm.status,
-          condition: editForm.condition || null,
+          condition: editForm.condition === NO_CONDITION ? null : editForm.condition,
           serialNumber: editForm.serialNumber || null,
           notes: editForm.notes || null,
         });
@@ -206,7 +210,15 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
             </div>
             <div>
               <Label>Condition</Label>
-              <Input value={editForm.condition} onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })} />
+              <Select value={editForm.condition} onValueChange={(v) => setEditForm({ ...editForm, condition: v ?? NO_CONDITION })}>
+                <SelectTrigger><SelectValue>{editForm.condition === NO_CONDITION ? "ไม่ระบุ" : labelFor(CONDITION_LABELS, editForm.condition)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CONDITION}>ไม่ระบุ</SelectItem>
+                  {Object.entries(CONDITION_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Serial Number</Label>
