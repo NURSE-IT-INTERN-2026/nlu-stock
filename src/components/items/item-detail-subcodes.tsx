@@ -38,14 +38,15 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
 const STATUS_OPTIONS = ["AVAILABLE", "IN_USE", "DAMAGED", "UNDER_REPAIR", "LOST", "DISPOSED", "PENDING_MAINTENANCE"];
 
 const STATUS_CHIPS = [
-  { value: "ALL", label: "All" },
-  { value: "AVAILABLE", label: "Available", activeClass: "bg-emerald-600 text-white border-emerald-600" },
-  { value: "ON_LOAN", label: "Checked Out", activeClass: "bg-blue-600 text-white border-blue-600" },
-  { value: "IN_USE", label: "In Use", activeClass: "bg-indigo-600 text-white border-indigo-600" },
-  { value: "DAMAGED", label: "Damaged", activeClass: "bg-red-600 text-white border-red-600" },
-  { value: "UNDER_REPAIR", label: "Under Repair", activeClass: "bg-amber-600 text-white border-amber-600" },
-  { value: "LOST", label: "Lost", activeClass: "bg-red-800 text-white border-red-800" },
-  { value: "DISPOSED", label: "Disposed", activeClass: "bg-slate-600 text-white border-slate-600" },
+  { value: "ALL", label: "ทั้งหมด", activeClass: "bg-primary text-primary-foreground border-primary" },
+  { value: "AVAILABLE", label: "พร้อมใช้งาน", activeClass: "bg-emerald-600 text-white border-emerald-600" },
+  { value: "ON_LOAN", label: "ถูกยืม", activeClass: "bg-blue-600 text-white border-blue-600" },
+  { value: "IN_USE", label: "ถูกใช้งาน", activeClass: "bg-indigo-600 text-white border-indigo-600" },
+  { value: "DAMAGED", label: "ชำรุด", activeClass: "bg-red-600 text-white border-red-600" },
+  { value: "UNDER_REPAIR", label: "ส่งซ่อม", activeClass: "bg-amber-600 text-white border-amber-600" },
+  { value: "PENDING_MAINTENANCE", label: "บำรุงรักษา", activeClass: "bg-cyan-600 text-white border-cyan-600" },
+  { value: "LOST", label: "สูญหาย", activeClass: "bg-red-800 text-white border-red-800" },
+  { value: "DISPOSED", label: "ตัดจำหน่าย", activeClass: "bg-slate-600 text-white border-slate-600" },
 ];
 
 interface Props {

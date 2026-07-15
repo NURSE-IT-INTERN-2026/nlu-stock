@@ -198,13 +198,9 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v ?? "AVAILABLE" })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="AVAILABLE">Available</SelectItem>
-                  <SelectItem value="ON_LOAN">Checked Out</SelectItem>
-                  <SelectItem value="IN_USE">In Use</SelectItem>
-                  <SelectItem value="DAMAGED">Damaged</SelectItem>
-                  <SelectItem value="UNDER_REPAIR">Under Repair</SelectItem>
-                  <SelectItem value="LOST">Lost</SelectItem>
-                  <SelectItem value="DISPOSED">Disposed</SelectItem>
+                  {(["AVAILABLE", "ON_LOAN", "IN_USE", "DAMAGED", "UNDER_REPAIR", "LOST", "DISPOSED"] as const).map((s) => (
+                    <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
