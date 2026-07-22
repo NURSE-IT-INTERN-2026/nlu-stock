@@ -24,9 +24,9 @@ interface Row {
 }
 
 const statusLabel: Record<string, { label: string; variant: "destructive" | "secondary" | "default" }> = {
-  overdue: { label: "Overdue", variant: "destructive" },
-  "due-soon": { label: "Due Soon", variant: "secondary" },
-  normal: { label: "Normal", variant: "default" },
+  overdue: { label: "เลยรอบ", variant: "destructive" },
+  "due-soon": { label: "ใกล้ถึงรอบ", variant: "secondary" },
+  normal: { label: "ปกติ", variant: "default" },
 };
 
 const columns: Column<Row>[] = [

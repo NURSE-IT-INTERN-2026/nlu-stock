@@ -65,11 +65,14 @@ export async function resolveSubItemReturn(
     orderBy: { dispensedAt: "desc" },
   });
   if (dispense) {
+    // UNDER_REPAIR is an internal sub-item state; on the dispense record it's a DAMAGED return.
+    const returnCondition = status === "UNDER_REPAIR" ? "DAMAGED" : status;
     await tx.dispenseRecord.update({
       where: { id: dispense.id },
       data: {
         resolvedQty: dispense.quantity,
         returnedAt: new Date(),
+        returnCondition,
         ...(proofUrls && proofUrls.length > 0 ? { returnProofUrls: proofUrls } : {}),
       },
     });

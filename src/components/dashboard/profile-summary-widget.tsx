@@ -1,11 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { profileIcon } from "@/lib/profile-icons";
 import { getDashboardProfileSummary } from "@/lib/api";
+import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
 
 interface Row {
   profileId: string;
@@ -16,10 +16,11 @@ interface Row {
 }
 
 export function ProfileSummaryWidget() {
-  const { data: rows = [], isLoading: loading } = useQuery({
-    queryKey: ["dashboard", "profile-summary"],
-    queryFn: async () => (await getDashboardProfileSummary()) as Row[],
-  });
+  const nonce = useDashboardRefreshNonce();
+  const { data: rows = [], isLoading: loading } = useAsync(
+    async () => (await getDashboardProfileSummary()) as Row[],
+    [nonce],
+  );
 
   const total = rows.reduce((s, r) => s + r.count, 0);
 

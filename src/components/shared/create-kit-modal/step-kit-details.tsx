@@ -56,7 +56,7 @@ export function StepKitDetails({ form, onUpdate }: StepKitDetailsProps) {
     <div className="space-y-5">
       {/* ชื่อชุด */}
       <div className="space-y-2">
-        <Label htmlFor="kit-name">ชื่อชุด <span className="text-destructive">*</span></Label>
+        <Label htmlFor="kit-name" required>ชื่อชุด</Label>
         <Input
           id="kit-name"
           placeholder="เช่น ชุดประกอบวิชาเคมี ม.4"
@@ -89,7 +89,7 @@ export function StepKitDetails({ form, onUpdate }: StepKitDetailsProps) {
         </div>
       ) : (
         <div className="space-y-2">
-          <Label htmlFor="kit-unit-select" className="text-xs">หน่วยนับ (ของชุด) <span className="text-destructive">*</span></Label>
+          <Label htmlFor="kit-unit-select" className="text-xs" required>หน่วยนับ (ของชุด)</Label>
           <Select
             value={form.issueUnitId}
             onValueChange={(v) => {

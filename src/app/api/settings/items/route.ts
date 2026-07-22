@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
 import { itemCreateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
+import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
+import { itemStatusWhere, andWhere } from "@/lib/item-status-where";
 import { NextRequest } from "next/server";
 import { Prisma, ItemStatus } from "@/generated/prisma/client";
 
@@ -29,12 +31,10 @@ export async function GET(request: NextRequest) {
   const profileId = params.get("profileId");
   if (profileId) where.category = { profileId };
 
-  const status = params.get("status");
-  if (status) {
-    const list = status.split(",").filter(Boolean);
-    if (list.length === 1) where.status = list[0] as ItemStatus;
-    else if (list.length > 1) where.status = { in: list as ItemStatus[] };
-  }
+  // Same matching as /api/items — a tracked item's สูญหาย/ตัดจำหน่าย pieces no longer show in
+  // its aggregate status, so filtering on Item.status alone found nothing here.
+  const statusList = (params.get("status") ?? "").split(",").filter(Boolean) as ItemStatus[];
+  andWhere(where, itemStatusWhere(statusList));
 
   const locationId = params.get("locationId");
   if (locationId) where.locationId = locationId;
@@ -110,8 +110,13 @@ export async function POST(request: NextRequest) {
     sanitizeItemByProfile(cat.profile, data);
   }
 
+  // First count is due one cycle from creation — a brand new item isn't overdue.
+  const nextCountDate = cat?.profile
+    ? nextCountFrom(new Date(), countCycleFor(cat.profile.dispenseType, data.countCycleMonths))
+    : null;
+
   const item = await prisma.item.create({
-    data,
+    data: { ...data, ...(nextCountDate ? { nextCountDate } : {}) },
     include: { category: { include: { profile: true } }, location: true, issueUnit: true },
   });
 

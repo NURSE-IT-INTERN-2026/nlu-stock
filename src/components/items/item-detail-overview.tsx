@@ -3,28 +3,29 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import {
-  Package, QrCode, ShoppingCart, ArrowDownToLine,
+  Package, QrCode, ArrowDownToLine, Home,
   Flag, Undo2, Pencil,
   Hash, Tag, Layers, MapPin, ClipboardList, FolderTree,
-  Printer, SearchX, Trash2,
+  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatSubCode, CONDITION_LABELS } from "@/lib/constants";
+import { countCycleFor } from "@/lib/stock-count";
+import { formatSubCode, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { ActionTile } from "@/components/items/action-tile";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { returnItem } from "@/lib/api";
-import { useCart, buildCartItem } from "@/components/dispense/cart-context";
+import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 
 interface SubItemRecord {
   id: string;
   subCode: string;
-  status: string;
+  name: string | null;
+  status: ItemStatus;
   condition: string | null;
   serialNumber: string | null;
 }
@@ -39,7 +40,7 @@ interface ItemData {
   nameEn: string | null;
   category: CategoryType;
   trackIndividually: boolean;
-  status: string;
+  status: ItemStatus;
   issueUnit: { id: string; name: string };
   minThreshold: number;
   location: LocationType | null;
@@ -50,6 +51,9 @@ interface ItemData {
   totalQty: number;
   subItems: SubItemRecord[];
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
+  countCycleMonths: number | null;
+  lastCountDate: string | null;
+  nextCountDate: string | null;
   images: string[];
 }
 
@@ -58,61 +62,16 @@ interface Props {
   userRole: string;
   onAdjust: () => void;
   onReportDamage: () => void;
-  onReportStatus: (status: "LOST" | "DISPOSED") => void;
-  onMoveLocation: () => void;
+  onReportStatus: (status: "AVAILABLE" | "DAMAGED" | "LOST" | "DISPOSED") => void;
   onEdit: () => void;
   onRefresh: () => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  AVAILABLE: "พร้อมใช้งาน",
-  ON_LOAN: "ถูกยืม",
-  IN_USE: "ถูกใช้งาน",
-  DAMAGED: "ชำรุด",
-  UNDER_REPAIR: "ส่งซ่อม",
-  LOST: "สูญหาย",
-  PENDING_MAINTENANCE: "บำรุงรักษา",
-  DISPOSED: "ตัดจำหน่าย",
-};
-
-
-export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onReportStatus, onMoveLocation, onEdit, onRefresh }: Props) {
+export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onReportStatus, onEdit, onRefresh }: Props) {
   const canAct = userRole === "ADMIN" || userRole === "STAFF";
-  const { addItem, items: cartItems } = useCart();
-  const router = useRouter();
-
-  // Add to dispense cart with the same smart defaults as the dispense grid
-  // (FIFO lot / next sub-item), then toast with a shortcut to review the cart.
-  const handleDispense = () => {
-    const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
-    const result = buildCartItem(
-      {
-        id: item.id,
-        code: item.code,
-        name: item.name,
-        imageUrl: item.imageUrl,
-        categoryName: item.category.name,
-        dispenseType: item.category.profile?.dispenseType ?? "COUNT",
-        trackIndividually: item.trackIndividually,
-        issueUnit: item.issueUnit.name,
-        availableQty: item.availableQty,
-        location: item.location
-          ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
-          : null,
-        lots: (item.lots ?? []).map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
-        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode })),
-      },
-      usedSubIds,
-    );
-    if (!result.ok) {
-      toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
-      return;
-    }
-    addItem(result.cartItem);
-    toast.success(`เพิ่ม "${item.name}" เข้าตะกร้า`, {
-      action: { label: "ดูตะกร้า", onClick: () => router.push("/cart") },
-    });
-  };
+  const [stationOpen, setStationOpen] = useState(false);
+  // COUNT durable (non-tracked, non-consumable = DUR) → eligible for "นำไปใช้งาน".
+  const isCountDurable = !item.trackIndividually && (item.category.profile?.dispenseType ?? "COUNT") !== "CONSUMABLE";
 
   const checkedOutSubs = useMemo(
     () => item.subItems.filter((s) => s.status === "ON_LOAN"),
@@ -157,6 +116,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     } catch (e) { toast.error(e instanceof Error ? e.message : "คืนไม่สำเร็จ"); }
   };
 
+  // Blank cycle = the profile default (3 months for consumables, 12 otherwise).
+  const countCycle = countCycleFor(item.category.profile?.dispenseType ?? "COUNT", item.countCycleMonths);
+
   const locationStr = item.location
     ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
     : "-";
@@ -170,6 +132,14 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     ...(item.storageRequirements
       ? [{ icon: ClipboardList, label: "การเก็บรักษา", value: item.storageRequirements }]
       : []),
+    { icon: ClipboardCheck, label: "รอบตรวจนับ", value: `ทุก ${countCycle} เดือน` },
+    {
+      icon: CalendarClock,
+      label: "ตรวจนับครั้งถัดไป",
+      value: item.nextCountDate
+        ? new Date(item.nextCountDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })
+        : "ยังไม่เคยตรวจนับ",
+    },
     ...(item.trackIndividually && item.subItems.length === 1 && item.subItems[0].serialNumber
       ? [{ icon: Hash, label: "หมายเลขซีเรียล", value: item.subItems[0].serialNumber, mono: true }]
       : []),
@@ -178,7 +148,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       : []),
   ];
 
-  const qrBlock = (
+  // withPrint=false for staff — they get a พิมพ์ QR tile in the manage grid instead,
+  // and two identical buttons in one card is just noise.
+  const qrBlock = (withPrint: boolean) => (
     <div className="border-t border-border p-4 sm:p-5 grid grid-cols-[auto_1fr] gap-4 sm:gap-5 items-center bg-muted/20">
       <div className="size-20 sm:size-24 shrink-0 rounded-xl border border-border bg-card p-2 grid place-items-center">
         {qrDataUrl ? (
@@ -191,12 +163,14 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
         <div className="text-[11px] uppercase tracking-widest text-muted-foreground">QR code</div>
         <div className="text-sm text-muted-foreground mt-1 truncate">สแกนเพื่อค้นหาพัสดุ</div>
         <div className="font-mono text-sm font-semibold mt-0.5 truncate">{item.code}</div>
-        <button
-          onClick={() => setPrintOpen(true)}
-          className="inline-flex items-center gap-1.5 mt-2 text-xs px-2.5 py-1.5 rounded-md border border-border bg-card hover:bg-muted transition-colors"
-        >
-          <Printer className="size-3.5" /> พิมพ์
-        </button>
+        {withPrint && (
+          <button
+            onClick={() => setPrintOpen(true)}
+            className="inline-flex items-center gap-1.5 mt-2 text-xs px-2.5 py-1.5 rounded-md border border-border bg-card hover:bg-muted transition-colors"
+          >
+            <Printer className="size-3.5" /> พิมพ์
+          </button>
+        )}
       </div>
     </div>
   );
@@ -236,12 +210,20 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader eyebrow="การจัดการ" title="จัดการสต็อก" />
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <ActionTile icon={ShoppingCart} label="เพิ่มเข้าตะกร้า" tone="primary" onClick={handleDispense} />
-              <ActionTile icon={ArrowDownToLine} label="รับเข้า" tone="default" onClick={() => { window.location.href = `/receive?item=${item.id}`; }} />
+              {isCountDurable && (
+                <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={() => setStationOpen(true)} disabled={item.availableQty <= 0} />
+              )}
+              <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={() => { window.location.href = `/receive?item=${item.id}`; }} />
+              {/* One tile for every qty correction — the dialog asks WHAT happened
+                  (ตรวจนับ / ตัดจำหน่าย / สูญหาย / อื่นๆ) and picks the input from that.
+                  Tracked items still book discrepancies per piece, so they keep a menu. */}
               {item.trackIndividually ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger render={<ActionTile icon={Package} label="ปรับสต็อก" tone="default" />} />
                   <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={onAdjust}>
+                      <ClipboardCheck className="size-4" />ตรวจนับตามรอบ
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onReportStatus("LOST")}>
                       <SearchX className="size-4" />สูญหาย
                     </DropdownMenuItem>
@@ -253,21 +235,40 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               ) : (
                 <ActionTile icon={Package} label="ปรับสต็อก" tone="default" onClick={onAdjust} />
               )}
-              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
-              <ActionTile icon={MapPin} label="ย้ายที่ตั้ง" tone="default" onClick={onMoveLocation} />
+              {isCountDurable ? (
+                // DUR: damage is usually partial (ตัดจำนวน) but the whole lot can also be
+                // pulled from service — that one sets Item.status, which recompute now keeps.
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={<ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" />} />
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={onReportDamage}>
+                      <Package className="size-4" />ตัดจำนวนที่ชำรุด
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onReportStatus("DAMAGED")}>
+                      <Flag className="size-4" />ทั้งรายการชำรุด
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              )}
+              {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (
+                <ActionTile icon={CheckCircle2} label="กลับพร้อมใช้งาน" tone="default" onClick={() => onReportStatus("AVAILABLE")} />
+              )}
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
+              <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
               {!item.trackIndividually && item.category.profile?.dispenseType !== "CONSUMABLE" && item.availableQty < item.totalQty && (
                 <Button variant="outline" className="sm:col-span-2" onClick={handleReturnQty}>
                   <Undo2 className="h-4 w-4 mr-1" />คืนตามจำนวน
                 </Button>
               )}
             </div>
-            {qrBlock}
+            {qrBlock(false)}
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader title="QR code" />
-            {qrBlock}
+            {qrBlock(true)}
           </div>
         )}
       </section>
@@ -277,7 +278,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <SectionHeader eyebrow="พัสดุย่อย" title="สรุปสถานะ" />
           <div className="p-4 sm:p-5 flex flex-wrap gap-2">
-            {Object.entries(statusSummary).map(([status, count]) => (
+            {(Object.entries(statusSummary) as [ItemStatus, number][]).map(([status, count]) => (
               <Badge key={status} variant={status === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
                 {STATUS_LABELS[status] ?? status.replace(/_/g, " ")}: {count}
               </Badge>
@@ -293,7 +294,10 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           <div className="p-4 sm:p-5 space-y-2">
             {checkedOutSubs.map((sub) => (
               <div key={sub.id} className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/40">
-                <span className="font-mono text-sm">{formatSubCode(item.code, sub.subCode)}</span>
+                <div className="min-w-0">
+                  {sub.name && <p className="text-sm truncate">{sub.name}</p>}
+                  <span className="font-mono text-xs text-muted-foreground">{formatSubCode(item.code, sub.subCode)}</span>
+                </div>
                 <Button size="sm" variant="outline" onClick={() => handleReturn(sub.id)}>
                   <Undo2 className="h-3.5 w-3.5 mr-1" />คืน
                 </Button>
@@ -304,6 +308,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       )}
 
       <QrPrintDialog open={printOpen} onClose={() => setPrintOpen(false)} items={printItems} />
+      {isCountDurable && (
+        <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={item.id} itemCode={item.code} itemName={item.name} availableQty={item.availableQty} issueUnit={item.issueUnit.name} onSuccess={onRefresh} />
+      )}
     </div>
   );
 }

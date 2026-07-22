@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { ItemStatus } from "@/generated/prisma/enums";
+import { effectiveCode } from "@/lib/constants";
 
 const DAMAGE_STATUSES: ItemStatus[] = ["DAMAGED", "UNDER_REPAIR", "DISPOSED", "LOST"];
 
@@ -18,9 +19,12 @@ export async function GET(request: NextRequest) {
 
   const statuses: ItemStatus[] = status ? [status as ItemStatus] : DAMAGE_STATUSES;
 
+  // A tracked item's damaged/lost pieces don't show in its aggregate status any more
+  // (see deriveStatusFromSubItems), so match the pieces directly too — this report is
+  // where written-off stock is meant to be found.
   const where: Record<string, unknown> = {
     isActive: true,
-    status: { in: statuses },
+    OR: [{ status: { in: statuses } }, { subItems: { some: { status: { in: statuses } } } }],
   };
 
   if (dateFrom || dateTo) {
@@ -45,11 +49,17 @@ export async function GET(request: NextRequest) {
       include: {
         category: { select: { name: true } },
         location: { select: { building: true, floor: true, room: true, detail: true } },
+        _count: { select: { subItems: true } },
+        subItems: {
+          where: { status: { in: statuses } },
+          select: { id: true, subCode: true, status: true },
+          orderBy: { subCode: "asc" },
+        },
         statusLogs: {
           where: { newStatus: { in: statuses } },
           orderBy: { changedAt: "desc" },
-          take: 1,
-          select: { changedAt: true, reason: true },
+          take: 50,
+          select: { changedAt: true, reason: true, subItemId: true, repairVenue: true },
         },
       },
       orderBy: { updatedAt: "desc" },
@@ -59,18 +69,41 @@ export async function GET(request: NextRequest) {
     prisma.item.count({ where }),
   ]);
 
-  const data = items.map((i) => ({
-    id: i.id,
-    code: i.code,
-    name: i.name,
-    status: i.status,
-    categoryName: i.category.name,
-    location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail]
+  // Tracked items report per piece (which copy is damaged/lost); non-tracked stay one row.
+  // Pagination still counts items, so a page can carry a few more rows than perPage.
+  const data = items.flatMap((i) => {
+    const locationLabel = [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail]
       .filter(Boolean)
-      .join(" / "),
-    reason: i.statusLogs[0]?.reason ?? "",
-    changedAt: i.statusLogs[0]?.changedAt.toISOString() ?? "",
-  }));
+      .join(" / ");
+    const base = { name: i.name, categoryName: i.category.name, location: locationLabel };
+    const logFor = (subItemId: string | null) => i.statusLogs.find((l) => l.subItemId === subItemId);
+
+    if (i.subItems.length > 0) {
+      return i.subItems.map((s) => {
+        const log = logFor(s.id);
+        return {
+          ...base,
+          id: s.id,
+          code: effectiveCode(i.code, s.subCode, i._count.subItems),
+          status: s.status,
+          reason: log?.reason ?? "",
+          repairVenue: log?.repairVenue ?? null,
+          changedAt: log?.changedAt.toISOString() ?? "",
+        };
+      });
+    }
+
+    const log = logFor(null) ?? i.statusLogs[0];
+    return [{
+      ...base,
+      id: i.id,
+      code: i.code,
+      status: i.status,
+      reason: log?.reason ?? "",
+      repairVenue: log?.repairVenue ?? null,
+      changedAt: log?.changedAt.toISOString() ?? "",
+    }];
+  });
 
   return json({ items: data, page, perPage, total });
 }

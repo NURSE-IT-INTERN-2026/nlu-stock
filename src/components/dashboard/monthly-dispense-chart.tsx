@@ -27,12 +27,12 @@ export function MonthlyDispenseChart({ data }: MonthlyDispenseChartProps) {
   const fillColor = useThemeColor("--chart-1");
 
   return (
-    <div className="h-full min-h-[260px] w-full" role="img" aria-label={`การเบิก-จ่ายรายเดือน: ${data.map((d) => `${d.month} (${d.total})`).join(", ")}`}>
+    <div className="h-full min-h-[260px] w-full" role="img" aria-label={`ภาพรวมการใช้งานวัสดุสิ้นเปลือง ย้อนหลัง 1 ปี: ${data.map((d) => `${d.month} (${d.total})`).join(", ")}`}>
       <ChartContainer>
         {({ width, height }) => (
           <BarChart data={data} width={width} height={height} margin={{ top: 8, right: 16, bottom: 4, left: -8 }}>
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={40} />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: "var(--color-border)" }} />
+            <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: "var(--color-border)" }} width={40} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-muted)", opacity: 0.4 }} />
             <Bar dataKey="total" fill={fillColor} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
           </BarChart>

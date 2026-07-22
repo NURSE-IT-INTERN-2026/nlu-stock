@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,10 +18,15 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -65,12 +70,12 @@ function dispenseTypeLabel(p: ProfileOption | null): string {
 
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
-    <TableRow>
-      <TableCell className="font-medium">{cat.name}</TableCell>
-      <TableCell><Badge variant="outline" className={cat.profile?.color}>{cat.profile?.name ?? "—"}</Badge></TableCell>
-      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseTypeLabel(cat.profile)}</TableCell>
-      <TableCell>{cat._count.items}</TableCell>
-      <TableCell>
+    <TableRow className="h-9 [&>td]:py-1">
+      <TableCell className="px-2"><span className="block truncate font-medium">{cat.name}</span></TableCell>
+      <TableCell className="px-2"><Badge variant="outline" className={cn("px-1.5 py-0 leading-5 text-[11px]", cat.profile?.color)}>{cat.profile?.name ?? "—"}</Badge></TableCell>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap px-2">{dispenseTypeLabel(cat.profile)}</TableCell>
+      <TableCell className="text-xs px-2 tabular-nums">{cat._count.items}</TableCell>
+      <TableCell className="px-2">
         <TooltipProvider>
           <div className="flex gap-1">
             <Tooltip>
@@ -102,6 +107,15 @@ export function CategoriesTab() {
   const [filterProfile, setFilterProfile] = useState<string>("ALL");
   const [form, setForm] = useState({ name: "", profileId: "" as string, description: "" });
   const [deleteTarget, setDeleteTarget] = useState<CategoryType | null>(null);
+
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
@@ -187,8 +201,66 @@ export function CategoriesTab() {
     </div>
   );
 
+  // ── Modal shell elements (shared by Dialog + Sheet) ──────────
+  const title = editing ? "แก้ไขหมวดหมู่" : "เพิ่มหมวดหมู่";
+  const subtitle = editing ? "แก้ไขข้อมูลหมวดหมู่" : "เพิ่มหมวดหมู่ใหม่";
+
+  const modalHeader = (
+    <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Tag className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+      </div>
+      <button
+        onClick={() => setDialogOpen(false)}
+        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        aria-label="ปิด"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
+  const modalBody = (
+    <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
+          <Input id="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+        </div>
+        <div>
+          <Label htmlFor="cat-type">ประเภท</Label>
+          <Select value={form.profileId} onValueChange={(v) => setForm({ ...form, profileId: v! })}>
+            <SelectTrigger className="bg-card"><SelectValue placeholder="เลือกประเภท">{profiles.find((p) => p.id === form.profileId)?.name ?? "เลือกประเภท"}</SelectValue></SelectTrigger>
+            <SelectContent>
+              {profiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="cat-desc">รายละเอียด</Label>
+          <Textarea id="cat-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="bg-card" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const modalFooter = (
+    <div className="flex items-center justify-between border-t border-border bg-card px-6 py-4">
+      <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+      <Button onClick={handleSave} disabled={!form.name}>{editing ? "บันทึก" : "สร้าง"}</Button>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0">
+    <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <FilterPill active={filterProfile === "ALL"} onClick={() => setFilterProfile("ALL")}>
@@ -200,18 +272,18 @@ export function CategoriesTab() {
             </FilterPill>
           ))}
         </div>
-        <Button size="sm" onClick={openCreate} className="shrink-0"><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
+        <Button size="sm" onClick={openCreate} className="shrink-0"><Plus className="h-4 w-4 mr-1" />เพิ่มหมวดหมู่</Button>
       </div>
 
-      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
-        <Table>
+      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead>ชื่อหมวดหมู่</TableHead>
-              <TableHead>ประเภท</TableHead>
-              <TableHead>ประเภทการเบิกจ่าย</TableHead>
-              <TableHead>จำนวน</TableHead>
-              <TableHead className="w-[100px]">การดำเนินการ</TableHead>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="px-2">ชื่อหมวดหมู่</TableHead>
+              <TableHead className="w-32 px-2">ประเภท</TableHead>
+              <TableHead className="w-40 px-2">ประเภทการเบิกจ่าย</TableHead>
+              <TableHead className="w-20 px-2">จำนวน</TableHead>
+              <TableHead className="w-[100px] px-2">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -233,38 +305,31 @@ export function CategoriesTab() {
         </Table>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "แก้ไขหมวดหมู่" : "เพิ่มหมวดหมู่"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
-              <Input id="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      {isDesktop ? (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
+            <DialogTitle className="sr-only">{title}</DialogTitle>
+            <DialogDescription className="sr-only">{subtitle}</DialogDescription>
+            <div className="flex max-h-[85vh] flex-col overflow-hidden">
+              {modalHeader}
+              {modalBody}
+              {modalFooter}
             </div>
-            <div>
-              <Label htmlFor="cat-type">ประเภท</Label>
-              <Select value={form.profileId} onValueChange={(v) => setForm({ ...form, profileId: v! })}>
-                <SelectTrigger><SelectValue placeholder="เลือกประเภท">{profiles.find((p) => p.id === form.profileId)?.name ?? "เลือกประเภท"}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+          <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl gap-0 p-0 overflow-hidden" showCloseButton={false}>
+            <SheetTitle className="sr-only">{title}</SheetTitle>
+            <SheetDescription className="sr-only">{subtitle}</SheetDescription>
+            <div className="flex h-full flex-col overflow-hidden">
+              {modalHeader}
+              {modalBody}
+              {modalFooter}
             </div>
-            <div>
-              <Label htmlFor="cat-desc">รายละเอียด</Label>
-              <Textarea id="cat-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-            <Button onClick={handleSave} disabled={!form.name}>{editing ? "บันทึก" : "สร้าง"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
@@ -289,6 +354,7 @@ export function CategoriesTab() {
           setSelectModalOpen(false);
         }}
         title="เพิ่มหมวดหมู่"
+        mode="create"
       />
     </div>
   );

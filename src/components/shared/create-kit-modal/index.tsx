@@ -31,8 +31,8 @@ const STEP_TITLES: Record<WizardStep, string> = {
 
 const MAIN_STEPS = [
   { idx: 0, title: "ข้อมูลชุด", desc: "ชื่อ หมวดหมู่ รหัส หน่วย", icon: Boxes },
-  { idx: 1, title: "ส่วนประกอบ", desc: "พัสดุที่จะประกอบเป็นชุด", icon: ListPlus },
-  { idx: 2, title: "ประกอบและสรุป", desc: "จำนวนที่จะประกอบ", icon: ClipboardCheck },
+  { idx: 1, title: "ส่วนประกอบ", desc: "พัสดุและจำนวนชุด", icon: ListPlus },
+  { idx: 2, title: "ประกอบและสรุป", desc: "ตรวจสอบและยืนยัน", icon: ClipboardCheck },
 ] as const;
 
 const INITIAL_FORM: KitFormState = {
@@ -76,7 +76,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
   const hasShortage = components.some((c) => c.quantity * assembleQty > c.availableQty);
   const canNext =
     (step === "kit-details" && form.name.trim() !== "" && form.issueUnitId !== "") ||
-    (step === "components" && components.length >= 1) ||
+    (step === "components" && components.length >= 1 && !hasShortage) ||
     (step === "assemble" && !hasShortage);
 
   const handleBack = useCallback(() => {
@@ -94,11 +94,11 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
         components: components.map((c) => ({ componentItemId: c.componentItemId, quantity: c.quantity })),
         assembleQty,
       });
-      toast.success(`ประกอบชุด "${result.kitCode}" สำเร็จ ได้ ${result.assembledQty} ชุด`);
+      toast.success(`จัด set อุปกรณ์ "${form.name}" สำเร็จ ได้ ${result.assembledQty} ชุด`);
       onCreated(result);
       handleClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "ประกอบชุดไม่สำเร็จ");
+      toast.error(e instanceof Error ? e.message : "จัด set อุปกรณ์ไม่สำเร็จ");
       setIsSubmitting(false);
     }
   }, [form, components, assembleQty, onCreated, handleClose]);
@@ -123,7 +123,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
   // ── Rendering ───────────────────────────────────────────────
   const stepIdx = step === "kit-details" ? 0 : step === "components" ? 1 : 2;
   const stepTitle = STEP_TITLES[step];
-  const title = "ประกอบชุดใหม่";
+  const title = "จัด set อุปกรณ์ใหม่";
 
   function renderHeader() {
     return (
@@ -229,6 +229,8 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
         {step === "components" && (
           <StepComponents
             components={components}
+            assembleQty={assembleQty}
+            onAssembleQtyChange={setAssembleQty}
             onAdd={addComponent}
             onRemove={removeComponent}
             onQtyChange={changeQty}
@@ -241,7 +243,6 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
             issueUnitName={form.issueUnitName}
             components={components}
             assembleQty={assembleQty}
-            onAssembleQtyChange={setAssembleQty}
           />
         )}
       </div>
@@ -269,7 +270,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
           {step === "assemble" ? (
             <>
               <Check className="h-4 w-4" />
-              {isSubmitting ? "กำลังประกอบ..." : "ประกอบชุด"}
+              {isSubmitting ? "กำลังจัด set..." : "จัด set อุปกรณ์"}
             </>
           ) : (
             <>

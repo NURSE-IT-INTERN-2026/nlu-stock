@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { fmtDate } from "@/lib/format";
 import { getReport } from "@/lib/api";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 
 const filterConfig: FilterConfig = { dateRange: true, maintenanceType: true };
 
@@ -19,6 +24,7 @@ interface Row {
   result: string;
   issue: string;
   cost: number;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
   performer: string;
   performedAt: string;
 }
@@ -34,12 +40,12 @@ const columns: Column<Row>[] = [
   {
     key: "type",
     header: "Type",
-    render: (r) => <Badge variant="outline">{r.type}</Badge>,
+    render: (r) => <Badge variant="outline">{labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType)}</Badge>,
   },
   {
     key: "result",
     header: "Result",
-    render: (r) => <Badge variant="secondary">{r.result.replace(/_/g, " ")}</Badge>,
+    render: (r) => <Badge variant="secondary">{labelFor(MAINT_RESULT_LABELS, r.result as MaintenanceResult)}</Badge>,
   },
   { key: "issue", header: "Issue" },
   {
@@ -47,70 +53,63 @@ const columns: Column<Row>[] = [
     header: "Cost",
     render: (r) => (r.cost > 0 ? `฿${r.cost.toLocaleString()}` : "—"),
   },
+  { key: "repairVenue", header: "ประเภทซ่อม", render: (r) => (r.repairVenue ? (r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—") },
   { key: "performer", header: "By" },
 ];
 
 export function MaintenanceHistoryTab() {
-  const [data, setData] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
   const [filters, setFilters] = useState<FilterValues>({});
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const perPage = PAGE_SIZE.DEFAULT;
 
-  const perPage = 20;
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchPage = useCallback(async (p: number) => {
     const params: Record<string, string> = {
-      page: String(page),
+      page: String(p),
       perPage: String(perPage),
     };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.maintenanceType) params.maintenanceType = filters.maintenanceType;
     const json = (await getReport("maintenance-history", params)) as { records: Row[]; total: number };
-    setData(json.records);
-    setTotal(json.total);
-    setLoading(false);
-  }, [filters, page]);
+    return { items: json.records, total: json.total };
+  }, [filters, perPage]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const {
+    items: data, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
+  } = usePagedList<Row>({ fetchPage, pageSize: perPage, isMobile });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-2">
       <ReportFilters
         config={filterConfig}
         values={filters}
-        onChange={(v) => { setFilters(v); setPage(1); }}
+        onChange={setFilters}
         actions={<ExportButtons reportType="maintenance-history" filters={filters} />}
       />
-      <ReportDataTable columns={columns} data={data} loading={loading} pageSize={perPage} />
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground px-2">
-          <span>
+      <ReportDataTable
+        columns={columns}
+        data={data}
+        loading={loading}
+        pageSize={isMobile ? Math.max(1, data.length) : perPage}
+      />
+      {isMobile ? (
+        data.length > 0 && (
+          <Pagination
+            mode="loadMore"
+            shown={data.length}
+            total={total}
+            hasMore={hasNext}
+            isLoading={isLoadingMore}
+            onLoadMore={loadMore}
+          />
+        )
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground py-1">
             Page {page} of {totalPages} ({total} records)
-          </span>
-          <div className="flex gap-2">
-            <button
-              className="px-3 py-1 border rounded disabled:opacity-40"
-              disabled={page <= 1}
-              onClick={() => setPage(page - 1)}
-            >
-              Prev
-            </button>
-            <button
-              className="px-3 py-1 border rounded disabled:opacity-40"
-              disabled={page >= totalPages}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </button>
-          </div>
-        </div>
+          </p>
+          <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
+        </>
       )}
     </div>
   );

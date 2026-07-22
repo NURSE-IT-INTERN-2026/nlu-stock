@@ -1,6 +1,7 @@
 /**
  * One-time backfill: derive Item.status for every item from its current state.
- *   - tracked (trackIndividually): highest-priority sub-item status
+ *   - tracked (trackIndividually): highest-priority sub-item status, ignoring LOST/DISPOSED
+ *     pieces unless every piece is written off
  *   - COUNT: available < total → ON_LOAN, else AVAILABLE
  *   - CONSUMABLE: AVAILABLE
  *
@@ -14,6 +15,8 @@ import { PrismaClient, ItemStatus } from "../src/generated/prisma/client";
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
+
+const WRITTEN_OFF = new Set<ItemStatus>([ItemStatus.LOST, ItemStatus.DISPOSED]);
 
 // Keep in sync with STATUS_PRIORITY in src/lib/stock.ts (higher = wins).
 const PRIORITY: Record<ItemStatus, number> = {
@@ -49,12 +52,24 @@ async function main() {
         where: { itemId: item.id },
         select: { status: true },
       });
-      status = subs.length
-        ? subs.reduce<ItemStatus>(
-            (best, s) => (PRIORITY[s.status] > PRIORITY[best] ? s.status : best),
+      // Written-off pieces are skipped unless every piece is written off (mirrors
+      // deriveStatusFromSubItems) — 1 lost copy must not make the whole item สูญหาย.
+      const all = subs.map((s) => s.status);
+      const live = all.filter((s) => !WRITTEN_OFF.has(s));
+      const pool = live.length > 0 ? live : all;
+      status = pool.length
+        ? pool.reduce<ItemStatus>(
+            (best, s) => (PRIORITY[s] > PRIORITY[best] ? s : best),
             ItemStatus.AVAILABLE,
           )
         : ItemStatus.AVAILABLE;
+    } else if (
+      item.category.profile.dispenseType !== "CONSUMABLE" &&
+      item.status !== ItemStatus.AVAILABLE &&
+      item.status !== ItemStatus.ON_LOAN
+    ) {
+      // Manually set status on a non-tracked item sticks (mirrors recomputeItemCounts).
+      status = item.status;
     } else if (item.category.profile.dispenseType === "COUNT" && item.availableQty < item.totalQty) {
       status = ItemStatus.ON_LOAN;
     } else {

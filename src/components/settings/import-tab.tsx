@@ -156,7 +156,7 @@ export function ImportTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0 overflow-y-auto">
+    <div className="flex flex-col gap-5">
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -248,16 +248,16 @@ export function ImportTab() {
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">#</TableHead>
-                    {headers.map((h) => <TableHead key={h}>{h}</TableHead>)}
+                  <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                    <TableHead className="w-10 px-2">#</TableHead>
+                    {headers.map((h) => <TableHead key={h} className="px-2">{h}</TableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {preview.map((row, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                      {headers.map((h) => <TableCell key={h}>{row[h]}</TableCell>)}
+                    <TableRow key={i} className="h-9 [&>td]:py-1">
+                      <TableCell className="text-muted-foreground px-2">{i + 1}</TableCell>
+                      {headers.map((h) => <TableCell key={h} className="px-2">{row[h]}</TableCell>)}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -284,18 +284,18 @@ export function ImportTab() {
             </div>
             {result.errors.length > 0 && (
               <div className="rounded-md border">
-                <Table>
+                <Table className="table-fixed">
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>แถว</TableHead>
-                      <TableHead>ข้อผิดพลาด</TableHead>
+                    <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                      <TableHead className="w-20 px-2">แถว</TableHead>
+                      <TableHead className="px-2">ข้อผิดพลาด</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {result.errors.map((err, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{err.row}</TableCell>
-                        <TableCell className="text-destructive">{err.message}</TableCell>
+                      <TableRow key={i} className="h-9 [&>td]:py-1">
+                        <TableCell className="font-mono text-xs px-2"><span className="block truncate">{err.row}</span></TableCell>
+                        <TableCell className="text-xs text-destructive px-2"><span className="block truncate">{err.message}</span></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

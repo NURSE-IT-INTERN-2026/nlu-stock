@@ -1,11 +1,13 @@
-import { test, expect, pool, findCount, makeTracked, uniqueCode } from "./fixtures";
+import { test, expect, pool, findCount, makeTracked } from "./fixtures";
 
 test("adjust (shelfCount) corrects counters + writes StockAdjustment", async ({ request }) => {
   const item = await findCount();
   expect(item).toBeTruthy();
 
+  // A shelf count goes through the ตรวจนับ flow — the server derives the reason
+  // from the delta, so the caller never names one.
   const res = await request.post(`/api/items/${item.id}/adjust`, {
-    data: { shelfCount: 25, reason: "COUNT_MISMATCH" },
+    data: { stockCount: true, shelfCount: 25, notes: "ตรวจนับประจำรอบ" },
   });
   expect(res.ok()).toBeTruthy();
 

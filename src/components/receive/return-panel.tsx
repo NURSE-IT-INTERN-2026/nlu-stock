@@ -35,7 +35,7 @@ const CHIP_STYLES: Record<"all" | "overdue" | "near", { active: string; idle: st
   near: { active: "bg-amber-600 text-white border-amber-600", idle: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
 };
 
-export function ReturnPanel({ initialChip }: { initialChip?: "overdue" | "near" }) {
+export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue" | "near"; readOnly?: boolean }) {
   const [records, setRecords] = useState<OpenBorrow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -111,6 +111,7 @@ export function ReturnPanel({ initialChip }: { initialChip?: "overdue" | "near" 
         group={selected}
         onBack={() => setSelectedKey(null)}
         onResolved={load}
+        readOnly={readOnly}
       />
     );
   }
@@ -132,21 +133,23 @@ export function ReturnPanel({ initialChip }: { initialChip?: "overdue" | "near" 
         <div className="shrink-0 space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">{shownOutstanding} ชิ้นค้างคืน · {filteredGroups.length} รายการยืม</p>
-            <div className="flex items-center gap-1">
-              {([["all", "ทั้งหมด"], ["overdue", "เกินกำหนด"], ["near", "ใกล้ครบกำหนด"]] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setChip(value)}
-                  className={cn(
-                    "px-2 py-1.5 rounded-full text-[11px] whitespace-nowrap shrink-0 border transition-colors",
-                    chip === value ? CHIP_STYLES[value].active : CHIP_STYLES[value].idle,
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {!readOnly && (
+              <div className="flex items-center gap-1">
+                {([["all", "ทั้งหมด"], ["overdue", "เกินกำหนด"], ["near", "ใกล้ครบกำหนด"]] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setChip(value)}
+                    className={cn(
+                      "px-2 py-1.5 rounded-full text-[11px] whitespace-nowrap shrink-0 border transition-colors",
+                      chip === value ? CHIP_STYLES[value].active : CHIP_STYLES[value].idle,
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

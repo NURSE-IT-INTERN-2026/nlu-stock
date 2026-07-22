@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, error, parseBody } from "@/lib/api-utils";
 import { isItemTracked } from "@/lib/category-profile";
+import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
 import { embedItem } from "@/lib/gemini";
 import { z } from "zod";
 
@@ -13,6 +14,7 @@ const quickCreateSchema = z.object({
   copyCount: z.number().int().min(1).default(1),
   setSize: z.number().int().min(1).default(1),
   initialQty: z.number().int().min(0).default(0),
+  description: z.string().max(1000).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
       name: data.name,
       categoryId: data.categoryId,
       issueUnitId: data.issueUnitId,
+      description: data.description,
       trackIndividually,
       setSize,
       ...(subItems.length > 0
@@ -59,6 +62,8 @@ export async function POST(request: NextRequest) {
         : {}),
       totalQty: trackIndividually ? data.copyCount : data.initialQty,
       availableQty: trackIndividually ? data.copyCount : data.initialQty,
+      // First count is due one cycle from creation — a brand new item isn't overdue.
+      nextCountDate: nextCountFrom(new Date(), countCycleFor(cat.profile.dispenseType)),
     },
     include: {
       category: { include: { profile: true } },

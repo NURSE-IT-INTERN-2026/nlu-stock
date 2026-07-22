@@ -13,7 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { STATUS_COLORS, STATUS_LABELS } from "@/lib/constants";
+import { STATUS_COLORS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
+import { statusOptionsFor } from "@/lib/status-utils";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
 // Map profile.icon string → lucide component. Unknown → Boxes fallback.
@@ -34,7 +35,7 @@ export interface FilterState {
   query: string;
   profileId: string;
   categoryId: string | null;
-  status: string[];
+  status: ItemStatus[];
   location: LocationFilter;
   preset: PresetKey | null;
 }
@@ -65,9 +66,13 @@ export interface ItemsFilterBarProps {
   onLoanCount?: number;
   // Optional trailing action rendered next to the scan button (e.g. "ประกอบชุด").
   trailingAction?: React.ReactNode;
+  // Registry view (/settings): offer every status, including written-off, and don't
+  // narrow by profile — an admin auditing the register must be able to ask "was there
+  // ever one of these?". /items stays the operational view.
+  allStatuses?: boolean;
 }
 
-const STATUS_KEYS = Object.keys(STATUS_LABELS);
+const ALL_STATUS_KEYS = Object.keys(STATUS_LABELS) as ItemStatus[];
 
 const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpiry" | "overdueMaintenance"; activeCls: string; badgeCls: string }[] = [
   { key: "lowStock", label: "สต๊อกต่ำ", countKey: "lowStock", activeCls: "bg-primary text-primary-foreground", badgeCls: "bg-white/25" },
@@ -76,12 +81,16 @@ const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpi
 ];
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount, trailingAction,
+  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount, trailingAction, allStatuses,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
     : categories;
   const locLabel = formatLocation(value.location);
+  // Which statuses make sense depends on the selected profile (CONSUMABLE has no lifecycle).
+  const statusOptions = allStatuses
+    ? ALL_STATUS_KEYS
+    : statusOptionsFor(profiles.find((p) => p.id === value.profileId)?.dispenseType);
 
   const activeFiltersCount =
     (value.profileId ? 1 : 0) +
@@ -131,10 +140,17 @@ export function ItemsFilterBar({
           profiles={profiles}
           categories={categories}
           value={{ profileId: value.profileId, categoryId: value.categoryId }}
-          onChange={({ profileId, categoryId }) => update({ profileId, categoryId })}
+          onChange={({ profileId, categoryId }) => {
+            // Drop status picks the new profile can never match (e.g. ชำรุด on a consumable).
+            // The registry view offers everything, so nothing to prune there.
+            if (allStatuses) return update({ profileId, categoryId });
+            const allowed = statusOptionsFor(profiles.find((p) => p.id === profileId)?.dispenseType);
+            update({ profileId, categoryId, status: value.status.filter((s) => allowed.includes(s)) });
+          }}
         />
         <LocationPicker value={value.location} locations={locations} onChange={(loc) => update({ location: loc })} />
         <StatusPicker
+          options={statusOptions}
           value={value.status}
           onChange={(s) => update({ status: s })}
           onLoanActive={typeof onLoanCount === "number" ? value.preset === "onLoan" : undefined}
@@ -313,15 +329,16 @@ export function CategoryPicker({ profiles, categories, value, onChange }: {
 }
 
 // ─── Status (multi) + on-loan toggle ───
-function StatusPicker({ value, onChange, onLoanActive, onLoanCount, onLoanToggle }: {
-  value: string[];
-  onChange: (v: string[]) => void;
+function StatusPicker({ options, value, onChange, onLoanActive, onLoanCount, onLoanToggle }: {
+  options: ItemStatus[];
+  value: ItemStatus[];
+  onChange: (v: ItemStatus[]) => void;
   onLoanActive?: boolean;
   onLoanCount?: number;
   onLoanToggle?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
-  const toggle = (k: string) => onChange(value.includes(k) ? value.filter((s) => s !== k) : [...value, k]);
+  const toggle = (k: ItemStatus) => onChange(value.includes(k) ? value.filter((s) => s !== k) : [...value, k]);
   const totalCount = value.length + (onLoanActive ? 1 : 0);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -345,7 +362,7 @@ function StatusPicker({ value, onChange, onLoanActive, onLoanCount, onLoanToggle
         )}
         <div className="text-xs font-medium text-muted-foreground px-1 pb-1">เลือกได้หลายรายการ</div>
         <div className="space-y-0.5">
-          {STATUS_KEYS.map((k) => {
+          {options.map((k) => {
             const active = value.includes(k);
             return (
               <button key={k} onClick={() => toggle(k)} className={cn(

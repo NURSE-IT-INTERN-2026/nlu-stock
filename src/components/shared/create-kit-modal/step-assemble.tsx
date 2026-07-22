@@ -1,8 +1,5 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ComponentRow } from "./types";
 
@@ -12,7 +9,6 @@ interface StepAssembleProps {
   issueUnitName: string;
   components: ComponentRow[];
   assembleQty: number;
-  onAssembleQtyChange: (q: number) => void;
 }
 
 export function StepAssemble({
@@ -21,36 +17,10 @@ export function StepAssemble({
   issueUnitName,
   components,
   assembleQty,
-  onAssembleQtyChange,
 }: StepAssembleProps) {
-  const hasShortage = components.some((c) => c.quantity * assembleQty > c.availableQty);
-
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">ระบุจำนวนชุดที่จะประกอบ แล้วตรวจสอบสรุปก่อนยืนยัน</p>
-
-      {/* จำนวนที่ประกอบ */}
-      <div className="rounded-xl border border-primary/20 bg-primary/[0.02] px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="assemble-qty" className="text-sm font-medium">จำนวนชุดที่จะประกอบ</Label>
-          <Input
-            id="assemble-qty"
-            type="number"
-            min={1}
-            value={assembleQty}
-            onChange={(e) => onAssembleQtyChange(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-24 bg-background text-center text-base font-semibold tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-        </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">ชุด</p>
-      </div>
-
-      {hasShortage && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>ส่วนประกอบบางรายการมีจำนวนไม่พอ การประกอบจะไม่สำเร็จ — ลดจำนวนชุดหรือเพิ่มสต๊อกก่อน</span>
-        </div>
-      )}
+      <p className="text-sm text-muted-foreground">ตรวจสอบสรุปการประกอบก่อนยืนยัน</p>
 
       <div className="divide-y divide-border rounded-xl border border-border bg-card text-sm">
         {/* ข้อมูลชุด */}

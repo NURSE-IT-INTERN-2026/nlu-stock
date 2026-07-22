@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { ItemCondition } from "@/generated/prisma/enums";
 import { isItemTracked } from "@/lib/category-profile";
+import { DEFAULT_LOCATION_ID } from "@/lib/default-location";
 
 interface ImportRow {
   [key: string]: string;
@@ -196,7 +197,7 @@ async function importLocations(rows: ImportRow[]): Promise<ImportResult> {
 async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = { imported: 0, errors: [] };
 
-  const itemCache = new Map<string, { id: string; trackIndividually: boolean }>();
+  const itemCache = new Map<string, { id: string; trackIndividually: boolean; locationId: string | null }>();
 
   const validRows: Prisma.SubItemCreateInput[] = [];
 
@@ -219,9 +220,14 @@ async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
         result.errors.push({ row: i + 1, message: `Item "${row.itemCode}" does not track individually` });
         continue;
       }
-      item = { id: found.id, trackIndividually: found.trackIndividually };
+      item = { id: found.id, trackIndividually: found.trackIndividually, locationId: found.locationId };
       itemCache.set(row.itemCode, item);
     }
+
+    // Same inherit-or-null rule as POST /api/settings/items/[id]/sub-items:
+    // skip the seed fallback so a wrong default isn't baked onto imported pieces.
+    const seededLocationId =
+      item.locationId && item.locationId !== DEFAULT_LOCATION_ID ? item.locationId : null;
 
     validRows.push({
       item: { connect: { id: item.id } },
@@ -229,6 +235,7 @@ async function importSubItems(rows: ImportRow[]): Promise<ImportResult> {
       serialNumber: row.serialNumber || null,
       condition: (row.condition as ItemCondition | null) || null,
       notes: row.notes || null,
+      location: seededLocationId ? { connect: { id: seededLocationId } } : undefined,
     });
   }
 

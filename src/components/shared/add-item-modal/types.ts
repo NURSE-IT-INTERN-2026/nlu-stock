@@ -47,6 +47,7 @@ export interface ItemFormState {
   profile: FormProfile | null;
   issueUnitId: string;
   issueUnitName: string;
+  description: string;
 }
 
 export interface SimilarItem {

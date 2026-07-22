@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { statusChangeSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
+import { STATUS_LABELS } from "@/lib/constants";
+import { ReturnCondition } from "@/generated/prisma/enums";
+import { ItemStatus } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,11 +37,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           subItemId: data.subItemId,
           previousStatus: subItem.status,
           newStatus: data.newStatus,
-          reason: data.notes || `Status changed to ${data.newStatus}`,
+          reason: data.notes || `เปลี่ยนสถานะเป็น ${STATUS_LABELS[data.newStatus] ?? data.newStatus}`,
           changedBy: auth.user.userId,
           imageUrl: data.imageUrl,
+          repairVenue: data.repairVenue ?? undefined,
+          repairNote: data.repairNote ?? undefined,
         },
       });
+
+      // Leaving IN_USE (ตั้งใช้ในห้อง → คืนเข้าพัสดุ / แจ้งชำรุด-สูญหาย) closes the open INUSE
+      // dispense record so it doesn't linger as a phantom outstanding loan.
+      if (subItem.status === ItemStatus.IN_USE && data.newStatus !== ItemStatus.IN_USE) {
+        const open = await tx.dispenseRecord.findFirst({
+          where: { itemId: id, subItemId: data.subItemId, returnedAt: null, loanType: "INUSE" },
+          orderBy: { dispensedAt: "desc" },
+        });
+        if (open) {
+          const cond = (["AVAILABLE", "DAMAGED", "LOST"] as const).includes(
+            data.newStatus as "AVAILABLE" | "DAMAGED" | "LOST",
+          )
+            ? (data.newStatus as ReturnCondition)
+            : undefined;
+          await tx.dispenseRecord.update({
+            where: { id: open.id },
+            data: { resolvedQty: open.quantity, returnedAt: new Date(), ...(cond ? { returnCondition: cond } : {}) },
+          });
+        }
+      }
 
       // Recompute counts for tracked items after a per-piece status change (no-op for non-tracked).
       await recomputeItemCounts(tx, id);
@@ -64,6 +89,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         reason: data.notes || `Status changed to ${data.newStatus}`,
         changedBy: auth.user.userId,
         imageUrl: data.imageUrl,
+        repairVenue: data.repairVenue ?? undefined,
+        repairNote: data.repairNote ?? undefined,
       },
     });
 

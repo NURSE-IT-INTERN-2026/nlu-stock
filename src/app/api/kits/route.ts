@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
           categoryId: kitCategory.id,
           issueUnitId,
           borrowable: true,
+          borrowLimit: assembleQty,
           setSize: 1,
           totalQty: 0,
           availableQty: 0,
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
           previousQty: 0,
           newQty: assembleQty,
           reason: "ASSEMBLY",
-          notes: `ประกอบชุด ${kitCode} (จาก ${compItems.length} ส่วนประกอบ)`,
+          notes: `จัด set อุปกรณ์ ${kitCode} (จาก ${compItems.length} ส่วนประกอบ)`,
           adjustedBy: auth.user.userId,
         },
       });

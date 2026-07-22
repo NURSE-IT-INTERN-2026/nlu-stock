@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 
 interface MaintenanceRecord {
   id: string;
@@ -32,6 +33,8 @@ interface Props {
   };
   maintenanceRecords: MaintenanceRecord[];
   canAct: boolean;
+  /** ครุภัณฑ์ only — other profiles have no purchase/warranty/cycle data to show. */
+  showAssetInfo: boolean;
   onRecordMaintenance: () => void;
 }
 
@@ -45,18 +48,7 @@ function getMaintenanceStatus(nextDate: string | null): { label: string; variant
   return { label: "ปกติ", variant: "default" };
 }
 
-const RESULT_LABELS: Record<string, string> = {
-  AVAILABLE: "พร้อมใช้งาน",
-  NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
-  DISPOSED: "จำหน่าย",
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  PREVENTIVE: "ป้องกัน",
-  CORRECTIVE: "ซ่อมแก้ไข",
-};
-
-export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onRecordMaintenance }: Props) {
+export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAssetInfo, onRecordMaintenance }: Props) {
   const maintStatus = useMemo(
     () => getMaintenanceStatus(item.nextMaintenanceDate),
     [item.nextMaintenanceDate],
@@ -65,7 +57,9 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
   const statusTone: "success" | "warning" | "destructive" =
     maintStatus.variant === "destructive" ? "destructive" : maintStatus.variant === "secondary" ? "warning" : "success";
 
-  const assetFields = [
+  // Procurement data — ครุภัณฑ์ only. The service cycle is NOT here: every non-consumable
+  // profile owns one now (sanitizeItemByProfile), so it gets its own block below.
+  const assetFields = !showAssetInfo ? [] : [
     item.model && { label: "รุ่น", value: item.model },
     item.purchaseDate && { label: "วันที่ซื้อ", value: new Date(item.purchaseDate).toLocaleDateString("th-TH") },
     item.purchasePrice != null && { label: "ราคา", value: `฿${item.purchasePrice.toLocaleString()}` },
@@ -73,10 +67,14 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
     item.vendorContact && { label: "ตัวแทน", value: item.vendorContact },
     item.vendorPhone && { label: "เบอร์โทร", value: item.vendorPhone },
     item.warrantyMonths > 0 && { label: "รับประกัน", value: `${item.warrantyMonths} เดือน` },
-    { label: "รอบบำรุงรักษา", value: `${item.maintenanceCycleMonths} เดือน` },
-    item.lastMaintenanceDate && { label: "ครั้งล่าสุด", value: new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH") },
-    item.nextMaintenanceDate && { label: "ครั้งถัดไป", value: new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH") },
   ].filter(Boolean) as { label: string; value: string }[];
+
+  // Always shown: the tab only opens for profiles that can be maintained at all.
+  const planFields: { label: string; value: string }[] = [
+    { label: "รอบบำรุงรักษา", value: `${item.maintenanceCycleMonths} เดือน` },
+    { label: "ครั้งล่าสุด", value: item.lastMaintenanceDate ? new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH") : "—" },
+    { label: "ครั้งถัดไป", value: item.nextMaintenanceDate ? new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH") : "—" },
+  ];
 
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -105,10 +103,25 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
       </div>
 
       {/* ── Fixed asset info ── */}
+      {assetFields.length > 0 && (
+        <div className="p-4 sm:p-5 border-b border-border">
+          <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลครุภัณฑ์</div>
+          <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+            {assetFields.map((f) => (
+              <div key={f.label}>
+                <dt className="text-muted-foreground text-xs">{f.label}</dt>
+                <dd className="font-medium mt-0.5">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {/* ── Maintenance plan ── */}
       <div className="p-4 sm:p-5 border-b border-border">
-        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลครุภัณฑ์</div>
+        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลการบำรุงรักษา</div>
         <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-          {assetFields.map((f) => (
+          {planFields.map((f) => (
             <div key={f.label}>
               <dt className="text-muted-foreground text-xs">{f.label}</dt>
               <dd className="font-medium mt-0.5">{f.value}</dd>
@@ -139,7 +152,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
                       {new Date(rec.performedAt).toLocaleDateString("th-TH")}
                     </span>
                     <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">
-                      {TYPE_LABELS[rec.type] || rec.type}
+                      {labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}
                     </span>
                     <span className={cn(
                       "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
@@ -147,7 +160,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, onReco
                         ? "bg-success/10 text-success-700 border-success/20"
                         : "bg-primary/10 text-primary border-primary/20",
                     )}>
-                      {RESULT_LABELS[rec.result] || rec.result}
+                      {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
                     </span>
                   </div>
                   {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}

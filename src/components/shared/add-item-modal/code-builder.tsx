@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/shared/numeric-input";
 
 export interface CodeMeta {
   copyCount: number;
@@ -108,13 +109,12 @@ export function CodeBuilder({
           {isSet && (
             <div className="flex items-center justify-between gap-4 px-3 py-2.5">
               <Label htmlFor="set-size" className="text-sm">จำนวนในชุด</Label>
-              <Input
+              <NumericInput
                 id="set-size"
-                type="number"
-                min={2}
                 value={setSize}
-                onChange={(e) => setSetSize(Math.max(2, parseInt(e.target.value) || 2))}
-                className="w-20 bg-background text-center text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                onCommit={setSetSize}
+                min={2}
+                className="w-20 bg-background text-center text-gray-900"
               />
             </div>
           )}
@@ -134,13 +134,12 @@ export function CodeBuilder({
               </p>
             )}
           </div>
-          <Input
+          <NumericInput
             id="copy-count"
-            type="number"
-            min={1}
             value={copyCount}
-            onChange={(e) => onCopyCountChange(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-20 bg-background text-center text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            onCommit={onCopyCountChange}
+            min={1}
+            className="w-20 bg-background text-center text-gray-900"
           />
         </div>
       </div>
