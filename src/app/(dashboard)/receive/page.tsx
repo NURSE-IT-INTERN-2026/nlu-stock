@@ -14,6 +14,7 @@ import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToL
 import { motion } from "motion/react";
 import { pic } from "@/lib/image";
 import { cn } from "@/lib/utils";
+import { autoLotNumber } from "@/lib/lot-code";
 import {
   searchDispenseItems,
   createReceive,
@@ -299,8 +300,6 @@ function ReceiveContent() {
     if (rows.length === 0) { toast.error("เพิ่มพัสดุอย่างน้อย 1 รายการ"); return; }
     for (const row of rows) {
       if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.name}`); return; }
-      const isConsumable = row.item.category.profile.dispenseType === "CONSUMABLE";
-      if (isConsumable && !row.lotNumber.trim()) { toast.error(`ต้องระบุเลขล็อต: ${row.item.name}`); return; }
     }
     setSubmitting(true);
     try {
@@ -506,17 +505,27 @@ function ReceiveContent() {
                     {isConsumable && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground" required>Lot Number</Label>
+                          <Label className="text-xs text-muted-foreground">Lot Number</Label>
                           <Input
-                            placeholder="เลขล็อตจากผู้ผลิต"
+                            placeholder="เว้นว่างได้ — ไม่ต้องระบุล็อต"
                             value={row.lotNumber}
                             onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
                             className="text-gray-900 h-8 text-sm"
                           />
-                          {(() => {
-                            const m = lotMatchInfo(row);
-                            return m ? <p className={`text-[11px] font-medium ${m.cls}`}>{m.text}</p> : null;
-                          })()}
+                          {row.lotNumber.trim() ? (
+                            (() => {
+                              const m = lotMatchInfo(row);
+                              return m ? <p className={`text-[11px] font-medium ${m.cls}`}>{m.text}</p> : null;
+                            })()
+                          ) : row.expiryDate || row.existingLots.length > 0 ? (
+                            // A lot only gets created when something needs one: an expiry date
+                            // to hold, or an item that already tracks lots (see api/receive).
+                            <p className="text-[11px] text-muted-foreground font-mono break-all">
+                              จะสร้าง: {autoLotNumber(new Date())}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">ไม่ระบุล็อต — เข้าคลังรวม</p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">วันหมดอายุ</Label>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, UserCheck, UserX, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, UserCheck, UserX, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,8 +11,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -52,6 +55,15 @@ export function UsersTab() {
   const [editing, setEditing] = useState<UserRecord | null>(null);
   const [form, setForm] = useState({ email: "", name: "", role: "STAFF" });
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -142,13 +154,80 @@ export function UsersTab() {
     </div>
   );
 
+  // ── Modal shell elements (shared by Dialog + Sheet) ──────────
+  const title = editing ? "แก้ไขผู้ใช้งาน" : "เพิ่มผู้ใช้งาน";
+  const subtitle = editing ? "แก้ไขข้อมูลผู้ใช้งาน" : "เพิ่มผู้ใช้งานเข้าระบบ";
+  const canSave = !form.email || !form.name;
+
+  const modalHeader = (
+    <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Users className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+      </div>
+      <button
+        onClick={() => setDialogOpen(false)}
+        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        aria-label="ปิด"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
+  const modalBody = (
+    <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="user-email">อีเมล</Label>
+          <Input
+            id="user-email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            disabled={!!editing}
+            type="email"
+            className="bg-card"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="user-name">ชื่อ-นามสกุล</Label>
+          <Input id="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="user-role">บทบาท</Label>
+          <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v ?? "STAFF" })}>
+            <SelectTrigger className="bg-card"><SelectValue>{ROLE_LABELS[form.role] ?? form.role}</SelectValue></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ADMIN">ผู้ดูแล</SelectItem>
+              <SelectItem value="STAFF">เจ้าหน้าที่</SelectItem>
+              <SelectItem value="INSTRUCTOR">ผู้สอน</SelectItem>
+              <SelectItem value="CHILDREN">นักศึกษา</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+
+  const modalFooter = (
+    <div className="flex items-center justify-between border-t border-border bg-card px-6 py-4">
+      <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+      <Button onClick={handleSave} disabled={canSave}>{editing ? "บันทึก" : "สร้าง"}</Button>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0">
+    <div className="flex flex-col gap-5">
       <div className="flex justify-end">
-        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
+        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มผู้ใช้งาน</Button>
       </div>
 
-      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
+      <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
@@ -211,45 +290,31 @@ export function UsersTab() {
         </Table>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "แก้ไขผู้ใช้งาน" : "เพิ่มผู้ใช้งาน"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="user-email">อีเมล</Label>
-              <Input
-                id="user-email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                disabled={!!editing}
-                type="email"
-              />
+      {isDesktop ? (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
+            <DialogTitle className="sr-only">{title}</DialogTitle>
+            <DialogDescription className="sr-only">{subtitle}</DialogDescription>
+            <div className="flex max-h-[85vh] flex-col overflow-hidden">
+              {modalHeader}
+              {modalBody}
+              {modalFooter}
             </div>
-            <div>
-              <Label htmlFor="user-name">ชื่อ-นามสกุล</Label>
-              <Input id="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+          <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl gap-0 p-0 overflow-hidden" showCloseButton={false}>
+            <SheetTitle className="sr-only">{title}</SheetTitle>
+            <SheetDescription className="sr-only">{subtitle}</SheetDescription>
+            <div className="flex h-full flex-col overflow-hidden">
+              {modalHeader}
+              {modalBody}
+              {modalFooter}
             </div>
-            <div>
-              <Label htmlFor="user-role">บทบาท</Label>
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v ?? "STAFF" })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ADMIN">ผู้ดูแล</SelectItem>
-                  <SelectItem value="STAFF">เจ้าหน้าที่</SelectItem>
-                  <SelectItem value="INSTRUCTOR">ผู้สอน</SelectItem>
-                  <SelectItem value="CHILDREN">นักศึกษา</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-            <Button onClick={handleSave} disabled={!form.email || !form.name}>{editing ? "บันทึก" : "สร้าง"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <AlertDialog open={deactivateTarget !== null} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
         <AlertDialogContent>

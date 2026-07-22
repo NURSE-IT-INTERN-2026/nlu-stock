@@ -23,15 +23,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const searchParams = getSearchParams(request);
   const { page, perPage, skip, take } = paginate(searchParams);
   const typeFilter = searchParams.get("type");
+  // lost mode: merge the 3 loss sources (status→LOST, adjustment reason LOST, return LOST),
+  // each filtered + enriched with the fields the lost-history table needs.
+  const lost = searchParams.get("lost") === "1";
 
   const events: TimelineEvent[] = [];
 
-  const fetchDispense = !typeFilter || typeFilter === "DISPENSE";
-  const fetchReceive = !typeFilter || typeFilter === "RECEIVE";
-  const fetchAdjust = !typeFilter || typeFilter === "ADJUSTMENT";
-  const fetchStatus = !typeFilter || typeFilter === "STATUS_CHANGE";
-  const fetchMaint = !typeFilter || typeFilter === "MAINTENANCE";
-  const fetchLocation = !typeFilter || typeFilter === "LOCATION_CHANGE";
+  const fetchDispense = !lost && (!typeFilter || typeFilter === "DISPENSE");
+  const fetchReceive = !lost && (!typeFilter || typeFilter === "RECEIVE");
+  const fetchAdjust = lost || !typeFilter || typeFilter === "ADJUSTMENT";
+  const fetchStatus = lost || !typeFilter || typeFilter === "STATUS_CHANGE";
+  const fetchMaint = !lost && (!typeFilter || typeFilter === "MAINTENANCE");
+  const fetchLocation = !lost && (!typeFilter || typeFilter === "LOCATION_CHANGE");
 
   const queries: Promise<void>[] = [];
 
@@ -82,7 +85,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (fetchAdjust) {
     queries.push(
       prisma.stockAdjustment.findMany({
-        where: { itemId: id },
+        where: lost ? { itemId: id, reason: "LOST" } : { itemId: id },
         include: { adjuster: { select: { name: true } } },
         orderBy: { adjustedAt: "desc" },
         take: 100,
@@ -92,9 +95,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             id: r.id,
             type: "ADJUSTMENT",
             date: r.adjustedAt,
-            description: `ปรับยอด ${r.previousQty} → ${r.newQty} (${ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason})`,
+            description: lost
+              ? `สูญหาย ${r.previousQty - r.newQty} ${r.reason}`
+              : `ปรับยอด ${r.previousQty} → ${r.newQty} (${ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason})`,
             user: r.adjuster.name,
-            details: { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
+            details: lost
+              ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
+              : { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
           });
         }
       })
@@ -104,8 +111,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (fetchStatus) {
     queries.push(
       prisma.itemStatusLog.findMany({
-        where: { itemId: id },
-        include: { changer: { select: { name: true } } },
+        where: lost ? { itemId: id, newStatus: "LOST" } : { itemId: id },
+        include: { changer: { select: { name: true } }, subItem: { select: { subCode: true } } },
         orderBy: { changedAt: "desc" },
         take: 100,
       }).then((records) => {
@@ -114,9 +121,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             id: r.id,
             type: "STATUS_CHANGE",
             date: r.changedAt,
-            description: `เปลี่ยนสถานะ ${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABELS[r.newStatus] ?? r.newStatus}`,
+            description: `เปลี่ยนสถานะ ${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABELS[r.newStatus] ?? r.newStatus}${r.repairVenue && r.newStatus === "UNDER_REPAIR" ? ` · ส่งซ่อม${r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}` : ""}`,
             user: r.changer.name,
-            details: { previousStatus: r.previousStatus, newStatus: r.newStatus, subItemId: r.subItemId },
+            details: lost
+              ? { source: "PIECE", subCode: r.subItem?.subCode ?? null, reason: r.reason, recoveredAt: r.recoveredAt }
+              : { previousStatus: r.previousStatus, newStatus: r.newStatus, subItemId: r.subItemId, repairVenue: r.repairVenue },
           });
         }
       })

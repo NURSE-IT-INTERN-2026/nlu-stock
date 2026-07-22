@@ -5,7 +5,7 @@ import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
-import { USAGE_TYPE_LABELS, STATUS_LABELS } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, STATUS_LABELS, effectiveCode } from "@/lib/constants";
 
 // ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
 function toCsv(data: Record<string, unknown>[], filename: string): Response {
@@ -132,7 +132,9 @@ async function toPdf(
 
 type ReportType =
   | "stock-summary"
+  | "stock-balance"
   | "dispense-history"
+  | "outstanding-loans"
   | "receive-history"
   | "status-log"
   | "usage-by-subject"
@@ -143,7 +145,9 @@ type ReportType =
 
 const REPORT_TYPES: ReportType[] = [
   "stock-summary",
+  "stock-balance",
   "dispense-history",
+  "outstanding-loans",
   "receive-history",
   "status-log",
   "usage-by-subject",
@@ -181,6 +185,50 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       }));
     }
 
+    case "stock-balance": {
+      const where: Record<string, unknown> = { isActive: true };
+      const categoryId = params.get("categoryId");
+      const profileId = params.get("profileId");
+      if (categoryId) where.categoryId = categoryId;
+      else if (profileId) where.category = { profileId };
+
+      const items = await prisma.item.findMany({
+        where,
+        include: {
+          lots: { select: { remainingQty: true, unitCost: true } },
+          category: { include: { profile: { select: { dispenseType: true } } } },
+          issueUnit: { select: { name: true } },
+        },
+        orderBy: { code: "asc" },
+      });
+
+      return items.map((it) => {
+        const isConsumable = it.category.profile?.dispenseType === "CONSUMABLE";
+        let value = 0;
+        let unitCost: number | null = null;
+        if (isConsumable) {
+          let totalRemaining = 0;
+          for (const lot of it.lots) {
+            totalRemaining += lot.remainingQty;
+            value += lot.remainingQty * (lot.unitCost ?? 0);
+          }
+          if (totalRemaining > 0 && value > 0) unitCost = value / totalRemaining;
+        } else {
+          unitCost = it.purchasePrice ?? null;
+          value = it.availableQty * (it.purchasePrice ?? 0);
+        }
+        return {
+          รหัส: it.code,
+          ชื่อ: it.name,
+          หมวด: it.category.name,
+          "คงเหลือ": it.availableQty,
+          หน่วย: it.issueUnit.name,
+          "ราคา/หน่วย": unitCost ?? "",
+          "มูลค่ารวม": value,
+        };
+      });
+    }
+
     case "dispense-history": {
       const where: Record<string, unknown> = {};
       const dateFrom = params.get("dateFrom");
@@ -208,15 +256,86 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         take: 10000,
       });
 
-      return records.map((r) => ({
-        Date: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
-        "Item Code": r.item.code,
-        "Item Name": r.item.name,
-        Quantity: r.quantity,
-        Staff: r.staff.name,
-        Usage: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
-        Notes: r.notes ?? "",
-      }));
+      return records.map((r) => {
+        const cond =
+          r.returnCondition === "AVAILABLE" ? "คืน-ปกติ"
+          : r.returnCondition === "DAMAGED" ? "คืน-ชำรุด"
+          : r.returnCondition === "LOST" ? "คืน-สูญหาย"
+          : r.returnedAt ? "คืนแล้ว"
+          : "Dispensed";
+        return {
+          Date: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
+          "Item Code": r.item.code,
+          "Item Name": r.item.name,
+          Quantity: r.quantity,
+          Staff: r.staff.name,
+          Usage: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
+          "Return Condition": cond,
+          Notes: r.notes ?? "",
+        };
+      });
+    }
+
+    case "outstanding-loans": {
+      const where: Record<string, unknown> = {
+        returnedAt: null,
+        item: { category: { profile: { dispenseType: { in: ["COUNT", "ITEM"] } } } },
+        // Exclude only per-unit (trackIndividually) INUSE — returned via คืนเข้าพัสดุ.
+        // COUNT-type INUSE returns numerically through this screen, keep visible.
+        OR: [
+          { loanType: null },
+          { loanType: "BORROW" },
+          { AND: [{ loanType: "INUSE" }, { item: { trackIndividually: false } }] },
+        ],
+      };
+      const dateFrom = params.get("dateFrom");
+      const dateTo = params.get("dateTo");
+      if (dateFrom || dateTo) {
+        where.dispensedAt = {
+          ...(dateFrom && { gte: new Date(dateFrom) }),
+          ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
+        };
+      }
+      const staffId = params.get("staffId");
+      if (staffId) where.staffId = staffId;
+
+      const records = await prisma.dispenseRecord.findMany({
+        where,
+        include: {
+          item: { select: { code: true, name: true } },
+          staff: { select: { name: true } },
+        },
+        orderBy: { dispensedAt: "desc" },
+      });
+
+      // Group by loanGroupId (legacy null → each its own) → one row per outstanding loan event.
+      const map = new Map<string, typeof records>();
+      for (const r of records) {
+        const key = r.loanGroupId ?? r.id;
+        const g = map.get(key);
+        if (g) g.push(r);
+        else map.set(key, [r]);
+      }
+
+      return [...map.values()].map((recs) => {
+        const head = recs[0];
+        const outstanding = recs.reduce((s, r) => s + (r.quantity - r.resolvedQty), 0);
+        const due = head.dueAt ? fmtDate(head.dueAt, "yyyy-MM-dd") : "";
+        const status = !head.dueAt
+          ? "ยังไม่คืน"
+          : new Date(head.dueAt) < new Date()
+            ? "เกินกำหนด"
+            : "ใกล้ครบกำหนด";
+        return {
+          Date: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
+          ผู้ยืม: head.recipient ?? "",
+          Staff: head.staff.name,
+          รายการ: recs.length,
+          ค้างคืน: outstanding,
+          ครบกำหนด: due,
+          สถานะ: status,
+        };
+      });
     }
 
     case "receive-history": {
@@ -386,22 +505,38 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const status = params.get("status");
       const statuses: ItemStatus[] = status ? [status as ItemStatus] : [ItemStatus.DAMAGED, ItemStatus.UNDER_REPAIR, ItemStatus.DISPOSED, ItemStatus.LOST];
 
+      // Mirrors api/reports/damaged-assets: match written-off pieces too, one row each.
       const items = await prisma.item.findMany({
-        where: { isActive: true, status: { in: statuses } },
+        where: {
+          isActive: true,
+          OR: [{ status: { in: statuses } }, { subItems: { some: { status: { in: statuses } } } }],
+        },
         include: {
           category: { select: { name: true } },
           location: { select: { building: true, floor: true, room: true, detail: true } },
+          _count: { select: { subItems: true } },
+          subItems: { where: { status: { in: statuses } }, select: { subCode: true, status: true }, orderBy: { subCode: "asc" } },
         },
         take: 10000,
       });
 
-      return items.map((i) => ({
-        Code: i.code,
-        Name: i.name,
-        Status: i.status,
-        Category: i.category.name,
-        Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
-      }));
+      return items.flatMap((i) => {
+        const base = {
+          Name: i.name,
+          Category: i.category.name,
+          Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
+        };
+        if (i.subItems.length > 0) {
+          return i.subItems.map((s) => ({
+            Code: effectiveCode(i.code, s.subCode, i._count.subItems),
+            Name: base.Name,
+            Status: s.status,
+            Category: base.Category,
+            Location: base.Location,
+          }));
+        }
+        return [{ Code: i.code, Name: base.Name, Status: i.status, Category: base.Category, Location: base.Location }];
+      });
     }
 
     case "maintenance-schedule": {

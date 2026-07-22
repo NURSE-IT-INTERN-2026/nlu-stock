@@ -11,19 +11,20 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger,
 } from "@/components/ui/select";
-import { TriangleAlert, X } from "lucide-react";
+import { CheckCircle2, TriangleAlert, X } from "lucide-react";
 import { FileUpload } from "@/components/shared/file-upload";
-import { STATUS_LABELS, formatSubCode } from "@/lib/constants";
+import { STATUS_LABELS, effectiveCode, type ItemStatus } from "@/lib/constants";
 import { updateItemStatus } from "@/lib/api";
 
 interface SubItemOption {
   id: string;
   subCode: string;
   name?: string | null;
-  status: string;
+  status: ItemStatus;
 }
 
 const STATUS_ACTION_META: Record<string, { title: string; desc: string; submit: string; placeholder: string }> = {
+  AVAILABLE: { title: "กลับพร้อมใช้งาน", desc: "ล้างสถานะชำรุด/ส่งซ่อม กลับมาใช้งานได้", submit: "ยืนยันพร้อมใช้งาน", placeholder: "เช่น ซ่อมเสร็จแล้ว..." },
   DAMAGED: { title: "แจ้งชำรุด", desc: "เปลี่ยนสถานะพัสดุเป็นชำรุด", submit: "แจ้งชำรุด", placeholder: "อธิบายรายละเอียดการชำรุด..." },
   LOST: { title: "แจ้งสูญหาย", desc: "บันทึกพัสดุสูญหาย", submit: "ยืนยันสูญหาย", placeholder: "อธิบายสาเหตุการสูญหาย..." },
   DISPOSED: { title: "ตัดจำหน่าย", desc: "ตัดพัสดุนี้ออกจากระบบ", submit: "ยืนยันตัดจำหน่าย", placeholder: "เหตุผลในการตัดจำหน่าย..." },
@@ -34,8 +35,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   itemId: string;
   itemCode?: string;
-  /** Status to apply — one of DAMAGED | LOST | DISPOSED. */
-  status: "DAMAGED" | "LOST" | "DISPOSED";
+  /** Status to apply. AVAILABLE = clear a manual off-normal status. */
+  status: "AVAILABLE" | "DAMAGED" | "LOST" | "DISPOSED";
   trackIndividually: boolean;
   subItems: SubItemOption[];
   onSuccess: () => void;
@@ -43,8 +44,10 @@ interface Props {
 
 export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, status, trackIndividually, subItems, onSuccess }: Props) {
   const meta = STATUS_ACTION_META[status];
+  // Lost/disposed reports must carry a reason — bookkeeping needs the why.
+  const notesRequired = status === "LOST" || status === "DISPOSED";
   // Full sub-code shown to staff (e.g. NLU-KRU-001-C01); falls back to raw when no itemCode.
-  const fmtCode = (code: string) => formatSubCode(itemCode ?? "", code);
+  const fmtCode = (code: string) => effectiveCode(itemCode ?? "", code, subItems.length);
   // ponytail: name optional — most sub-items have one, code stays as the ID.
   const subLabel = (sub: SubItemOption) =>
     `${sub.name ? `${sub.name} · ` : ""}${fmtCode(sub.subCode)} (${STATUS_LABELS[sub.status] ?? sub.status})`;
@@ -69,6 +72,10 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
   async function handleSave() {
     if (trackIndividually && !subItemId) {
       toast.error("กรุณาเลือกชิ้นย่อย");
+      return;
+    }
+    if (notesRequired && !notes.trim()) {
+      toast.error("กรุณากรอกหมายเหตุ");
       return;
     }
     setSaving(true);
@@ -104,8 +111,10 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
           {/* ── Header ── */}
           <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                <TriangleAlert className="h-4 w-4" />
+              <div className={status === "AVAILABLE"
+                ? "flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success"
+                : "flex h-9 w-9 items-center justify-center rounded-lg bg-destructive/10 text-destructive"}>
+                {status === "AVAILABLE" ? <CheckCircle2 className="h-4 w-4" /> : <TriangleAlert className="h-4 w-4" />}
               </div>
               <div>
                 <p className="text-base font-semibold text-foreground">{meta.title}</p>
@@ -152,7 +161,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
             )}
 
             <div className="space-y-2">
-              <Label>หมายเหตุ</Label>
+              <Label required={notesRequired}>หมายเหตุ</Label>
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -179,7 +188,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
             <Button
               variant="destructive"
               onClick={handleSave}
-              disabled={saving || (trackIndividually && !subItemId)}
+              disabled={saving || (trackIndividually && !subItemId) || (notesRequired && !notes.trim())}
               className="gap-1.5"
             >
               {saving ? "กำลังบันทึก..." : meta.submit}

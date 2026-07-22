@@ -15,7 +15,7 @@ export function MonthlyDispenseWidget() {
     <Card className="flex flex-col h-full w-full">
       <CardHeader className="border-b py-3">
         <CardTitle className="text-base font-semibold text-foreground">
-          การเบิก-จ่ายรายเดือน
+          ภาพรวมการใช้งานวัสดุสิ้นเปลือง ย้อนหลัง 1 ปี
         </CardTitle>
         <CardAction>
           <Link href="/reports" className={buttonVariants({ variant: "outline", size: "sm" })}>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
-export function usePagination(initialPerPage = 20) {
+export function usePagination(initialPerPage = PAGE_SIZE.DEFAULT) {
   const [page, setPage] = useState(1);
   const [perPage] = useState(initialPerPage);
   const [total, setTotal] = useState(0);

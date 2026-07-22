@@ -94,11 +94,11 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
         components: components.map((c) => ({ componentItemId: c.componentItemId, quantity: c.quantity })),
         assembleQty,
       });
-      toast.success(`ประกอบชุด "${form.name}" สำเร็จ ได้ ${result.assembledQty} ชุด`);
+      toast.success(`จัด set อุปกรณ์ "${form.name}" สำเร็จ ได้ ${result.assembledQty} ชุด`);
       onCreated(result);
       handleClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "ประกอบชุดไม่สำเร็จ");
+      toast.error(e instanceof Error ? e.message : "จัด set อุปกรณ์ไม่สำเร็จ");
       setIsSubmitting(false);
     }
   }, [form, components, assembleQty, onCreated, handleClose]);
@@ -123,7 +123,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
   // ── Rendering ───────────────────────────────────────────────
   const stepIdx = step === "kit-details" ? 0 : step === "components" ? 1 : 2;
   const stepTitle = STEP_TITLES[step];
-  const title = "ประกอบชุดใหม่";
+  const title = "จัด set อุปกรณ์ใหม่";
 
   function renderHeader() {
     return (
@@ -270,7 +270,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
           {step === "assemble" ? (
             <>
               <Check className="h-4 w-4" />
-              {isSubmitting ? "กำลังประกอบ..." : "ประกอบชุด"}
+              {isSubmitting ? "กำลังจัด set..." : "จัด set อุปกรณ์"}
             </>
           ) : (
             <>

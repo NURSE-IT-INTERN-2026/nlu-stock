@@ -23,7 +23,7 @@ export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-xs gap-1"
+        className="h-8 text-xs gap-1"
         onClick={() => window.open(`${baseUrl}&format=csv`, "_blank")}
       >
         <FileText className="h-3.5 w-3.5" />
@@ -32,7 +32,7 @@ export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-xs gap-1"
+        className="h-8 text-xs gap-1"
         onClick={() => window.open(`${baseUrl}&format=xlsx`, "_blank")}
       >
         <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -41,7 +41,7 @@ export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-xs gap-1"
+        className="h-8 text-xs gap-1"
         onClick={() => window.open(`${baseUrl}&format=pdf`, "_blank")}
       >
         <FileDown className="h-3.5 w-3.5" />

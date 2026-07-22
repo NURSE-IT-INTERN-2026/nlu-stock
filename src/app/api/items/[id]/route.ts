@@ -24,7 +24,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       location: true,
       issueUnit: true,
       subItems: { orderBy: { subCode: "asc" } },
-      lots: { orderBy: { expiryDate: "asc" } },
+      // receivedDate breaks the tie between date-coded lots, which carry no expiry.
+      lots: { orderBy: [{ expiryDate: "asc" }, { receivedDate: "asc" }] },
       dispenseRecords: {
         take: 5,
         orderBy: { dispensedAt: "desc" },

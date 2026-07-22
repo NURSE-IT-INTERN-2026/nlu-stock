@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
+import { requireAdmin, requireStaff, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { subItemCreateSchema, subItemBatchCreateSchema } from "@/lib/validators";
+import { DEFAULT_LOCATION_ID } from "@/lib/default-location";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireStaff(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { itemId: id },
     orderBy: { subCode: "asc" },
     include: {
+      location: true,
       dispenseRecords: {
         where: { returnedAt: null },
         orderBy: { dispensedAt: "desc" },
@@ -35,6 +37,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!item) return notFound("Item not found");
   if (!item.trackIndividually) return error("Item does not track individually");
 
+  // Seed the piece's own location from its parent — but skip the seed fallback
+  // (see default-location.ts): a parent whose only "location" is the default has
+  // no real one to inherit, so the piece starts NULL instead of inheriting wrong.
+  const seededLocationId =
+    item.locationId && item.locationId !== DEFAULT_LOCATION_ID ? item.locationId : null;
+
   const body = await request.json();
 
   // Batch create mode
@@ -48,7 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const subItems = [];
     for (let i = data.startNumber; i <= data.endNumber; i++) {
       const numStr = String(i).padStart(String(data.endNumber).length, "0");
-      subItems.push({ itemId: id, subCode: `${data.prefix}${numStr}` });
+      subItems.push({ itemId: id, subCode: `${data.prefix}${numStr}`, name: item.name, locationId: seededLocationId });
     }
 
     const result = await prisma.subItem.createMany({
@@ -67,7 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!data) return error("No data");
 
   const subItem = await prisma.subItem.create({
-    data: { ...data, itemId: id },
+    data: { ...data, itemId: id, locationId: seededLocationId },
   });
 
   return json(subItem, 201);

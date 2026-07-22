@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Search, Package, Plus, Minus, X, Boxes } from "lucide-react";
+import { Search, Package, Plus, Minus, X, Boxes, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/shared/numeric-input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,12 +26,14 @@ interface SearchResult {
 
 interface StepComponentsProps {
   components: ComponentRow[];
+  assembleQty: number;
+  onAssembleQtyChange: (q: number) => void;
   onAdd: (row: ComponentRow) => void;
   onRemove: (id: string) => void;
   onQtyChange: (id: string, qty: number) => void;
 }
 
-export function StepComponents({ components, onAdd, onRemove, onQtyChange }: StepComponentsProps) {
+export function StepComponents({ components, assembleQty, onAssembleQtyChange, onAdd, onRemove, onQtyChange }: StepComponentsProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,7 +56,7 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
     try {
       const data = await searchDispenseItems({
         q: q.trim(),
-        limit: "8",
+        perPage: "8",
         ...(pId ? { profileId: pId } : {}),
         ...(cId ? { categoryId: cId } : {}),
         ...(loc.building ? { building: loc.building } : {}),
@@ -86,12 +89,26 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
     setCategoryId("");
     setLocation({ building: "", floor: "", room: "", detail: "" });
   };
+  const hasShortage = components.some((c) => c.quantity * assembleQty > c.availableQty);
 
   return (
     <div className="space-y-5">
-      <div>
-        <Label htmlFor="comp-search">ค้นหาส่วนประกอบ</Label>
-        <p className="mt-0.5 text-xs text-muted-foreground">พิมพ์ชื่อหรือรหัสพัสดุที่จะประกอบเป็นชุด</p>
+      <div className="flex flex-wrap items-end justify-between gap-3 pr-6">
+        <div>
+          <Label htmlFor="comp-search">ค้นหาส่วนประกอบ</Label>
+          <p className="mt-0.5 text-xs text-muted-foreground">พิมพ์ชื่อหรือรหัสพัสดุที่จะประกอบเป็นชุด</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.02] px-3 py-1.5">
+          <Label htmlFor="assemble-qty" className="whitespace-nowrap text-xs font-medium text-foreground">จำนวนชุด</Label>
+          <NumericInput
+            id="assemble-qty"
+            value={assembleQty}
+            onCommit={onAssembleQtyChange}
+            min={1}
+            className="h-8 w-16 bg-background text-center text-sm font-semibold tabular-nums"
+          />
+          <span className="text-xs text-muted-foreground">ชุด</span>
+        </div>
       </div>
 
       {/* กรอง: หมวดหมู่ + สถานที่ (picker เดียวกับ filter bar หน้า items/dispense) */}
@@ -189,6 +206,13 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
         </div>
       ) : null}
 
+      {hasShortage && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>ส่วนประกอบบางรายการมีไม่พอสำหรับ {assembleQty} ชุด — เพิ่มสต๊อกหรือลดจำนวนชุด</span>
+        </div>
+      )}
+
       {/* Added components list */}
       {components.length > 0 && (
         <div className="space-y-2">
@@ -204,7 +228,9 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
                       <span className="truncate text-sm font-medium text-foreground">{c.name}</span>
                       <span className="shrink-0 text-xs text-muted-foreground">{c.code}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">คงเหลือ {c.availableQty} {c.unitName}</span>
+                    <span className={cn("text-xs", c.quantity * assembleQty > c.availableQty ? "text-destructive" : "text-muted-foreground")}>
+                      ต้องการ {c.quantity * assembleQty} · คงเหลือ {c.availableQty} {c.unitName}{c.quantity * assembleQty > c.availableQty && " · ไม่พอ"}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -226,12 +252,11 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
                   >
                     <Minus className="h-3 w-3" />
                   </button>
-                  <input
-                    type="number"
-                    min={1}
+                  <NumericInput
                     value={c.quantity}
-                    onChange={(e) => onQtyChange(c.componentItemId, Math.max(1, parseInt(e.target.value) || 1))}
-                    className="h-6 w-12 rounded-md border border-border bg-background text-center text-sm font-semibold tabular-nums outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onCommit={(n) => onQtyChange(c.componentItemId, n)}
+                    min={1}
+                    className="h-6 w-12 rounded-md border border-border bg-background text-center text-sm font-semibold tabular-nums"
                   />
                   <button
                     type="button"

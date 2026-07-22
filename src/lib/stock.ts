@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { ItemStatus } from "@/generated/prisma/enums";
+import { WRITTEN_OFF } from "@/lib/status-utils";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -19,9 +20,13 @@ export const STATUS_PRIORITY: Record<ItemStatus, number> = {
 
 // Aggregate a tracked item's status from its sub-item statuses (highest priority wins).
 // Empty sub-item set → AVAILABLE (item exists but has no trackable units yet).
+// Written-off pieces (LOST/DISPOSED) are skipped unless every piece is written off —
+// one lost copy out of ten must not make the whole item read as สูญหาย. Those pieces stay
+// visible through the damaged/lost report and the item's ประวัติสูญหาย tab.
 export function deriveStatusFromSubItems(statuses: ItemStatus[]): ItemStatus {
   if (statuses.length === 0) return ItemStatus.AVAILABLE;
-  return statuses.reduce<ItemStatus>(
+  const live = statuses.filter((s) => !WRITTEN_OFF.has(s));
+  return (live.length > 0 ? live : statuses).reduce<ItemStatus>(
     (best, s) => (STATUS_PRIORITY[s] > STATUS_PRIORITY[best] ? s : best),
     ItemStatus.AVAILABLE,
   );
@@ -37,6 +42,51 @@ export function deriveNonTrackedStatus(
 ): ItemStatus {
   if (dispenseType === "COUNT" && availableQty < totalQty) return ItemStatus.ON_LOAN;
   return ItemStatus.AVAILABLE;
+}
+
+/**
+ * Push a stock delta onto an item's lots.
+ *
+ * Staff count what is on the shelf, not what is in each lot — the count screen asks
+ * for one number and this spreads it:
+ *   delta < 0 → drain FEFO (nearest expiry first, undated last), clamped at 0 per lot
+ *   delta > 0 → add to the most recently received lot (surplus is most likely from it)
+ *
+ * Returns false when the item has no lots — the caller then owns availableQty directly
+ * (the lot-less consumable case, which is most of them). Callers that write availableQty
+ * themselves MUST go through this first: recomputeItemCounts resyncs availableQty from
+ * SUM(lots.remainingQty) once an item has lots, so a direct write would be wiped.
+ */
+export async function allocateAcrossLots(
+  tx: TxClient,
+  itemId: string,
+  delta: number,
+): Promise<boolean> {
+  const lots = await tx.lot.findMany({
+    where: { itemId },
+    orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }, { receivedDate: "asc" }],
+    select: { id: true, remainingQty: true, receivedDate: true },
+  });
+  if (lots.length === 0) return false;
+  if (delta === 0) return true;
+
+  if (delta > 0) {
+    const newest = lots.reduce((a, b) => (b.receivedDate > a.receivedDate ? b : a));
+    await tx.lot.update({ where: { id: newest.id }, data: { remainingQty: { increment: delta } } });
+    return true;
+  }
+
+  let left = -delta;
+  for (const lot of lots) {
+    if (left <= 0) break;
+    const take = Math.min(lot.remainingQty, left);
+    if (take <= 0) continue;
+    await tx.lot.update({ where: { id: lot.id }, data: { remainingQty: { decrement: take } } });
+    left -= take;
+  }
+  // ponytail: a shortfall bigger than every lot combined means the caller's numbers were
+  // stale; the lots are emptied and the leftover is dropped rather than going negative.
+  return true;
 }
 
 /**
@@ -69,15 +119,43 @@ export async function recomputeItemCounts(
   }
 
   if (!item.trackIndividually) {
-    const status = deriveNonTrackedStatus(
-      item.category.profile.dispenseType,
-      item.availableQty,
-      item.totalQty,
-    );
-    if (status !== item.status) {
-      await tx.item.update({ where: { id: itemId }, data: { status } });
+    // Consumables that track lots: lots are the source of truth for what's
+    // physically left, so keep the item's availableQty cache synced to
+    // SUM(lots.remainingQty). Items WITHOUT lots manage availableQty directly
+    // (receive/dispense/adjust) and must be left alone — resyncing would zero
+    // their stock. See ADR-0002.
+    let availableQty = item.availableQty;
+    if (item.category.profile.dispenseType === "CONSUMABLE") {
+      const lotSum = await tx.lot.aggregate({
+        where: { itemId },
+        _sum: { remainingQty: true },
+        _count: true,
+      });
+      if (lotSum._count > 0) {
+        availableQty = lotSum._sum.remainingQty ?? 0;
+      }
     }
-    return { availableQty: item.availableQty, totalQty: item.totalQty };
+    // A status a staff member set by hand (ชำรุด/ส่งซ่อม/บำรุงรักษา/สูญหาย/ตัดจำหน่าย) sticks
+    // until they clear it — a receive/dispense/adjust is not a reason to silently drop it.
+    // CONSUMABLE is exempt: no lifecycle, always derived.
+    const dispenseType = item.category.profile.dispenseType;
+    const manual =
+      dispenseType !== "CONSUMABLE" &&
+      item.status !== ItemStatus.AVAILABLE &&
+      item.status !== ItemStatus.ON_LOAN;
+    const status = manual
+      ? item.status
+      : deriveNonTrackedStatus(dispenseType, availableQty, item.totalQty);
+    if (availableQty !== item.availableQty || status !== item.status) {
+      await tx.item.update({
+        where: { id: itemId },
+        data: {
+          ...(availableQty !== item.availableQty ? { availableQty } : {}),
+          ...(status !== item.status ? { status } : {}),
+        },
+      });
+    }
+    return { availableQty, totalQty: item.totalQty };
   }
 
   // Tracked: one query for all sub-item statuses, then derive counts + status in JS.

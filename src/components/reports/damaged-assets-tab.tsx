@@ -6,7 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
-import { STATUS_LABELS, STATUS_VARIANTS } from "@/lib/constants";
+import { STATUS_LABELS, STATUS_VARIANTS, type ItemStatus } from "@/lib/constants";
 
 const filterConfig: FilterConfig = {
   dateRange: true,
@@ -22,10 +22,11 @@ interface Row {
   id: string;
   code: string;
   name: string;
-  status: string;
+  status: ItemStatus;
   categoryName: string;
   location: string;
   reason: string;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
   changedAt: string;
 }
 
@@ -40,6 +41,7 @@ const columns: Column<Row>[] = [
   { key: "categoryName", header: "Category" },
   { key: "location", header: "Location" },
   { key: "reason", header: "Reason" },
+  { key: "repairVenue", header: "ประเภทซ่อม", render: (r) => (r.repairVenue ? (r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—") },
 ];
 
 export function DamagedAssetsTab() {

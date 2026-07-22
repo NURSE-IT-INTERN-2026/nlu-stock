@@ -2,12 +2,13 @@
 
 import { Suspense, useState, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Layers, Boxes, MapPin } from "lucide-react";
+import { Layers, Boxes, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { STATUS_PILLS, STATUS_LABELS, locationLabel, formatSubCode } from "@/lib/constants";
+import { STATUS_PILLS, STATUS_LABELS, statusDisplay, locationLabel, formatSubCode, type ItemStatus } from "@/lib/constants";
+import { parseItemStatusList } from "@/lib/status-utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -16,7 +17,8 @@ import { QrScanner } from "@/components/shared/qr-scanner";
 import { CreateKitModal } from "@/components/shared/create-kit-modal";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
-import { usePagination } from "@/hooks/use-pagination";
+import { useInventoryList } from "@/hooks/use-inventory-list";
+import { Pagination } from "@/components/shared/pagination";
 import { getItems, getSubItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, EMPTY_FILTER, type FilterState } from "@/components/items/items-filter-bar";
@@ -29,9 +31,10 @@ interface SubItemRecord {
   id: string;
   subCode: string;
   name: string | null;
-  status: string;
+  status: ItemStatus;
   condition: string | null;
   notes: string | null;
+  location: LocationOption | null;
   dispenseRecords: { staff: { name: string } }[];
 }
 
@@ -42,7 +45,7 @@ interface ItemRecord {
   nameEn: string | null;
   category: CategoryOption;
   trackIndividually: boolean;
-  status: string;
+  status: ItemStatus;
   issueUnit: UnitType;
   availableQty: number;
   totalQty: number;
@@ -50,6 +53,8 @@ interface ItemRecord {
   location: LocationOption | null;
   _count: { subItems: number };
   statusCounts: { available: number; inUse: number; unavailable: number };
+  // Only sent when the request carries a status filter — the pieces that matched it.
+  matchedSubItems?: SubItemRecord[];
 }
 
 export default function ItemsPage() {
@@ -65,11 +70,16 @@ function ItemsContent() {
   const alerts = useAlerts();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<ItemRecord[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const on = () => setIsMobile(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const { categories } = useCategories();
   const { locations } = useLocations();
-  const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
-  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
 
@@ -90,25 +100,22 @@ function ItemsContent() {
     const statusParam = searchParams.get("status");
     return {
       query: "",
-      profileId: "",
+      profileId: searchParams.get("profile") ?? "",
       categoryId: searchParams.get("category"),
-      status: statusParam ? statusParam.split(",").filter(Boolean) : [],
+      status: parseItemStatusList(statusParam),
       location: {},
       preset,
     };
   });
+  const {
+    items, total, page, perPage, loading, isLoadingMore, hasNext,
+    loadMore, setPage, refetch,
+  } = useInventoryList<ItemRecord>({ isMobile, filter });
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); setSelected(new Set()); }, [setPage]);
+  const statusFiltering = filter.status.length > 0;
 
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [mobileExpanded, setMobileExpanded] = useState<Set<string>>(new Set());
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const on = () => setIsMobile(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileExpandedId, setMobileExpandedId] = useState<string | null>(null);
   const [isVerySmall, setIsVerySmall] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 399px)");
@@ -117,11 +124,7 @@ function ItemsContent() {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  const toggleMobile = (id: string) => setMobileExpanded((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggleMobile = (id: string) => setMobileExpandedId((prev) => prev === id ? null : id);
   const [subItemsMap, setSubItemsMap] = useState<Record<string, SubItemRecord[]>>({});
   const [scannerOpen, setScannerOpen] = useState(false);
   const [kitOpen, setKitOpen] = useState(false);
@@ -157,42 +160,18 @@ function ItemsContent() {
   };
 
   const toggleExpand = async (itemId: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) { next.delete(itemId); return next; }
-      next.add(itemId);
-      return next;
-    });
+    setExpandedId((prev) => prev === itemId ? null : itemId);
     if (!subItemsMap[itemId]) {
       const data = await getSubItems(itemId);
       setSubItemsMap((prev) => ({ ...prev, [itemId]: data as SubItemRecord[] }));
     }
   };
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true);
-    setSelected(new Set());
-    const params: Record<string, string> = { page: String(page), perPage: String(perPage) };
-    if (filter.query) params.search = filter.query;
-    if (filter.profileId) params.profileId = filter.profileId;
-    if (filter.categoryId) params.categoryId = filter.categoryId;
-    if (filter.status.length) params.status = filter.status.join(",");
-    if (filter.preset) params[filter.preset] = "true";
-    if (filter.location.building) params.building = filter.location.building;
-    if (filter.location.floor) params.floor = filter.location.floor;
-    if (filter.location.room) params.room = filter.location.room;
-    if (filter.location.detail) params.detail = filter.location.detail;
-
-    const data = await getItems(params);
-    setItems((data.items || []) as ItemRecord[]);
-    setTotal(data.total || 0);
-    setLoading(false);
-  }, [page, perPage, filter, setTotal]);
-
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  // Clear selection when navigating pages (desktop), matching prior offset behavior.
+  const goToPage = (n: number) => { setSelected(new Set()); setPage(n); };
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-6">
+    <div className="flex flex-col gap-6">
       <ItemsFilterBar
         profiles={profiles}
         categories={categories}
@@ -211,13 +190,15 @@ function ItemsContent() {
             className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 w-full justify-center"
           >
             <Boxes className="size-5" />
-            <span className="font-medium">ประกอบชุด</span>
+            <span className="font-medium">จัด set อุปกรณ์</span>
           </Button>
         ) : undefined}
       />
 
-      <div className="rounded-2xl border overflow-hidden bg-card flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 overflow-auto [&_[data-slot=table-container]]:overflow-visible">
+      {/* overflow-clip (not hidden) rounds header corners without becoming a scroll container,
+          so sticky header still references the viewport and iOS page scroll isn't captured. */}
+      <div className="rounded-2xl border bg-card flex flex-col overflow-clip">
+        <div className="[&_[data-slot=table-container]]:overflow-visible">
           <Table className="table-fixed">
             <TableHeader>
               <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
@@ -232,9 +213,9 @@ function ItemsContent() {
                   </TableHead>
                 )}
                 <TableHead className="w-24 md:w-28 px-2 max-[399px]:hidden">รหัสพัสดุ</TableHead>
-                <TableHead className="px-2">ชื่อ</TableHead>
+                <TableHead className="px-2">รายการพัสดุ</TableHead>
                 <TableHead className="hidden md:table-cell md:w-20 text-center">หมวดหมู่</TableHead>
-                <TableHead className="hidden md:table-cell md:w-36 px-1 text-center whitespace-nowrap">ว่าง/ยืมอยู่/ไม่พร้อม</TableHead>
+                <TableHead className="hidden md:table-cell md:w-36 px-1 text-center whitespace-nowrap">ว่าง/ยืม/ไม่พร้อม</TableHead>
                 <TableHead className="hidden md:table-cell md:w-32 lg:w-40 xl:w-52 md:pl-6">สถานที่</TableHead>
                 <TableHead className="w-28 md:w-32 px-2 text-center">สถานะ</TableHead>
               </TableRow>
@@ -255,15 +236,20 @@ function ItemsContent() {
                   </TableCell>
                 </TableRow>
               ) : items.map((item, idx) => {
-                const expanded = expandedIds.has(item.id);
-                const subs = subItemsMap[item.id];
+                // Filtering by status: the API already shipped the matching pieces, so the row
+                // opens straight onto them instead of making staff expand and re-read all copies.
+                const matched = statusFiltering ? item.matchedSubItems ?? [] : null;
+                const expanded = matched ? matched.length > 0 : expandedId === item.id;
+                const subs = matched ?? subItemsMap[item.id];
                 const hasSubItems = item.trackIndividually && item._count.subItems > 1;
                 return (
                   <Fragment key={item.id}>
                     <TableRow
-                      className={`h-9 cursor-pointer hover:bg-muted/50 transition-colors [&>td]:py-1 ${expanded ? "bg-orange-50/50 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
+                      className={`h-9 cursor-pointer hover:bg-muted/50 transition-colors [&>td]:py-1 ${expanded ? "bg-orange-50/40 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
                       onClick={() => {
-                        if (hasSubItems) toggleExpand(item.id);
+                        // While filtering the pieces are already shown; collapsing them would
+                        // hide the answer, so the row just opens the item instead.
+                        if (hasSubItems && !statusFiltering) toggleExpand(item.id);
                         else if (isMobile) toggleMobile(item.id);
                         else router.push(`/items/${item.code}`);
                       }}
@@ -282,7 +268,7 @@ function ItemsContent() {
                           </span>
                           {hasSubItems && (
                             <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200">
-                              <Layers className="size-2.5" />{item._count.subItems}
+                              <Layers className="size-2.5" />{matched ? `${matched.length}/${item._count.subItems}` : item._count.subItems}
                             </Badge>
                           )}
                           {item.trackIndividually && item._count.subItems === 0 && (
@@ -306,8 +292,8 @@ function ItemsContent() {
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-sm md:pl-6"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
                       <TableCell className="px-2 text-center">
-                        <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5 ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
-                          {STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ")}
+                        <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5 ${statusDisplay(item).cls}`}>
+                          {statusDisplay(item).label}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -317,19 +303,21 @@ function ItemsContent() {
                       <TableRow
                         key={sub.id}
                         className="h-9 [&>td]:py-1 bg-orange-50/40 dark:bg-orange-950/30 hover:bg-orange-50/60 dark:hover:bg-orange-950/40 cursor-pointer"
-                        onClick={() => router.push(`/items/${item.code}/sub/${sub.subCode}`)}
+                        onClick={() => router.push(`/items/${item.code}?copy=${sub.subCode}`)}
                       >
                         {canMove && <TableCell className="hidden md:table-cell" />}
                         <TableCell className="font-mono text-xs text-muted-foreground px-2 max-[399px]:hidden">
                           <span className="block truncate max-w-[8rem]"><span className="text-orange-300/80 mr-1.5">└</span>{fullCode}</span>
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm px-2">{sub.name || sub.notes || "-"}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm px-2"><span className="block truncate">{sub.name || sub.notes || item.name || "-"}</span></TableCell>
                         <TableCell className="hidden md:table-cell"></TableCell>
                         <TableCell className="hidden md:table-cell"></TableCell>
                         <TableCell className="hidden md:table-cell text-sm text-muted-foreground md:pl-6">
-                          {sub.status === "ON_LOAN" && sub.dispenseRecords?.[0]
-                            ? <span className="text-blue-600">→ {sub.dispenseRecords[0].staff.name}</span>
-                            : item.location ? locationLabel(item.location) : "-"}
+                          <span className="block truncate">
+                            {sub.status === "ON_LOAN" && sub.dispenseRecords?.[0]
+                              ? <span className="text-blue-600">→ {sub.dispenseRecords[0].staff.name}</span>
+                              : (sub.location ?? item.location) ? locationLabel(sub.location ?? item.location!) : "-"}
+                          </span>
                         </TableCell>
                         <TableCell className="px-2 text-center">
                           <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5 ${STATUS_PILLS[sub.status] || "bg-muted text-muted-foreground border-border"}`}>
@@ -339,9 +327,9 @@ function ItemsContent() {
                       </TableRow>
                       );
                     })}
-                    {(mobileExpanded.has(item.id) || (isMobile && expanded)) && (
+                    {(mobileExpandedId === item.id || (isMobile && expandedId === item.id)) && (
                       <TableRow className="md:hidden">
-                        <TableCell colSpan={isVerySmall ? 2 : 3} className="bg-muted/30">
+                        <TableCell colSpan={isVerySmall ? 2 : 3} className="bg-orange-50/40 dark:bg-orange-950/30">
                           <div className="py-1 space-y-1.5 text-sm">
                             {isVerySmall && (
                               <div className="flex justify-between gap-3"><span className="text-muted-foreground">รหัสพัสดุ</span><span className="font-mono text-right truncate">{item.code}</span></div>
@@ -372,59 +360,21 @@ function ItemsContent() {
           </div>
         )}
 
-        {/* Fixed footer — single line, high density */}
-        <div className="flex items-center gap-1.5 border-t bg-card px-3 py-1.5 shrink-0">
-          <div className="flex items-center gap-0.5 min-w-0">
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-7 w-7 p-0 text-xs">
-              &laquo;
-            </Button>
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-7 w-7 p-0">
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            {/* Mobile: compact page indicator */}
-            <span className="sm:hidden px-1.5 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
-              {page} / {totalPages || 1}
-            </span>
-            {/* sm+: numbered pages (narrow ±1 window to stay single-line on dense widths) */}
-            <span className="hidden sm:flex items-center gap-0.5 min-w-0">
-            {Array.from({ length: totalPages || 1 }, (_, i) => i + 1)
-              .filter((p) => {
-                if (totalPages <= 7) return true;
-                if (p === 1 || p === totalPages) return true;
-                if (Math.abs(p - page) <= 1) return true;
-                return false;
-              })
-              .reduce<(number | "...")[]>((acc, p, i, arr) => {
-                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("...");
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((p, i) =>
-                p === "..." ? (
-                  <span key={`dots-${i}`} className="px-0.5 text-xs text-muted-foreground">…</span>
-                ) : (
-                  <Button
-                    key={p}
-                    variant={page === p ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setPage(p)}
-                    className="h-6 min-w-6 px-1 text-xs tabular-nums"
-                  >
-                    {p}
-                  </Button>
-                )
-              )}
-            </span>
-            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-7 w-7 p-0">
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-7 w-7 p-0 text-xs">
-              &raquo;
-            </Button>
-          </div>
-          <div className="flex-1 min-w-0" />
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums hidden min-[380px]:inline">{total} items</span>
-        </div>
+        {/* Pagination — desktop numbered, mobile load-more (cursor) */}
+        {isMobile ? (
+          items.length > 0 && (
+            <Pagination
+              mode="loadMore"
+              shown={items.length}
+              total={total}
+              hasMore={hasNext}
+              isLoading={isLoadingMore}
+              onLoadMore={loadMore}
+            />
+          )
+        ) : (
+          <Pagination page={page} total={total} pageSize={perPage} onChange={goToPage} loading={loading} />
+        )}
       </div>
 
       <QrScanner
@@ -438,7 +388,7 @@ function ItemsContent() {
         onClose={() => setKitOpen(false)}
         onCreated={() => {
           setKitOpen(false);
-          fetchItems();
+          refetch();
         }}
       />
 
@@ -447,7 +397,7 @@ function ItemsContent() {
         open={bulkMoveOpen}
         onOpenChange={setBulkMoveOpen}
         items={items.filter((i) => selected.has(i.id)).map((i) => ({ id: i.id, code: i.code, name: i.name }))}
-        onSuccess={() => { clearSelection(); fetchItems(); }}
+        onSuccess={() => { clearSelection(); refetch(); }}
       />
     </div>
   );

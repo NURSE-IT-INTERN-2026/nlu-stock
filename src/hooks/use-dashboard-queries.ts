@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
 import {
   getDashboardRecentDispense,
   getDashboardRecentReceive,
@@ -21,36 +21,41 @@ function validate<T>(schema: import("zod").ZodSchema<T>, data: unknown): T {
 }
 
 export function useRecentDispense() {
-  return useQuery({
-    queryKey: ["dashboard", "recent-dispense"],
-    queryFn: async () => validate(DispenseRecordArraySchema, await getDashboardRecentDispense()),
-  });
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(DispenseRecordArraySchema, await getDashboardRecentDispense()),
+    [nonce],
+  );
 }
 
 export function useRecentReceive() {
-  return useQuery({
-    queryKey: ["dashboard", "recent-receive"],
-    queryFn: async () => validate(ReceiveRecordArraySchema, await getDashboardRecentReceive()),
-  });
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(ReceiveRecordArraySchema, await getDashboardRecentReceive()),
+    [nonce],
+  );
 }
 
 export function useTopDispense(categoryId?: string, profileId?: string) {
-  return useQuery({
-    queryKey: ["dashboard", "top-dispense", categoryId ?? "all", profileId ?? "all"],
-    queryFn: async () => validate(TopDispenseDataArraySchema, await getDashboardTopDispense(categoryId, profileId)),
-  });
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(TopDispenseDataArraySchema, await getDashboardTopDispense(categoryId, profileId)),
+    [nonce, categoryId ?? "all", profileId ?? "all"],
+  );
 }
 
 export function useUsageBySubject(categoryId?: string, profileId?: string) {
-  return useQuery({
-    queryKey: ["dashboard", "usage-by-subject", categoryId ?? "all", profileId ?? "all"],
-    queryFn: async () => validate(UsageByTypeDataArraySchema, await getDashboardUsageBySubject(categoryId, profileId)),
-  });
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(UsageByTypeDataArraySchema, await getDashboardUsageBySubject(categoryId, profileId)),
+    [nonce, categoryId ?? "all", profileId ?? "all"],
+  );
 }
 
 export function useDispenseMonthly() {
-  return useQuery({
-    queryKey: ["dashboard", "dispense-monthly"],
-    queryFn: async () => validate(MonthlyDispenseDataArraySchema, await getDashboardDispenseMonthly()),
-  });
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(MonthlyDispenseDataArraySchema, await getDashboardDispenseMonthly()),
+    [nonce],
+  );
 }

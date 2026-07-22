@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { QrPrintDialog } from "@/components/shared/qr-print-dialog";
-import { LocationCascadePicker } from "@/components/shared/location-cascade-picker";
+import { LocationCascadePicker, type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
 import { updateItem } from "@/lib/api";
 
 interface MoveItem {
@@ -26,7 +26,7 @@ interface Props {
 
 export function MoveLocationDialog({ open, onOpenChange, items, currentLocationId, onSuccess }: Props) {
   const itemIds = items.map((i) => i.id);
-  const [resolvedId, setResolvedId] = useState<string | null>(null);
+  const [ref, setRef] = useState<LocationRef>({ kind: "none" });
   const [resolvedName, setResolvedName] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -35,19 +35,23 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
 
   const effectiveItems = done ? doneItems : items;
   const bulk = effectiveItems.length > 1;
-  const canSave = !!resolvedId;
+  const canSave = ref.kind === "ok";
 
   const submit = async () => {
-    if (!resolvedId) return;
+    if (ref.kind !== "ok") return;
     setSaving(true);
+    // find-or-create the destination once (picker emits a descriptor, not an id).
+    const locationId = await resolveLocationId(ref).catch(() => null);
+    if (!locationId) { setSaving(false); toast.error("ย้ายที่ตั้งไม่สำเร็จ"); return; }
     // #4 allSettled — partial failure still surfaces moved count, no silent half-move.
-    const results = await Promise.allSettled(itemIds.map((id) => updateItem(id, { locationId: resolvedId })));
+    const results = await Promise.allSettled(itemIds.map((id) => updateItem(id, { locationId })));
     const moved = items.filter((_, i) => results[i]?.status === "fulfilled");
     const fail = itemIds.length - moved.length;
     setSaving(false);
     if (moved.length === 0) { toast.error("ย้ายที่ตั้งไม่สำเร็จ"); return; }
     if (fail > 0) toast.warning(`ย้าย ${moved.length} สำเร็จ, ล้มเหลว ${fail}`);
     else toast.success(bulk ? `ย้ายที่ตั้ง ${moved.length} รายการเรียบร้อย` : "ย้ายที่ตั้งเรียบร้อย");
+    setResolvedName(ref.name);
     setDoneItems(moved);
     setDone(true);
     onSuccess();
@@ -88,7 +92,7 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
           <div className="bg-secondary/40 px-6 py-5">
             <LocationCascadePicker
               initialLocationId={currentLocationId ?? null}
-              onChange={(id, name) => { setResolvedId(id); setResolvedName(name ?? ""); }}
+              onChange={setRef}
             />
           </div>
         )}

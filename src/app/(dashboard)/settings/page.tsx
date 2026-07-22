@@ -37,7 +37,7 @@ export default function SettingsPage() {
   }, [activeTabLabel, setDetail]);
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col">
       {/* Horizontal tabs */}
       <div className="border-b mb-4 sm:mb-6 -mx-4 px-4 sm:-mx-6 sm:px-6">
         <nav className="flex gap-1 -mb-px overflow-x-auto">
@@ -70,9 +70,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Content area */}
-      <div className="flex-1 min-h-0">
+      <div>
         {TABS.map(({ value, component: Component }) => (
-          <div key={value} className={`h-full min-h-0 ${activeTab === value ? "" : "hidden"}`}>
+          <div key={value} className={activeTab === value ? "" : "hidden"}>
             <Component />
           </div>
         ))}

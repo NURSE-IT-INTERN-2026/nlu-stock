@@ -156,7 +156,7 @@ export function ImportTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0 overflow-y-auto">
+    <div className="flex flex-col gap-5">
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { MapPin } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getPublicLocations } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Combobox } from "@/components/shared/combobox";
+import { getPublicLocations, findOrCreateLocation } from "@/lib/api";
 
 interface Loc {
   id: string;
@@ -14,20 +15,32 @@ interface Loc {
   name: string;
 }
 
-const NONE_DETAIL = "__none__";
+/** What the picker emits: a complete destination descriptor, or none. The
+ *  parent resolves it to an id at submit time (find-or-create) — the picker
+ *  never writes, so typing partial values can't create garbage locations. */
+export type LocationRef =
+  | { kind: "none" }
+  | { kind: "ok"; building: string; floor: string; room: string; detail: string | null; name: string };
+
+/** Resolve a LocationRef to a location id, creating the location if new. */
+export async function resolveLocationId(ref: LocationRef): Promise<string | null> {
+  if (ref.kind !== "ok") return null;
+  const loc = await findOrCreateLocation({ building: ref.building, floor: ref.floor, room: ref.room, detail: ref.detail });
+  return loc.id;
+}
 
 interface Props {
   /** seed the cascade from this location id once on mount */
   initialLocationId: string | null;
-  /** reports the resolved location whenever it changes */
-  onChange: (id: string | null, name?: string) => void;
+  /** reports the resolved destination descriptor whenever it changes */
+  onChange: (ref: LocationRef) => void;
   className?: string;
 }
 
 /**
- * Cascade picker: อาคาร → ชั้น → ห้อง → รายละเอียด.
- * Fetches public locations itself, seeds from initialLocationId, resolves to a single location id.
- * Shared by MoveLocationDialog and EditItemDialog.
+ * Location picker with creatable comboboxes (อาคาร → ชั้น → ห้อง/ตำแหน่ง → รายละเอียด).
+ * `noRoom` toggle = ของไม่ได้อยู่ในห้อง → ฟิลด์ "ตำแหน่ง" แทน "ห้อง". Every field accepts a
+ * brand-new value. Emits a LocationRef; shared by MoveLocationDialog + EditItemDialog.
  */
 export function LocationCascadePicker({ initialLocationId, onChange, className }: Props) {
   const [locs, setLocs] = useState<Loc[]>([]);
@@ -35,8 +48,10 @@ export function LocationCascadePicker({ initialLocationId, onChange, className }
   const [f, setF] = useState("");
   const [r, setR] = useState("");
   const [d, setD] = useState("");
+  const [noRoom, setNoRoom] = useState(false);
+  const [pos, setPos] = useState("");
 
-  // Fetch + seed once on mount (parents remount via key / fresh dialog open).
+  // Fetch + seed once on mount.
   useEffect(() => {
     let alive = true;
     getPublicLocations()
@@ -56,104 +71,87 @@ export function LocationCascadePicker({ initialLocationId, onChange, className }
   }, []);
 
   const buildings = useMemo(() => [...new Set(locs.map((l) => l.building))], [locs]);
-  const floors = useMemo(() => [...new Set(locs.filter((l) => l.building === b).map((l) => l.floor))], [locs, b]);
-  const rooms = useMemo(() => [...new Set(locs.filter((l) => l.building === b && l.floor === f).map((l) => l.room))], [locs, b, f]);
-  const detailOpts = useMemo(() => {
-    const at = locs.filter((l) => l.building === b && l.floor === f && l.room === r);
-    const nonNull = [...new Set(at.map((l) => l.detail).filter((x): x is string => !!x))];
-    const hasNull = at.some((l) => l.detail === null);
-    return [...(hasNull ? [NONE_DETAIL] : []), ...nonNull];
-  }, [locs, b, f, r]);
+  const floorsFor = (building: string) => [...new Set(locs.filter((l) => l.building === building).map((l) => l.floor))];
+  const roomsFor = (building: string, floor: string) => [...new Set(locs.filter((l) => l.building === building && l.floor === floor).map((l) => l.room))];
+  const detailsFor = (building: string, floor: string, room: string) => [...new Set(locs.filter((l) => l.building === building && l.floor === floor && l.room === room).map((l) => l.detail).filter((x): x is string => !!x))];
 
-  const { id: resolvedId, name: resolvedName } = useMemo(() => {
-    if (!b || !f || !r) return { id: null, name: "" };
-    const wantDetail = detailOpts.length > 0;
-    if (wantDetail && !d) return { id: null, name: "" };
-    const target = !wantDetail ? null : d === NONE_DETAIL ? null : d;
-    const found = locs.find((l) => l.building === b && l.floor === f && l.room === r && l.detail === target);
-    return { id: found?.id ?? null, name: found?.name ?? "" };
-  }, [locs, b, f, r, d, detailOpts]);
+  const room = (noRoom ? pos : r);
+  const detail = (!noRoom && d.trim()) ? d.trim() : null;
+  const bt = b.trim(), ft = f.trim(), rt = room.trim();
+  const key = (bt && ft && rt) ? `ok|${bt}|${ft}|${rt}|${detail ?? ""}` : "none";
 
-  // Report up — only once locations have loaded (avoid spurious null before seed).
   useEffect(() => {
-    if (locs.length === 0) return;
-    onChange(resolvedId, resolvedName);
+    if (locs.length === 0) return; // wait for seed before emitting
+    if (bt && ft && rt) {
+      onChange({ kind: "ok", building: bt, floor: ft, room: rt, detail, name: [bt, ft, rt, detail].filter(Boolean).join(" / ") });
+    } else {
+      onChange({ kind: "none" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedId, resolvedName, locs.length]);
+  }, [key, locs.length]);
 
-  const pick = (setter: (v: string) => void, reset: (() => void)[]) => (v: string | null) => {
-    if (v == null) return;
-    setter(v);
-    reset.forEach((fn) => fn());
+  const toggleNoRoom = (v: boolean) => {
+    setNoRoom(v);
+    setPos("");
   };
-  const resetFromFloor = () => { setF(""); setR(""); setD(""); };
-  const resetFromRoom = () => { setR(""); setD(""); };
-  const resetDetail = () => setD("");
 
-  const valText = (value: string, placeholder: string, fmt?: (v: string) => string) => (
-    <span className={value ? "text-foreground" : "text-muted-foreground"}>
-      {value ? (fmt ? fmt(value) : value) : placeholder}
-    </span>
-  );
-  const triggerCls = "w-full h-10 bg-card border-input shadow-none hover:bg-muted/40";
+  const inputCls = "w-full h-10 bg-card border-input shadow-none";
 
   return (
     <div className={className ?? "space-y-4"}>
+      {/* in-room / no-room segmented tabs */}
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+        <button
+          type="button"
+          onClick={() => toggleNoRoom(false)}
+          aria-pressed={!noRoom}
+          className={cn("rounded-md py-1.5 text-sm font-medium transition-colors", !noRoom ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+        >
+          อยู่ในห้อง
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleNoRoom(true)}
+          aria-pressed={noRoom}
+          className={cn("rounded-md py-1.5 text-sm font-medium transition-colors", noRoom ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+        >
+          ไม่มีห้องเฉพาะ
+        </button>
+      </div>
+      <p className="-mt-1 text-xs text-muted-foreground">{noRoom ? "ของไม่ได้อยู่ในห้อง — ระบุตำแหน่งแทน" : "เลือก อาคาร → ชั้น → ห้อง"}</p>
+
       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         <Field label="อาคาร">
-          <Select value={b} onValueChange={pick(setB, [resetFromFloor])}>
-            <SelectTrigger className={triggerCls}>
-              <SelectValue placeholder="เลือกอาคาร">{valText(b, "เลือกอาคาร")}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {buildings.map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <Combobox value={b} onChange={setB} options={buildings} placeholder="เช่น อาคาร 2" className={inputCls} />
         </Field>
         <Field label="ชั้น">
-          <Select value={f} onValueChange={pick(setF, [resetFromRoom])} disabled={!b}>
-            <SelectTrigger className={triggerCls}>
-              <SelectValue placeholder="เลือกชั้น">{valText(f, "เลือกชั้น")}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {floors.map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <Combobox value={f} onChange={setF} options={buildings.includes(b) ? floorsFor(b) : [...new Set(locs.map((l) => l.floor))]} placeholder="เช่น 4" className={inputCls} />
         </Field>
-        <Field label="ห้อง" className={detailOpts.length === 0 ? "col-span-2" : ""}>
-          <Select value={r} onValueChange={pick(setR, [resetDetail])} disabled={!f}>
-            <SelectTrigger className={triggerCls}>
-              <SelectValue placeholder="เลือกห้อง">{valText(r, "เลือกห้อง", (v) => `ห้อง ${v}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {rooms.map((x) => <SelectItem key={x} value={x}>{`ห้อง ${x}`}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </Field>
-        {detailOpts.length > 0 && (
-          <Field label="รายละเอียด">
-            <Select value={d} onValueChange={pick(setD, [])} disabled={!r}>
-              <SelectTrigger className={triggerCls}>
-                <SelectValue placeholder="เลือกรายละเอียด">
-                  {valText(d, "เลือกรายละเอียด", (v) => (v === NONE_DETAIL ? "ไม่มีรายละเอียด" : v))}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {detailOpts.map((x) => <SelectItem key={x} value={x}>{x === NONE_DETAIL ? "ไม่มีรายละเอียด" : x}</SelectItem>)}
-              </SelectContent>
-            </Select>
+
+        {noRoom ? (
+          <Field label="ตำแหน่ง" className="col-span-2">
+            <Combobox value={pos} onChange={setPos} options={b && f ? roomsFor(b, f) : [...new Set(locs.map((l) => l.room))]} placeholder="เช่น ล็อคเกอร์หน้าห้อง 402" className={inputCls} />
           </Field>
+        ) : (
+          <>
+            <Field label="ห้อง" className={detailsFor(b, f, r).length === 0 ? "col-span-2" : ""}>
+              <Combobox value={r} onChange={setR} options={b && f ? roomsFor(b, f) : [...new Set(locs.map((l) => l.room))]} placeholder="เช่น 402" className={inputCls} />
+            </Field>
+            {detailsFor(b, f, r).length > 0 && (
+              <Field label="รายละเอียด">
+                <Combobox value={d} onChange={setD} options={detailsFor(b, f, r)} placeholder="ไม่มีรายละเอียด" className={inputCls} />
+              </Field>
+            )}
+          </>
         )}
       </div>
 
-      <div className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 ${resolvedName ? "border-primary/30 bg-primary/5" : "border-border bg-card"}`}>
-        <MapPin className={`size-4 shrink-0 ${resolvedName ? "text-primary" : "text-muted-foreground/60"}`} />
-        {resolvedName ? (
-          <span className="text-sm font-medium text-foreground">{resolvedName}</span>
-        ) : (
-          <span className="text-sm text-muted-foreground">เลือกทีละขั้นจนครบ</span>
-        )}
-      </div>
+      {bt && ft && rt && (
+        <div className="flex items-center gap-1.5 text-sm">
+          <MapPin className="size-4 shrink-0 text-primary" />
+          <span className="font-medium text-foreground">{[bt, ft, rt, detail].filter(Boolean).join(" / ")}</span>
+        </div>
+      )}
     </div>
   );
 }
