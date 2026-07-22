@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, Layers, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -26,7 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PROFILE_ICON_OPTIONS, PROFILE_COLOR_OPTIONS, profileIcon } from "@/lib/profile-icons";
+import { PROFILE_COLOR_OPTIONS, profileIcon } from "@/lib/profile-icons";
+import { IconColorPicker } from "./icon-picker";
 
 const DISPENSE_OPTIONS: { value: "CONSUMABLE" | "COUNT" | "ITEM"; label: string }[] = [
   { value: "CONSUMABLE", label: "ใช้แล้วทิ้ง" },
@@ -37,6 +41,12 @@ const DISPENSE_OPTIONS: { value: "CONSUMABLE" | "COUNT" | "ITEM"; label: string 
 function dispenseLabel(d: string) {
   return DISPENSE_OPTIONS.find((o) => o.value === d)?.label ?? d;
 }
+
+const DISPENSE_HELP: Record<string, string> = {
+  CONSUMABLE: "ใช้แล้วหมดไป ต้องระบุเลขล็อตตอนรับเข้า",
+  COUNT: "ยืม-คืนได้ นับเป็นจำนวนรวม ไม่แยกรายชิ้น",
+  ITEM: "ยืม-คืนได้ ระบบสร้างรหัสย่อยติดตามแต่ละชิ้น",
+};
 
 interface FormState {
   name: string;
@@ -63,6 +73,15 @@ export function ProfilesTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProfileOption | null>(null);
+
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const fetchProfiles = useCallback(async () => {
     setLoading(true);
@@ -155,24 +174,119 @@ export function ProfilesTab() {
     );
   }
 
+  // ── Modal shell elements (shared by Dialog + Sheet) ──────────
+  const title = editing ? "แก้ไขประเภท" : "เพิ่มประเภท";
+  const subtitle = editing ? "แก้ไขข้อมูลประเภทหลัก" : "ตั้งค่าประเภทพัสดุหลัก";
+  const canSave = !form.name || !form.code || saving;
+
+  const modalHeader = (
+    <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Layers className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+      </div>
+      <button
+        onClick={() => setDialogOpen(false)}
+        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        aria-label="ปิด"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
+  const modalBody = (
+    <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="p-name" required>ชื่อประเภท</Label>
+          <Input id="p-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="เช่น ครุภัณฑ์ทางการแพทย์" className="bg-card" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="p-code" required>รหัสย่อ</Label>
+          <Input id="p-code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="MED" maxLength={6} className="bg-card font-mono uppercase" />
+          <p className="text-xs text-muted-foreground mt-1">ตัวอักษรภาษาอังกฤษพิมพ์ใหญ่ 2-6 ตัว — ใช้ในรหัสพัสดุ NLU-รหัส-001</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="p-dispense" required>ประเภทการเบิกจ่าย</Label>
+          <Select value={form.dispenseType} onValueChange={(v) => v && setForm({ ...form, dispenseType: v as FormState["dispenseType"] })}>
+            <SelectTrigger id="p-dispense" className="bg-card"><SelectValue>{dispenseLabel(form.dispenseType)}</SelectValue></SelectTrigger>
+            <SelectContent>
+              {DISPENSE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">{DISPENSE_HELP[form.dispenseType]}</p>
+        </div>
+        <div className="space-y-2 rounded-lg border bg-card p-3">
+          <div>
+            <p className="text-sm font-medium">ตั้งค่าเพิ่มเติม</p>
+            <p className="text-xs text-muted-foreground">เลือกได้อิสระ ไม่ผูกกับประเภทการเบิกจ่ายด้านบน</p>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5 pr-2">
+              <Label htmlFor="p-asset" className="text-sm">ติดตามทรัพย์สิน (จัดซื้อ/บำรุงรักษา)</Label>
+              <p className="text-xs text-muted-foreground">เปิดถ้าต้องขึ้นทะเบียนครุภัณฑ์ กรอกข้อมูลผู้ขาย ราคา รับประกัน และรอบซ่อมบำรุง</p>
+            </div>
+            <Switch id="p-asset" checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5 pr-2">
+              <Label htmlFor="p-set" className="text-sm">ติดตามเป็นชุด</Label>
+              <p className="text-xs text-muted-foreground">ใช้เมื่อ 1 หน่วยที่รับเข้าประกอบด้วยหลายชิ้นย่อย เช่น หนังสือ 1 ชุด มี 6 เล่ม</p>
+            </div>
+            <Switch id="p-set" checked={form.setTracking} onCheckedChange={(v) => setForm({ ...form, setTracking: v })} />
+          </div>
+          {editing && <p className="text-xs text-amber-600 mt-1">⚠ เปลี่ยนพฤติกรรมไม่ได้ถ้าประเภทนี้มีพัสดุอยู่</p>}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="p-icon">ไอคอนและสี</Label>
+          <IconColorPicker
+            icon={form.icon}
+            color={form.color}
+            onIconChange={(v) => setForm({ ...form, icon: v })}
+            onColorChange={(v) => setForm({ ...form, color: v })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="p-desc">รายละเอียด</Label>
+          <Textarea id="p-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="bg-card" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const modalFooter = (
+    <div className="flex items-center justify-between border-t border-border bg-card px-6 py-4">
+      <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+      <Button onClick={handleSave} disabled={canSave}>
+        {saving ? "กำลังบันทึก..." : editing ? "บันทึก" : "สร้าง"}
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0">
+    <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">จัดการประเภทหลัก — เพิ่ม/ซ่อน/ลบ ประเภทพัสดุ</p>
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มประเภท</Button>
       </div>
 
-      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
-        <Table>
+      <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <TableHead>ประเภท</TableHead>
-              <TableHead>รหัส</TableHead>
-              <TableHead>การเบิกจ่าย</TableHead>
-              <TableHead>Flags</TableHead>
-              <TableHead>หมวด</TableHead>
-              <TableHead>เปิดใช้</TableHead>
-              <TableHead className="w-[100px]">การดำเนินการ</TableHead>
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+              <TableHead className="px-2">ประเภท</TableHead>
+              <TableHead className="w-24 px-2">รหัส</TableHead>
+              <TableHead className="w-40 px-2">การเบิกจ่าย</TableHead>
+              <TableHead className="w-32 px-2">คุณสมบัติเพิ่มเติม</TableHead>
+              <TableHead className="w-20 px-2">หมวด</TableHead>
+              <TableHead className="w-20 px-2">เปิดใช้</TableHead>
+              <TableHead className="w-[100px] px-2">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -190,26 +304,26 @@ export function ProfilesTab() {
             ) : profiles.map((p) => {
               const Icon = profileIcon(p.icon);
               return (
-                <TableRow key={p.id} className={!p.isActive ? "opacity-50" : ""}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                <TableRow key={p.id} className={`h-9 [&>td]:py-1 ${!p.isActive ? "opacity-50" : ""}`}>
+                  <TableCell className="px-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className={`grid place-items-center size-7 rounded-lg ${p.color}`}><Icon className="h-4 w-4" /></span>
-                      <span className="font-medium">{p.name}</span>
+                      <span className="truncate min-w-0 font-medium">{p.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell><span className="font-mono text-xs">{p.code}</span></TableCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{dispenseLabel(p.dispenseType)}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-mono text-xs px-2"><span className="block truncate">{p.code}</span></TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap px-2">{dispenseLabel(p.dispenseType)}</TableCell>
+                  <TableCell className="px-2">
                     <div className="flex flex-wrap gap-1">
-                      {p.assetTracking && <Badge variant="secondary" className="text-[10px]">ทรัพย์สิน</Badge>}
-                      {p.setTracking && <Badge variant="secondary" className="text-[10px]">ชุด</Badge>}
+                      {p.assetTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ทรัพย์สิน</Badge>}
+                      {p.setTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ชุด</Badge>}
                     </div>
                   </TableCell>
-                  <TableCell>{p._count?.subCategories ?? 0}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs px-2 tabular-nums">{p._count?.subCategories ?? 0}</TableCell>
+                  <TableCell className="px-2">
                     <Switch checked={p.isActive} onCheckedChange={() => handleToggleActive(p)} aria-label="เปิด/ปิด" />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2">
                     <TooltipProvider>
                       <div className="flex gap-1">
                         <Tooltip>
@@ -234,73 +348,31 @@ export function ProfilesTab() {
         </Table>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? "แก้ไขประเภท" : "เพิ่มประเภท"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-            <div>
-              <Label htmlFor="p-name">ชื่อประเภท <span className="text-destructive">*</span></Label>
-              <Input id="p-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="เช่น ครุภัณฑ์ทางการแพทย์" />
+      {isDesktop ? (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
+            <DialogTitle className="sr-only">{title}</DialogTitle>
+            <DialogDescription className="sr-only">{subtitle}</DialogDescription>
+            <div className="flex max-h-[85vh] flex-col overflow-hidden">
+              {modalHeader}
+              {modalBody}
+              {modalFooter}
             </div>
-            <div>
-              <Label htmlFor="p-code">รหัสย่อ <span className="text-destructive">*</span></Label>
-              <Input id="p-code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="MED" maxLength={6} className="font-mono uppercase" />
-              <p className="text-xs text-muted-foreground mt-1">ตัวอักษรภาษาอังกฤษพิมพ์ใหญ่ 2-6 ตัว — ใช้ในรหัสพัสดุ NLU-รหัส-001</p>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+          <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl gap-0 p-0 overflow-hidden" showCloseButton={false}>
+            <SheetTitle className="sr-only">{title}</SheetTitle>
+            <SheetDescription className="sr-only">{subtitle}</SheetDescription>
+            <div className="flex h-full flex-col overflow-hidden">
+              {modalHeader}
+              {modalBody}
+              {modalFooter}
             </div>
-            <div>
-              <Label htmlFor="p-dispense">ประเภทการเบิกจ่าย <span className="text-destructive">*</span></Label>
-              <Select value={form.dispenseType} onValueChange={(v) => v && setForm({ ...form, dispenseType: v as FormState["dispenseType"] })}>
-                <SelectTrigger id="p-dispense"><SelectValue>{dispenseLabel(form.dispenseType)}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {DISPENSE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 rounded-lg border p-3">
-              <p className="text-sm font-medium">พฤติกรรมเสริม</p>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="p-asset" className="text-sm">ติดตามทรัพย์สิน (จัดซื้อ/บำรุงรักษา)</Label>
-                <Switch id="p-asset" checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="p-set" className="text-sm">ติดตามเป็นชุด (setSize)</Label>
-                <Switch id="p-set" checked={form.setTracking} onCheckedChange={(v) => setForm({ ...form, setTracking: v })} />
-              </div>
-              {editing && <p className="text-xs text-amber-600 mt-1">⚠ เปลี่ยนพฤติกรรมไม่ได้ถ้าประเภทนี้มีพัสดุอยู่</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="p-icon">ไอคอน</Label>
-                <Select value={form.icon} onValueChange={(v) => setForm({ ...form, icon: v ?? "Package" })}>
-                  <SelectTrigger id="p-icon"><SelectValue>{form.icon}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    {PROFILE_ICON_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="p-color">สี</Label>
-                <Select value={form.color} onValueChange={(v) => v && setForm({ ...form, color: v })}>
-                  <SelectTrigger id="p-color"><SelectValue>{PROFILE_COLOR_OPTIONS.find((c) => c.value === form.color)?.label ?? "เลือก"}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    {PROFILE_COLOR_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="p-desc">รายละเอียด</Label>
-              <Textarea id="p-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-            <Button onClick={handleSave} disabled={!form.name || !form.code || saving}>{editing ? "บันทึก" : "สร้าง"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>

@@ -12,6 +12,7 @@ interface StepSummaryProps {
   issueUnitName: string;
   codeMeta?: CodeMeta | null;
   initialQty?: number;
+  description?: string;
 }
 
 export function StepSummary({
@@ -23,6 +24,7 @@ export function StepSummary({
   issueUnitName,
   codeMeta,
   initialQty = 0,
+  description,
 }: StepSummaryProps) {
   const usageLabel = USAGE_OPTIONS.find((o) => o.id === usageType)?.title ?? "—";
 
@@ -36,6 +38,7 @@ export function StepSummary({
           <Row label="ชื่อพัสดุ" value={name || "—"} />
           <Row label="รหัสพัสดุ" value={code || "—"} />
           <Row label="รูปแบบใช้งาน" value={usageLabel} />
+          {description && <Row label="คำอธิบาย" value={description} />}
         </Section>
 
         {/* Section: หมวดหมู่ */}

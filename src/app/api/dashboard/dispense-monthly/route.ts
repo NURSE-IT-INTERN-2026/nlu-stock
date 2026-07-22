@@ -9,16 +9,16 @@ export async function GET(request: NextRequest) {
   if (auth.denied) return auth.denied;
 
   const now = new Date();
-  // last 6 months incl current
-  const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  // last 12 months incl current
+  const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
   const records = await prisma.dispenseRecord.findMany({
     where: { dispensedAt: { gte: start } },
     select: { dispensedAt: true, quantity: true },
   });
 
-  const buckets = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+  const buckets = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
     return { key: `${d.getFullYear()}-${d.getMonth()}`, month: MONTH_LABELS[d.getMonth()], total: 0 };
   });
 

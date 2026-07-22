@@ -24,31 +24,43 @@ const ITEM_INCLUDE = {
       issueUnit: { select: { name: true } },
       category: { select: { name: true, profile: { select: { dispenseType: true } } } },
       location: { select: { building: true, floor: true, room: true, detail: true } },
+      _count: { select: { subItems: true } },
     },
   },
-  subItem: { select: { id: true, subCode: true, serialNumber: true } },
+  subItem: { select: { id: true, subCode: true, name: true, serialNumber: true } },
   staff: { select: { name: true } },
 } as const;
 
 // Lists loans for the รับคืน tab grouped client-side by loanGroupId (one card per borrow event).
-// 2-step: find loanGroupIds with an open record, then fetch ALL records in those groups
+// 2-step: find loanGroupIds with an open BORROW record, then fetch ALL records in those groups
 // (including already-returned ones) so the UI can show "ค้าง X/Y". Legacy null-loanGroupId
-// records are returned singly (Y = X). Consumables are filtered out by profile type.
+// records are returned singly (Y = X). Consumables + INUSE (ตั้งใช้ในห้อง) are filtered out.
+// Keep every open loan EXCEPT per-unit (trackIndividually) INUSE — those return via
+// คืนเข้าพัสดุ (status route), not here. COUNT-type INUSE still returns numerically through
+// this screen, so it must stay visible. null loanType = legacy BORROW.
+// (Avoid NOT:{AND:[INUSE,tracked]} — Prisma over-filters it to 6 instead of 20; explicit OR is correct.)
+const NOT_TRACKED_INUSE = {
+  OR: [
+    { loanType: null },
+    { loanType: "BORROW" as const },
+    { AND: [{ loanType: "INUSE" as const }, { item: { trackIndividually: false } }] },
+  ],
+} satisfies Prisma.DispenseRecordWhereInput;
 export async function GET() {
   const auth = await requireAuth();
   if (auth.denied) return auth.denied;
 
   const open = await prisma.dispenseRecord.findMany({
-    where: { returnedAt: null, item: BORROWABLE },
+    where: { returnedAt: null, item: BORROWABLE, ...NOT_TRACKED_INUSE },
     select: { loanGroupId: true },
   });
   const groupIds = [...new Set(open.map((r) => r.loanGroupId).filter(Boolean) as string[])];
 
   const [grouped, legacy] = await Promise.all([
     groupIds.length
-      ? prisma.dispenseRecord.findMany({ where: { loanGroupId: { in: groupIds } }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } })
+      ? prisma.dispenseRecord.findMany({ where: { loanGroupId: { in: groupIds }, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } })
       : Promise.resolve([]),
-    prisma.dispenseRecord.findMany({ where: { returnedAt: null, loanGroupId: null, item: BORROWABLE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } }),
+    prisma.dispenseRecord.findMany({ where: { returnedAt: null, loanGroupId: null, item: BORROWABLE, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } }),
   ]);
 
   return NextResponse.json({ records: [...grouped, ...legacy] });

@@ -1,6 +1,6 @@
 // Re-export enums from Prisma generated client — single source of truth
 export { ItemStatus, Role, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
-import type { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
+import type { ItemStatus, AdjustmentReason, Role, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
 
 // ─── Item Condition (sub-item สภาพ) ───
 export const CONDITION_LABELS: Record<string, string> = {
@@ -10,6 +10,40 @@ export const CONDITION_LABELS: Record<string, string> = {
   FAIR: "สภาพพอใช้",
   UNUSABLE: "ใช้งานไม่ได้",
   DAMAGED: "ชำรุด",
+};
+
+// ─── Role ───
+export const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: "ผู้ดูแล",
+  STAFF: "เจ้าหน้าที่",
+  INSTRUCTOR: "ผู้สอน",
+  CHILDREN: "นักศึกษา",
+};
+
+// ─── Maintenance ───
+export const MAINT_TYPE_LABELS: Record<MaintenanceType, string> = {
+  PREVENTIVE: "ตรวจบำรุง",
+  CORRECTIVE: "ซ่อมแซม",
+};
+
+export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
+  AVAILABLE: "พร้อมใช้งาน",
+  NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
+  DISPOSED: "ตัดจำหน่าย",
+};
+
+// ─── Timeline event type ───
+export type TimelineEventType =
+  | "DISPENSE" | "RECEIVE" | "ADJUSTMENT"
+  | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
+
+export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
+  DISPENSE: "เบิก",
+  RECEIVE: "รับเข้า",
+  ADJUSTMENT: "ปรับสต๊อก",
+  STATUS_CHANGE: "เปลี่ยนสถานะ",
+  MAINTENANCE: "บำรุงรักษา",
+  LOCATION_CHANGE: "ที่ตั้ง",
 };
 
 // ─── Category ───
@@ -35,18 +69,39 @@ export const USAGE_TYPE_OPTIONS = [
 
 export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   LOST: "สูญหาย",
-  DAMAGED_PENDING_REPAIR: "เสียหาย (รอซ่อม)",
+  DAMAGED_PENDING_REPAIR: "เสียหาย/ชำรุด",
   COUNT_MISMATCH_SHORT: "นับแล้วขาด",
   COUNT_MISMATCH_OVER: "นับแล้วเกิน",
-  DISPOSAL: "กำจัด (พ้นสภาพ)",
+  DISPOSAL: "ตัดจำหน่าย",
   ASSEMBLY: "ประกอบเป็นชุด",
   OTHER: "อื่นๆ",
 };
 
-export const ADJUSTMENT_REASON_OPTIONS = Object.entries(ADJUSTMENT_REASON_LABELS)
-  .map(([value, label]) => ({ value, label })) as { value: AdjustmentReason; label: string }[];
+// What the staff member is DOING, picked first in the adjust dialog — the choice
+// decides how qty is entered: STOCK_COUNT asks for the counted total (absolute,
+// stamps the count cycle), every other mode asks how many pieces leave the shelf
+// (relative), because "ทิ้งขวดหมดอายุ 3 ขวด" should not require doing 50-3 in your head.
+// Excluded from the list (still in the enum for history/other flows):
+//   ASSEMBLY — system-driven (kit assembly in api/kits)
+//   DAMAGED_PENDING_REPAIR — entered via the "แจ้งชำรุด" tile (fixedReason)
+//   COUNT_MISMATCH_SHORT/OVER — server-assigned from a count's delta, never picked by hand
+export const STOCK_COUNT_MODE = "STOCK_COUNT";
+export const ADJUST_MODE_OPTIONS: { value: string; label: string; hint: string }[] = [
+  { value: STOCK_COUNT_MODE, label: "ตรวจนับตามรอบ", hint: "กรอกยอดที่นับได้จริง — ระบบเทียบกับยอดในระบบให้" },
+  { value: "DISPOSAL", label: "ตัดจำหน่าย", hint: "ของหมดอายุ/ใช้ไม่ได้ ทิ้งออกจากระบบ" },
+  { value: "LOST", label: "สูญหาย", hint: "หาไม่เจอ ไม่ทราบสาเหตุ" },
+  { value: "OTHER", label: "อื่นๆ", hint: "แก้ยอดให้ตรงความจริง ระบุเหตุผลในหมายเหตุ" },
+];
 
-export const STATUS_LABELS: Record<string, string> = {
+// Reasons a short count can carry — default LOST, but stock thrown away between
+// counts is DISPOSAL, not missing stock.
+export const COUNT_SHORT_REASON_OPTIONS: { value: string; label: string }[] = [
+  { value: "LOST", label: "สูญหาย" },
+  { value: "DISPOSAL", label: "ตัดจำหน่าย (ทิ้งไปแล้ว)" },
+  { value: "OTHER", label: "อื่นๆ" },
+];
+
+export const STATUS_LABELS = {
   AVAILABLE: "พร้อมใช้งาน",
   ON_LOAN: "ถูกยืม",
   IN_USE: "ถูกใช้งาน",
@@ -55,14 +110,17 @@ export const STATUS_LABELS: Record<string, string> = {
   LOST: "สูญหาย",
   PENDING_MAINTENANCE: "บำรุงรักษา",
   DISPOSED: "ตัดจำหน่าย",
-};
+} satisfies Record<ItemStatus, string>;
 
-// Target statuses offered when adjusting a tracked (per-piece) item via the adjust dialog.
-export const TRACKED_ADJUST_STATUS_OPTIONS: { value: ItemStatus; label: string }[] = (
-  ["LOST", "DISPOSED"] as ItemStatus[]
-).map((value) => ({ value, label: STATUS_LABELS[value] }));
+// Manual statuses a staff member may set on a sub-item via batch SET / edit dialog.
+// System-driven statuses are excluded — they're owned by other flows:
+//   ON_LOAN (dispense/borrow), IN_USE (receive/deploy),
+//   PENDING_MAINTENANCE (maintenance schedule), UNDER_REPAIR (maintenance record).
+export const MANUAL_SETTABLE_STATUS_OPTIONS: ItemStatus[] = [
+  "AVAILABLE", "DAMAGED", "LOST", "DISPOSED",
+];
 
-export const STATUS_COLORS: Record<string, string> = {
+export const STATUS_COLORS = {
   AVAILABLE: "#22c55e",
   ON_LOAN: "#3b82f6",
   IN_USE: "#6366f1",
@@ -71,9 +129,9 @@ export const STATUS_COLORS: Record<string, string> = {
   LOST: "#a855f7",
   PENDING_MAINTENANCE: "#06b6d4",
   DISPOSED: "#9ca3af",
-};
+} satisfies Record<ItemStatus, string>;
 
-export const STATUS_PILLS: Record<string, string> = {
+export const STATUS_PILLS = {
   AVAILABLE: "bg-success/15 text-success border-success/30",
   ON_LOAN: "bg-info-500/15 text-info-500 border-info-500/30",
   IN_USE: "bg-indigo-500/15 text-indigo-500 border-indigo-500/30",
@@ -82,9 +140,9 @@ export const STATUS_PILLS: Record<string, string> = {
   LOST: "bg-purple-500/15 text-purple-500 border-purple-500/30",
   DISPOSED: "bg-muted text-muted-foreground border-border",
   PENDING_MAINTENANCE: "bg-cyan-500/15 text-cyan-600 border-cyan-500/30",
-};
+} satisfies Record<ItemStatus, string>;
 
-export const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+export const STATUS_VARIANTS = {
   AVAILABLE: "default",
   ON_LOAN: "secondary",
   IN_USE: "secondary",
@@ -93,7 +151,56 @@ export const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destruct
   LOST: "destructive",
   DISPOSED: "outline",
   PENDING_MAINTENANCE: "secondary",
+} satisfies Record<ItemStatus, "default" | "secondary" | "destructive" | "outline">;
+
+// Non-tracked items (consumable / COUNT durable) have no per-unit lifecycle status —
+// their stock state derives from available/total. COUNT (ยืม-คืน) has a middle "on loan"
+// band; consumables only deplete (no borrowing) so they're binary. Used by the item
+// detail headline + master list pill. Tracked items keep the ItemStatus enum.
+export type NonTrackedStockKey = "AVAILABLE" | "ON_LOAN" | "OUT";
+
+export const NON_TRACKED_STOCK_LABELS: Record<NonTrackedStockKey, string> = {
+  AVAILABLE: "พร้อมใช้งาน",
+  ON_LOAN: "ถูกยืม",
+  OUT: "ไม่พร้อมใช้งาน",
 };
+
+export const NON_TRACKED_STOCK_PILLS: Record<NonTrackedStockKey, string> = {
+  AVAILABLE: STATUS_PILLS.AVAILABLE,
+  ON_LOAN: STATUS_PILLS.ON_LOAN,
+  OUT: "bg-destructive/15 text-destructive border-destructive/30",
+};
+
+export function nonTrackedStockKey(
+  dispenseType: "CONSUMABLE" | "COUNT" | "ITEM",
+  available: number,
+  total: number,
+): NonTrackedStockKey {
+  if (available <= 0) return "OUT";
+  if (dispenseType !== "CONSUMABLE" && available < total) return "ON_LOAN";
+  return "AVAILABLE";
+}
+
+// Status pill {cls, label} for a list row. Tracked → ItemStatus enum pill;
+// non-tracked → a manually set lifecycle status if there is one (recompute keeps it),
+// otherwise the derived stock state via nonTrackedStockKey. Shared by the master
+// tab + inventory list so the two stay consistent.
+export function statusDisplay(item: {
+  trackIndividually: boolean;
+  status: ItemStatus;
+  availableQty: number;
+  totalQty: number;
+  category: { profile?: { dispenseType?: "CONSUMABLE" | "COUNT" | "ITEM" } | null };
+}): { cls: string; label: string } {
+  if (!item.trackIndividually) {
+    if (item.status !== "AVAILABLE" && item.status !== "ON_LOAN") {
+      return { cls: STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border", label: STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ") };
+    }
+    const key = nonTrackedStockKey(item.category.profile?.dispenseType ?? "COUNT", item.availableQty, item.totalQty);
+    return { cls: NON_TRACKED_STOCK_PILLS[key], label: NON_TRACKED_STOCK_LABELS[key] };
+  }
+  return { cls: STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border", label: STATUS_LABELS[item.status] ?? item.status.replace(/_/g, " ") };
+}
 
 // ─── Location label helper ───
 
@@ -105,4 +212,24 @@ export function locationLabel(loc: { building: string; floor: string; room: stri
 // subCode may be stored as suffix ("C01") or full ("ITM001-01"); show full, avoid doubling prefix.
 export function formatSubCode(itemCode: string, subCode: string): string {
   return subCode.startsWith(itemCode) ? subCode : `${itemCode}-${subCode}`;
+}
+
+/**
+ * Display code for a tracked item's piece. Per the single-copy rule:
+ * 1 copy → base code (the single piece IS the item); ≥2 copies → itemCode-subCode.
+ * `subCount` = number of sub-items on the parent item. Pass the count you have in
+ * scope (item.subItems.length, item._count.subItems, etc.).
+ */
+export function effectiveCode(itemCode: string, subCode: string | null | undefined, subCount: number): string {
+  if (!subCode || subCount <= 1) return itemCode;
+  return formatSubCode(itemCode, subCode);
+}
+
+// ─── Label lookup helper ───
+// Type-safe over E: the map must be exhaustive (Record<E, string>) so a missing
+// member errors at compile time, and `key` is typed E so a typo'd enum at the
+// call site is caught. When the source value is a plain `string` (e.g. API JSON),
+// cast at the boundary: labelFor(ROLE_LABELS, user.role as Role).
+export function labelFor<E extends string>(map: Record<E, string>, key: E): string {
+  return map[key] ?? key;
 }

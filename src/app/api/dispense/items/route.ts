@@ -1,17 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/api-utils";
+import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth.denied) return auth.denied;
 
-  const { searchParams } = new URL(req.url);
+  const searchParams = getSearchParams(req);
+  const { page, perPage, skip, take } = paginate(searchParams);
+
   const q = searchParams.get("q")?.trim() ?? "";
   const categoryId = searchParams.get("categoryId") ?? "";
   const profileId = searchParams.get("profileId") ?? "";
-  const page = parseInt(searchParams.get("page") ?? "1");
-  const limit = parseInt(searchParams.get("limit") ?? "20");
 
   // Location cascade filter (building → floor → room → detail)
   const building = searchParams.get("building") ?? "";
@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
         issueUnit: { select: { id: true, name: true } },
         lots: {
           where: { remainingQty: { gt: 0 } },
-          orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }],
+          // FEFO first; date-coded lots (no expiry) all tie, so fall back to FIFO on
+          // receivedDate — otherwise their order is whatever the DB feels like.
+          orderBy: [{ expiryDate: { sort: "asc", nulls: "last" } }, { receivedDate: "asc" }],
           select: { id: true, lotNumber: true, expiryDate: true, remainingQty: true },
         },
         subItems: {
@@ -59,11 +61,11 @@ export async function GET(req: NextRequest) {
         location: { select: { building: true, floor: true, room: true, detail: true } },
       },
       orderBy: { name: "asc" },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip,
+      take,
     }),
     prisma.item.count({ where }),
   ]);
 
-  return NextResponse.json({ items, total, page, limit });
+  return json({ items, total, page, perPage });
 }

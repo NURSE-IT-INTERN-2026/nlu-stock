@@ -70,7 +70,7 @@ export function StepItemDetails({
     <div className="space-y-6">
       {/* Name */}
       <div className="space-y-2">
-        <Label htmlFor="item-name">ชื่อพัสดุ <span className="text-destructive">*</span></Label>
+        <Label htmlFor="item-name" required>ชื่อพัสดุ</Label>
         <Input
           id="item-name"
           placeholder="เช่น ปากกาลูกลื่น, สว่านไฟฟ้า"
@@ -167,7 +167,7 @@ export function StepItemDetails({
       {/* Usage type picker */}
       <div className="space-y-3">
         <div>
-          <Label id="usage-group-label">ของชิ้นนี้ใช้งานยังไง? <span className="text-destructive">*</span></Label>
+          <Label id="usage-group-label" required>ของชิ้นนี้ใช้งานยังไง?</Label>
           <p className="mt-0.5 text-xs text-muted-foreground">
             เลือกรูปแบบการใช้งานเพื่อกำหนดวิธีติดตามสต็อก
           </p>

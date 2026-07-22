@@ -29,12 +29,20 @@ export function isItemTracked(p: ProfileLike | null | undefined): boolean {
 
 // ── Profile-driven item field enforcement (D4) ──
 
-/** Fixed-asset fields only meaningful when profile.assetTracking is true. */
+/** Procurement/warranty fields only meaningful when profile.assetTracking is true. */
 const ASSET_FIELDS = [
   "model", "purchaseDate", "purchasePrice",
   "vendorCompany", "vendorContact", "vendorPhone",
-  "warrantyMonths", "maintenanceCycleMonths",
-  "lastMaintenanceDate", "nextMaintenanceDate", "manualUrl",
+  "warrantyMonths", "manualUrl",
+] as const;
+
+/**
+ * Maintenance is not a ครุภัณฑ์-only concern — วัสดุคงทน and หนังสือ/ของเล่น get
+ * repaired and serviced too, so they own a cycle. Only consumables are excluded:
+ * they're used up, never maintained.
+ */
+const MAINTENANCE_FIELDS = [
+  "maintenanceCycleMonths", "lastMaintenanceDate", "nextMaintenanceDate",
 ] as const;
 
 /**
@@ -49,6 +57,9 @@ export function sanitizeItemByProfile(
   if (!profile) return;
   if (!profile.assetTracking) {
     for (const f of ASSET_FIELDS) delete data[f];
+  }
+  if (profile.dispenseType === "CONSUMABLE") {
+    for (const f of MAINTENANCE_FIELDS) delete data[f];
   }
   if (!profile.setTracking) {
     data.setSize = 1;

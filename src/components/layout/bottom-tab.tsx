@@ -9,6 +9,7 @@ import { logout } from "@/lib/api";
 import {
   Sheet,
   SheetContent,
+  SheetClose,
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -45,86 +46,89 @@ export function BottomTab({ user }: BottomTabProps) {
   }
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-center justify-around h-14 sm:h-16">
-        {visibleTabs.map((tab) => {
-          const Icon = tab.icon;
-          const showBadge = tab.href === "/alerts" && alerts.total > 0;
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={cn(
-                "flex flex-1 min-w-0 flex-col items-center gap-0.5 px-0.5 py-1.5 text-[10px] relative",
-                isActive(tab.href)
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              )}
-            >
-              {isActive(tab.href) && (
-                <motion.span
-                  layoutId="bottom-tab-active"
-                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                  className="absolute top-0 left-1/2 -ml-4 h-1 w-8 rounded-full bg-primary"
-                />
-              )}
-              <Icon className="h-6 w-6" />
-              <span className="leading-none whitespace-nowrap">{tab.label}</span>
-              {showBadge && (
-                <span className="absolute -top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
-                  {alerts.total}
+    <nav className="lg:hidden fixed inset-x-0 bottom-0 z-50 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto max-w-md px-3 pb-3">
+        <div className="flex items-center justify-around rounded-3xl border border-border/60 bg-card/95 px-2 py-2 shadow-[0_-8px_30px_-10px_oklch(0.2_0.04_60/0.15)] backdrop-blur">
+          {visibleTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = isActive(tab.href);
+            const showBadge = tab.href === "/alerts" && alerts.total > 0;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={cn(
+                  "relative flex flex-1 min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-1 text-[11px] transition",
+                  active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className="relative grid size-9 place-items-center rounded-xl">
+                  {active && (
+                    <motion.span
+                      layoutId="bottom-tab-active"
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-primary/60 shadow-sm"
+                    />
+                  )}
+                  <Icon className={cn("relative size-5", active && "text-primary-foreground")} />
+                  {showBadge && (
+                    <span className="absolute -right-1 -top-1 z-10 grid min-w-[18px] place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white ring-2 ring-card">
+                      {alerts.total}
+                    </span>
+                  )}
                 </span>
-              )}
-            </Link>
-          );
-        })}
+                <span className={cn("leading-none whitespace-nowrap", active && "font-semibold")}>{tab.label}</span>
+              </Link>
+            );
+          })}
 
-        <Sheet>
-          <SheetTrigger
-            render={(props) => (
-              <button {...props} className="flex flex-1 min-w-0 flex-col items-center gap-0.5 px-0.5 py-1.5 text-[10px] text-muted-foreground">
-                <MoreHorizontal className="h-6 w-6" />
-                <span className="leading-none whitespace-nowrap">เพิ่มเติม</span>
-              </button>
-            )}
-          />
-          <SheetContent side="bottom" className="h-auto rounded-t-xl">
-            <SheetTitle className="sr-only">เมนูเพิ่มเติม</SheetTitle>
-            <div className="space-y-1 pb-4">
-              <Link
-                href="/maintenance"
-                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
-              >
-                <Wrench className="h-4 w-4" />
-                บำรุงรักษา
-              </Link>
-              <Link
-                href="/reports"
-                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
-              >
-                <BarChart3 className="h-4 w-4" />
-                รายงาน
-              </Link>
-              {user.role === "ADMIN" && (
-                <Link
-                  href="/settings"
-                  className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
-                >
-                  <Settings className="h-4 w-4" />
-                  ตั้งค่า
-                </Link>
+          <Sheet>
+            <SheetTrigger
+              render={(props) => (
+                <button {...props} className="flex flex-1 min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-1 text-[11px] text-muted-foreground transition hover:text-foreground">
+                  <span className="grid size-9 place-items-center rounded-xl">
+                    <MoreHorizontal className="size-5" />
+                  </span>
+                  <span className="leading-none whitespace-nowrap">เพิ่มเติม</span>
+                </button>
               )}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-destructive hover:bg-accent"
-              >
-                <LogOut className="h-4 w-4" />
-                ออกจากระบบ
-              </button>
-            </div>
-          </SheetContent>
-        </Sheet>
+            />
+            <SheetContent side="bottom" className="h-auto rounded-t-xl">
+              <SheetTitle className="sr-only">เมนูเพิ่มเติม</SheetTitle>
+              <div className="space-y-1 pb-4">
+                <SheetClose
+                  nativeButton={false}
+                  render={<Link href="/maintenance" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
+                >
+                  <Wrench className="h-4 w-4" />
+                  บำรุงรักษา
+                </SheetClose>
+                <SheetClose
+                  nativeButton={false}
+                  render={<Link href="/reports" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  รายงาน
+                </SheetClose>
+                {user.role === "ADMIN" && (
+                  <SheetClose
+                    nativeButton={false}
+                    render={<Link href="/settings" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
+                  >
+                    <Settings className="h-4 w-4" />
+                    ตั้งค่า
+                  </SheetClose>
+                )}
+                <SheetClose
+                  render={<button type="button" onClick={handleLogout} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-destructive hover:bg-accent" />}
+                >
+                  <LogOut className="h-4 w-4" />
+                  ออกจากระบบ
+                </SheetClose>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
     </nav>
   );

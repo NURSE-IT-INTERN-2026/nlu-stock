@@ -133,7 +133,7 @@ export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "
       ) : null}
       <div>
         <input ref={inputRef} type="file" accept={accept} onChange={handleFileChange} className="hidden" disabled={uploading} />
-        <Button variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
+        <Button variant="outline" size="sm" className="bg-card" disabled={uploading} onClick={() => inputRef.current?.click()}>
           {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
           {uploading ? "กำลังอัปโหลด..." : label}
         </Button>

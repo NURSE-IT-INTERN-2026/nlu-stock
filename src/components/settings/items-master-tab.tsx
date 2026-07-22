@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import {
-  Plus, Pencil, Trash2, ChevronLeft, ChevronRight,
-  ChevronDown, ChevronRight as ExpandIcon, QrCode, Package,
+  Plus, Pencil, Trash2,
+  QrCode, Package, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +16,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SubCodesManager } from "./sub-codes-manager";
 import { QrPrintDialog } from "@/components/shared/qr-print-dialog";
 import { EditItemDialog } from "@/components/shared/edit-item-dialog";
-import { locationLabel, STATUS_PILLS, STATUS_LABELS } from "@/lib/constants";
+import { locationLabel, statusDisplay, type ItemStatus } from "@/lib/constants";
 import { getSettingsItems, deleteSettingsItem } from "@/lib/api";
 import { AddItemModal } from "@/components/shared/add-item-modal";
 import type { CategoryOption, LocationOption, ProfileOption, UnitOption } from "@/lib/api";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
-import { usePagination } from "@/hooks/use-pagination";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { ItemsFilterBar, EMPTY_FILTER, type FilterState } from "@/components/items/items-filter-bar";
 import {
   AlertDialog,
@@ -44,7 +47,7 @@ interface ItemRecord {
   categoryId: string;
   category: CategoryOption;
   trackIndividually: boolean;
-  status: string;
+  status: ItemStatus;
   issueUnitId: string;
   issueUnit: UnitOption;
   minThreshold: number;
@@ -69,19 +72,12 @@ interface ItemRecord {
   borrowable: boolean;
 }
 
-// Local labels for this tab
-const STATUS_THAI: Record<string, string> = {
-  ...STATUS_LABELS,
-  INACTIVE: "ปิดใช้งาน",
-};
-
 export function ItemsMasterTab() {
-  const [items, setItems] = useState<ItemRecord[]>([]);
+  const isMobile = useIsMobile();
   const { categories } = useCategories();
   const { locations } = useLocations();
-  const { page, setPage, perPage, total, setTotal, totalPages } = usePagination(20);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
+  const perPage = PAGE_SIZE.DEFAULT;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
@@ -100,13 +96,12 @@ export function ItemsMasterTab() {
 
   const handleFilterChange = useCallback((next: FilterState) => {
     setFilter(next);
-    setPage(1);
-  }, [setPage]);
+    setSelectedIds(new Set());
+  }, []);
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true);
+  const fetchPage = useCallback(async (p: number) => {
     const params: Record<string, string> = {
-      page: String(page),
+      page: String(p),
       perPage: String(perPage),
     };
     if (filter.query) params.search = filter.query;
@@ -119,13 +114,17 @@ export function ItemsMasterTab() {
     if (filter.location.detail) params.detail = filter.location.detail;
 
     const data = await getSettingsItems(params);
-    setItems((data.items || []) as ItemRecord[]);
-    setTotal(data.total || 0);
-    setLoading(false);
-  }, [page, perPage, filter]);
+    return { items: (data.items || []) as ItemRecord[], total: data.total || 0 };
+  }, [filter, perPage]);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEffect(() => { setSelectedIds(new Set()); }, [page, filter]);
+  const {
+    items, total, page, loading, isLoadingMore, hasNext, loadMore, setPage, refetch,
+  } = usePagedList<ItemRecord>({ fetchPage, pageSize: perPage, isMobile });
+
+  const goToPage = useCallback((p: number) => {
+    setSelectedIds(new Set());
+    setPage(p);
+  }, [setPage]);
 
   function openCreate() {
     setAddItemOpen(true);
@@ -144,8 +143,8 @@ export function ItemsMasterTab() {
     if (!deleteTarget) return;
     try {
       await deleteSettingsItem(deleteTarget.id);
-      toast.success("ลบรายการสำเร็จ");
-      fetchItems();
+      toast.success("ปิดใช้งานพัสดุแล้ว");
+      refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
@@ -153,7 +152,7 @@ export function ItemsMasterTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0">
+    <div className="flex flex-col gap-5">
       <ItemsFilterBar
         profiles={profiles}
         categories={categories}
@@ -165,6 +164,7 @@ export function ItemsMasterTab() {
         onScanQR={() => {}}
         hideScan
         hideAlertPicker
+        allStatuses
         trailingAction={
           <div className="flex gap-2 w-full">
             {selectedIds.size > 0 && (
@@ -181,11 +181,11 @@ export function ItemsMasterTab() {
         }
       />
       {/* Table — hero zone, most visual weight */}
-      <div className="rounded-2xl border overflow-hidden bg-card shadow-sm flex-1 min-h-0 flex flex-col">
-        <div className="hidden md:block overflow-auto flex-1 min-h-0">
-        <Table>
+      <div className="rounded-2xl border bg-card shadow-sm flex flex-col md:overflow-clip">
+        <div className="hidden md:block">
+        <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
               <TableHead className="w-[48px] pl-4">
                 <Checkbox
                   checked={items.length > 0 && items.every((i) => selectedIds.has(i.id))}
@@ -199,13 +199,13 @@ export function ItemsMasterTab() {
                   aria-label="เลือกทั้งหมด"
                 />
               </TableHead>
-              <TableHead>รหัส</TableHead>
-              <TableHead>ชื่อพัสดุ</TableHead>
-              <TableHead>หมวดหมู่</TableHead>
-              <TableHead>หน่วย</TableHead>
-              <TableHead>สถานที่</TableHead>
-              <TableHead>สถานะ</TableHead>
-              <TableHead className="w-[100px]">จัดการ</TableHead>
+              <TableHead className="w-28 px-2">รหัส</TableHead>
+              <TableHead className="px-2">ชื่อพัสดุ</TableHead>
+              <TableHead className="w-40 px-2 hidden xl:table-cell">หมวดหมู่</TableHead>
+              <TableHead className="w-24 px-2 hidden xl:table-cell">หน่วย</TableHead>
+              <TableHead className="w-44 px-2">สถานที่</TableHead>
+              <TableHead className="w-32 px-2">สถานะ</TableHead>
+              <TableHead className="w-[100px] px-2">จัดการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -230,7 +230,7 @@ export function ItemsMasterTab() {
             ) : items.map((item) => (
               <React.Fragment key={item.id}>
                 <TableRow
-                  className={`group ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                  className={`group h-9 [&>td]:py-1 ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
                   onClick={(e) => {
                     if (!(e.target as HTMLElement).closest("input[type='checkbox'], button, a")) {
                       if (item.trackIndividually && item._count.subItems > 1) {
@@ -250,33 +250,27 @@ export function ItemsMasterTab() {
                       aria-label={`เลือก ${item.code}`}
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    <div className="flex items-center gap-1">
-                      {item.trackIndividually && item._count.subItems > 1 && (
-                        <button type="button" aria-label="ดู sub-codes" onClick={() => setExpandedRow(expandedRow === item.id ? null : item.id)} className="grid size-6 shrink-0 place-items-center hover:bg-muted rounded">
-                          {expandedRow === item.id ? <ChevronDown className="h-3.5 w-3.5" /> : <ExpandIcon className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
-                      {item.code}
+                  <TableCell className="font-mono text-xs px-2">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="block truncate">{item.code}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div>
-                      <span className="font-medium">{item.name}</span>
-                      {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
+                  <TableCell className="px-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate min-w-0"><span className="font-medium">{item.name}</span>{item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}</span>
+                      {item.trackIndividually && item._count.subItems > 1 && <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-2.5" />{item._count.subItems}</Badge>}
+                      {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="shrink-0 h-4 px-1 text-[10px] bg-amber-50 text-amber-700 border-amber-200">ไม่มี SubItem</Badge>}
                     </div>
-                    {item.trackIndividually && item._count.subItems > 1 && <Badge variant="secondary" className="text-xs mt-0.5">ติดตาม ({item._count.subItems})</Badge>}
-                    {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs mt-0.5 bg-amber-50 text-amber-700 border-amber-200">ยังไม่มี SubItem — เบิกไม่ได้</Badge>}
                   </TableCell>
-                  <TableCell><Badge variant="outline">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
-                  <TableCell className="text-sm">{item.issueUnit.name}</TableCell>
-                  <TableCell className="text-sm">{item.location ? locationLabel(item.location) : "-"}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
-                      {STATUS_THAI[item.status] ?? item.status.replace(/_/g, " ")}
+                  <TableCell className="px-2 hidden xl:table-cell"><Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
+                  <TableCell className="text-xs px-2 hidden xl:table-cell"><span className="block truncate">{item.issueUnit.name}</span></TableCell>
+                  <TableCell className="text-xs px-2"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
+                  <TableCell className="px-2">
+                    <span className={`inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium ${statusDisplay(item).cls}`}>
+                      {statusDisplay(item).label}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2">
                     <TooltipProvider>
                       <div className="flex gap-1">
                         <Tooltip>
@@ -309,7 +303,7 @@ export function ItemsMasterTab() {
         </div>
 
         {/* Mobile: stacked cards (no horizontal scroll) */}
-        <div className="divide-y divide-border md:hidden overflow-auto flex-1 min-h-0">
+        <div className="divide-y divide-border md:hidden">
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="px-4 py-3"><Skeleton className="h-12 w-full" /></div>
@@ -344,15 +338,12 @@ export function ItemsMasterTab() {
                   >
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
-                      {canExpand && (
-                        expandedRow === item.id
-                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                          : <ExpandIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
                     </div>
-                    <div className="mt-0.5 font-medium leading-tight">
-                      {item.name}
+                    <div className="mt-0.5 font-medium leading-tight flex flex-wrap items-center gap-1.5">
+                      <span className="truncate">{item.name}</span>
                       {item.nameEn && <span className="text-muted-foreground"> ({item.nameEn})</span>}
+                      {canExpand && <Badge variant="outline" className="gap-0.5 px-1.5 py-0 text-[11px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-3" />{item._count.subItems}</Badge>}
+                      {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-orange-200">ไม่มี SubItem</Badge>}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                       <span>{item.category.profile?.name ?? item.category.name}</span>
@@ -360,11 +351,9 @@ export function ItemsMasterTab() {
                       {item.location && <span>· {locationLabel(item.location)}</span>}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILLS[item.status] || "bg-muted text-muted-foreground border-border"}`}>
-                        {STATUS_THAI[item.status] ?? item.status.replace(/_/g, " ")}
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${statusDisplay(item).cls}`}>
+                        {statusDisplay(item).label}
                       </span>
-                      {canExpand && <Badge variant="secondary" className="text-xs">ติดตาม ({item._count.subItems})</Badge>}
-                      {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">ยังไม่มี SubItem</Badge>}
                     </div>
                   </button>
                   <div className="flex shrink-0 flex-col gap-1">
@@ -386,59 +375,28 @@ export function ItemsMasterTab() {
           })}
         </div>
 
-        {/* Pagination — minimal, quiet */}
-        <div className="flex items-center border-t border-border/50 bg-muted/20 px-3 py-1.5">
-          <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-6 w-6 p-0 text-xs text-muted-foreground">
-              &laquo;
-            </Button>
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-6 w-6 p-0">
-              <ChevronLeft className="h-3 w-3 text-muted-foreground" />
-            </Button>
-            {Array.from({ length: totalPages || 1 }, (_, i) => i + 1)
-              .filter((p) => {
-                if (totalPages <= 7) return true;
-                if (p === 1 || p === totalPages) return true;
-                if (Math.abs(p - page) <= 2) return true;
-                return false;
-              })
-              .reduce<(number | "...")[]>((acc, p, i, arr) => {
-                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("...");
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((p, i) =>
-                p === "..." ? (
-                  <span key={`dots-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
-                ) : (
-                  <Button
-                    key={p}
-                    variant={page === p ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setPage(p as number)}
-                    className="h-6 w-6 p-0 text-xs"
-                  >
-                    {p}
-                  </Button>
-                )
-              )}
-            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-6 w-6 p-0">
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            </Button>
-            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-6 w-6 p-0 text-xs">
-              &raquo;
-            </Button>
-          </div>
-          <div className="flex-1" />
-          <span className="text-sm text-muted-foreground tabular-nums">{total} รายการ</span>
-        </div>
+        {/* Pagination — desktop numbered, mobile load-more */}
+        {isMobile ? (
+          items.length > 0 && (
+            <Pagination
+              mode="loadMore"
+              shown={items.length}
+              total={total}
+              hasMore={hasNext}
+              isLoading={isLoadingMore}
+              onLoadMore={loadMore}
+            />
+          )
+        ) : (
+          <Pagination page={page} total={total} pageSize={perPage} onChange={goToPage} />
+        )}
       </div>
 
       <EditItemDialog
         open={dialogOpen}
         itemId={editing?.id ?? null}
         onOpenChange={setDialogOpen}
-        onSaved={fetchItems}
+        onSaved={refetch}
       />
 
       <QrPrintDialog
@@ -450,14 +408,14 @@ export function ItemsMasterTab() {
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>ลบรายการพัสดุ</AlertDialogTitle>
+            <AlertDialogTitle>ปิดใช้งานพัสดุ</AlertDialogTitle>
             <AlertDialogDescription>
-              ต้องการลบ &ldquo;{deleteTarget?.name}&rdquo; ({deleteTarget?.code}) ใช่หรือไม่? ดำเนินการนี้ไม่สามารถย้อนกลับได้
+              ต้องการปิดใช้งาน &ldquo;{deleteTarget?.name}&rdquo; ({deleteTarget?.code}) ใช่หรือไม่? พัสดุจะหายไปจากระบบ แต่ยังเก็บประวัติทั้งหมดไว้
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>ลบ</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>ปิดใช้งาน</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -467,7 +425,7 @@ export function ItemsMasterTab() {
         onClose={() => setAddItemOpen(false)}
         onCreated={() => {
           setAddItemOpen(false);
-          fetchItems();
+          refetch();
         }}
       />
     </div>

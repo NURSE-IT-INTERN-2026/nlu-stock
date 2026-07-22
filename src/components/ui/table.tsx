@@ -5,10 +5,13 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  // table-fixed fits at md+ → overflow-visible: no scrollbar, and avoids the
+  // overflow-x:auto→computed overflow-y:auto gotcha that hijacks sticky headers.
+  const compact = className?.includes("table-fixed");
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full", compact ? "overflow-x-auto md:overflow-visible" : "overflow-x-auto")}
     >
       <table
         data-slot="table"

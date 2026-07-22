@@ -10,7 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
-import { Pagination } from "@/components/dashboard/pagination";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 export interface Column<T> {
   key: string;
@@ -32,7 +33,7 @@ export function ReportDataTable<T extends Record<string, any>>({
   columns,
   data,
   loading,
-  pageSize = 20,
+  pageSize = PAGE_SIZE.DEFAULT,
   emptyMessage = "ไม่พบข้อมูล",
 }: ReportDataTableProps<T>) {
   const [page, setPage] = useState(1);
@@ -43,7 +44,7 @@ export function ReportDataTable<T extends Record<string, any>>({
 
   if (loading) {
     return (
-      <Card>
+      <Card className="pb-0">
         <div className="p-8 text-center text-sm text-muted-foreground">
           Loading...
         </div>
@@ -53,7 +54,7 @@ export function ReportDataTable<T extends Record<string, any>>({
 
   if (data.length === 0) {
     return (
-      <Card>
+      <Card className="pb-0">
         <div className="p-8 text-center text-sm text-muted-foreground">
           {emptyMessage}
         </div>
@@ -62,14 +63,14 @@ export function ReportDataTable<T extends Record<string, any>>({
   }
 
   return (
-    <Card>
+    <Card className="pb-0">
       {/* Desktop: table */}
-      <div className="hidden md:block">
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
               {columns.map((col) => (
-                <TableHead key={col.key} className={col.className}>
+                <TableHead key={col.key} className={`px-2 ${col.className ?? ""}`}>
                   {col.header}
                 </TableHead>
               ))}
@@ -77,9 +78,9 @@ export function ReportDataTable<T extends Record<string, any>>({
           </TableHeader>
           <TableBody>
             {paged.map((row, i) => (
-              <TableRow key={i}>
+              <TableRow key={i} className="h-9 [&>td]:py-1">
                 {columns.map((col) => (
-                  <TableCell key={col.key} className={col.className}>
+                  <TableCell key={col.key} className={`px-2 ${col.className ?? ""}`}>
                     {col.render
                       ? col.render(row)
                       : (row[col.key] as React.ReactNode) ?? "—"}
@@ -109,14 +110,12 @@ export function ReportDataTable<T extends Record<string, any>>({
       </div>
 
       {totalPages > 1 && (
-        <div className="px-4 pb-4">
-          <Pagination
-            page={currentPage}
-            total={data.length}
-            pageSize={pageSize}
-            onChange={setPage}
-          />
-        </div>
+        <Pagination
+          page={currentPage}
+          total={data.length}
+          pageSize={pageSize}
+          onChange={setPage}
+        />
       )}
     </Card>
   );

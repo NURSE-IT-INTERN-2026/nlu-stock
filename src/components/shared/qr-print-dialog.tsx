@@ -32,6 +32,12 @@ const LABEL_SIZES: Record<LabelSize, { width: number; height: number; qr: number
   large: { width: 240, height: 160, qr: 110, fontSize: 12 },
 };
 
+const SIZE_LABELS: Record<LabelSize, string> = {
+  small: "Small (120 x 80 mm)",
+  medium: "Medium (180 x 120 mm)",
+  large: "Large (240 x 160 mm)",
+};
+
 export function QrPrintDialog({ open, onClose, items }: Props) {
   const [size, setSize] = useState<LabelSize>("medium");
   const [qrImages, setQrImages] = useState<Map<string, string>>(new Map());
@@ -142,50 +148,52 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Print QR Labels</DialogTitle>
+          <DialogTitle>พิมพ์ป้าย QR</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Label Size</Label>
+            <Label>ขนาดป้าย</Label>
             <Select value={size} onValueChange={(v) => setSize(v as LabelSize)}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue>{SIZE_LABELS[size]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="small">Small (120 x 80 mm)</SelectItem>
-                <SelectItem value="medium">Medium (180 x 120 mm)</SelectItem>
-                <SelectItem value="large">Large (240 x 160 mm)</SelectItem>
+                <SelectItem value="small">{SIZE_LABELS.small}</SelectItem>
+                <SelectItem value="medium">{SIZE_LABELS.medium}</SelectItem>
+                <SelectItem value="large">{SIZE_LABELS.large}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            {items.length} label(s) will be printed
+            จะพิมพ์ {items.length} ป้าย
           </p>
 
           {/* Preview grid */}
           <div
-            className="flex flex-wrap gap-2 border rounded-md p-3 bg-muted/30 max-h-[300px] overflow-y-auto"
+            className="flex flex-wrap gap-3 border rounded-md p-4 bg-muted/30 max-h-[55vh] overflow-y-auto"
           >
             {items.map((item) => (
               <div
                 key={item.code}
-                className="flex items-center gap-1.5 border rounded p-1.5 bg-white dark:bg-card"
+                className="flex items-center gap-2 border rounded p-2 bg-white dark:bg-card"
                 style={{
-                  width: LABEL_SIZES[size].width * 0.5,
+                  // Preview at the label's real proportions — 0.5 scale was unreadable.
+                  width: LABEL_SIZES[size].width,
                 }}
               >
                 {qrImages.get(item.code) && (
                   <img
                     src={qrImages.get(item.code)}
                     alt="QR"
-                    className="w-10 h-10 flex-shrink-0"
+                    className="flex-shrink-0"
+                    style={{ width: LABEL_SIZES[size].qr * 0.6, height: LABEL_SIZES[size].qr * 0.6 }}
                   />
                 )}
-                <div className="min-w-0 text-[7px] leading-tight">
+                <div className="min-w-0 leading-tight" style={{ fontSize: LABEL_SIZES[size].fontSize }}>
                   <div className="font-mono font-bold truncate">{item.code}</div>
                   <div className="text-muted-foreground truncate">{item.name}</div>
                 </div>
@@ -195,7 +203,7 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
 
           <Button className="w-full" onClick={handlePrint} disabled={items.length === 0}>
             <Printer className="h-4 w-4 mr-1" />
-            Print Labels
+            พิมพ์ป้าย
           </Button>
         </div>
       </DialogContent>

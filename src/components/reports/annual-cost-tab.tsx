@@ -8,6 +8,7 @@ import { AnnualCostChart } from "./charts/annual-cost-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtDate } from "@/lib/format";
 import { getReport } from "@/lib/api";
+import { MAINT_TYPE_LABELS, labelFor, type MaintenanceType } from "@/lib/constants";
 
 const filterConfig: FilterConfig = { year: true, categories: true };
 
@@ -50,7 +51,7 @@ const purchaseColumns: Column<PurchaseRow>[] = [
 const repairColumns: Column<RepairRow>[] = [
   { key: "itemCode", header: "Code" },
   { key: "itemName", header: "Item" },
-  { key: "type", header: "Type" },
+  { key: "type", header: "Type", render: (r) => labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType) },
   {
     key: "cost",
     header: "Cost",

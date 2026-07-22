@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NLU Stock — คู่มือ Flow ทั้งระบบ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --text: #1f2a44;
+    --muted: #667085;
+    --border: #e6e9f0;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --amber: #d97706;
+    --amber-soft: #fffbeb;
+    --red: #dc2626;
+    --red-soft: #fef2f2;
+    --slate: #475569;
+    --shadow: 0 12px 34px -16px rgba(20, 30, 60, 0.28);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans Thai", system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #eef2ff 0%, transparent 60%), var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 48px 24px 96px; }
+
+  header.hero { text-align: center; margin-bottom: 28px; }
+  header.hero .kicker {
+    display: inline-block;
+    font-size: 13px; font-weight: 600; letter-spacing: .08em;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 6px 14px; border-radius: 999px; margin-bottom: 18px;
+  }
+  header.hero h1 { font-size: 34px; font-weight: 800; margin: 0 0 12px; letter-spacing: -0.01em; }
+  header.hero p { color: var(--muted); font-size: 16px; max-width: 680px; margin: 0 auto; }
+
+  /* ── Tab bar ── */
+  .tabs {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(245, 247, 251, .92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    margin: 24px -24px 0;
+    padding: 12px 24px;
+  }
+  .tab-row {
+    display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto;
+    max-width: 1100px; margin: 0 auto;
+    scrollbar-width: thin;
+  }
+  .tab-row::-webkit-scrollbar { height: 6px; }
+  .tab-row::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+  .tab-btn {
+    flex: none;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--slate);
+    font-family: inherit;
+    font-size: 14px; font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s ease;
+  }
+  .tab-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tab-btn.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    box-shadow: 0 6px 16px -8px rgba(79, 70, 229, .6);
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  section.feature {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    margin-top: 24px;
+    box-shadow: var(--shadow);
+    scroll-margin-top: 80px;
+  }
+  .feature-head { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .feature-num {
+    flex: none; width: 44px; height: 44px;
+    display: grid; place-items: center;
+    background: var(--accent); color: #fff;
+    font-weight: 800; font-size: 18px; border-radius: 14px;
+  }
+  .feature-head h2 { font-size: 22px; font-weight: 800; margin: 0; }
+  .feature-sub { color: var(--muted); font-size: 15px; margin: 2px 0 0; }
+
+  .plain {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 20px 0;
+    font-size: 15px;
+  }
+  .plain strong { color: var(--accent); }
+
+  .diagram {
+    border: 1px dashed var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    background: #fcfdff;
+    overflow-x: auto;
+    text-align: center;
+  }
+  .mermaid { font-family: "Noto Sans Thai", sans-serif !important; }
+
+  .result {
+    display: flex; gap: 12px; align-items: flex-start;
+    margin-top: 20px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: var(--green-soft);
+    border: 1px solid #c9f0dd;
+    font-size: 15px;
+  }
+  .result .ic { flex: none; font-size: 20px; line-height: 1.3; }
+  .result b { color: var(--green); }
+  .result.amber { background: var(--amber-soft); border-color: #fde8bf; }
+  .result.amber b { color: var(--amber); }
+  .result.red { background: var(--red-soft); border-color: #fbd5d5; }
+  .result.red b { color: var(--red); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+  .chip {
+    font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .chip.ok  { background: var(--green-soft); color: var(--green); border-color:#c9f0dd; }
+  .chip.warn{ background: var(--amber-soft); color: var(--amber); border-color:#fde8bf; }
+  .chip.bad { background: var(--red-soft);   color: var(--red);   border-color:#fbd5d5; }
+  .chip.new { background: #f5f3ff; color: var(--accent); border-color:#ddd6fe; }
+  .chip.info{ background: #eff6ff; color: #2563eb; border-color:#bfdbfe; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 14px 0; }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+  .mini-card {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: #fcfdff;
+  }
+  .mini-card h4 { margin: 0 0 6px; font-size: 15px; }
+  .mini-card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+  footer.legend {
+    margin-top: 44px; text-align: center; color: var(--muted); font-size: 13.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="kicker">NLU STOCK · คู่มือทำความเข้าใจ</span>
+    <h1>Flow การทำงานทั้งระบบ</h1>
+    <p>เลือกดูแต่ละส่วนได้จากแท็บด้านบน — อธิบายทีละขั้นว่าเมื่อกดปุ่ม/เปิดหน้าแต่ละอันแล้วเกิดอะไรขึ้น ข้อมูลไปแสดงที่ไหน</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tab-row" id="tab-row">
+      <button class="tab-btn active" data-tab="auth">🔐 เข้าสู่ระบบ</button>
+      <button class="tab-btn" data-tab="dashboard">📊 แดชบอร์ด</button>
+      <button class="tab-btn" data-tab="items">📦 คลังพัสดุ</button>
+      <button class="tab-btn" data-tab="receive">📥 รับเข้า</button>
+      <button class="tab-btn" data-tab="dispense">🛒 เบิก-ยืม</button>
+      <button class="tab-btn" data-tab="return">🔁 รับคืน</button>
+      <button class="tab-btn" data-tab="maintenance">🔧 บำรุงรักษา</button>
+      <button class="tab-btn" data-tab="reports">📈 รายงาน</button>
+      <button class="tab-btn" data-tab="alerts">🔔 แจ้งเตือน</button>
+      <button class="tab-btn" data-tab="settings">⚙️ ตั้งค่า</button>
+    </div>
+  </div>
+
+  <!-- ════════════════ AUTH ════════════════ -->
+  <div class="panel active" id="panel-auth">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>เข้าสู่ระบบ</h2>
+        <p class="feature-sub">ล็อกอินด้วยอีเมล — ระบบออก session cookie ให้ 24 ชม.</p></div>
+      </div>
+      <div class="plain">
+        การล็อกอินใช้ <strong>อีเมลอย่างเดียว</strong> ไม่มีรหัสผ่าน (เป็นระบบภายในสำหรับเจ้าหน้าที่ที่ได้รับอนุญาตแล้ว)
+        มีปุ่มลัด 4 บทบาท หรือพิมพ์อีเมลเองก็ได้ หากไม่ได้ล็อกอิน เข้าหน้าไหนก็จะถูกเด้งกลับมาหน้านี้
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เปิดเว็บ / คลิกปุ่มบทบาท]) --> B{มี session ค้างไหม?}
+    B -->|มีและยังไม่หมดอายุ| Z([เข้าแดชบอร์ดได้เลย])
+    B -->|ไม่มี/หมดอายุ| C[หน้า login]
+    C --> D[เลือกบทบาทหรือพิมพ์อีเมล]
+    D --> E{อีเมลนี้ active ไหม?}
+    E -->|ไม่มี/ปิดใช้งาน| F[[แจ้ง User not found]]
+    E -->|active| G[ออก JWT cookie · 24 ชม.]
+    G --> H{บทบาทอะไร?}
+    H -->|CHILDREN| J([ไปหน้า /items])
+    H -->|อื่นๆ| K([ไปแดชบอร์ด /])
+      </pre></div>
+      <div class="chips">
+        <span class="chip info">ADMIN · ผู้ดูแล</span>
+        <span class="chip info">STAFF · เจ้าหน้าที่</span>
+        <span class="chip info">INSTRUCTOR · ผู้สอน (ดูได้อย่างเดียว)</span>
+        <span class="chip info">CHILDREN · นักศึกษา</span>
+      </div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> ได้ session 24 ชม. สิทธิ์แต่ละบทบาทคุมว่าเห็นเมนูอะไร กดอะไรได้ — เช่น INSTRUCTOR กดเบิก/คืน/แก้สต็อกไม่ได้</div></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>ออกจากระบบ</h2>
+        <p class="feature-sub">ล้าง session cookie ที่เครื่องนี้</p></div>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+    A([คลิกออกจากระบบ]) --> B[ลบ session cookie] --> C([กลับหน้า login])
+      </pre></div>
+      <div class="result amber"><span class="ic">⚠️</span><div><b>หมายเหตุ:</b> ออกแล้ว cookie หายจากเครื่องที่กดเท่านั้น</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ DASHBOARD ════════════════ -->
+  <div class="panel" id="panel-dashboard">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>ภาพรวมแดชบอร์ด</h2>
+        <p class="feature-sub">หน้าแรก — สรุปสถานะสต็อกและกิจกรรมล่าสุด</p></div>
+      </div>
+      <div class="plain">
+        แดชบอร์ดรวบรวมตัวเลขสำคัญ กราฟ และตารางกิจกรรมล่าสุด ทุกการ์ด <strong>กดได้</strong> เพื่อพาไปหน้ารายละเอียด
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เปิดหน้าแรก]) --> B[ทักทาย + อัปเดตล่าสุด]
+    B --> C[การ์ด KPI 4 ใบ]
+    C --> D1[พัสดุทั้งหมด → /items]
+    C --> D2[สต็อกต่ำ → /alerts]
+    C --> D3[ใกล้หมดอายุ → /alerts]
+    C --> D4[ยืมอยู่ → /items?onLoan]
+    D4 --> E[กราฟเบิกรายเดือน + แยกตามประเภท]
+    E --> F[ตารางเบิก/รับเข้าล่าสุด 5 รายการ]
+    F --> G([คลิกแถว → หน้าพัสดุ])
+      </pre></div>
+      <div class="grid-2">
+        <div class="mini-card"><h4>📊 กราฟเบิกรายเดือน</h4><p>ยอดเบิก 6 เดือนล่าสุด</p></div>
+        <div class="mini-card"><h4>🗂️ แยกตามประเภท</h4><p>จำนวนพัสดุต่อ CategoryProfile + คลิกกรองได้</p></div>
+      </div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> เห็นสถานะคลังรวมในที่เดียว มีปุ่มรีเฟรช คลิกการ์ด/แถวเพื่อเจาะลึก</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ ITEMS ════════════════ -->
+  <div class="panel" id="panel-items">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>ค้นหา / กรองพัสดุ</h2>
+        <p class="feature-sub">ค้นหาด้วยข้อความ, สแกน QR, หรือค้นด้วย AI</p></div>
+      </div>
+      <div class="plain">
+        หน้า /items แสดงตารางพัสดุทั้งหมด กรองได้หลายมิติ พัสดุมี <strong>3 ประเภท</strong>:
+        <br>• <strong>วัสดุสิ้นเปลือง</strong> (CONSUMABLE) — ติดตามเป็นล็อต + วันหมดอายุ
+        <br>• <strong>นับจำนวน</strong> (COUNT) — ลด/เพิ่มจำนวนคงเหลือ
+        <br>• <strong>รายชิ้น</strong> (ITEM) — ติดตามทีละชิ้น มี SubCode ของตัวเอง
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เปิด /items]) --> B[ค้นหา / เลือกประเภท / สถานที่ / สถานะ]
+    B --> C{วิธีไหน?}
+    C -->|พิมพ์| D[ค้นรหัส/ชื่อ]
+    C -->|สแกน| E[กล้อง QR → พาตรงไปพัสดุ]
+    C -->|AI| F[ค้นด้วยใจความใกล้เคียง]
+    D --> G[ตารางผลลัพธ์]
+    E --> G
+    F --> G
+    G --> H([คลิกแถว → หน้ารายละเอียด])
+      </pre></div>
+      <div class="result"><span class="ic">🔍</span><div><b>ค้นหา AI:</b> พิมพ์คำพูดทั่วไป เช่น "สำลี" ระบบเจอพัสดุที่ใกล้เคียงความหมาย (ใช้ Gemini + pgvector)</div></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>หน้ารายละเอียดพัสดุ</h2>
+        <p class="feature-sub">ข้อมูลเต็ม รูป ประวัติ การซ่อม และปุ่มจัดการ</p></div>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+    A([พัสดุ 1 รายการ]) --> B[ข้อมูลทั่วไป]
+    A --> C[รูปภาพ]
+    A --> D[รหัสย่อย — ถ้าเป็นรายชิ้น]
+    A --> E[ประวัติการเคลื่อนไหว]
+    A --> F[ประวัติซ่อมบำรุง]
+    A --> G[ชุดประกอบ — ถ้าเป็นชุด]
+      </pre></div>
+      <div class="plain">
+        แสดงยอด <strong>คงเหลือ / ทั้งหมด</strong> แถบสถานะ (พร้อมใช้ / ถูกยืม / ไม่พร้อม) และแจ้งเตือน lot หมดอายุ
+        สำหรับ ADMIN/STAFF มีปุ่ม: <strong>เบิก · รับเข้า · ปรับสต็อก · แจ้งชำรุด · ย้ายที่ตั้ง · แก้ไข</strong>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">3</div>
+        <div><h2>รายละเอียดรายชิ้น (SubItem)</h2>
+        <p class="feature-sub">สำหรับพัสดุรายชิ้น — เช่น NLU-KRU-002-C01</p></div>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([คลิก SubCode]) --> B[รหัสเต็ม + สภาพ + ซีเรียล]
+    B --> C{สถานะชิ้นนี้}
+    C -->|ON_LOAN| D[การ์ด กำลังยืมอยู่ + ปุ่มคืน]
+    C -->|อื่นๆ| E[แสดงประวัติยืม/สถานะ]
+    D --> F([คืนได้ทันที])
+      </pre></div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> ตามตัวชิ้นได้เลย ว่าใครยืม เมื่อไหร่ สภาพอย่างไร</div></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">4</div>
+        <div><h2>เพิ่ม / ปรับสถานะ / ประกอบชุด</h2>
+        <p class="feature-sub">การจัดการสต็อกด้วยมือ</p></div>
+      </div>
+      <div class="grid-2">
+        <div class="mini-card"><h4>➕ เพิ่มพัสดุ</h4><p>3 ขั้นตอน → รหัสอัตโนมัติ NLU-PREFIX-NNN</p></div>
+        <div class="mini-card"><h4>⚖️ ปรับสต็อก</h4><p>แก้ lot / นับชั้นวาง / เปลี่ยนสถานะรายชิ้น — ต้องใส่เหตุผล + รูป</p></div>
+        <div class="mini-card"><h4>🔄 เปลี่ยนสถานะ</h4><p>เดี่ยวหรือเป็นชุด — ชำรุด/สูญหาย/จำหน่าย</p></div>
+        <div class="mini-card"><h4>📦 ประกอบชุด</h4><p>รวมพัสดุหลายอย่างเป็น 1 ชุด (KIT) — ตัดสต็อกส่วนประกอบอัตโนมัติ</p></div>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([ADMIN/STAFF จัดการ]) --> B{เลือก action}
+    B -->|เพิ่ม| C[สร้างพัสดุ + รหัสอัตโนมัติ]
+    B -->|ปรับสต็อก| D[ระบุเหตุผล + รูป]
+    B -->|เปลี่ยนสถานะ| E[เขียน status log]
+    B -->|ประกอบชุด| F[ตัดส่วนประกอบ + สร้างชุด]
+    C --> G([บันทึกประวัติ])
+    D --> G
+    E --> G
+    F --> G
+      </pre></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ RECEIVE ════════════════ -->
+  <div class="panel" id="panel-receive">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>รับเข้าพัสดุ</h2>
+        <p class="feature-sub">เพิ่มของเข้าคลัง — ของใหม่หรือเติมของเดิม</p></div>
+      </div>
+      <div class="plain">
+        หน้ารับเข้าใช้เพิ่มจำนวนของในคลัง ระบบจะขอข้อมูลต่างกันตามชนิดพัสดุ:
+        <br>• <strong>วัสดุสิ้นเปลือง</strong> ต้องระบุ “เลขล็อต” + วันหมดอายุ (ล็อตเดิมมีอยู่ → เติมเข้าไป)
+        <br>• <strong>รายชิ้น</strong> ต้องระบุ “รหัสย่อย” ให้ครบตามจำนวน (สร้างให้อัตโนมัติ เช่น C01, C02…)
+        <br>• <strong>นับจำนวน</strong> ระบุจำนวนอย่างเดียว
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([ค้นหาพัสดุที่จะรับเข้า]) --> B[ใส่จำนวนที่รับเข้า]
+    B --> C{เป็นพัสดุแบบไหน?}
+    C -->|วัสดุสิ้นเปลือง| D1[ใส่เลขล็อต + วันหมดอายุ]
+    C -->|รายชิ้น| D2[สร้างรหัสย่อยให้ครบจำนวน]
+    C -->|นับจำนวน| D3[ระบุจำนวนอย่างเดียว]
+    D1 --> E{กดบันทึกรับเข้า}
+    D2 --> E
+    D3 --> E
+    E --> F[เพิ่มจำนวนคงเหลือในคลัง]
+    F --> G([บันทึกประวัติการรับเข้า])
+      </pre></div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> จำนวนคงเหลือเพิ่มขึ้นทันที ไปแสดงที่รายงาน “ประวัติรับเข้า” และหน้ารายละเอียดพัสดุ</div></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>คืนเข้า / รับซ่อม (แท็บในหน้ารับ)</h2>
+        <p class="feature-sub">เปลี่ยนสถานะพัสดุรายชิ้น — ไม่ใช่รับเข้าสต็อก</p></div>
+      </div>
+      <div class="plain">
+        หน้า /receive มีแท็บเสริมสำหรับพัสดุรายชิ้น: <strong>คืนเข้าพัสดุ</strong> (ใช้ในห้อง → พร้อมใช้) และ <strong>รับซ่อม</strong> (เซ่อมเสร็จ → บันทึกผล + ค่าซ่อม)
+      </div>
+      <div class="result amber"><span class="ic">ℹ️</span><div><b>สังเกต:</b> “รับคืน” (คืนของที่ยืม) อยู่อีกแท็บ — ดูที่แท็บ <b>รับคืน</b></div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ DISPENSE ════════════════ -->
+  <div class="panel" id="panel-dispense">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>เบิก–ยืมพัสดุ</h2>
+        <p class="feature-sub">หยิบของใส่ตะกร้า ระบุผู้ยืม แล้วยืนยัน — ระบบตัดของออกจากสต๊อกอัตโนมัติ</p></div>
+      </div>
+      <div class="plain">
+        พัสดุแต่ละประเภทตัดสต็อกไม่เหมือนกัน:
+        <br>• <strong>วัสดุสิ้นเปลือง</strong> — ตัดจาก “ล็อต” ที่ใกล้หมดอายุก่อนเสมอ (FEFO)
+        <br>• <strong>นับจำนวน</strong> — ลดจำนวนคงเหลือ
+        <br>• <strong>รายชิ้น</strong> — จับจองเป็นรายชิ้น ทำเครื่องหมายว่า “ถูกยืม”
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เจ้าหน้าที่ค้นหาพัสดุ]) --> B[เพิ่มลงตะกร้า]
+    B --> C[เลือกจำนวน / เลือกชิ้น<br/>ระบุผู้ยืม และกำหนดคืน ถ้ามี]
+    C --> D{กดยืนยันการเบิก}
+    D --> E{ของในคลังพอไหม?}
+    E -->|ไม่พอ| E1[[แจ้งเตือน ทำรายการไม่ได้]]
+    E -->|พอ| F{เป็นพัสดุแบบไหน?}
+    F -->|วัสดุสิ้นเปลือง| G1[ตัดจากล็อตที่ใกล้หมดอายุก่อน]
+    F -->|นับจำนวน| G2[ลดจำนวนคงเหลือ]
+    F -->|รายชิ้น| G3[ทำเครื่องหมายชิ้นนั้นว่า ถูกยืม]
+    G1 --> H([บันทึกประวัติการเบิก])
+    G2 --> H
+    G3 --> H
+      </pre></div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> ของถูกหักออกจากสต๊อกทันที และมีประวัติการเบิกบันทึกไว้ — ไปแสดงที่หน้าแรก, รายงาน “ประวัติการเบิก”, และหน้ารายละเอียดพัสดุ</div></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>ตะกร้า + ยืนยันการเบิก</h2>
+        <p class="feature-sub">ทุกอย่างในการกดยืนยันครั้งเดียว จะสำเร็จทั้งหมดหรือไม่สำเร็จทั้งหมด</p></div>
+      </div>
+      <div class="plain">
+        เมื่อกด “ยืนยัน” ระบบจะทำงานแบบ <strong>ทั้งหมดหรือไม่ทำเลย</strong> —
+        ถ้ามีของสักรายการในตะกร้าไม่พอ ระบบจะยกเลิกทั้งบิลและไม่ตัดสต็อกอะไรเลย
+        กันตัวเลขคลังเพี้ยนและกันของติดลบเวลามีคนเบิกพร้อมกัน
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เปิดตะกร้า]) --> B[เลือก lot / ชิ้น / ปรับจำนวน]
+    B --> C[กดยืนยันการเบิก]
+    C --> D[ตรวจทุกรายการในตะกร้า]
+    D --> E{มีรายการไหนของไม่พอ<br/>หรือชิ้นนั้นถูกยืมไปแล้ว?}
+    E -->|มี| F[[ยกเลิกทั้งบิล<br/>ไม่ตัดสต๊อกใด ๆ · แจ้งเหตุผล]]
+    E -->|ไม่มี| G[บันทึกใบเบิกทุกบรรทัด]
+    G --> H[ตัดสต็อกตามชนิดพัสดุ]
+    H --> I([สำเร็จ · ล้างตะกร้า · กลับหน้าเบิก])
+      </pre></div>
+      <div class="chips">
+        <span class="chip ok">ระบุผู้รับ · วันกำหนดคืน · ประเภทการใช้ (วิชา/กิจกรรม/อื่นๆ)</span>
+        <span class="chip info">ตะกร้าเก็บในเครื่อง (localStorage) — ยังไม่ตัดสต็อกจนกว่าจะกดยืนยัน</span>
+      </div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> ได้ใบเบิก 1 รายการที่จับกลุ่มทุกบรรทัดไว้ด้วยกัน เพื่อให้ตอนรับคืนเห็นเป็น “การ์ดเดียว” ไม่กระจัดกระจาย</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ RETURN ════════════════ -->
+  <div class="panel" id="panel-return">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>รับคืนพัสดุ</h2>
+        <p class="feature-sub">รับของที่ยืมไปกลับเข้าคลัง พร้อมระบุสภาพ ปกติ / ชำรุด / สูญหาย</p></div>
+      </div>
+      <div class="plain">
+        หน้ารับคืนแสดง “รายการที่ยืมค้าง” เป็นการ์ดต่อ 1 การยืม เจ้าหน้าที่เลือกการยืมที่จะรับคืน
+        แล้วระบุสภาพของแต่ละชิ้น/แต่ละจำนวน:
+        <div class="chips">
+          <span class="chip ok">ปกติ → กลับเข้าคลัง ใช้ต่อได้</span>
+          <span class="chip bad">ชำรุด → เข้าคิวซ่อม</span>
+          <span class="chip warn">สูญหาย → ตัดออกจากคลัง</span>
+        </div>
+        ถ้ามีของไม่ปกติ <strong>ต้องแนบรูปหลักฐาน</strong> ก่อนจึงจะบันทึกได้
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เปิดหน้ารับคืน]) --> B[เลือกการยืมที่จะรับคืน]
+    B --> C{ประเภทพัสดุ}
+    C -->|รายชิ้น| D1[ติ๊กเลือกชิ้น + เลือกสภาพแต่ละชิ้น]
+    C -->|นับจำนวน| D2[ใส่จำนวนที่คืน<br/>ติ๊กมีชำรุด/สูญหาย + ใส่จำนวน]
+    D1 --> E{มีของไม่ปกติไหม?}
+    D2 --> E
+    E -->|มี| F[ต้องแนบรูปหลักฐานก่อน]
+    E -->|ไม่มี| G[กดบันทึกการคืน]
+    F --> G
+    G --> H{สภาพของแต่ละส่วน}
+    H -->|ปกติ| I1[กลับเข้าคลัง พร้อมใช้งาน]
+    H -->|ชำรุด| I2[เข้าคิวซ่อม · เปิดใบซ่อมให้อัตโนมัติ]
+    H -->|สูญหาย| I3[ตัดออกจากคลัง บันทึกว่าสูญหาย]
+    I1 --> J([อัปเดตประวัติ · ปิดการยืมเมื่อคืนครบ])
+    I2 --> J
+    I3 --> J
+      </pre></div>
+      <div class="result"><span class="ic">🔧</span><div><b>ของชำรุดไปไหน?</b> พอทำเครื่องหมาย “ชำรุด” ระบบจะ <b>เปิดใบซ่อมให้อัตโนมัติ</b> ไปโผล่ที่หน้า “บำรุงรักษา/รับซ่อม” จึงไม่มีของชำรุดตกหล่นหายไปจากสายตา</div></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>เตือนเมื่อเกินกำหนดคืน</h2>
+        <p class="feature-sub">ของที่ยืมเลยวันกำหนดคืน จะถูกนับขึ้นที่กระดิ่งแจ้งเตือนอัตโนมัติ</p></div>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([ระบบตรวจเป็นระยะทุก ~5 นาที]) --> B{มีการยืมที่เลยกำหนดคืนไหม?}
+    B -->|ไม่มี| B0([ไม่ขึ้นแจ้งเตือน])
+    B -->|มี| C[นับจำนวนขึ้นที่กระดิ่งแจ้งเตือน]
+    C --> D[คลิกกระดิ่ง เปิดหน้าการแจ้งเตือน]
+    D --> E[คลิกหัวข้อ เกินกำหนดคืน]
+    E --> F([พาไปหน้ารับคืน<br/>กรองเฉพาะรายการที่เกินกำหนดให้ทันที])
+      </pre></div>
+      <div class="result"><span class="ic">🔔</span><div><b>ผลลัพธ์:</b> เห็นจำนวนของค้างคืนเกินกำหนดได้ทุกหน้า และคลิกเดียวไปถึงหน้ารับคืนที่กรองไว้ให้แล้ว</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ MAINTENANCE ════════════════ -->
+  <div class="panel" id="panel-maintenance">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>รอบบำรุงรักษา + แจ้งซ่อม</h2>
+        <p class="feature-sub">ตามรอบป้องกัน และซ่อมแก้ไขเมื่อชำรุด</p></div>
+      </div>
+      <div class="plain">
+        หน้าบำรุงรักษามีการ์ดสรุป <strong>เลยรอบ / ใกล้ถึงรอบ / บำรุงเดือนนี้</strong> + ตารางรายการที่ต้องบำรุง
+        คลิกแถว → เปิดฟอร์มบันทึกการซ่อม (ประเภท ผล ค่าใช้จ่าย นัดครั้งถัดไป) นัดครั้งถัดไปคำนวณอัตโนมัติ +รอบเดือน
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([เปิดหน้าบำรุงรักษา]) --> B[การ์ดสรุป + ตารางเลยรอบ/ใกล้รอบ]
+    B --> C[คลิกแถวที่ต้องบำรุง]
+    C --> D[เปิดฟอร์มบันทึกซ่อม]
+    D --> E[ประเภท · ผล · ค่าใช้จ่าย · นัดถัดไป]
+    E --> F{ผลการตรวจ}
+    F -->|พร้อมใช้งาน| G[ชิ้นนั้นกลับ AVAILABLE]
+    F -->|ต้องซ่อมเพิ่ม| H[ค้างซ่อมต่อ]
+    F -->|จำหน่าย| I[ตัดออกจากคลัง]
+    G --> J([บันทึก + อัปเดตรอบถัดไป])
+    H --> J
+    I --> J
+      </pre></div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>ของชำรุดเข้าระบบอัตโนมัติ</h2>
+        <p class="feature-sub">ไม่ต้องสร้างใบซ่อมเอง — มาจากการรับคืน</p></div>
+      </div>
+      <div class="plain">
+        เมื่อรับคืนพัสดุแล้วระบุสภาพ <strong>ชำรุด</strong> ระบบจะสร้าง <strong>MaintenanceRecord</strong>
+        (CORRECTIVE · ต้องซ่อมเพิ่ม) ให้อัตโนมัติ พร้อมรูปหลักฐานที่แนบมา — ชิ้นนั้นไปโผล่ที่แท็บ “รับซ่อม”
+        พอซ่อมเสร็จก็กลับพร้อมใช้งาน
+      </div>
+      <div class="result"><span class="ic">🔗</span><div><b>ผลลัพธ์:</b> ของเสียไม่หายไปจากระบบ — เข้าคิวซ่อมอัตโนมัติ บันทึกค่าใช้จ่าย/ผล แล้วกลับใช้งานได้</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ REPORTS ════════════════ -->
+  <div class="panel" id="panel-reports">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>รายงานทั้งหมด</h2>
+        <p class="feature-sub">9 รายงาน + export CSV/Excel/PDF — ทุกรายงานกรอง + export ได้</p></div>
+      </div>
+      <div class="grid-2">
+        <div class="mini-card"><h4>📦 สรุปสต็อก</h4><p>จำนวน/คงเหลือต่อหมวด + กราฟ</p></div>
+        <div class="mini-card"><h4>🛒 ประวัติการเบิก</h4><p>วันที่/ผู้เบิก/ประเภท กรองช่วงเวลา</p></div>
+        <div class="mini-card"><h4>📥 ประวัติรับเข้า</h4><p>+ คืนเข้า/รับคืน/รับซ่อม (sub-tabs)</p></div>
+        <div class="mini-card"><h4>📚 ใช้งานรายวิชา</h4><p>ยอดเบิกตามประเภทการใช้</p></div>
+        <div class="mini-card"><h4>💰 ค่าใช้จ่ายรายปี</h4><p>ซื้อ + ซ่อม ต่อปี ต่อหมวด</p></div>
+        <div class="mini-card"><h4>🔧 พัสดุชำรุด</h4><p>ชำรุด/ซ่อม/จำหน่าย/สูญหาย</p></div>
+        <div class="mini-card"><h4>🏗️ ประวัติบำรุงรักษา</h4><p>ทุกครั้งที่ซ่อม + ค่าซ่อม</p></div>
+        <div class="mini-card"><h4>📅 ตารางนัดบำรุง</h4><p>เลยรอบ/ใกล้รอบ (อยู่หน้าบำรุงด้วย)</p></div>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+    A([เปิด /reports]) --> B[เลือกแท็บ]
+    B --> C[ตั้งตัวกรอง วันที่/หมวด/สถานที่]
+    C --> D[ดูตารางผลลัพธ์]
+    D --> E{ต้องการไฟล์ไหม?}
+    E -->|CSV| F1[ดาวน์โหลด .csv]
+    E -->|Excel| F2[ดาวน์โหลด .xlsx]
+    E -->|PDF| F3[ดาวน์โหลด .pdf]
+      </pre></div>
+      <div class="result"><span class="ic">✅</span><div><b>ผลลัพธ์:</b> ดูสถิติย้อนหลังได้ครบ พร้อม export เป็นไฟล์ส่งต่อ/พิมพ์</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ ALERTS ════════════════ -->
+  <div class="panel" id="panel-alerts">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>การแจ้งเตือนทั้งหมด</h2>
+        <p class="feature-sub">5 ประเภท — คำนวณสดจากข้อมูลจริงทุก 5 นาที</p></div>
+      </div>
+      <div class="chips">
+        <span class="chip warn">⚠️ สต็อกต่ำ (ต่ำกว่าจุดสั่งซื้อ)</span>
+        <span class="chip warn">📅 ใกล้หมดอายุ (30 วัน)</span>
+        <span class="chip bad">🔧 เกินกำหนดซ่อม</span>
+        <span class="chip bad">🔁 เกินกำหนดคืน</span>
+        <span class="chip bad">💥 แจ้งชำรุด (รอส่งซ่อม)</span>
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    A([ระบบนับ alert ทุก 5 นาที]) --> B[รวมเป็นตัวเลขกระดิ่ง]
+    B --> C[กระดิ่งขึ้นทุกหน้า]
+    C --> D([คลิก → หน้า /alerts])
+    D --> E[เลือกแท็บประเภท]
+    E --> F{ประเภทไหน?}
+    F -->|สต็อก/หมดอายุ/ซ่อม| G[ตารางพัสดุ → คลิกไปรายละเอียด]
+    F -->|เกินกำหนดคืน| H[การ์ดยืม → หน้ารับคืน]
+    F -->|แจ้งชำรุด| I[รายการรอซ่อม → ปุ่มส่งซ่อม]
+      </pre></div>
+      <div class="result"><span class="ic">🔔</span><div><b>ผลลัพธ์:</b> เห็นตัวเลขรวมทุกหน้า คลิกเจาะได้เรื่อยจนถึงจุดที่ต้องจัดการ</div></div>
+    </section>
+
+  </div>
+
+  <!-- ════════════════ SETTINGS ════════════════ -->
+  <div class="panel" id="panel-settings">
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">1</div>
+        <div><h2>ตั้งค่าระบบ <span style="font-size:13px;color:var(--muted);font-weight:600">(ADMIN เท่านั้น)</span></h2>
+        <p class="feature-sub">ข้อมูลหลักที่ส่วนอื่นๆ อ้างอิง — ประเภท/หมวด/สถานที่/ผู้ใช้/นำเข้า</p></div>
+      </div>
+      <div class="grid-2">
+        <div class="mini-card"><h4>🏷️ ประเภท (Profile)</h4><p>กำหนดพฤติกรรม: สิ้นเปลือง/นับจำนวน/รายชิ้น + asset/ชุด</p></div>
+        <div class="mini-card"><h4>📂 หมวดหมู่ (Category)</h4><p>หมวดย่อยภายใต้แต่ละประเภท</p></div>
+        <div class="mini-card"><h4>📍 สถานที่</h4><p>อาคาร → ชั้น → ห้อง → รายละเอียด</p></div>
+        <div class="mini-card"><h4>👤 ผู้ใช้งาน</h4><p>เพิ่ม/แก้/ปิดใช้งาน + กำหนดบทบาท</p></div>
+        <div class="mini-card"><h4>📋 รายการพัสดุ</h4><p>แก้/ลบ master + จัดการรหัสย่อย + พิมพ์ QR</p></div>
+        <div class="mini-card"><h4>📤 นำเข้าข้อมูล</h4><p>CSV 9 ประเภท (พัสดุ 5 + อ้างอิง 4)</p></div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="feature-head">
+        <div class="feature-num">2</div>
+        <div><h2>นำเข้าข้อมูล CSV</h2>
+        <p class="feature-sub">bulk import ข้อมูลหลัก และพัสดุ</p></div>
+      </div>
+      <div class="plain">
+        9 ประเภททั้งหมด: <strong>พัสดุ</strong> (ครุภัณฑ์/หนังสือ-ของเล่น/วัสดุคงทน/วัสดุสิ้นเปลือง/ชุด) +
+        <strong>อ้างอิง</strong> (หมวดหมู่/สถานที่/รหัสย่อย/BOM ชุด) — ดาวน์โหลด template ก่อน แล้วอัปโหลดกลับ ระบบ preview + รายงาน error แถวต่อแถว
+      </div>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+    A([เลือกประเภท]) --> B[ดาวน์โหลด template]
+    B --> C[กรอก CSV]
+    C --> D[อัปโหลด]
+    D --> E[preview 5 แถว]
+    E --> F{กดนำเข้า}
+    F --> G[ตรวจ + บันทึกทีละแถว]
+    G --> H([รายงาน: สำเร็จ N + error])
+      </pre></div>
+    </section>
+
+  </div>
+
+  <footer class="legend">
+    เอกสารอธิบายภาพรวมการใช้งาน ไม่ใช่รายละเอียดทางเทคนิค · อ้างอิง code จริงใน src/
+  </footer>
+
+</div>
+
+<script>
+  // ── Mermaid (lazy: render only the visible panel, otherwise getBBox
+  //    returns NaN on display:none and diagrams render broken) ──
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "base",
+    fontFamily: "Noto Sans Thai, sans-serif",
+    themeVariables: {
+      primaryColor: "#eef2ff",
+      primaryBorderColor: "#4f46e5",
+      primaryTextColor: "#1f2a44",
+      lineColor: "#94a3b8",
+      fontSize: "15px"
+    },
+    flowchart: { curve: "basis", padding: 14, nodeSpacing: 40, rankSpacing: 46 }
+  });
+
+  function renderPanel(panel) {
+    const pending = Array.from(panel.querySelectorAll("pre.mermaid, div.mermaid"))
+      .filter((n) => !n.querySelector("svg"));
+    if (pending.length) mermaid.run({ nodes: pending }).catch(() => {});
+  }
+
+  // ── Tab switching ──
+  const buttons = document.querySelectorAll(".tab-btn");
+  const panels = document.querySelectorAll(".panel");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.tab;
+      buttons.forEach((b) => b.classList.toggle("active", b === btn));
+      const target = document.getElementById("panel-" + tab);
+      panels.forEach((p) => p.classList.toggle("active", p === target));
+      renderPanel(target);
+      btn.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  // render whatever panel is active on first load
+  renderPanel(document.querySelector(".panel.active"));
+</script>
+</body>
+</html>

@@ -3,27 +3,26 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
-  Pencil, Lock, Copy, Check, Info,
-  Package, Ruler, Warehouse, FileText,
+  Lock, Info,
+  Package, Ruler, Warehouse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/shared/numeric-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EditDialogShell } from "@/components/shared/edit-dialog-shell";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { motion } from "motion/react";
+import { TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { FileUpload } from "@/components/shared/file-upload";
-import { LocationCascadePicker } from "@/components/shared/location-cascade-picker";
-import { getSettingsItem, getUnits, saveSettingsItem } from "@/lib/api";
+import { LocationCascadePicker, type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
+import { useSession } from "@/components/layout/auth-guard";
+import { getSettingsItem, getUnits, saveSettingsItem, updateSubItemFields } from "@/lib/api";
+import { CONDITION_LABELS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, UnitOption } from "@/lib/api";
 import { useCategories } from "@/hooks/use-lookup-data";
 
@@ -52,8 +51,10 @@ interface SettingsItem {
   vendorPhone: string | null;
   warrantyMonths: number;
   maintenanceCycleMonths: number;
+  countCycleMonths: number | null;
   storageRequirements: string | null;
   setSize: number;
+  borrowLimit: number;
   borrowable: boolean;
   _count: { subItems: number; dispenseRecords: number; receiveRecords: number };
 }
@@ -66,8 +67,9 @@ interface FormState {
   model: string; purchaseDate: string; purchasePrice: string;
   vendorCompany: string; vendorContact: string; vendorPhone: string;
   warrantyMonths: number; maintenanceCycleMonths: number;
+  countCycleMonths: string; // "" = follow the profile default (3 mo consumable, 12 mo rest)
   storageRequirements: string;
-  setSize: number; borrowable: boolean;
+  setSize: number; borrowLimit: number; borrowable: boolean;
 }
 
 const emptyForm: FormState = {
@@ -78,8 +80,9 @@ const emptyForm: FormState = {
   model: "", purchaseDate: "", purchasePrice: "",
   vendorCompany: "", vendorContact: "", vendorPhone: "",
   warrantyMonths: 0, maintenanceCycleMonths: 12,
+  countCycleMonths: "",
   storageRequirements: "",
-  setSize: 1, borrowable: false,
+  setSize: 1, borrowLimit: 0, borrowable: false,
 };
 
 function prefillFrom(item: SettingsItem): FormState {
@@ -103,35 +106,47 @@ function prefillFrom(item: SettingsItem): FormState {
     vendorPhone: item.vendorPhone || "",
     warrantyMonths: item.warrantyMonths ?? 0,
     maintenanceCycleMonths: item.maintenanceCycleMonths,
+    countCycleMonths: item.countCycleMonths != null ? String(item.countCycleMonths) : "",
     storageRequirements: item.storageRequirements || "",
     setSize: item.setSize ?? 1,
+    borrowLimit: item.borrowLimit ?? 0,
     borrowable: item.borrowable ?? false,
   };
 }
 
 const DIALOG_TABS = [
   { value: "basic", label: "ข้อมูลพื้นฐาน", icon: Package },
-  { value: "units", label: "หน่วย", icon: Ruler },
-  { value: "stock", label: "สต็อก", icon: Warehouse },
-  { value: "more", label: "เพิ่มเติม", icon: FileText },
+  { value: "units", label: "หน่วยนับ", icon: Ruler },
+  { value: "stock", label: "สถานที่จัดเก็บ", icon: Warehouse },
 ] as const;
+
+const SUB_NONE = "__none__";
 
 interface Props {
   open: boolean;
   itemId: string | null;
   onOpenChange: (v: boolean) => void;
   onSaved: () => void;
+  /** piece-mode: the selected sub-item. Its serial/condition/notes/location are
+   *  edited in the location tab and saved to the SubItem (item fields still save to Item). */
+  subItem?: { id: string; serialNumber: string | null; condition: string | null; notes: string | null; locationId: string | null } | null;
 }
 
-export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
+export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }: Props) {
   const { categories } = useCategories();
+  const { user } = useSession();
+  const isSuperAdmin = user?.role === "ADMIN";
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [item, setItem] = useState<SettingsItem | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [locRef, setLocRef] = useState<LocationRef>({ kind: "none" });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [dialogTab, setDialogTab] = useState("basic");
-  const [copiedCode, setCopiedCode] = useState(false);
+  // sub-item fields (piece-mode only) — serial/condition/notes edited in the location tab.
+  const [subSerial, setSubSerial] = useState("");
+  const [subCondition, setSubCondition] = useState("");
+  const [subNotes, setSubNotes] = useState("");
+  const [subLocRef, setSubLocRef] = useState<LocationRef>({ kind: "none" });
 
   useEffect(() => { getUnits().then(setUnits); }, []);
 
@@ -140,12 +155,14 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
     if (!open || !itemId) return;
     setLoading(true);
     setItem(null);
+    setSubSerial(subItem?.serialNumber ?? "");
+    setSubCondition(subItem?.condition ?? "");
+    setSubNotes(subItem?.notes ?? "");
     getSettingsItem(itemId)
       .then((data) => {
         const it = data as SettingsItem;
         setItem(it);
         setForm(prefillFrom(it));
-        setDialogTab("basic");
       })
       .catch(() => toast.error("โหลดข้อมูลไม่สำเร็จ"))
       .finally(() => setLoading(false));
@@ -162,15 +179,22 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
   async function handleSave() {
     if (!itemId) return;
     setSaving(true);
+    // item location: in piece-mode the picker edits the sub-item instead, so the
+    // item keeps its existing location. In item-mode the picker edits the item.
+    const itemLocationId = subItem
+      ? (form.locationId || null)
+      : (locRef.kind === "ok" ? await resolveLocationId(locRef).catch(() => null) : (form.locationId || null));
     const payload = {
       ...form,
       nameEn: form.nameEn || null,
-      locationId: form.locationId || null,
+      locationId: itemLocationId,
       description: form.description || null,
       imageUrl: form.imageUrl || null,
       minThreshold: Number(form.minThreshold),
       maintenanceCycleMonths: Number(form.maintenanceCycleMonths),
+      countCycleMonths: form.countCycleMonths === "" ? null : Number(form.countCycleMonths),
       warrantyMonths: Number(form.warrantyMonths),
+      borrowLimit: Number(form.borrowLimit),
       purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
       purchaseDate: form.purchaseDate || null,
       model: form.model || null,
@@ -182,6 +206,18 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
 
     try {
       await saveSettingsItem(payload, itemId);
+      // piece-mode: also persist the selected sub-item's identity + location.
+      if (subItem) {
+        const subLocationId = subLocRef.kind === "ok"
+          ? await resolveLocationId(subLocRef).catch(() => null)
+          : (subItem.locationId ?? null);
+        await updateSubItemFields(itemId, subItem.id, {
+          serialNumber: subSerial.trim() || null,
+          condition: subCondition || null,
+          notes: subNotes.trim() || null,
+          locationId: subLocationId,
+        });
+      }
       toast.success("แก้ไขรายการสำเร็จ");
       onOpenChange(false);
       onSaved();
@@ -192,55 +228,20 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-[640px] gap-0 p-0 overflow-hidden">
-        <DialogHeader className="flex-row items-center gap-3 border-b border-border bg-card px-6 py-4 pr-14">
-          <div className="flex items-center gap-3 shrink-0 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Pencil className="h-4 w-4" />
-            </div>
-            <DialogTitle className="text-base font-semibold text-foreground shrink-0">
-              แก้ไขรายการ
-            </DialogTitle>
-            {/* Code badge — read-only (identity), copy only */}
-            <div className="flex items-center gap-1 rounded-full border border-orange-300/50 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 pl-2.5 pr-1 py-1 shrink-0">
-              <span className="font-mono text-xs font-semibold text-orange-600 dark:text-orange-300 tabular-nums ml-1">
-                {form.code || "—"}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (form.code) {
-                    navigator.clipboard.writeText(form.code);
-                    setCopiedCode(true);
-                    setTimeout(() => setCopiedCode(false), 1500);
-                  }
-                }}
-                className="h-6 w-6 flex items-center justify-center rounded-full text-orange-400 hover:text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
-                aria-label="คัดลอกรหัส"
-              >
-                {copiedCode ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </button>
-            </div>
-          </div>
-          <div className="flex-1" />
-          <label className={`flex items-center gap-2 cursor-pointer select-none rounded-full border px-3 py-1.5 transition-colors ${
-            form.isActive
-              ? "border-success/30 bg-success/8 text-success"
-              : "border-border bg-muted/60 text-muted-foreground"
-          }`}>
-            <span className="text-xs font-medium">
-              {form.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}
-            </span>
-            <Switch
-              checked={form.isActive}
-              onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
-              aria-label="เปลี่ยนสถานะการใช้งาน"
-              className={form.isActive ? "data-checked:!bg-success" : ""}
-            />
-          </label>
-          <DialogDescription className="sr-only">แก้ไขข้อมูลพัสดุ</DialogDescription>
-        </DialogHeader>
+    <EditDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="แก้ไขรายการ"
+      description="แก้ไขข้อมูลพัสดุ"
+      code={form.code}
+      isActive={form.isActive}
+      onToggleActive={(v) => setForm((f) => ({ ...f, isActive: v }))}
+      saving={saving}
+      saveDisabled={loading || !form.code || !form.name || !form.categoryId || !form.issueUnitId}
+      onSave={handleSave}
+      onCancel={() => onOpenChange(false)}
+      tabs={loading || !item ? undefined : DIALOG_TABS}
+    >
 
         {loading || !item ? (
           <div className="px-6 py-8 space-y-4">
@@ -249,33 +250,11 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
             <Skeleton className="h-10 w-2/3" />
           </div>
         ) : (
-          <Tabs value={dialogTab} onValueChange={setDialogTab} className="flex flex-col">
-            <TabsList className="relative mx-6 mt-4 grid grid-cols-4 h-9 bg-muted/60 p-0 shrink-0">
-              <motion.span
-                className="absolute inset-y-[3px] left-0 rounded-md bg-primary/10"
-                style={{ width: "25%" }}
-                animate={{ x: `${Math.max(0, DIALOG_TABS.findIndex((t) => t.value === dialogTab)) * 100}%` }}
-                initial={false}
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              />
-              {DIALOG_TABS.map((t) => {
-                const Icon = t.icon;
-                return (
-                  <TabsTrigger key={t.value} value={t.value} className="text-xs gap-1.5 data-active:!bg-transparent data-active:!text-primary data-active:!shadow-none">
-                    <span className="relative z-10 flex items-center gap-1.5">
-                      <Icon className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t.label}</span>
-                    </span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-
-            <div className="px-6 py-5 min-h-[300px] max-h-[55vh] overflow-y-auto bg-secondary/40">
+          <>
               {/* ── Tab 1: ข้อมูลพื้นฐาน ── */}
               <TabsContent value="basic" className="mt-0 space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">หมวดหมู่ <span className="text-destructive">*</span></Label>
+                  <Label className="text-[11px] font-medium text-muted-foreground" required>หมวดหมู่</Label>
                   {/* Category locked on edit — trackIndividually is forced by profile, sub-items reference it */}
                   <div className="flex h-10 items-center gap-2 rounded-md bg-primary/5 px-3 border border-primary/20">
                     <span className="text-sm text-foreground flex-1">
@@ -286,24 +265,8 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
-                  {isSetTracked && (
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-medium text-muted-foreground">จำนวนในชุด (set) — มากกว่า 1 = เป็นชุด</Label>
-                      <Input
-                        type="number" min={1} value={form.setSize}
-                        onChange={(e) => setForm({ ...form, setSize: Math.max(1, parseInt(e.target.value) || 1) })}
-                        className="h-10 text-foreground bg-muted/50 border border-input shadow-none font-mono"
-                      />
-                    </div>
-                  )}
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">จำนวนขั้นต่ำ</Label>
-                    <Input type="number" min={0} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: parseInt(e.target.value) || 0 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">ชื่อไทย <span className="text-destructive">*</span></Label>
+                    <Label className="text-[11px] font-medium text-muted-foreground" required>ชื่อไทย</Label>
                     <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" placeholder="เช่น เครื่องดื่มหัวปลีแบบผง" />
                   </div>
                   <div className="space-y-1.5">
@@ -311,58 +274,57 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
                     <Input value={form.nameEn} onChange={(e) => setForm({ ...form, nameEn: e.target.value })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" placeholder="e.g. Banana Blossom Drink" />
                   </div>
                 </div>
-              </TabsContent>
-
-              {/* ── Tab 2: หน่วย ── */}
-              <TabsContent value="units" className="mt-0 space-y-4">
-                {item._count && (item._count.dispenseRecords + item._count.receiveRecords) > 0 && (
-                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-300">
-                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                    <div className="text-xs">
-                      <p className="font-medium">มี {item._count.dispenseRecords + item._count.receiveRecords} transaction ที่อ้างอิงหน่วยปัจจุบัน</p>
-                      <p className="text-amber-700 dark:text-amber-400 mt-0.5">เปลี่ยนหน่วยจะไม่กระทบ transaction เก่า แต่ตัวเลขอาจอ่านต่างกัน</p>
+                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+                  {isSetTracked && (
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">จำนวนในชุด (set) — มากกว่า 1 = เป็นชุด</Label>
+                      <NumericInput
+                        value={form.setSize}
+                        onCommit={(n) => setForm({ ...form, setSize: n })}
+                        min={1}
+                        className="h-10 text-foreground bg-muted/50 border border-input shadow-none font-mono"
+                      />
                     </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">จำนวนคงคลังขั้นต่ำ</Label>
+                    <Input type="number" min={0} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: parseInt(e.target.value) || 0 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">หน่วย <span className="text-destructive">*</span></Label>
-                  <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
-                    <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
-                      <span className={form.issueUnitId ? "text-foreground" : "text-muted-foreground"}>
-                        {form.issueUnitId ? (units.find((u) => u.id === form.issueUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
-                  <div>
-                    <div className="text-sm font-medium">Track รายชิ้น (sub-codes)</div>
-                    <div className="text-xs text-muted-foreground">
-                      {trackForced === true ? "บังคับเปิด — หมวดหมู่นี้ต้องมี sub-code" : trackForced === false ? "ปิดเสมอสำหรับหมวดนี้" : "เปิดใช้ sub-codes ต่อชิ้น"}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">รอบตรวจนับ (เดือน)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.countCycleMonths}
+                      onChange={(e) => setForm({ ...form, countCycleMonths: e.target.value })}
+                      placeholder="ค่าเริ่มต้น: สิ้นเปลือง 3 · อื่นๆ 12"
+                      className="h-10 text-foreground bg-muted/50 border border-input shadow-none"
+                    />
+                  </div>
+                  {/* Sits with the count cycle rather than in the ครุภัณฑ์ block: วัสดุคงทน and
+                      หนังสือ/ของเล่น have a service cycle too — only consumables don't. */}
+                  {!isConsumable && (
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">รอบซ่อมบำรุง (เดือน)</Label>
+                      <Input type="number" min={1} value={form.maintenanceCycleMonths} onChange={(e) => setForm({ ...form, maintenanceCycleMonths: parseInt(e.target.value) || 12 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
                     </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">
+                      จำนวนที่อนุญาตให้ยืม {!isSuperAdmin && <Lock className="inline h-3 w-3 align-[-1px] text-primary/40" />}
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.borrowLimit}
+                      onChange={(e) => setForm({ ...form, borrowLimit: parseInt(e.target.value) || 0 })}
+                      disabled={!isSuperAdmin}
+                      className="h-10 text-foreground bg-muted/50 border border-input shadow-none disabled:opacity-100 disabled:text-muted-foreground"
+                    />
+                    <p className="text-[10px] text-muted-foreground">0 = ไม่อนุญาตให้ยืม{!isSuperAdmin && " · แก้ไขได้เฉพาะ SuperAdmin"}</p>
                   </div>
-                  <Switch
-                    checked={trackForced !== undefined ? trackForced : form.trackIndividually}
-                    onCheckedChange={trackForced !== undefined ? undefined : (v) => setForm({ ...form, trackIndividually: v })}
-                    disabled={trackForced !== undefined}
-                  />
                 </div>
-              </TabsContent>
 
-              {/* ── Tab 3: สต็อก ── */}
-              <TabsContent value="stock" className="mt-0 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">สถานที่จัดเก็บ</Label>
-                  <LocationCascadePicker
-                    initialLocationId={form.locationId || null}
-                    onChange={(id) => setForm((f) => ({ ...f, locationId: id ?? "" }))}
-                  />
-                </div>
-              </TabsContent>
-
-              {/* ── Tab 4: เพิ่มเติม ── */}
-              <TabsContent value="more" className="mt-0 space-y-4">
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-medium text-muted-foreground">คำอธิบาย</Label>
                   <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="text-foreground bg-muted/50 border border-input shadow-none resize-none" rows={3} />
@@ -373,10 +335,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
                     <Textarea value={form.storageRequirements} onChange={(e) => setForm({ ...form, storageRequirements: e.target.value })} className="text-foreground bg-muted/50 border border-input shadow-none resize-none" placeholder="เช่น เก็บในตู้เย็น ไม่เกิน 30°C" rows={2} />
                   </div>
                 )}
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">รูปภาพ</Label>
-                  <FileUpload value={form.imageUrl} onChange={(url) => setForm({ ...form, imageUrl: url })} accept="image/*" variant="zone" />
-                </div>
 
                 {isFixedAsset && (
                   <>
@@ -410,36 +368,96 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved }: Props) {
                         <Input value={form.vendorPhone} onChange={(e) => setForm({ ...form, vendorPhone: e.target.value })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" placeholder="Phone number" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-medium text-muted-foreground">รับประกัน (เดือน)</Label>
-                        <Input type="number" value={form.warrantyMonths} onChange={(e) => setForm({ ...form, warrantyMonths: parseInt(e.target.value) || 0 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-medium text-muted-foreground">รอบซ่อมบำรุง (เดือน)</Label>
-                        <Input type="number" value={form.maintenanceCycleMonths} onChange={(e) => setForm({ ...form, maintenanceCycleMonths: parseInt(e.target.value) || 12 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
-                      </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">รับประกัน (เดือน)</Label>
+                      <Input type="number" value={form.warrantyMonths} onChange={(e) => setForm({ ...form, warrantyMonths: parseInt(e.target.value) || 0 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
                     </div>
                   </>
                 )}
               </TabsContent>
-            </div>
-          </Tabs>
+
+              {/* ── Tab 2: หน่วย ── */}
+              <TabsContent value="units" className="mt-0 space-y-4">
+                {item._count && (item._count.dispenseRecords + item._count.receiveRecords) > 0 && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-300">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">มี {item._count.dispenseRecords + item._count.receiveRecords} transaction ที่อ้างอิงหน่วยปัจจุบัน</p>
+                      <p className="text-amber-700 dark:text-amber-400 mt-0.5">เปลี่ยนหน่วยจะไม่กระทบ transaction เก่า แต่ตัวเลขอาจอ่านต่างกัน</p>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium text-muted-foreground" required>หน่วย</Label>
+                  <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
+                    <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
+                      <span className={form.issueUnitId ? "text-foreground" : "text-muted-foreground"}>
+                        {form.issueUnitId ? (units.find((u) => u.id === form.issueUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
+                  <div>
+                    <div className="text-sm font-medium">Track รายชิ้น (sub-codes)</div>
+                    <div className="text-xs text-muted-foreground">
+                      {trackForced === true ? "บังคับเปิด — หมวดหมู่นี้ต้องมี sub-code" : trackForced === false ? "ปิดเสมอสำหรับหมวดนี้" : "เปิดใช้ sub-codes ต่อชิ้น"}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={trackForced !== undefined ? trackForced : form.trackIndividually}
+                    onCheckedChange={trackForced !== undefined ? undefined : (v) => setForm({ ...form, trackIndividually: v })}
+                    disabled={trackForced !== undefined}
+                  />
+                </div>
+              </TabsContent>
+
+              {/* ── Tab 3: สต็อก ── */}
+              <TabsContent value="stock" className="mt-0 space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium text-muted-foreground">
+                    สถานที่จัดเก็บ{subItem ? " (ของชิ้นนี้)" : ""}
+                  </Label>
+                  <LocationCascadePicker
+                    initialLocationId={subItem ? (subItem.locationId || form.locationId || null) : (form.locationId || null)}
+                    onChange={subItem ? setSubLocRef : setLocRef}
+                  />
+                </div>
+
+                {subItem && (
+                  <>
+                    <Separator className="mt-2" />
+                    <p className="pt-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">ข้อมูลพัสดุย่อย</p>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">หมายเลขซีเรียล</Label>
+                      <Input value={subSerial} onChange={(e) => setSubSerial(e.target.value)} className="h-10 bg-muted/50 border border-input shadow-none" placeholder="ไม่ระบุ" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">สภาพ</Label>
+                      <Select value={subCondition || SUB_NONE} onValueChange={(v) => setSubCondition(v === SUB_NONE ? "" : v ?? "")}>
+                        <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
+                          <SelectValue>{subCondition ? (CONDITION_LABELS[subCondition] ?? subCondition) : "ไม่ระบุ"}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SUB_NONE}>ไม่ระบุ</SelectItem>
+                          {Object.entries(CONDITION_LABELS).map(([v, label]) => (
+                            <SelectItem key={v} value={v}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">หมายเหตุ</Label>
+                      <Textarea value={subNotes} onChange={(e) => setSubNotes(e.target.value)} rows={2} className="bg-muted/50 border border-input shadow-none resize-none" placeholder="หมายเหตุ (optional)" />
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+
+          </>
         )}
 
-        <DialogFooter className="mx-0 mb-0 px-6 py-3.5 border-t border-border/60 bg-muted/30 sm:justify-between">
-          <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
-            แท็บ {DIALOG_TABS.findIndex((t) => t.value === dialogTab) + 1} / {DIALOG_TABS.length}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
-            <Button onClick={handleSave} disabled={saving || loading || !form.code || !form.name || !form.categoryId || !form.issueUnitId}>
-              {saving ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </EditDialogShell>
   );
 }

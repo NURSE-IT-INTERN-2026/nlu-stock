@@ -15,33 +15,33 @@ export default async function DashboardPage() {
       {/* Metric cards — horizontal row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <DashboardMetricCard
-          title="รายการพัสดุทั้งหมด"
+          title="รายการพัสดุในคลังทั้งหมด"
           value={totalItems}
-          subtitle="ทั้งหมด"
+          subtitle="รายการ"
           iconName="Package"
           color="text-success"
           href="/items"
         />
         <DashboardMetricCard
-          title="ใกล้หมด / ต่ำกว่าจุดสั่งซื้อ"
+          title="คงคลังต่ำกว่าเกณฑ์ขั้นต่ำ"
           value={lowStock}
-          subtitle={lowStock > 0 ? "ต่ำกว่าจุดสั่งซื้อ" : undefined}
+          subtitle={lowStock > 0 ? "รายการ" : undefined}
           iconName="AlertTriangle"
           color="text-orange-500"
           href="/alerts?lowStock=true"
         />
         <DashboardMetricCard
-          title="หมดอายุใน 30 วัน"
+          title="หมดอายุภายใน 30 วัน"
           value={nearExpiry}
-          subtitle={nearExpiry > 0 ? "หมดอายุใน 30 วัน" : undefined}
+          subtitle={nearExpiry > 0 ? "รายการ" : undefined}
           iconName="CalendarClock"
           color="text-info-500"
           href="/alerts?nearExpiry=true"
         />
         <DashboardMetricCard
-          title="ยืมอยู่ / ยังไม่คืน"
+          title="อยู่ระหว่างการยืม ค้างส่งคืน"
           value={onLoan}
-          subtitle={onLoan > 0 ? "ยังไม่คืน" : undefined}
+          subtitle={onLoan > 0 ? "รายการ" : undefined}
           iconName="Undo2"
           color="text-danger-500"
           href="/items?onLoan=true"
