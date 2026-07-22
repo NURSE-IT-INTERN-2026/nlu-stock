@@ -55,6 +55,23 @@ function mapCondition(th: string): string {
   return "USABLE";
 }
 
+// A piece that arrives already lost/damaged still needs an audit trail: ประวัติสูญหาย and
+// the status history read ItemStatusLog, not SubItem.status, so a status set straight on
+// create is invisible there. Seed one opening entry per non-AVAILABLE starting status.
+async function logInitialStatus(sub: { id: string; itemId: string; status: string }, adminId: string) {
+  if (sub.status === "AVAILABLE") return;
+  await prisma.itemStatusLog.create({
+    data: {
+      itemId: sub.itemId,
+      subItemId: sub.id,
+      previousStatus: "AVAILABLE" as any,
+      newStatus: sub.status as any,
+      reason: "สถานะเริ่มต้นจากข้อมูลนำเข้า",
+      changedBy: adminId,
+    },
+  });
+}
+
 // Map Thai condition → ItemStatus enum
 function mapStatus(th: string): string {
   const t = (th || "").trim();
@@ -307,7 +324,7 @@ async function main() {
 
     for (let si = 0; si < group.subItems.length; si++) {
       const sub = group.subItems[si];
-      await prisma.subItem.create({
+      const created = await prisma.subItem.create({
         data: {
           itemId: item.id,
           subCode: `C${String(si + 1).padStart(2, "0")}`,
@@ -318,6 +335,7 @@ async function main() {
           notes: sub.notes || null,
         },
       });
+      await logInitialStatus(created, admin.id);
       kruSubCount++;
     }
     kruItemCount++;
@@ -405,7 +423,7 @@ async function main() {
 
     for (let si = 0; si < group.subItems.length; si++) {
       const sub = group.subItems[si];
-      await prisma.subItem.create({
+      const created = await prisma.subItem.create({
         data: {
           itemId: item.id,
           subCode: `C${String(si + 1).padStart(2, "0")}`,
@@ -416,6 +434,7 @@ async function main() {
           notes: sub.notes || null,
         },
       });
+      await logInitialStatus(created, admin.id);
       eleSubCount++;
     }
     eleItemCount++;

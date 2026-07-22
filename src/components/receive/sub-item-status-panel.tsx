@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { Loader2, MapPin, RotateCcw, Search, Send, Wrench } from "lucide-react";
 import { pic } from "@/lib/image";
 import { getSubItemsByStatus, updateItemStatus, type SubItemByStatus } from "@/lib/api";
-import { formatSubCode, locationLabel } from "@/lib/constants";
+import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
 
@@ -84,12 +84,15 @@ export function SubItemStatusPanel({
 
   const q = query.trim().toLowerCase();
   const filteredRows = q
-    ? rows.filter((r) =>
-        r.item.name.toLowerCase().includes(q) ||
-        r.item.code.toLowerCase().includes(q) ||
-        r.subCode.toLowerCase().includes(q) ||
-        (r.item.location ? locationLabel(r.item.location).toLowerCase().includes(q) : false),
-      )
+    ? rows.filter((r) => {
+        const loc = r.location ?? r.item.location;
+        return (
+          r.item.name.toLowerCase().includes(q) ||
+          r.item.code.toLowerCase().includes(q) ||
+          r.subCode.toLowerCase().includes(q) ||
+          (loc ? locationLabel(loc).toLowerCase().includes(q) : false)
+        );
+      })
     : rows;
 
   return (
@@ -127,11 +130,15 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [maintOpen, setMaintOpen] = useState(false);
   const [note, setNote] = useState("");
+  const [repairNote, setRepairNote] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
   const isRepair = status === "UNDER_REPAIR";
   const isDamaged = status === "DAMAGED";
   // DAMAGED → UNDER_REPAIR (ส่งซ่อม); IN_USE/UNDER_REPAIR → AVAILABLE (รับเข้า).
   const targetStatus = isDamaged ? "UNDER_REPAIR" : "AVAILABLE";
+  // Prefer the piece's own location; fall back to the spec's location when unset.
+  const loc = row.location ?? row.item.location;
 
   const receive = async () => {
     setSaving(true);
@@ -139,12 +146,16 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
       await updateItemStatus(row.item.id, {
         newStatus: targetStatus,
         subItemId: row.id,
-        notes: isDamaged ? (note.trim() || undefined) : undefined,
+        notes: isDamaged ? note.trim() : undefined,
         imageUrl: isDamaged ? (photoUrl ?? undefined) : undefined,
+        repairVenue: isDamaged && venue ? venue : undefined,
+        repairNote: isDamaged ? repairNote.trim() : undefined,
       });
       toast.success("บันทึกเรียบร้อย");
       setNote("");
+      setRepairNote("");
       setPhotoUrl(null);
+      setVenue("");
       onResolved();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
@@ -163,11 +174,18 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-sm leading-snug">{row.item.name}</p>
-              <p className="text-xs text-muted-foreground font-mono">{formatSubCode(row.item.code, row.subCode)}</p>
+              <p className="text-xs text-muted-foreground font-mono">{effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}</p>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1">
-                {row.item.location && (
-                  <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(row.item.location)}</span>
+                {isRepair && row.repairVenue && (
+                  <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + (row.repairVenue === "EXTERNAL" ? "bg-purple-500/10 text-purple-700" : "bg-sky-500/10 text-sky-700")}>
+                    {row.repairVenue === "EXTERNAL" ? "ส่งซ่อมภายนอก" : "ส่งซ่อมภายใน"}
+                  </span>
                 )}
+                {loc && (
+                  <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(loc)}</span>
+                )}
+                {row.damageNote && <span>ชำรุด: <span className="text-foreground">{row.damageNote}</span></span>}
+                {row.repairNote && <span>ส่งซ่อม: <span className="text-foreground">{row.repairNote}</span></span>}
                 {row.notes && <span>หมายเหตุ: <span className="text-foreground">{row.notes}</span></span>}
               </div>
             </div>
@@ -194,31 +212,68 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                 {isDamaged ? (
                   <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
                 ) : (
-                  <>บันทึก <span className="font-medium text-foreground">{row.item.name}</span> ({formatSubCode(row.item.code, row.subCode)}) เป็น &ldquo;พร้อมใช้งาน&rdquo; ทันที — รายการนี้จะเข้าประวัติ ไม่สามารถแก้ไขย้อนหลังได้</>
+                  <>บันทึก <span className="font-medium text-foreground">{row.item.name}</span> ({effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}) เป็น &ldquo;พร้อมใช้งาน&rdquo; ทันที — รายการนี้จะเข้าประวัติ ไม่สามารถแก้ไขย้อนหลังได้</>
                 )}
               </AlertDialogDescription>
-              {isDamaged && (
-                <div className="w-full space-y-3 pt-1 text-left">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">หมายเหตุ (ถ้ามี)</Label>
-                    <Textarea
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="เช่น ส่งร้าน ABC ถนน…"
-                      rows={2}
-                      className="text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-                    <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+            </AlertDialogHeader>
+            {isDamaged && (
+              // Direct child of AlertDialogContent (not Header) so the separator's
+              // -mx-4 reaches both dialog edges (Header is a centered grid → clips).
+              <div className="w-full space-y-3 text-left">
+                <div className="-mx-4"><Separator /></div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground" required>
+                    ระบุรายละเอียดการชำรุด
+                  </Label>
+                  <Textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="เช่น จอแตก ปุ่มหลุด สายชาร์จขาด…"
+                    rows={2}
+                    className="bg-card"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground" required>
+                    รายละเอียด/สถานที่ส่งซ่อม
+                  </Label>
+                  <Textarea
+                    value={repairNote}
+                    onChange={(e) => setRepairNote(e.target.value)}
+                    placeholder="เช่น ส่งซ่อมร้าน ABC…"
+                    rows={2}
+                    className="bg-card"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground" required>ประเภทการซ่อม</Label>
+                  <div className="flex gap-2">
+                    {([["INTERNAL", "ภายใน"], ["EXTERNAL", "ภายนอก"]] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setVenue(value)}
+                        className={
+                          "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors " +
+                          (venue === value
+                            ? "border-primary bg-primary/10 text-primary font-medium"
+                            : "border-border bg-card text-muted-foreground hover:text-foreground")
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
-            </AlertDialogHeader>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
+                  <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+                </div>
+              </div>
+            )}
             <AlertDialogFooter>
               <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-              <AlertDialogAction onClick={() => { setConfirmOpen(false); receive(); }}>ยืนยัน</AlertDialogAction>
+              <AlertDialogAction disabled={isDamaged && (!note.trim() || !repairNote.trim() || !venue)} onClick={() => { setConfirmOpen(false); receive(); }}>ยืนยัน</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -232,7 +287,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
           itemId={row.item.id}
           itemLabel={row.item.name}
           subItemId={row.id}
-          subItemLabel={formatSubCode(row.item.code, row.subCode)}
+          subItemLabel={effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}
           onSuccess={onResolved}
         />
       )}

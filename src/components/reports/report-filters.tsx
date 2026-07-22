@@ -71,7 +71,7 @@ interface CategoryLite extends Option {
   profile?: { id: string } | null;
 }
 
-const dateInputCls = "h-9 flex-1 min-w-0 sm:flex-none sm:w-[150px] rounded-lg border-border bg-background text-sm";
+const dateInputCls = "h-8 flex-1 min-w-0 sm:flex-none sm:w-[150px] rounded-lg border-border bg-background text-sm";
 
 function FilterSelect({
   icon: Icon,
@@ -89,7 +89,7 @@ function FilterSelect({
   children: ReactNode;
 }) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={(v) => onValueChange(v ?? "")}>
       <SelectTrigger className="h-9 min-w-[120px] max-w-full flex-1 sm:flex-none gap-2 rounded-lg border-border bg-background">
         <Icon className="size-4 text-muted-foreground shrink-0" />
         {/* ponytail: pass explicit label as children — Base UI Select.Value falls back to the
@@ -278,15 +278,15 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
             value={values.maintenanceType ?? "all"}
             placeholder="ประเภท"
             selectedLabel={
-              values.maintenanceType === "PREVENTIVE" ? "ป้องกัน (Preventive)"
-              : values.maintenanceType === "CORRECTIVE" ? "แก้ไข (Corrective)"
+              values.maintenanceType === "PREVENTIVE" ? "ตรวจบำรุง (Preventive)"
+              : values.maintenanceType === "CORRECTIVE" ? "ซ่อมแซม (Corrective)"
               : undefined
             }
             onValueChange={(v) => onChange({ ...values, maintenanceType: v === "all" ? undefined : String(v) })}
           >
             <SelectItem value="all">ทุกประเภท</SelectItem>
-            <SelectItem value="PREVENTIVE">ป้องกัน (Preventive)</SelectItem>
-            <SelectItem value="CORRECTIVE">แก้ไข (Corrective)</SelectItem>
+            <SelectItem value="PREVENTIVE">ตรวจบำรุง (Preventive)</SelectItem>
+            <SelectItem value="CORRECTIVE">ซ่อมแซม (Corrective)</SelectItem>
           </FilterSelect>
         )}
 
@@ -298,7 +298,7 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
               variant="ghost"
               size="sm"
               onClick={() => onChange({})}
-              className="h-9 w-full text-primary hover:text-primary hover:bg-primary/10 sm:w-auto"
+              className="h-8 w-full text-primary hover:text-primary hover:bg-primary/10 sm:w-auto"
             >
               <X className="size-3.5" />
               ล้างตัวกรอง

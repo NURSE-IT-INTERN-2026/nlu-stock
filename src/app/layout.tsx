@@ -24,9 +24,13 @@ export default function RootLayout({
     <html
       lang="th"
       suppressHydrationWarning
-      className={`${sarabun.variable} h-full antialiased`}
+      className={`${sarabun.variable} antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      {/* ponytail: no h-full on <html> — height:100% on the root element kills the viewport
+          scrollbar on mobile (content overflows a fixed-height html with no scroll), so every
+          non-app-shell page couldn't scroll. body uses min-h-dvh (viewport unit) instead of
+          min-h-full so it still fills the screen without depending on html's height. */}
+      <body className="min-h-dvh flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}
           <Toaster />

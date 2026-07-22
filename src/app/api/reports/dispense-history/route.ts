@@ -48,12 +48,16 @@ export async function GET(request: NextRequest) {
       itemCode: r.item.code,
       itemName: r.item.name,
       quantity: r.quantity,
+      resolvedQty: r.resolvedQty,
       staffName: r.staff.name,
       usageTypeLabel: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
       lotNumber: r.lot?.lotNumber ?? "—",
       dispensedAt: r.dispensedAt.toISOString(),
       notes: r.notes ?? "",
       returnedAt: r.returnedAt?.toISOString() ?? null,
+      returnCondition: r.returnCondition,
+      loanGroupId: r.loanGroupId,
+      recipient: r.recipient ?? null,
     }));
 
     return json({ records: data, page, perPage, total });

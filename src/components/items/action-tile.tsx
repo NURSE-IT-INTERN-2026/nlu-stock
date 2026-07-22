@@ -13,7 +13,7 @@ export const ActionTile = React.forwardRef<HTMLButtonElement, ActionTileProps>(
       <button
         ref={ref}
         className={cn(
-          "group flex items-center gap-3 rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0",
+          "group flex items-center gap-3 rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 disabled:opacity-40 disabled:pointer-events-none disabled:hover:translate-y-0 disabled:hover:shadow-none",
           tone === "primary" && "bg-primary text-primary-foreground border-primary hover:bg-primary/90",
           tone === "default" && "bg-card border-border hover:border-primary/40",
           tone === "destructive" && "bg-card border-border text-destructive hover:bg-destructive/5 hover:border-destructive/40",

@@ -32,13 +32,15 @@ const STEP_TITLES: Record<WizardStep, string> = {
   "create-confirm": "ตรวจสอบและยืนยัน",
 };
 
-function getProgressIndex(step: WizardStep): number {
+function getProgressIndex(step: WizardStep, mode: "select" | "create" = "select"): number {
+  if (mode === "create") return step === "create-name" ? 0 : 1;
   if (step === "select") return 0;
   if (step === "confirm-existing" || step === "create-name") return 1;
   return 2;
 }
 
-function getProgressTotal(step: WizardStep): number {
+function getProgressTotal(step: WizardStep, mode: "select" | "create" = "select"): number {
+  if (mode === "create") return 2;
   if (step === "select" || step === "confirm-existing") return 2;
   return 3;
 }
@@ -48,7 +50,9 @@ export function CategorySelectModal({
   onClose,
   onSelect,
   title = "เลือกหมวดหมู่",
+  mode = "select",
 }: CategorySelectModalProps) {
+  const startStep: WizardStep = mode === "create" ? "create-name" : "select";
   const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
@@ -60,7 +64,7 @@ export function CategorySelectModal({
   }, []);
 
   const [state, setState] = useState<WizardState>({
-    step: "select",
+    step: startStep,
     selectedExisting: null,
     newCategoryName: "",
     newCategoryProfileId: "",
@@ -70,14 +74,14 @@ export function CategorySelectModal({
 
   const reset = useCallback(() => {
     setState({
-      step: "select",
+      step: startStep,
       selectedExisting: null,
       newCategoryName: "",
       newCategoryProfileId: "",
       newCategoryDescription: "",
       isSubmitting: false,
     });
-  }, []);
+  }, [startStep]);
 
   const handleClose = useCallback(() => {
     reset();
@@ -136,14 +140,18 @@ export function CategorySelectModal({
     state.step === "create-confirm";
 
   const handleBack = useCallback(() => {
-    if (state.step === "confirm-existing" || state.step === "create-name") {
+    if (state.step === "create-name") {
+      if (mode === "create") return handleClose();
       setState((s) => ({ ...s, step: "select" }));
+    } else if (state.step === "confirm-existing") {
+      if (mode === "create") setState((s) => ({ ...s, step: "create-name" }));
+      else setState((s) => ({ ...s, step: "select" }));
     } else if (state.step === "create-confirm") {
       setState((s) => ({ ...s, step: "create-name" }));
     } else {
       handleClose();
     }
-  }, [state.step, handleClose]);
+  }, [state.step, mode, handleClose]);
 
   const handleNext = useCallback(() => {
     if (state.step === "confirm-existing") {
@@ -157,8 +165,8 @@ export function CategorySelectModal({
 
   // ── Shared rendering helpers ────────────────────────────────
 
-  const progressIdx = getProgressIndex(state.step);
-  const progressTotal = getProgressTotal(state.step);
+  const progressIdx = getProgressIndex(state.step, mode);
+  const progressTotal = getProgressTotal(state.step, mode);
   const stepTitle = STEP_TITLES[state.step];
 
   function renderHeader() {
@@ -237,7 +245,7 @@ export function CategorySelectModal({
     return (
       <div className="flex items-center justify-between border-t border-border bg-card px-6 py-4">
         <Button variant="ghost" onClick={handleBack} className="gap-1.5">
-          {state.step === "select" ? (
+          {state.step === "select" || (mode === "create" && state.step === "create-name") ? (
             "ยกเลิก"
           ) : (
             <>

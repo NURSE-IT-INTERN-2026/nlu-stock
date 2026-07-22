@@ -7,68 +7,20 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Plus, Minus, Search, QrCode, X, Dices } from "lucide-react";
+import { Plus, Minus, Search, QrCode, X, Dices, MapPin } from "lucide-react";
 import { pic } from "@/lib/image";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { usePagedList } from "@/hooks/use-paged-list";
 import { searchDispenseItems } from "@/lib/api";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
-import { Pagination } from "@/components/dashboard/pagination";
+import { Pagination } from "@/components/shared/pagination";
 import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
 import type { ProfileOption } from "@/lib/api";
-
-function CardEditableQty({ value, max, onChange }: {
-  value: number;
-  max?: number;
-  onChange: (v: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value));
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        type="number"
-        min={1}
-        max={max}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const v = parseInt(draft) || 1;
-          const clamped = Math.max(1, max ? Math.min(v, max) : v);
-          onChange(clamped);
-          setEditing(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            (e.target as HTMLInputElement).blur();
-          } else if (e.key === "Escape") {
-            setDraft(String(value));
-            setEditing(false);
-          }
-        }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-9 h-9 text-center text-sm font-semibold tabular-nums bg-background border rounded-full px-0 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-      />
-    );
-  }
-
-  return (
-    <button
-      className="min-w-8 h-9 text-center text-sm font-semibold tabular-nums"
-      onClick={(e) => {
-        e.stopPropagation();
-        setDraft(String(value));
-        setEditing(true);
-      }}
-    >
-      {value}
-    </button>
-  );
-}
 
 
 interface SearchItem {
@@ -87,13 +39,13 @@ interface SearchItem {
 }
 
 function DispenseContent() {
-  const { itemCount, getItemQty, items: cartItems, updateItem, removeItem, addItem } = useCart();
+  const { getItemQty, items: cartItems, updateItem, removeItem, addItem } = useCart();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [items, setItems] = useState<SearchItem[]>([]);
   const { categories } = useCategories();
   const { locations } = useLocations();
+  const isMobile = useIsMobile();
   const [filterProfile, setFilterProfile] = useState(searchParams.get("profile") ?? "");
   const [filterCategory, setFilterCategory] = useState(searchParams.get("category") ?? "");
   const [filterLocation, setFilterLocation] = useState<LocationFilter>(() => ({
@@ -108,60 +60,35 @@ function DispenseContent() {
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
   const locActive = Boolean(filterLocation.building || filterLocation.floor || filterLocation.room || filterLocation.detail);
-  const [loading, setLoading] = useState(true);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const prevCount = useRef(itemCount);
-  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
-  const [total, setTotal] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
-  const skipPageEffect = useRef(false);
-  const restoredScroll = useRef(false);
-  const PAGE_SIZE = 18;
-
   const debounced = useDebounce(query, 300);
 
-  const searchItems = useCallback(async (q: string, catId: string, loc: LocationFilter, p: number, profileId: string) => {
-    setLoading(true);
+  const fetchPage = useCallback(async (p: number) => {
     try {
       const data = await searchDispenseItems({
-        q,
-        limit: String(PAGE_SIZE),
+        q: debounced,
+        perPage: String(PAGE_SIZE.DEFAULT),
         page: String(p),
-        categoryId: catId || undefined,
-        building: loc.building || undefined,
-        floor: loc.floor || undefined,
-        room: loc.room || undefined,
-        detail: loc.detail || undefined,
-        profileId: profileId || undefined,
+        categoryId: filterCategory || undefined,
+        building: filterLocation.building || undefined,
+        floor: filterLocation.floor || undefined,
+        room: filterLocation.room || undefined,
+        detail: filterLocation.detail || undefined,
+        profileId: filterProfile || undefined,
       });
-      setItems((data.items ?? []) as SearchItem[]);
-      setTotal(data.total ?? 0);
+      return { items: (data.items ?? []) as SearchItem[], total: data.total ?? 0 };
     } catch {
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
+      return { items: [], total: 0 };
     }
-  }, []);
+  }, [debounced, filterCategory, filterLocation, filterProfile]);
 
-  // Filter changes → reset to page 1
-  useEffect(() => {
-    skipPageEffect.current = true;
-    setPage(1);
-    searchItems(debounced, filterCategory, filterLocation, 1, filterProfile);
-  }, [debounced, filterCategory, filterLocation, filterProfile, searchItems]);
+  const {
+    items, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
+  } = usePagedList<SearchItem>({ fetchPage, pageSize: PAGE_SIZE.DEFAULT, isMobile });
 
-  // Page changes from pagination click
-  useEffect(() => {
-    if (skipPageEffect.current) {
-      skipPageEffect.current = false;
-      return;
-    }
-    searchItems(debounced, filterCategory, filterLocation, page, filterProfile);
-    gridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync filters to URL so back-navigation restores them
+  // Sync filters to URL so back-navigation restores them. Page is loadMore/numbered session
+  // state — not URL-driven — so mobile accumulate and desktop numbered both start fresh on load.
   useEffect(() => {
     const p = new URLSearchParams();
     if (debounced) p.set("q", debounced);
@@ -171,22 +98,13 @@ function DispenseContent() {
     if (filterLocation.floor) p.set("floor", filterLocation.floor);
     if (filterLocation.room) p.set("room", filterLocation.room);
     if (filterLocation.detail) p.set("detail", filterLocation.detail);
-    if (page > 1) p.set("page", String(page));
     const qs = p.toString();
     router.replace(qs ? `/dispense?${qs}` : "/dispense", { scroll: false });
-  }, [debounced, filterProfile, filterCategory, filterLocation, page, router]);
-
-  // Restore grid scroll position after back-navigation
-  useEffect(() => {
-    if (restoredScroll.current || items.length === 0) return;
-    const saved = Number(sessionStorage.getItem("dispense-scroll"));
-    if (saved) gridRef.current?.scrollTo({ top: saved });
-    restoredScroll.current = true;
-    sessionStorage.removeItem("dispense-scroll");
-  }, [items]);
+  }, [debounced, filterProfile, filterCategory, filterLocation, router]);
 
   const handlePageChange = (p: number) => {
     setPage(p);
+    gridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleAdd = (item: SearchItem): boolean => {
@@ -248,11 +166,9 @@ function DispenseContent() {
   };
 
   const handleQrScan = async (code: string) => {
-    setLoading(true);
     try {
-      const data = await searchDispenseItems({ q: code, limit: "1", categoryId: filterCategory || undefined, building: filterLocation.building || undefined, floor: filterLocation.floor || undefined, room: filterLocation.room || undefined, detail: filterLocation.detail || undefined, profileId: filterProfile || undefined });
-      const items = (data.items ?? []) as SearchItem[];
-      const found = items[0];
+      const data = await searchDispenseItems({ q: code, perPage: "1", categoryId: filterCategory || undefined, building: filterLocation.building || undefined, floor: filterLocation.floor || undefined, room: filterLocation.room || undefined, detail: filterLocation.detail || undefined, profileId: filterProfile || undefined });
+      const found = (data.items ?? [])[0] as SearchItem | undefined;
       if (found && found.code === code) {
         handleAdd(found);
       } else {
@@ -260,8 +176,6 @@ function DispenseContent() {
       }
     } catch {
       toast.error("ค้นหาไม่สำเร็จ", { id: "qr-fail" });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -326,61 +240,76 @@ return (
         </div>
       </div>
 
-      <Card className="flex-1 min-h-0 p-3 flex flex-col relative">
+      <Card className="flex-1 min-h-0 px-3 pt-3 pb-3 gap-3 flex flex-col relative">
         <div ref={gridRef} className="flex-1 overflow-y-auto pb-1">
         {items.length === 0 && !loading ? (
           <p className="text-sm text-muted-foreground text-center py-8">
             {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
           </p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+          <div className="flex flex-col gap-3">
             {items.map((item) => {
               const inCart = getItemQty(item.id);
               const cartEntry = cartItems.find((c) => c.itemId === item.id);
               const atMax = !item.trackIndividually && inCart >= item.availableQty;
+              const stockNum = item.trackIndividually ? item.subItems.length : item.availableQty;
+              const outOfStock = stockNum <= 0;
+              const stockLabel = item.trackIndividually ? `${stockNum} ชิ้น` : `${stockNum} ${item.issueUnit.name}`;
+              const locText = item.location && !locActive
+                ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
+                : "";
               return (
-              <div
-                key={item.id}
-                className="@container flex flex-col gap-3 rounded-2xl border p-3 hover:bg-muted/50 transition-colors"
-              >
-                <Link
-                  href={`/items/${item.id}`}
-                  onClick={() => sessionStorage.setItem("dispense-scroll", String(gridRef.current?.scrollTop ?? 0))}
-                  className="flex flex-col flex-1 min-w-0 gap-3 text-left"
+                <article
+                  key={item.id}
+                  className="group rounded-2xl border border-border/60 bg-card p-3 shadow-sm transition-all hover:border-primary/30 hover:shadow-md sm:p-4"
                 >
-                  {/* Cover image — rounded square, full width */}
-                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-muted">
-                    <img src={item.imageUrl ?? pic(item.code)} alt={item.name} loading="lazy" className="h-full w-full object-cover" />
-                  </div>
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    {/* Thumbnail + floating stock badge */}
+                    <Link href={`/items/${item.id}`} className="relative shrink-0">
+                      <div className="size-20 sm:size-24 overflow-hidden rounded-xl bg-muted ring-1 ring-border">
+                        <img
+                          src={item.imageUrl ?? pic(item.code)}
+                          alt={item.name}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      </div>
+                      <span className={`absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ring-2 ring-card ${outOfStock ? "bg-destructive" : "bg-success"}`}>
+                        {outOfStock ? "หมด" : `เหลือ ${stockNum}`}
+                      </span>
+                    </Link>
 
-                  {/* Content */}
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex flex-col items-start gap-1">
-                      <Badge className={`text-[11px] @[15rem]:text-xs shrink-0 max-w-[140px] truncate ${item.category.profile.color ?? ""}`}>
-                        {item.category.name}
-                      </Badge>
-                      <span className="font-mono text-xs @[15rem]:text-sm text-muted-foreground">{item.code}</span>
+                    {/* Content */}
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="flex items-center gap-2">
+                        <Badge className={`text-[11px] sm:text-xs shrink-0 max-w-[140px] truncate ${item.category.profile.color ?? ""}`}>
+                          {item.category.name}
+                        </Badge>
+                        <span className="truncate font-mono text-xs text-muted-foreground">{item.code}</span>
+                      </div>
+                      <Link href={`/items/${item.id}`} className="mt-1.5 block">
+                        <h3 className="line-clamp-2 text-sm font-semibold leading-snug sm:text-[15px]">{item.name}</h3>
+                      </Link>
+                      {locText && (
+                        <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="size-3.5 shrink-0" />
+                          <span className="truncate">{locText}</span>
+                        </p>
+                      )}
                     </div>
-                    <span className="text-sm @[15rem]:text-base font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.25rem] @[15rem]:min-h-[2.75rem]">{item.name}</span>
-                    <p className="text-xs @[15rem]:text-sm text-muted-foreground">
-                      คงเหลือ: {item.trackIndividually
-                        ? `${item.subItems.length} ชิ้น`
-                        : `${item.availableQty} ${item.issueUnit.name}`}
-                    </p>
-                    <p className="text-[11px] @[15rem]:text-xs text-muted-foreground/70 truncate min-h-[0.875rem] @[15rem]:min-h-[1rem]">
-                      {(item.location && !locActive)
-                        ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
-                        : ""}
-                    </p>
                   </div>
-                </Link>
 
-                {/* Qty control — bottom row, in flow */}
-                <div className="pt-2 flex justify-end">
+                  {/* Footer: คงเหลือ + morph stepper */}
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-dashed border-border pt-3 sm:mt-4">
+                    <span className="text-xs text-muted-foreground sm:text-sm">
+                      คงเหลือ <span className="font-semibold text-foreground">{stockLabel}</span>
+                    </span>
+
                     {inCart > 0 && cartEntry ? (
-                      <div className="animate-cart-pop flex w-full items-center justify-between gap-0.5 bg-background border rounded-full px-0.5">
+                      <div className="animate-cart-pop flex shrink-0 items-center gap-1 rounded-full bg-muted p-1 ring-1 ring-border">
                         <button
-                          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90"
+                          aria-label="ลดจำนวน"
+                          className="grid size-8 place-items-center rounded-full text-foreground transition hover:bg-card active:scale-90"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (cartEntry.quantity <= 1) {
@@ -390,17 +319,13 @@ return (
                             }
                           }}
                         >
-                          <Minus className="h-4 w-4" />
+                          <Minus className="size-4" />
                         </button>
-                        <CardEditableQty
-                          value={inCart}
-                          max={!item.trackIndividually ? item.availableQty : undefined}
-                          onChange={(v) => {
-                            updateItem(item.id, { quantity: v }, cartEntry.lotId, cartEntry.subItemId);
-                          }}
-                        />
+                        <span className="min-w-[1.5rem] text-center text-sm font-bold tabular-nums">{inCart}</span>
                         <button
-                          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors active:scale-90 disabled:opacity-30"
+                          aria-label="เพิ่มจำนวน"
+                          disabled={atMax}
+                          className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-sm transition hover:brightness-110 active:scale-90 disabled:opacity-40 disabled:hover:brightness-100"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (atMax) return;
@@ -410,34 +335,47 @@ return (
                               updateItem(item.id, { quantity: cartEntry.quantity + 1 }, cartEntry.lotId, cartEntry.subItemId);
                             }
                           }}
-                          disabled={atMax}
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="size-4" />
                         </button>
                       </div>
                     ) : (
                       <button
-                        className="h-9 w-full flex items-center justify-center rounded-full border bg-background hover:bg-muted transition-colors active:scale-95 disabled:opacity-30"
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-primary to-primary/60 px-4 text-sm font-medium text-primary-foreground shadow-sm transition hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:hover:brightness-100"
                         onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
-                        disabled={!item.trackIndividually && item.availableQty <= 0}
+                        disabled={outOfStock}
                       >
-                        <Plus className="h-4 w-4" />
+                        <Plus className="size-4" />
+                        เพิ่ม
                       </button>
                     )}
                   </div>
-              </div>
+                </article>
               );
             })}
           </div>
         )}
         </div>
 
-        <Pagination
-          page={page}
-          total={total}
-          pageSize={PAGE_SIZE}
-          onChange={handlePageChange}
-        />
+        {isMobile ? (
+          items.length > 0 && (
+            <Pagination
+              mode="loadMore"
+              shown={items.length}
+              total={total}
+              hasMore={hasNext}
+              isLoading={isLoadingMore}
+              onLoadMore={loadMore}
+            />
+          )
+        ) : (
+          <Pagination
+            page={page}
+            total={total}
+            pageSize={PAGE_SIZE.DEFAULT}
+            onChange={handlePageChange}
+          />
+        )}
         {loading && items.length > 0 && (
           <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] rounded-xl flex items-center justify-center z-10">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />

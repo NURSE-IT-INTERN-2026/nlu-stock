@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus, RepairVenue } from "@/generated/prisma/enums";
 
 const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
@@ -24,10 +24,13 @@ const itemBaseSchema = z.object({
   maintenanceCycleMonths: z.number().int().min(1).default(12),
   lastMaintenanceDate: z.coerce.date().optional().nullable(),
   manualUrl: z.string().optional().nullable(),
+  // Stock count cadence override; null/omitted = profile default (3 mo consumable, 12 mo rest).
+  countCycleMonths: z.number().int().min(1).optional().nullable(),
   // Consumable fields
   storageRequirements: z.string().max(500).optional().nullable(),
   // Book/Toy set + borrowing (ADR-0001)
   setSize: z.number().int().min(1).default(1),
+  borrowLimit: z.number().int().min(0).default(0),
   borrowable: z.boolean().default(false),
 });
 
@@ -42,11 +45,17 @@ export const stockAdjustSchema = z.object({
   // Lot-level correction (consumables): correct a specific lot's remainingQty.
   lotId: z.string().optional().nullable(),
   lotCount: z.number().int().min(0).optional(),
-  reason: z.nativeEnum(AdjustmentReason),
+  // Scheduled stock count (ตรวจนับ): stamps lastCountDate/nextCountDate and lets the
+  // server pick the reason from the delta (over → COUNT_MISMATCH_OVER, short → LOST),
+  // so the UI never has to. A count that matches is valid and carries no adjustment.
+  stockCount: z.boolean().optional(),
+  reason: z.nativeEnum(AdjustmentReason).optional(),
   notes: z.string().max(500).optional().nullable(),
   imageEvidence: z.string().optional().nullable(),
-}).refine((d) => d.shelfCount != null || (d.lotId != null && d.lotCount != null), {
+}).refine((d) => d.stockCount || d.shelfCount != null || (d.lotId != null && d.lotCount != null), {
   message: "Either shelfCount or (lotId + lotCount) is required",
+}).refine((d) => d.stockCount || d.reason != null, {
+  message: "reason is required",
 });
 
 export const statusChangeSchema = z.object({
@@ -54,6 +63,8 @@ export const statusChangeSchema = z.object({
   subItemId: z.string().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   imageUrl: z.string().optional().nullable(),
+  repairVenue: z.nativeEnum(RepairVenue).optional().nullable(),
+  repairNote: z.string().max(500).optional().nullable(),
 });
 
 // Bulk per-piece status change for tracked items (used by adjust dialog + subcodes tab batch).

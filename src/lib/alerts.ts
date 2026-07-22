@@ -6,6 +6,7 @@ export interface AlertCounts {
   overdueMaintenance: number;
   overdueReturn: number;
   damagedPending: number;
+  dueCount: number;
   total: number;
   totalItems: number;
   onLoan: number;
@@ -15,7 +16,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  const [lowStockIds, nearExpiry, overdueMaint, totalItems, onLoan, overdueLoans, damagedSubItems, damagedItems] = await Promise.all([
+  const [lowStockIds, nearExpiry, overdueMaint, totalItems, onLoan, overdueLoans, damagedSubItems, damagedItems, dueCount] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
     `,
@@ -29,7 +30,20 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       where: { isActive: true },
     }),
     prisma.item.count({
-      where: { dispenseRecords: { some: { returnedAt: null } } },
+      // onLoan = ยืมออกไป (incl. COUNT-type ตั้งใช้ในห้อง still outstanding numerically).
+      // Per-unit (trackIndividually) INUSE returned via คืนเข้าพัสดุ — excluded here.
+      where: {
+        dispenseRecords: {
+          some: {
+            returnedAt: null,
+            OR: [
+              { loanType: null },
+              { loanType: "BORROW" },
+              { AND: [{ loanType: "INUSE" }, { item: { trackIndividually: false } }] },
+            ],
+          },
+        },
+      },
     }),
     // Open loans past their due date. Select the grouping keys so we can count
     // distinct loan *events* (one card per loanGroupId in the return panel),
@@ -46,6 +60,10 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     prisma.subItem.count({ where: { status: "DAMAGED" } }),
     // Same, for non-tracked (count-based) items.
     prisma.item.count({ where: { status: "DAMAGED", trackIndividually: false, isActive: true } }),
+    // ถึงรอบตรวจนับ — null nextCountDate = never counted, also due.
+    prisma.item.count({
+      where: { isActive: true, OR: [{ nextCountDate: null }, { nextCountDate: { lt: now } }] },
+    }),
   ]);
 
   const lowStock = lowStockIds.length;
@@ -55,7 +73,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   // "ทั้งหมด" = sum of alert-type counts (each chip added together). onLoan is NOT an alert —
   // it's a normal operational state, surfaced as a filter on /items instead. The table paginates
   // distinct items separately, so this need not equal the row count.
-  const total = lowStock + nearExpiry + overdueMaint + overdueReturn + damagedPending;
+  const total = lowStock + nearExpiry + overdueMaint + overdueReturn + damagedPending + dueCount;
 
   return {
     lowStock,
@@ -63,6 +81,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     overdueMaintenance: overdueMaint,
     overdueReturn,
     damagedPending,
+    dueCount,
     total,
     totalItems,
     onLoan,

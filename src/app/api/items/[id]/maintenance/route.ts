@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, forbidden } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
+import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
 
@@ -34,6 +35,23 @@ export async function POST(
 
   try {
     const record = await prisma.$transaction(async (tx) => {
+      // Repair finished (result AVAILABLE) but no next date sent → schedule the next
+      // preventive round one cycle (default 12 months) from the day it came back.
+      // The form normally fills this in; the fallback keeps API-only callers on cadence.
+      let nextAt = data.nextMaintenanceAt ?? null;
+      if (!nextAt && data.result === "AVAILABLE") {
+        const it = await tx.item.findUnique({ where: { id: itemId }, select: { maintenanceCycleMonths: true } });
+        nextAt = nextMaintenanceFromCycle(data.performedAt, it?.maintenanceCycleMonths ?? 12);
+      }
+
+      // Denormalize the repair venue (ภายใน/ภายนอก) captured at send-to-repair time onto
+      // the maintenance record so cost-by-venue reporting works without a fuzzy join.
+      const venueLog = await tx.itemStatusLog.findFirst({
+        where: { itemId, newStatus: ItemStatus.UNDER_REPAIR, subItemId: data.subItemId ?? null },
+        orderBy: { changedAt: "desc" },
+        select: { repairVenue: true },
+      });
+
       const rec = await tx.maintenanceRecord.create({
         data: {
           itemId,
@@ -45,8 +63,9 @@ export async function POST(
           description: data.description ?? undefined,
           cost: data.cost ?? undefined,
           attachmentUrls: data.attachmentUrls,
-          nextMaintenanceAt: data.nextMaintenanceAt ?? undefined,
+          nextMaintenanceAt: nextAt ?? undefined,
           subItemId: data.subItemId ?? undefined,
+          repairVenue: venueLog?.repairVenue ?? undefined,
         },
       });
 
@@ -72,7 +91,7 @@ export async function POST(
         where: { id: itemId },
         data: {
           lastMaintenanceDate: data.performedAt,
-          ...(data.nextMaintenanceAt && { nextMaintenanceDate: data.nextMaintenanceAt }),
+          ...(nextAt && { nextMaintenanceDate: nextAt }),
         },
       });
 

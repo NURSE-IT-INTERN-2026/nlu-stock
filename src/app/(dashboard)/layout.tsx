@@ -2,7 +2,6 @@
 
 import React, { useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/sidebar";
 import { BottomTab } from "@/components/layout/bottom-tab";
 import { Header } from "@/components/layout/header";
@@ -14,7 +13,7 @@ import { CartProvider } from "@/components/dispense/cart-context";
 import { PageHeaderProvider } from "@/components/layout/page-header-context";
 
 // Pages that manage their own height/scroll (app-shell style) — drop main's vertical padding so they fill the viewport.
-const FULL_BLEED = new Set(["/receive", "/items", "/settings"]);
+const FULL_BLEED = new Set(["/receive", "/items", "/settings", "/alerts"]);
 
 const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
@@ -29,7 +28,7 @@ const pageTitles: Record<string, string> = {
 
 function getTitle(pathname: string) {
   if (pathname.startsWith("/items/") && pathname !== "/items") return "รายละเอียดพัสดุ";
-  if (pathname === "/cart") return "ยืนยันการเบิก";
+  if (pathname === "/cart") return "เบิก-ยืมพัสดุ";
   return pageTitles[pathname] || "NLU Stock";
 }
 
@@ -38,15 +37,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 60_000,
-        refetchOnWindowFocus: false,
-      },
-    },
-  }));
 
   // Auto-collapse on tablet (md–xl), expand on desktop (xl+)
   React.useEffect(() => {
@@ -77,11 +67,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
     <AlertProvider>
       <CartProvider>
       <PageHeaderProvider>
-        <div className="flex h-screen overflow-hidden" style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "4rem" : "16rem" }}>
+        <div className="flex min-h-dvh lg:h-dvh lg:overflow-hidden" style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "4rem" : "16rem" }}>
         <Sidebar
           user={user}
           collapsed={sidebarCollapsed}
@@ -90,8 +79,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-1 flex-col min-w-0">
           <Header title={getTitle(pathname)} user={user} sidebarCollapsed={sidebarCollapsed} />
           <main className={cn(
-            "flex-1 overflow-y-auto",
-            FULL_BLEED.has(pathname) ? "px-4 sm:px-6 pb-[calc(3.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(4rem+env(safe-area-inset-bottom))] lg:px-6 lg:pb-3" : "px-4 sm:px-6 pb-[calc(3.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-6",
+            "flex-1 px-4 sm:px-6 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:px-6 lg:pb-6 lg:overflow-y-auto lg:overflow-x-hidden lg:overscroll-none",
+            // app-shell pages keep mobile fixed-height scroll (their h-full panes need a bounded ancestor).
+            // max-h (not h): flex-1 sets flex-basis 0% which makes an explicit height ignored when the flex
+            // container's size is indefinite (mobile appshell is min-h-dvh) — main would grow to content and not scroll.
+            // max-height clamps the flex-resolved size reliably, so main stays viewport-bound and scrolls internally.
+            FULL_BLEED.has(pathname) && "max-h-[calc(100dvh-4rem)] sm:max-h-[calc(100dvh-5rem)] lg:max-h-none overflow-y-auto overflow-x-hidden overscroll-none",
           )}>
             {children}
           </main>
@@ -101,6 +94,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </PageHeaderProvider>
       </CartProvider>
     </AlertProvider>
-    </QueryClientProvider>
   );
 }

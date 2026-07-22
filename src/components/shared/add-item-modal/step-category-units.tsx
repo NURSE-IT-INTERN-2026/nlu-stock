@@ -5,6 +5,7 @@ import { FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,7 @@ import { getUnits } from "@/lib/api";
 import type { CategoryOption, UnitOption } from "@/lib/api";
 import { CodeBuilder } from "./code-builder";
 import type { CodeMeta } from "./code-builder";
+import { NumericInput } from "@/components/shared/numeric-input";
 import type { FormProfile } from "./types";
 
 interface StepCategoryUnitsProps {
@@ -41,6 +43,10 @@ interface StepCategoryUnitsProps {
   /** Initial stock quantity for flat types (CON/DUR/KIT) */
   initialQty?: number;
   onInitialQtyChange?: (q: number) => void;
+  /** Notified when initial-qty validity changes (true = valid) — gates Next. */
+  onQtyValidChange?: (valid: boolean) => void;
+  description?: string;
+  onDescriptionChange?: (d: string) => void;
 }
 
 export function StepCategoryUnits({
@@ -60,9 +66,13 @@ export function StepCategoryUnits({
   initialCodeMeta,
   initialQty = 1,
   onInitialQtyChange,
+  onQtyValidChange,
+  description,
+  onDescriptionChange,
 }: StepCategoryUnitsProps) {
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
+  const [qtyInvalid, setQtyInvalid] = useState(false);
 
   const fetchUnits = useCallback(async () => {
     if (units.length > 0) return;
@@ -92,7 +102,7 @@ export function StepCategoryUnits({
     <div className="space-y-5">
       {/* Category — primary, drives code generation */}
       <div className="space-y-2">
-        <Label htmlFor="cat-btn">หมวดหมู่ <span className="text-destructive">*</span></Label>
+        <Label htmlFor="cat-btn" required>หมวดหมู่</Label>
         <button
           id="cat-btn"
           type="button"
@@ -145,19 +155,26 @@ export function StepCategoryUnits({
             )}
 
             {/* Initial stock quantity for flat types */}
-            <div className="w-full rounded-lg border border-border bg-card">
+            <div className={cn("w-full rounded-lg border bg-card", qtyInvalid ? "border-destructive" : "border-border")}>
               <div className="flex items-center justify-between gap-4 px-3 py-2.5">
                 <Label htmlFor="initial-qty" className="text-sm">จำนวนเริ่มต้น</Label>
-                <Input
+                <NumericInput
                   id="initial-qty"
-                  type="number"
-                  min={0}
                   value={initialQty}
-                  onChange={(e) => onInitialQtyChange?.(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-20 bg-background text-center text-gray-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onCommit={(n) => onInitialQtyChange?.(n)}
+                  min={1}
+                  showBorderError={false}
+                  onValidityChange={(v) => {
+                    setQtyInvalid(!v);
+                    onQtyValidChange?.(v);
+                  }}
+                  className="w-20 bg-background text-center text-gray-900"
                 />
               </div>
             </div>
+            {qtyInvalid && (
+              <p className="text-xs text-destructive">กรุณาระบุจำนวนอย่างน้อย 1</p>
+            )}
           </div>
         )}
       </div>
@@ -170,7 +187,7 @@ export function StepCategoryUnits({
         </div>
       ) : (
         <div className="space-y-2">
-          <Label htmlFor="issue-unit-select" className="text-xs">หน่วย <span className="text-destructive">*</span></Label>
+          <Label htmlFor="issue-unit-select" className="text-xs" required>หน่วย</Label>
           <Select
             value={issueUnitId}
             onValueChange={(v) => {
@@ -194,6 +211,19 @@ export function StepCategoryUnits({
           </Select>
         </div>
       )}
+
+      {/* Description */}
+      <div className="space-y-2">
+        <Label htmlFor="item-description" className="text-xs">คำอธิบาย</Label>
+        <Textarea
+          id="item-description"
+          value={description ?? ""}
+          onChange={(e) => onDescriptionChange?.(e.target.value)}
+          rows={2}
+          placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)"
+          className="bg-card"
+        />
+      </div>
     </div>
   );
 }

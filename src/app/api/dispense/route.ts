@@ -5,6 +5,7 @@ import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { dispenseRequestSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
+import { LoanType } from "@/generated/prisma/enums";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
             notes: notes ?? undefined,
             recipient: recipient ?? undefined,
             loanGroupId,
+            loanType: inRoom ? LoanType.INUSE : LoanType.BORROW,
             dueAt: dueAtDate ?? undefined,
           },
         });

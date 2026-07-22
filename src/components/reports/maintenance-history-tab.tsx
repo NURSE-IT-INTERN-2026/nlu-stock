@@ -24,6 +24,7 @@ interface Row {
   result: string;
   issue: string;
   cost: number;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
   performer: string;
   performedAt: string;
 }
@@ -52,6 +53,7 @@ const columns: Column<Row>[] = [
     header: "Cost",
     render: (r) => (r.cost > 0 ? `฿${r.cost.toLocaleString()}` : "—"),
   },
+  { key: "repairVenue", header: "ประเภทซ่อม", render: (r) => (r.repairVenue ? (r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—") },
   { key: "performer", header: "By" },
 ];
 

@@ -3,9 +3,10 @@
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { ChevronRight, CheckCircle2, MapPin, Package, Clock, Wrench } from "lucide-react";
+import { ChevronRight, CheckCircle2, MapPin, Package, Clock, Wrench, ClipboardCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locationLabel } from "@/lib/constants";
+import { parseItemStatusList } from "@/lib/status-utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -39,25 +40,28 @@ interface ItemRecord {
   minThreshold: number;
   location: LocationOption | null;
   nextMaintenanceDate: string | null;
+  nextCountDate: string | null;
   lots: { expiryDate: string | null }[];
   _count: { subItems: number };
   alertTypes: string[];
 }
 
-type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "overdueReturn" | "damagedPending";
+type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "overdueReturn" | "damagedPending" | "dueCount";
 
 const ALERT_BADGE: Record<string, string> = {
   lowStock: "bg-orange-500/15 text-orange-700 border-orange-500/30",
   nearExpiry: "bg-warning/15 text-warning-foreground border-warning/30",
   overdueMaint: "bg-destructive/15 text-destructive border-destructive/30",
+  dueCount: "bg-sky-500/15 text-sky-700 border-sky-500/30",
 };
 
 const ALERT_LABEL: Record<string, string> = {
-  lowStock: "สต็อกต่ำ",
+  lowStock: "ต่ำกว่ากำหนด",
   nearExpiry: "ใกล้หมดอายุ",
   overdueMaint: "เกินกำหนดซ่อม",
   overdueReturn: "คืนเกินกำหนด",
   damagedPending: "ชำรุดรอดำเนินการ",
+  dueCount: "ถึงรอบตรวจนับ",
 };
 
 // Mobile row icon by alert type (desktop table keeps text badges only).
@@ -65,6 +69,7 @@ const ALERT_ICON: Record<string, { icon: typeof Package; cls: string }> = {
   lowStock: { icon: Package, cls: "bg-orange-500/10 text-orange-700 ring-orange-500/20" },
   nearExpiry: { icon: Clock, cls: "bg-warning/10 text-warning-700 ring-warning/20" },
   overdueMaint: { icon: Wrench, cls: "bg-destructive/10 text-destructive ring-destructive/20" },
+  dueCount: { icon: ClipboardCheck, cls: "bg-sky-500/10 text-sky-700 ring-sky-500/20" },
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -82,6 +87,11 @@ function alertDetail(item: ItemRecord, type: string): string {
     case "overdueMaint": {
       const days = item.nextMaintenanceDate ? Math.max(0, Math.floor((Date.now() - new Date(item.nextMaintenanceDate).getTime()) / DAY_MS)) : 0;
       return `เกินกำหนด ${days} วัน`;
+    }
+    case "dueCount": {
+      if (!item.nextCountDate) return "ยังไม่เคยตรวจนับ";
+      const days = Math.max(0, Math.floor((Date.now() - new Date(item.nextCountDate).getTime()) / DAY_MS));
+      return `ถึงรอบมาแล้ว ${days} วัน`;
     }
     default:
       return "";
@@ -120,12 +130,13 @@ function AlertsContent() {
     if (searchParams.get("overdueMaint") === "true") return "overdueMaint";
     if (searchParams.get("overdueReturn") === "true") return "overdueReturn";
     if (searchParams.get("damagedPending") === "true") return "damagedPending";
+    if (searchParams.get("dueCount") === "true") return "dueCount";
     return "all";
   }, [searchParams]);
 
   const selectAlertType = useCallback((key: AlertTypeKey) => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending"]) params.delete(k);
+    for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending", "dueCount"]) params.delete(k);
     if (key !== "all") params.set(key, "true");
     const qs = params.toString();
     router.replace(qs ? `/alerts?${qs}` : "/alerts");
@@ -137,7 +148,7 @@ function AlertsContent() {
       query: "",
       profileId: "",
       categoryId: searchParams.get("category"),
-      status: statusParam ? statusParam.split(",").filter(Boolean) : [],
+      status: parseItemStatusList(statusParam),
       location: {},
       preset: null,
     };
@@ -172,11 +183,12 @@ function AlertsContent() {
 
   const alertChips: { key: AlertTypeKey; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: alerts.total },
-    { key: "lowStock", label: "สต็อกต่ำ", count: alerts.lowStock },
+    { key: "lowStock", label: "ต่ำกว่ากำหนด", count: alerts.lowStock },
     { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
     { key: "overdueMaint", label: "เกินกำหนดซ่อม", count: alerts.overdueMaintenance },
     { key: "overdueReturn", label: "เกินกำหนดคืน", count: alerts.overdueReturn },
-    { key: "damagedPending", label: "แจ้งชำรุด (รอส่งซ่อม)", count: alerts.damagedPending },
+    { key: "damagedPending", label: "ชำรุด (รอส่งซ่อม)", count: alerts.damagedPending },
+    { key: "dueCount", label: "ถึงรอบตรวจนับ", count: alerts.dueCount },
   ];
 
   // Reflect the active tab in the header breadcrumb ("การแจ้งเตือน › <tab>").
@@ -289,7 +301,7 @@ function AlertsContent() {
         </div>
       ) : alertType === "overdueReturn" ? (
         <div className="flex-1 min-h-0">
-          <ReturnPanel initialChip="overdue" />
+          <ReturnPanel initialChip="overdue" readOnly />
         </div>
       ) : (
       <>

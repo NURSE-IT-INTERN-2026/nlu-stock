@@ -105,11 +105,14 @@ export async function POST(
         }
 
         const newResolved = dispense.resolvedQty + qty;
+        // UNDER_REPAIR is internal; recorded as a DAMAGED return on the dispense record.
+        const returnCondition = status === "UNDER_REPAIR" ? "DAMAGED" : status;
         await tx.dispenseRecord.update({
           where: { id: dispense.id },
           data: {
             resolvedQty: newResolved,
             returnedAt: newResolved >= dispense.quantity ? new Date() : undefined,
+            returnCondition,
             ...(proofUrls && proofUrls.length > 0 ? { returnProofUrls: proofUrls } : {}),
           },
         });

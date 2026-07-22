@@ -129,9 +129,14 @@ Entra ID SSO, NodeMailer email alerts, borrow/return + sets, Kit/BOM (re-introdu
 - **E1 — Dispense-history report: show real return condition.** The report's Status column
   shows only "Dispensed" / "Returned" (from `returnedAt`). It cannot tell ปกติ vs ชำรุด vs สูญหาย
   because `DispenseRecord` stores no return condition — the outcome lives in `StockAdjustment`
-  (LOST / DAMAGED_PENDING_REPAIR) and per-piece `ItemStatusLog`. Fix needs **either** a new
-  `DispenseRecord.returnCondition` field (+ backfill) **or** a join to those tables in the report
-  query. Non-blocking for the DoD; agreed to log now so it isn't lost.
+  (LOST / DAMAGED_PENDING_REPAIR) and per-piece `ItemStatusLog`.
+
+  **Decided (2026-07-06): add field, not join.** `StockAdjustment` and `ItemStatusLog` have no FK
+  to `DispenseRecord` → join is fuzzy (item+time match) and impossible for consumable/count types
+  (no sub-item). Add `DispenseRecord.returnCondition ReturnCondition?` + enum
+  `{ INTACT DAMAGED LOST }`; set at the return write site; render in `dispense-history-tab.tsx`
+  + export. Legacy rows stay null → report shows "Returned" as today (no backfill needed).
+  Tracked as task #1. Non-blocking for the DoD.
 
 ---
 

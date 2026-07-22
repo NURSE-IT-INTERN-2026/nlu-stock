@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, MapPin, ChevronRight, Eye, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -14,6 +13,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { getLocations, createLocation, updateLocation, deleteLocation, getItems } from "@/lib/api";
+import { Combobox } from "@/components/shared/combobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -265,6 +265,21 @@ export function LocationsTab() {
     return (a.detail || "").localeCompare(b.detail || "");
   });
 
+  // suggestion lists for the form comboboxes (creatable — typing a new value still works).
+  const buildingOpts = useMemo(() => [...new Set(locations.map((l) => l.building))], [locations]);
+  const floorOpts = useMemo(
+    () => [...new Set(locations.filter((l) => l.building === form.building).map((l) => l.floor))],
+    [locations, form.building],
+  );
+  const roomOpts = useMemo(
+    () => [...new Set(locations.filter((l) => l.building === form.building && l.floor === form.floor).map((l) => l.room).filter(Boolean))],
+    [locations, form.building, form.floor],
+  );
+  const detailOpts = useMemo(
+    () => [...new Set(locations.map((l) => l.detail).filter((x): x is string => !!x))],
+    [locations],
+  );
+
   function openCreate() {
     setEditing(null);
     setForm({ building: "", floor: "", room: "", detail: "" });
@@ -342,12 +357,12 @@ export function LocationsTab() {
   );
 
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0">
+    <div className="flex flex-col gap-5">
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => openCreate()}><Plus className="h-4 w-4 mr-1" />เพิ่ม</Button>
+        <Button size="sm" onClick={() => openCreate()}><Plus className="h-4 w-4 mr-1" />เพิ่มสถานที่</Button>
       </div>
 
-      <div className="rounded-2xl border bg-card shadow-sm flex-1 min-h-0 overflow-auto">
+      <div className="rounded-2xl border bg-card shadow-sm">
         {sortedLocations.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <MapPin className="h-8 w-8 text-muted-foreground/40" />
@@ -380,23 +395,24 @@ export function LocationsTab() {
 
           <div className="space-y-6 bg-secondary/40 px-6 py-6">
             <div className="space-y-2">
-              <Label htmlFor="loc-building">อาคาร <span className="text-destructive">*</span></Label>
-              <Input id="loc-building" value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} placeholder="เช่น อาคาร 2" className="bg-card" autoFocus={!editing} />
+              <Label htmlFor="loc-building" required>อาคาร</Label>
+              <Combobox id="loc-building" value={form.building} onChange={(v) => setForm({ ...form, building: v })} options={buildingOpts} placeholder="เช่น อาคาร 2" className="bg-card" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="loc-floor">ชั้น <span className="text-destructive">*</span></Label>
-                <Input id="loc-floor" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="เช่น 4" className="bg-card" />
+                <Label htmlFor="loc-floor" required>ชั้น</Label>
+                <Combobox id="loc-floor" value={form.floor} onChange={(v) => setForm({ ...form, floor: v })} options={floorOpts.length ? floorOpts : [...new Set(locations.map((l) => l.floor))]} placeholder="เช่น 4" className="bg-card" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="loc-room">
-                  {noRoom ? "ตำแหน่ง" : "ห้อง"} <span className="text-destructive">*</span>
+                <Label htmlFor="loc-room" required>
+                  {noRoom ? "ตำแหน่ง" : "ห้อง"}
                 </Label>
-                <Input
+                <Combobox
                   id="loc-room"
                   value={form.room}
-                  onChange={(e) => setForm({ ...form, room: e.target.value })}
+                  onChange={(v) => setForm({ ...form, room: v })}
+                  options={roomOpts.length ? roomOpts : [...new Set(locations.map((l) => l.room).filter(Boolean))]}
                   placeholder={noRoom ? "เช่น ล็อคเกอร์หน้าห้อง 402" : "เช่น 402"}
                   className="bg-card"
                 />
@@ -421,10 +437,11 @@ export function LocationsTab() {
 
             <div className="space-y-2">
               <Label htmlFor="loc-detail">รายละเอียดเพิ่มเติม</Label>
-              <Input
+              <Combobox
                 id="loc-detail"
                 value={form.detail}
-                onChange={(e) => setForm({ ...form, detail: e.target.value })}
+                onChange={(v) => setForm({ ...form, detail: v })}
+                options={detailOpts}
                 placeholder="ไม่จำเป็น เช่น ชั้นบนของตู้"
                 className="bg-card"
               />

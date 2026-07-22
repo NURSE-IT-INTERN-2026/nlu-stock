@@ -56,7 +56,7 @@ export function StepCreateName({
     <div className="space-y-6">
       {/* Name input */}
       <div className="space-y-2">
-        <Label htmlFor="new-cat-name">ชื่อหมวดหมู่ <span className="text-destructive">*</span></Label>
+        <Label htmlFor="new-cat-name" required>ชื่อหมวดหมู่</Label>
         <Input
           id="new-cat-name"
           placeholder="เช่น อุปกรณ์ทำความสะอาด"
@@ -112,7 +112,7 @@ export function StepCreateName({
       {/* Profile picker */}
       <div className="space-y-3">
         <div>
-          <Label>ประเภท <span className="text-destructive">*</span></Label>
+          <Label required>ประเภท</Label>
           <p className="mt-0.5 text-xs text-muted-foreground">
             เลือกประเภทหมวดหมู่เพื่อกำหนดวิธีจัดการ
           </p>

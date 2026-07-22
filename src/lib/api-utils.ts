@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { ZodSchema, ZodError } from "zod";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 type SessionUser = { userId: string; email: string; name: string; role: string };
 type AuthResult = { user: SessionUser; denied: null } | { user: null; denied: NextResponse };
@@ -48,6 +49,14 @@ export async function requireAdmin(request: NextRequest): Promise<AuthResult> {
   return result;
 }
 
+// ponytail: STAFF+ — aligns the item edit dialog (canAct = ADMIN/STAFF) with the API.
+export async function requireStaff(request?: NextRequest): Promise<AuthResult> {
+  const result = await requireAuth(request);
+  if (result.denied) return result;
+  if (result.user.role !== "ADMIN" && result.user.role !== "STAFF") return { user: null, denied: forbidden() };
+  return result;
+}
+
 export function parseBody<T>(schema: ZodSchema<T>) {
   return async (request: Request): Promise<{ data: T | null; error: NextResponse | null }> => {
     try {
@@ -69,7 +78,7 @@ export function getSearchParams(request: NextRequest) {
 
 export function paginate(searchParams: URLSearchParams) {
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const perPage = Math.min(100, Math.max(1, Number(searchParams.get("perPage")) || 20));
+  const perPage = Math.min(100, Math.max(1, Number(searchParams.get("perPage")) || PAGE_SIZE.DEFAULT));
   const skip = (page - 1) * perPage;
   return { page, perPage, skip, take: perPage };
 }

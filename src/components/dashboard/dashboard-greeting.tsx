@@ -2,11 +2,11 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { useSession } from "@/components/layout/auth-guard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { refreshDashboard } from "@/hooks/use-async";
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -28,7 +28,6 @@ function formatTimestamp(d: Date): string {
 export function DashboardGreeting() {
   const { user } = useSession();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const greeting = getGreeting();
   const firstName = user?.name?.split(" ")[0] ?? "ผู้ใช้งาน";
 
@@ -39,11 +38,11 @@ export function DashboardGreeting() {
 
   const refresh = useCallback(() => {
     setRefreshing(true);
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    refreshDashboard();
     router.refresh();
     setLastRefreshed(new Date());
     window.setTimeout(() => setRefreshing(false), 600);
-  }, [queryClient, router]);
+  }, [router]);
 
   return (
     <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -53,7 +52,7 @@ export function DashboardGreeting() {
           <span className="font-bold text-foreground">{firstName}</span>
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          นี่คือสถานะสต๊อกล่าสุดประจำวันนี้
+          สถานะพัสดุในคลังล่าสุดประจำวัน
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           อัปเดตล่าสุด: {formatTimestamp(lastRefreshed)}

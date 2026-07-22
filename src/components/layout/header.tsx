@@ -30,7 +30,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   reports: "รายงาน & สถิติ",
   alerts: "การแจ้งเตือน",
   settings: "ตั้งค่าระบบ",
-  cart: "ยืนยันการเบิก",
+  cart: "เบิก-ยืมพัสดุ",
 };
 
 function Breadcrumb({ title, detail }: { title: string; detail?: string }) {

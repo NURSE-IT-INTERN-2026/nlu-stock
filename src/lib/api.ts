@@ -172,6 +172,19 @@ export function getPublicLocations() {
   return request<LocationOption[]>("/api/locations");
 }
 
+/** Find-or-create a location (building/floor/room/detail) via POST /api/locations. */
+export function findOrCreateLocation(data: {
+  building: string;
+  floor: string;
+  room: string;
+  detail?: string | null;
+}) {
+  return request<LocationOption>("/api/locations", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export function createLocation(data: {
   building: string;
   floor: string;
@@ -379,7 +392,8 @@ export function adjustStock(
     shelfCount?: number;
     lotId?: string | null;
     lotCount?: number;
-    reason: string;
+    stockCount?: boolean;
+    reason?: string;
     notes?: string | null;
     imageEvidence?: string | null;
   },
@@ -392,7 +406,7 @@ export function adjustStock(
 
 export function updateItemStatus(
   itemId: string,
-  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null },
+  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null },
 ) {
   return request<unknown>(`/api/items/${itemId}/status`, {
     method: "POST",
@@ -447,6 +461,7 @@ export interface OpenBorrow {
     issueUnit: { name: string };
     category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
+    _count: { subItems: number };
   };
   subItem: { id: string; subCode: string; name: string | null; serialNumber: string | null } | null;
   staff: { name: string };
@@ -475,6 +490,10 @@ export interface SubItemByStatus {
   id: string;
   subCode: string;
   notes: string | null;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
+  damageNote: string | null;
+  repairNote: string | null;
+  location: { building: string; floor: string; room: string; detail: string | null } | null;
   item: {
     id: string;
     code: string;
@@ -483,6 +502,7 @@ export interface SubItemByStatus {
     issueUnit: { name: string };
     category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
+    _count: { subItems: number };
   };
 }
 
@@ -500,6 +520,22 @@ export function updateItem(itemId: string, data: Record<string, unknown>) {
 export function getItemHistory(itemId: string, params?: string) {
   const qs = params || "perPage=3";
   return request<{ events: unknown[] }>(`/api/items/${itemId}/history?${qs}`);
+}
+
+export function recoverLoss(itemId: string, data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string }) {
+  return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover-loss`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** Partial update of a sub-item (serial/condition/notes/locationId/imageUrl/images).
+ *  STAFF+ route — PUT /api/items/:id/sub-items/:subId. */
+export function updateSubItemFields(itemId: string, subId: string, data: Record<string, unknown>) {
+  return request<unknown>(`/api/items/${itemId}/sub-items/${subId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }
 
 export function createMaintenance(itemId: string, data: Record<string, unknown>) {
@@ -553,7 +589,7 @@ export function getMaintenanceSummary() {
 // ─── Alerts ───
 
 export function getAlerts() {
-  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; overdueReturn: number; damagedPending: number; total: number; totalItems: number; onLoan: number }>(
+  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; overdueReturn: number; damagedPending: number; dueCount: number; total: number; totalItems: number; onLoan: number }>(
     "/api/alerts",
   );
 }
