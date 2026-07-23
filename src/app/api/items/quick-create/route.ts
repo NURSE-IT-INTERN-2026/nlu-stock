@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, error, parseBody } from "@/lib/api-utils";
 import { isItemTracked } from "@/lib/category-profile";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
+import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { embedItem } from "@/lib/gemini";
 import { z } from "zod";
 
@@ -38,6 +39,13 @@ export async function POST(request: NextRequest) {
   // setSize only applies to set-tracked profiles (BOOK/TOY); clamp otherwise (D4).
   const setSize = cat.profile?.setTracking ? data.setSize : 1;
 
+  // Maintenance schedule seed. quick-create uses the default cycle (12 mo); no cycle
+  // field in its payload. CONSUMABLE never gets a cycle. Tracked → seed each copy;
+  // flat (COUNT) → seed the item.
+  const DEFAULT_CYCLE = 12;
+  const hasMaintenance = cat.profile.dispenseType !== "CONSUMABLE";
+  const seedNextMaintenance = hasMaintenance ? nextMaintenanceFromCycle(new Date(), DEFAULT_CYCLE) : null;
+
   // Build sub-items for individually tracked items — subCode is the copy part (C01, C02…);
   // full reference = item.code + "-" + subCode (see ADR-0001).
   const subItems = trackIndividually
@@ -45,6 +53,7 @@ export async function POST(request: NextRequest) {
         subCode: `C${String(i + 1).padStart(2, "0")}`,
         name: data.copyCount === 1 ? data.name : `${data.name} (copy ${i + 1})`,
         status: "AVAILABLE" as const,
+        ...(seedNextMaintenance ? { nextMaintenanceDate: seedNextMaintenance } : {}),
       }))
     : [];
 
@@ -64,6 +73,8 @@ export async function POST(request: NextRequest) {
       availableQty: trackIndividually ? data.copyCount : data.initialQty,
       // First count is due one cycle from creation — a brand new item isn't overdue.
       nextCountDate: nextCountFrom(new Date(), countCycleFor(cat.profile.dispenseType)),
+      // Flat items carry the maintenance schedule on the Item (tracked ones on each copy above).
+      ...(!trackIndividually && seedNextMaintenance ? { nextMaintenanceDate: seedNextMaintenance } : {}),
     },
     include: {
       category: { include: { profile: true } },

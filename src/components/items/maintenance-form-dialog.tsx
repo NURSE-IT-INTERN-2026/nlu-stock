@@ -57,7 +57,8 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   const [issue, setIssue] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
-  const [nextMaintenanceAt, setNextMaintenanceAt] = useState("");
+  // null = follow the auto-calculated date; a string = staff typed their own.
+  const [nextOverride, setNextOverride] = useState<string | null>(null);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -92,14 +93,18 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   }, [searchQuery, doSearch, hasDefaultItem]);
 
   // ── Auto-calculate next maintenance date ──
+  // Only a finished job (result AVAILABLE) starts the next cycle. Still under
+  // repair or written off → no appointment, otherwise the piece silently drops
+  // off the overdue list / gets scheduled after it's already disposed.
   const cycle = maintenanceCycleMonths ?? 0;
-  useEffect(() => {
-    if (cycle > 0 && performedAt) {
-      const d = new Date(performedAt);
-      d.setMonth(d.getMonth() + cycle);
-      setNextMaintenanceAt(d.toISOString().split("T")[0]);
-    }
-  }, [performedAt, cycle]);
+  const schedulesNext = result === "AVAILABLE";
+  const autoNext = (() => {
+    if (cycle <= 0 || !performedAt) return "";
+    const d = new Date(performedAt);
+    d.setMonth(d.getMonth() + cycle);
+    return d.toISOString().split("T")[0];
+  })();
+  const nextMaintenanceAt = schedulesNext ? (nextOverride ?? autoNext) : "";
 
   const handleSubmit = async () => {
     const targetId = selectedItemId;
@@ -137,7 +142,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
     setIssue("");
     setDescription("");
     setCost("");
-    setNextMaintenanceAt("");
+    setNextOverride(null);
     setAttachmentUrl(null);
     setSelectedItemId(itemId ?? null);
     setSearchQuery("");
@@ -322,12 +327,19 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                 <Input
                   type="date"
                   value={nextMaintenanceAt}
-                  onChange={(e) => setNextMaintenanceAt(e.target.value)}
+                  onChange={(e) => setNextOverride(e.target.value)}
+                  disabled={!schedulesNext}
                   className="bg-card"
                 />
-                {cycle > 0 && nextMaintenanceAt && (
-                  <span className="text-[11px] text-muted-foreground">คำนวณอัตโนมัติ: +{cycle} เดือน</span>
-                )}
+                {schedulesNext
+                  ? cycle > 0 && nextMaintenanceAt && (
+                      <span className="text-[11px] text-muted-foreground">คำนวณอัตโนมัติ: +{cycle} เดือน</span>
+                    )
+                  : (
+                      <span className="text-[11px] text-muted-foreground">
+                        {result === "DISPOSED" ? "ตัดจำหน่ายแล้ว — ไม่นัดรอบถัดไป" : "ยังซ่อมไม่เสร็จ — ยังอยู่ในรายการเลยรอบ"}
+                      </span>
+                    )}
               </div>
             </div>
 

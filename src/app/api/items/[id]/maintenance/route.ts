@@ -69,34 +69,91 @@ export async function POST(
         },
       });
 
-      // Maintenance completed on a specific sub-item → mark it AVAILABLE + log.
-      if (data.subItemId && data.result === "AVAILABLE") {
-        const sub = await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { status: true } });
-        if (sub && sub.status !== ItemStatus.AVAILABLE) {
-          await tx.subItem.update({ where: { id: data.subItemId }, data: { status: ItemStatus.AVAILABLE } });
-          await tx.itemStatusLog.create({
-            data: {
-              itemId,
-              subItemId: data.subItemId,
-              previousStatus: sub.status,
-              newStatus: ItemStatus.AVAILABLE,
-              reason: "บำรุงรักษาเสร็จสิ้น",
-              changedBy: auth.user.userId,
-            },
-          });
+      // The recorded result IS the status change — AVAILABLE puts the piece back in
+      // service, DISPOSED (แทงจำหน่าย) removes it from inventory, NEEDS_MORE_REPAIR
+      // (ซ่อมแล้วยังไม่หาย) puts it into the repair queue — all here rather than in a
+      // second manual trip to the status screen. NEEDS_MORE_REPAIR keeps the due date so
+      // the piece stays on the overdue list until it's actually fixed.
+      const newStatus =
+        data.result === "AVAILABLE" ? ItemStatus.AVAILABLE
+        : data.result === "DISPOSED" ? ItemStatus.DISPOSED
+        : data.result === "NEEDS_MORE_REPAIR" ? ItemStatus.UNDER_REPAIR
+        : null;
+      const reason =
+        data.result === "DISPOSED" ? "ตัดจำหน่ายจากผลการบำรุงรักษา"
+        : data.result === "NEEDS_MORE_REPAIR" ? "ตรวจแล้วต้องซ่อมต่อ"
+        : "บำรุงรักษาเสร็จสิ้น";
+
+      if (data.subItemId) {
+        // Tracked copy: the schedule lives on the SubItem, so this copy alone gets
+        // re-dated — servicing/disposing one piece never moves its siblings.
+        if (newStatus) {
+          const sub = await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { status: true } });
+          if (sub && sub.status !== newStatus) {
+            await tx.subItem.update({ where: { id: data.subItemId }, data: { status: newStatus } });
+            await tx.itemStatusLog.create({
+              data: {
+                itemId,
+                subItemId: data.subItemId,
+                previousStatus: sub.status,
+                newStatus,
+                reason,
+                changedBy: auth.user.userId,
+              },
+            });
+          }
+        }
+        // Stamp this copy's schedule. DISPOSED → no next round. AVAILABLE → next cycle.
+        // NEEDS_MORE_REPAIR → leave nextMaintenanceDate untouched so it stays overdue.
+        await tx.subItem.update({
+          where: { id: data.subItemId },
+          data: {
+            lastMaintenanceDate: data.performedAt,
+            ...(data.result === "DISPOSED"
+              ? { nextMaintenanceDate: null }
+              : nextAt
+                ? { nextMaintenanceDate: nextAt }
+                : {}),
+          },
+        });
+        // Re-derive item status/qty from the aggregated sub-item statuses.
+        await recomputeItemCounts(tx, itemId);
+      } else {
+        // Flat (non-tracked) item: schedule lives on the Item. DISPOSED / UNDER_REPAIR
+        // are set here; AVAILABLE is left to qty derivation (recompute) below.
+        if (newStatus === ItemStatus.DISPOSED || newStatus === ItemStatus.UNDER_REPAIR) {
+          const cur = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } });
+          if (cur.status !== newStatus) {
+            await tx.item.update({ where: { id: itemId }, data: { status: newStatus } });
+            await tx.itemStatusLog.create({
+              data: {
+                itemId,
+                previousStatus: cur.status,
+                newStatus,
+                reason,
+                changedBy: auth.user.userId,
+              },
+            });
+          }
+        }
+
+        await tx.item.update({
+          where: { id: itemId },
+          data: {
+            lastMaintenanceDate: data.performedAt,
+            ...(nextAt && { nextMaintenanceDate: nextAt }),
+          },
+        });
+
+        // Derive item status (AVAILABLE left to qty derivation, not hardcoded).
+        await recomputeItemCounts(tx, itemId);
+
+        // A disposed flat item has no next round.
+        const after = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } });
+        if (after.status === ItemStatus.DISPOSED) {
+          await tx.item.update({ where: { id: itemId }, data: { nextMaintenanceDate: null } });
         }
       }
-
-      await tx.item.update({
-        where: { id: itemId },
-        data: {
-          lastMaintenanceDate: data.performedAt,
-          ...(nextAt && { nextMaintenanceDate: nextAt }),
-        },
-      });
-
-      // Derive item status from current state (tracked: sub-items; COUNT: out-on-loan qty).
-      await recomputeItemCounts(tx, itemId);
 
       return rec;
     });
