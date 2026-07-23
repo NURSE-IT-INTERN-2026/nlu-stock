@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireStaff, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { subItemCreateSchema, subItemBatchCreateSchema } from "@/lib/validators";
 import { DEFAULT_LOCATION_ID } from "@/lib/default-location";
+import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const seededLocationId =
     item.locationId && item.locationId !== DEFAULT_LOCATION_ID ? item.locationId : null;
 
+  // A new copy joins the maintenance schedule immediately (source of truth = SubItem).
+  // Baseline off the fleet's last service if any, else today, + the shared cycle.
+  const seedNextMaintenance = nextMaintenanceFromCycle(
+    item.lastMaintenanceDate ?? new Date(),
+    item.maintenanceCycleMonths,
+  );
+
   const body = await request.json();
 
   // Batch create mode
@@ -56,7 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const subItems = [];
     for (let i = data.startNumber; i <= data.endNumber; i++) {
       const numStr = String(i).padStart(String(data.endNumber).length, "0");
-      subItems.push({ itemId: id, subCode: `${data.prefix}${numStr}`, name: item.name, locationId: seededLocationId });
+      subItems.push({ itemId: id, subCode: `${data.prefix}${numStr}`, name: item.name, locationId: seededLocationId, nextMaintenanceDate: seedNextMaintenance });
     }
 
     const result = await prisma.subItem.createMany({
@@ -75,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!data) return error("No data");
 
   const subItem = await prisma.subItem.create({
-    data: { ...data, itemId: id, locationId: seededLocationId },
+    data: { ...data, itemId: id, locationId: seededLocationId, nextMaintenanceDate: seedNextMaintenance ?? undefined },
   });
 
   return json(subItem, 201);

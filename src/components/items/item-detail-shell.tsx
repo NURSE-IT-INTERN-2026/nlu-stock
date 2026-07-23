@@ -90,6 +90,8 @@ interface SubItemData {
   condition: string | null; serialNumber: string | null; notes: string | null;
   imageUrl: string | null; images: string[]; createdAt: string; updatedAt: string;
   location: LocationType | null;
+  // Per-copy maintenance schedule (source of truth for tracked items).
+  lastMaintenanceDate: string | null; nextMaintenanceDate: string | null;
   item: ParentItem; dispenseRecords: DispenseRecord[]; statusLogs: StatusLog[]; maintenanceRecords: MaintenanceRecord[];
 }
 
@@ -926,9 +928,9 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
 function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct: boolean; onRecord: () => void }) {
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
-      <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button size="sm" onClick={onRecord}><Wrench className="h-3.5 w-3.5 mr-1" />บันทึกการซ่อม</Button> : undefined} />
+      <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button onClick={onRecord}><Wrench className="h-4 w-4 mr-1.5" />บันทึกการบำรุงรักษา</Button> : undefined} />
       <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
-        <StatCard label="รอบถัดไป" value={sub.item.nextMaintenanceDate ? fmtDay(sub.item.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.item.nextMaintenanceDate)} />
+        <StatCard label="รอบถัดไป" value={sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.nextMaintenanceDate)} />
         <StatCard label="จำนวนการซ่อมบำรุง" value={`${sub.maintenanceRecords.length} ครั้ง`} icon={Wrench} />
         <StatCard label="สถานะปัจจุบัน" value={STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")} icon={ShieldAlert} tone={STATUS_META[sub.status]?.tone ?? "primary"} />
       </div>
@@ -937,8 +939,8 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
         <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลการบำรุงรักษา</div>
         <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
           <div><dt className="text-muted-foreground text-xs">รอบบำรุงรักษา</dt><dd className="font-medium mt-0.5">{sub.item.maintenanceCycleMonths ? `${sub.item.maintenanceCycleMonths} เดือน` : "—"}</dd></div>
-          <div><dt className="text-muted-foreground text-xs">บำรุงล่าสุด</dt><dd className="font-medium mt-0.5">{sub.item.lastMaintenanceDate ? fmtDay(sub.item.lastMaintenanceDate) : sub.maintenanceRecords[0] ? fmtDay(sub.maintenanceRecords[0].performedAt) : "—"}</dd></div>
-          <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.item.nextMaintenanceDate ? fmtDay(sub.item.nextMaintenanceDate) : "—"}</dd></div>
+          <div><dt className="text-muted-foreground text-xs">บำรุงล่าสุด</dt><dd className="font-medium mt-0.5">{sub.lastMaintenanceDate ? fmtDay(sub.lastMaintenanceDate) : sub.maintenanceRecords[0] ? fmtDay(sub.maintenanceRecords[0].performedAt) : "—"}</dd></div>
+          <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"}</dd></div>
         </dl>
       </div>
       <div className="p-4 sm:p-5">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { ZodSchema, ZodError } from "zod";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 
@@ -39,6 +40,13 @@ export function handleError(err: unknown, fallback: string, status = 400) {
 export async function requireAuth(_request?: NextRequest): Promise<AuthResult> {
   const user = await getSessionUser();
   if (!user) return { user: null, denied: unauthorized() };
+  // The JWT can outlive its user row (account removed, or a DB reseed in dev). A stale
+  // userId passes the signature + middleware checks but then violates a FK on any write
+  // (e.g. performedBy) — a confusing 500. Verify the row still exists/active and reject
+  // with 401 so the client bounces to re-login instead.
+  // ponytail: one indexed PK lookup per authed request; fine for an internal tool.
+  const row = await prisma.user.findUnique({ where: { id: user.userId }, select: { isActive: true } });
+  if (!row || !row.isActive) return { user: null, denied: unauthorized() };
   return { user, denied: null };
 }
 

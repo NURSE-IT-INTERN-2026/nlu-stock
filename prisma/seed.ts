@@ -853,45 +853,41 @@ async function main() {
 
   const maintItems = await prisma.item.findMany({
     where: { trackIndividually: true, isActive: true },
-    select: { id: true, code: true, name: true },
+    select: { id: true, code: true, name: true, subItems: { select: { id: true } } },
     take: 20,
   });
 
-  // --- Set nextMaintenanceDate on some items ---
+  // The maintenance schedule for tracked items lives per copy on the SubItem
+  // (cycle length stays on the Item). Stamp every copy so each shows on the schedule.
+  const setSchedule = async (
+    itemId: string,
+    subIds: string[],
+    dates: { next: Date; last: Date },
+    cycle: number,
+  ) => {
+    await prisma.item.update({ where: { id: itemId }, data: { maintenanceCycleMonths: cycle } });
+    await prisma.subItem.updateMany({
+      where: { id: { in: subIds } },
+      data: { nextMaintenanceDate: dates.next, lastMaintenanceDate: dates.last },
+    });
+  };
+
   // 3 overdue (past dates)
   for (let i = 0; i < Math.min(3, maintItems.length); i++) {
-    await prisma.item.update({
-      where: { id: maintItems[i].id },
-      data: {
-        nextMaintenanceDate: day((i + 1) * 5),   // 5-15 days ago
-        lastMaintenanceDate: day(180 + i * 30),   // ~6-12 months ago
-        maintenanceCycleMonths: 6,
-      },
-    });
+    await setSchedule(maintItems[i].id, maintItems[i].subItems.map((s) => s.id),
+      { next: day((i + 1) * 5), last: day(180 + i * 30) }, 6);
   }
 
   // 4 due-soon (within 30 days)
   for (let i = 3; i < Math.min(7, maintItems.length); i++) {
-    await prisma.item.update({
-      where: { id: maintItems[i].id },
-      data: {
-        nextMaintenanceDate: new Date(now.getTime() + (i - 2) * 5 * 24 * 60 * 60 * 1000), // 5-25 days ahead
-        lastMaintenanceDate: day(200),
-        maintenanceCycleMonths: 12,
-      },
-    });
+    await setSchedule(maintItems[i].id, maintItems[i].subItems.map((s) => s.id),
+      { next: new Date(now.getTime() + (i - 2) * 5 * 24 * 60 * 60 * 1000), last: day(200) }, 12);
   }
 
   // 5 normal (far future)
   for (let i = 7; i < Math.min(12, maintItems.length); i++) {
-    await prisma.item.update({
-      where: { id: maintItems[i].id },
-      data: {
-        nextMaintenanceDate: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
-        lastMaintenanceDate: day(30),
-        maintenanceCycleMonths: 12,
-      },
-    });
+    await setSchedule(maintItems[i].id, maintItems[i].subItems.map((s) => s.id),
+      { next: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000), last: day(30) }, 12);
   }
 
   // --- Maintenance history records ---
@@ -902,6 +898,8 @@ async function main() {
     await prisma.maintenanceRecord.create({
       data: {
         itemId: maintItems[i].id,
+        // Attach to the first copy so demo history shows which piece (per-copy).
+        subItemId: maintItems[i].subItems[0]?.id,
         type: maintTypes[i % 2],
         result: maintResults[i % maintResults.length],
         performedAt: day((i + 1) * 7),

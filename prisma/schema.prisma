@@ -267,6 +267,12 @@ model SubItem {
   images       String[]
   locationId   String?
   location     Location?       @relation(fields: [locationId], references: [id])
+  // Per-copy maintenance schedule (tracked items). Cycle length stays on the parent
+  // Item.maintenanceCycleMonths; each copy tracks its own last/next so servicing or
+  // disposing one piece doesn't move the others. Flat (non-tracked) items keep using
+  // the Item-level columns instead.
+  lastMaintenanceDate DateTime?
+  nextMaintenanceDate DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
