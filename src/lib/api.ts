@@ -24,6 +24,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
+    // Session no longer valid (expired, or the user row is gone after a reseed): the
+    // JWT still passes middleware but the API rejects it. Bounce to /login so a stale
+    // session self-heals into a fresh one instead of looping on failed writes.
+    if (res.status === 401 && typeof window !== "undefined" && !url.startsWith("/api/auth/")) {
+      window.location.href = "/login";
+    }
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error || `Request failed (${res.status})`);
   }

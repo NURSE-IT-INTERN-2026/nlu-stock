@@ -11,7 +11,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
-import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
+import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 
 const filterConfig: FilterConfig = { dateRange: true, maintenanceType: true };
 
@@ -19,6 +19,8 @@ interface Row {
   id: string;
   itemCode: string;
   itemName: string;
+  subCode: string | null;
+  subCount: number;
   categoryName: string;
   type: string;
   result: string;
@@ -35,7 +37,7 @@ const columns: Column<Row>[] = [
     header: "Date",
     render: (r) => fmtDate(new Date(r.performedAt), "dd MMM yyyy"),
   },
-  { key: "itemCode", header: "Code" },
+  { key: "itemCode", header: "Code", render: (r) => effectiveCode(r.itemCode, r.subCode, r.subCount) },
   { key: "itemName", header: "Item" },
   {
     key: "type",

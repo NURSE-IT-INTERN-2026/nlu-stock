@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn, type ReturnStatus } from "@/lib/returns";
-import { AdjustmentReason, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
+import { AdjustmentReason } from "@/generated/prisma/enums";
 
-const RETURN_STATUSES = ["AVAILABLE", "DAMAGED", "UNDER_REPAIR", "LOST"] as const;
+const RETURN_STATUSES = ["AVAILABLE", "DAMAGED", "LOST"] as const;
 
 export async function POST(
   _req: NextRequest,
@@ -87,26 +87,12 @@ export async function POST(
               adjustedBy: auth.user.userId,
             },
           });
-          // Damaged count-return → open a repair draft (subItemId null: not tracked per-piece)
-          // so it surfaces on the รับซ่อม tab like tracked damaged items do.
-          if (status === "DAMAGED") {
-            await tx.maintenanceRecord.create({
-              data: {
-                itemId,
-                type: MaintenanceType.CORRECTIVE,
-                result: MaintenanceResult.NEEDS_MORE_REPAIR,
-                performedAt: new Date(),
-                performedBy: auth.user.userId,
-                issue: note || `คืนพัสดุพร้อมแจ้งชำรุด (จำนวน ${qty})`,
-                attachmentUrls: proofUrls ?? [],
-              },
-            });
-          }
+          // ponytail: no repair queue for COUNT stock — without per-piece identity there is
+          // nothing to send to a shop or receive back. The StockAdjustment above is the record.
         }
 
         const newResolved = dispense.resolvedQty + qty;
-        // UNDER_REPAIR is internal; recorded as a DAMAGED return on the dispense record.
-        const returnCondition = status === "UNDER_REPAIR" ? "DAMAGED" : status;
+        const returnCondition = status;
         await tx.dispenseRecord.update({
           where: { id: dispense.id },
           data: {

@@ -25,6 +25,7 @@ import {
   type MaintenanceType, type MaintenanceResult, type ItemStatus,
   NON_TRACKED_STOCK_LABELS, nonTrackedStockKey, type NonTrackedStockKey,
 } from "@/lib/constants";
+import { canTransition } from "@/lib/status-utils";
 import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
 import { pic } from "@/lib/image";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
@@ -90,6 +91,8 @@ interface SubItemData {
   condition: string | null; serialNumber: string | null; notes: string | null;
   imageUrl: string | null; images: string[]; createdAt: string; updatedAt: string;
   location: LocationType | null;
+  // Per-copy maintenance schedule (source of truth for tracked items).
+  lastMaintenanceDate: string | null; nextMaintenanceDate: string | null;
   item: ParentItem; dispenseRecords: DispenseRecord[]; statusLogs: StatusLog[]; maintenanceRecords: MaintenanceRecord[];
 }
 
@@ -824,16 +827,18 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader eyebrow="การจัดการ" title="จัดการสต็อก" />
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={onStation} disabled={sub.status !== "AVAILABLE"} />
+              <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={onStation} disabled={!canTransition(sub.status, "IN_USE")} />
               <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={onReceive} />
               <DropdownMenu>
                 <DropdownMenuTrigger render={<ActionTile icon={Package} label="ปรับสต็อก" tone="default" />} />
                 <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onStatus("LOST")}><SearchX className="size-4" />สูญหาย</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />ตัดจำหน่าย</DropdownMenuItem>
+                  {/* Off-normal moves must respect the lifecycle order (e.g. can't lose a piece
+                      that's already ส่งซ่อม); server enforces it too, this just hides dead options. */}
+                  <DropdownMenuItem disabled={!canTransition(sub.status, "LOST")} onClick={() => onStatus("LOST")}><SearchX className="size-4" />สูญหาย</DropdownMenuItem>
+                  <DropdownMenuItem disabled={!canTransition(sub.status, "DISPOSED")} onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />ตัดจำหน่าย</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} disabled={!canTransition(sub.status, "DAMAGED")} />
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
             </div>
@@ -926,9 +931,9 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
 function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct: boolean; onRecord: () => void }) {
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
-      <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button size="sm" onClick={onRecord}><Wrench className="h-3.5 w-3.5 mr-1" />บันทึกการซ่อม</Button> : undefined} />
+      <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button onClick={onRecord}><Wrench className="h-4 w-4 mr-1.5" />บันทึกการบำรุงรักษา</Button> : undefined} />
       <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
-        <StatCard label="รอบถัดไป" value={sub.item.nextMaintenanceDate ? fmtDay(sub.item.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.item.nextMaintenanceDate)} />
+        <StatCard label="รอบถัดไป" value={sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.nextMaintenanceDate)} />
         <StatCard label="จำนวนการซ่อมบำรุง" value={`${sub.maintenanceRecords.length} ครั้ง`} icon={Wrench} />
         <StatCard label="สถานะปัจจุบัน" value={STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")} icon={ShieldAlert} tone={STATUS_META[sub.status]?.tone ?? "primary"} />
       </div>
@@ -937,8 +942,8 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
         <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ข้อมูลการบำรุงรักษา</div>
         <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
           <div><dt className="text-muted-foreground text-xs">รอบบำรุงรักษา</dt><dd className="font-medium mt-0.5">{sub.item.maintenanceCycleMonths ? `${sub.item.maintenanceCycleMonths} เดือน` : "—"}</dd></div>
-          <div><dt className="text-muted-foreground text-xs">บำรุงล่าสุด</dt><dd className="font-medium mt-0.5">{sub.item.lastMaintenanceDate ? fmtDay(sub.item.lastMaintenanceDate) : sub.maintenanceRecords[0] ? fmtDay(sub.maintenanceRecords[0].performedAt) : "—"}</dd></div>
-          <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.item.nextMaintenanceDate ? fmtDay(sub.item.nextMaintenanceDate) : "—"}</dd></div>
+          <div><dt className="text-muted-foreground text-xs">บำรุงล่าสุด</dt><dd className="font-medium mt-0.5">{sub.lastMaintenanceDate ? fmtDay(sub.lastMaintenanceDate) : sub.maintenanceRecords[0] ? fmtDay(sub.maintenanceRecords[0].performedAt) : "—"}</dd></div>
+          <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"}</dd></div>
         </dl>
       </div>
       <div className="p-4 sm:p-5">

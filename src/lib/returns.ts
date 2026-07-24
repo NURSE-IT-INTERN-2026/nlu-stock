@@ -3,11 +3,12 @@ import { ItemStatus } from "@/generated/prisma/enums";
 
 type TxClient = Prisma.TransactionClient;
 
-export type ReturnStatus = "AVAILABLE" | "DAMAGED" | "UNDER_REPAIR" | "LOST";
+// A return can only land on these three. ส่งซ่อม is NOT one of them: sending a damaged piece
+// for repair is a separate step that records ภายใน/ภายนอก, so a return stops at ชำรุด.
+export type ReturnStatus = "AVAILABLE" | "DAMAGED" | "LOST";
 
 const REASON_LABEL: Record<Exclude<ReturnStatus, "AVAILABLE">, string> = {
   DAMAGED: "ชำรุด",
-  UNDER_REPAIR: "ส่งซ่อม",
   LOST: "สูญหาย",
 };
 
@@ -65,14 +66,12 @@ export async function resolveSubItemReturn(
     orderBy: { dispensedAt: "desc" },
   });
   if (dispense) {
-    // UNDER_REPAIR is an internal sub-item state; on the dispense record it's a DAMAGED return.
-    const returnCondition = status === "UNDER_REPAIR" ? "DAMAGED" : status;
     await tx.dispenseRecord.update({
       where: { id: dispense.id },
       data: {
         resolvedQty: dispense.quantity,
         returnedAt: new Date(),
-        returnCondition,
+        returnCondition: status,
         ...(proofUrls && proofUrls.length > 0 ? { returnProofUrls: proofUrls } : {}),
       },
     });

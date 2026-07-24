@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { X, ClipboardList, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
+import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -29,7 +29,10 @@ interface Summary {
 
 interface ScheduleRow {
   id: string;
-  code: string;
+  itemId: string;
+  subItemId: string | null;
+  subCode: string | null;
+  code: string; // already formatted per-copy (effectiveCode) by the server
   name: string;
   model: string;
   categoryName: string;
@@ -38,12 +41,15 @@ interface ScheduleRow {
   nextMaintenanceDate: string;
   maintenanceCycleMonths: number;
   maintenanceStatus: string;
+  subItemStatus: string | null;
 }
 
 interface HistoryRow {
   id: string;
   itemCode: string;
   itemName: string;
+  subCode: string | null;
+  subCount: number;
   categoryName: string;
   type: string;
   result: string;
@@ -80,6 +86,8 @@ export default function MaintenancePage() {
   const [dialogItemId, setDialogItemId] = useState<string | undefined>();
   const [dialogItemLabel, setDialogItemLabel] = useState<string | undefined>();
   const [dialogCycle, setDialogCycle] = useState<number | undefined>();
+  const [dialogSubItemId, setDialogSubItemId] = useState<string | undefined>();
+  const [dialogSubLabel, setDialogSubLabel] = useState<string | undefined>();
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -132,10 +140,13 @@ export default function MaintenancePage() {
     setSchedulePage(1);
   };
 
-  const openRecordDialog = (itemId?: string, itemLabel?: string, cycle?: number) => {
-    setDialogItemId(itemId);
-    setDialogItemLabel(itemLabel);
-    setDialogCycle(cycle);
+  const openRecordDialog = (row: ScheduleRow) => {
+    setDialogItemId(row.itemId);
+    setDialogItemLabel(`${row.code} – ${row.name}`);
+    setDialogCycle(row.maintenanceCycleMonths);
+    // Tracked copy → record against that specific piece; the dialog shows the "ชิ้น:" row.
+    setDialogSubItemId(row.subItemId ?? undefined);
+    setDialogSubLabel(row.subItemId ? row.code : undefined);
     setDialogOpen(true);
   };
 
@@ -236,7 +247,7 @@ export default function MaintenancePage() {
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow className="sticky top-0 z-10 border-b border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
-                        <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
+                        <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>
                         <TableHead className="px-2">ชื่อ</TableHead>
                         <TableHead className="w-24 px-2">สถานะ</TableHead>
                         <TableHead className="w-32 px-2">กำหนด</TableHead>
@@ -260,31 +271,24 @@ export default function MaintenancePage() {
                       ) : pagedSchedule.map((row) => {
                         const days = daysUntil(row.nextMaintenanceDate);
                         const isOverdue = row.maintenanceStatus === "overdue";
-                        const open = () => openRecordDialog(row.id, `${row.code} – ${row.name}`, row.maintenanceCycleMonths);
                         return (
                           <TableRow
                             key={row.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={open}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                open();
-                              }
-                            }}
-                            aria-label={`${row.code} ${row.name}, ${isOverdue ? `เลยรอบ เกิน ${Math.abs(days)} วัน` : `ใกล้ถึงรอบ อีก ${days} วัน`}`}
-                            className="h-9 cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none [&>td]:py-1"
+                            className="h-9 [&>td]:py-1"
                           >
-                            <TableCell className="font-mono text-xs px-2"><span className="block truncate">{row.code}</span></TableCell>
+                            {/* รหัส → ลิงก์ไปหน้าพัสดุ. ชื่อ → ปุ่มบันทึกบำรุง (target แค่ชื่อ ไม่ทั้งแถว) */}
+                            <TableCell className="font-mono text-xs px-2">
+                              <Link href={`/items/${row.itemId}`} className="block truncate text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
+                            </TableCell>
                             <TableCell className="px-2">
-                              <Link
-                                href={`/items/${row.id}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="font-medium hover:underline"
+                              <button
+                                type="button"
+                                onClick={() => openRecordDialog(row)}
+                                aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
+                                className="block w-full truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none cursor-pointer"
                               >
-                                <span className="block truncate min-w-0">{row.name}</span>
-                              </Link>
+                                {row.name}
+                              </button>
                             </TableCell>
                             <TableCell className="px-2">
                               <Badge variant={isOverdue ? "destructive" : "secondary"} className="px-1.5 py-0 leading-5 text-[11px]">
@@ -319,28 +323,24 @@ export default function MaintenancePage() {
                   ) : pagedSchedule.map((row) => {
                     const days = daysUntil(row.nextMaintenanceDate);
                     const isOverdue = row.maintenanceStatus === "overdue";
-                    const open = () => openRecordDialog(row.id, `${row.code} – ${row.name}`, row.maintenanceCycleMonths);
                     return (
-                      <button
-                        key={row.id}
-                        type="button"
-                        onClick={open}
-                        className="flex w-full flex-col gap-1.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
-                      >
+                      <div key={row.id} className="flex flex-col gap-1.5 px-4 py-2.5">
                         <div className="flex items-start justify-between gap-2">
-                          <Link
-                            href={`/items/${row.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="min-w-0 font-medium leading-tight hover:underline"
+                          {/* ชื่อ = ปุ่มบันทึกบำรุง (target แค่ชื่อ) */}
+                          <button
+                            type="button"
+                            onClick={() => openRecordDialog(row)}
+                            aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
+                            className="min-w-0 text-left font-medium leading-tight hover:underline focus-visible:underline focus-visible:outline-none"
                           >
                             {row.name}
-                          </Link>
+                          </button>
                           <Badge variant={isOverdue ? "destructive" : "secondary"} className="shrink-0">
                             {isOverdue ? "เลยรอบ" : "ใกล้ถึงรอบ"}
                           </Badge>
                         </div>
                         <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="font-mono text-xs text-muted-foreground">{row.code}</span>
+                          <Link href={`/items/${row.itemId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
                           <span className="flex items-center gap-1.5 tabular-nums">
                             {new Date(row.nextMaintenanceDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
                             <span className={isOverdue ? "text-destructive text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
@@ -348,7 +348,7 @@ export default function MaintenancePage() {
                             </span>
                           </span>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -415,7 +415,7 @@ export default function MaintenancePage() {
                     </span>
                   </div>
                   <div className="text-sm">
-                    <span className="mr-2 font-mono text-xs text-muted-foreground">{rec.itemCode}</span>
+                    <span className="mr-2 font-mono text-xs text-muted-foreground">{effectiveCode(rec.itemCode, rec.subCode, rec.subCount)}</span>
                     <span className="font-medium">{rec.itemName}</span>
                   </div>
                   {rec.issue && <p className="mt-0.5 text-sm text-muted-foreground">{rec.issue}</p>}
@@ -435,6 +435,8 @@ export default function MaintenancePage() {
         onOpenChange={setDialogOpen}
         itemId={dialogItemId}
         itemLabel={dialogItemLabel}
+        subItemId={dialogSubItemId}
+        subItemLabel={dialogSubLabel}
         maintenanceCycleMonths={dialogCycle}
         onSuccess={fetchData}
       />

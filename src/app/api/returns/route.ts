@@ -3,8 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
-import { resolveSubItemReturn, type ReturnStatus } from "@/lib/returns";
-import { MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
+import { resolveSubItemReturn } from "@/lib/returns";
 
 // Per-row return condition chosen in the return detail view.
 const CONDITIONS = ["AVAILABLE", "DAMAGED", "LOST"] as const;
@@ -67,7 +66,7 @@ export async function GET() {
 }
 
 // Return per-unit SubItems from a loan event, each with its own condition.
-// DAMAGED → SubItem UNDER_REPAIR + a draft MaintenanceRecord (shows in รับซ่อม).
+// DAMAGED → SubItem ชำรุด, queued on แจ้งชำรุด until someone sends it for repair.
 // Count-based loans use the single /api/items/[id]/return (numeric).
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -111,36 +110,23 @@ export async function POST(req: NextRequest) {
         });
         if (!sub) throw new Error(`Sub-item ${e.subItemId} not found`);
 
-        const target: ReturnStatus = e.status === "DAMAGED" ? "UNDER_REPAIR" : e.status;
         const rowNote = [overallNote, e.note].filter(Boolean).join(" · ") || null;
-        // Per-entry evidence (when damaged/lost) stamps this dispense record + the repair draft.
+        // Per-entry evidence (when damaged/lost) stamps this dispense record.
         const entryProofs = [...(proofUrls ?? []), ...(e.photos ?? [])];
 
+        // A damaged return lands on ชำรุด and stops there. It does NOT jump to ส่งซ่อม:
+        // sending for repair is a separate decision that has to capture ภายใน/ภายนอก and
+        // where it went, so it happens on the แจ้งชำรุด screen with its own log row.
         await resolveSubItemReturn(tx, {
           itemId: sub.itemId,
           subItemId: e.subItemId,
-          status: target,
+          status: e.status,
           note: rowNote,
           userId: auth.user.userId,
           dispenseRecordId: e.dispenseRecordId,
           proofUrls: entryProofs.length > 0 ? entryProofs : undefined,
         });
 
-        // DAMAGED → auto-create a repair draft (convention: NEEDS_MORE_REPAIR = pending).
-        if (e.status === "DAMAGED") {
-          await tx.maintenanceRecord.create({
-            data: {
-              itemId: sub.itemId,
-              subItemId: e.subItemId,
-              type: MaintenanceType.CORRECTIVE,
-              result: MaintenanceResult.NEEDS_MORE_REPAIR,
-              performedAt: new Date(),
-              performedBy: auth.user.userId,
-              issue: rowNote || "คืนพัสดุพร้อมแจ้งชำรุด",
-              attachmentUrls: e.photos ?? [],
-            },
-          });
-        }
         affectedItems.add(sub.itemId);
       }
       // recompute each affected item once

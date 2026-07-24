@@ -23,9 +23,20 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     prisma.lot.count({
       where: { expiryDate: { gte: now, lte: in30Days } },
     }),
-    prisma.item.count({
-      where: { nextMaintenanceDate: { lt: now }, isActive: true },
-    }),
+    // Overdue maintenance = live tracked copies (schedule on SubItem) + flat items
+    // (schedule on Item). Mirrors the /maintenance summary + schedule rows.
+    Promise.all([
+      prisma.subItem.count({
+        where: {
+          nextMaintenanceDate: { lt: now },
+          status: { notIn: ["DISPOSED", "LOST"] },
+          item: { isActive: true, trackIndividually: true },
+        },
+      }),
+      prisma.item.count({
+        where: { nextMaintenanceDate: { lt: now }, isActive: true, trackIndividually: false },
+      }),
+    ]).then(([a, b]) => a + b),
     prisma.item.count({
       where: { isActive: true },
     }),

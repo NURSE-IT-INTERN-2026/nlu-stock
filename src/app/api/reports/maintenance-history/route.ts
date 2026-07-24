@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
     prisma.maintenanceRecord.findMany({
       where,
       include: {
-        item: { select: { code: true, name: true, category: { select: { name: true } } } },
+        item: { select: { code: true, name: true, category: { select: { name: true } }, _count: { select: { subItems: true } } } },
+        subItem: { select: { subCode: true } },
         performer: { select: { name: true } },
       },
       orderBy: { performedAt: "desc" },
@@ -42,6 +43,10 @@ export async function GET(request: NextRequest) {
     id: r.id,
     itemCode: r.item.code,
     itemName: r.item.name,
+    // Which copy this record is for (null for flat items). subCount feeds effectiveCode
+    // so a single-copy item shows the base code and multi-copy shows the -C0n suffix.
+    subCode: r.subItem?.subCode ?? null,
+    subCount: r.item._count.subItems,
     categoryName: r.item.category.name,
     type: r.type,
     result: r.result,
