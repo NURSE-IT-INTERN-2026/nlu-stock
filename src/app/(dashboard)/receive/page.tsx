@@ -97,10 +97,10 @@ export default function ReceivePage() {
 type ReceiveTab = "receive" | "in_use" | "return" | "repair";
 
 const RECEIVE_TABS = [
-  { value: "receive", label: "รับเข้าพัสดุ", icon: ArrowDownToLine },
-  { value: "in_use", label: "คืนเข้าพัสดุ", icon: PackageCheck },
-  { value: "return", label: "รับคืน", icon: Undo2 },
-  { value: "repair", label: "รับซ่อม", icon: Wrench },
+  { value: "receive", label: "นำเข้าคลัง", icon: ArrowDownToLine },
+  { value: "in_use", label: "คืนเข้าคลัง", icon: PackageCheck },
+  { value: "return", label: "รับคืนจากใบยืม", icon: Undo2 },
+  { value: "repair", label: "รับคืนจากส่งซ่อม", icon: Wrench },
 ] as const;
 
 function ReceiveShell() {
@@ -158,11 +158,11 @@ function ReceiveShell() {
         {tab === "receive" ? (
           <ReceiveContent />
         ) : tab === "in_use" ? (
-          <SubItemStatusPanel status="IN_USE" actionLabel="รับเข้า" emptyText="ไม่มีพัสดุที่ตั้งใช้งานอยู่" />
+          <SubItemStatusPanel status="IN_USE" actionLabel="รับเข้า" emptyText="ไม่มีรายการที่อยู่ระหว่างนำไปใช้งาน" />
         ) : tab === "return" ? (
           <ReturnPanel initialChip={initialDueChip} />
         ) : (
-          <SubItemStatusPanel status="UNDER_REPAIR" actionLabel="รับซ่อม" emptyText="ไม่มีพัสดุที่ส่งซ่อมอยู่" />
+          <SubItemStatusPanel status="UNDER_REPAIR" actionLabel="รับซ่อม" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
         )}
       </div>
     </div>

@@ -65,16 +65,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   // due-soon alerts follow the new cadence immediately — not only after the
   // next maintenance record. Baseline = last performed maintenance; no baseline
   // (never maintained) → leave nextMaintenanceDate untouched (still null).
+  // Flat items carry the schedule on the Item; tracked items carry it per copy on
+  // each SubItem (recalculated below, after the item write).
   // ponytail: extra read on the rare admin update path is fine; no cron exists.
   let recalcNext: Date | undefined;
+  let cycleChangedTo: number | undefined;
   if (data.maintenanceCycleMonths !== undefined) {
     const cur = await prisma.item.findUnique({
       where: { id },
       select: { maintenanceCycleMonths: true, lastMaintenanceDate: true },
     });
     if (cur && cur.maintenanceCycleMonths !== data.maintenanceCycleMonths) {
-      const next = nextMaintenanceFromCycle(cur.lastMaintenanceDate, data.maintenanceCycleMonths);
-      if (next) recalcNext = next;
+      cycleChangedTo = data.maintenanceCycleMonths;
+      if (!data.trackIndividually) {
+        const next = nextMaintenanceFromCycle(cur.lastMaintenanceDate, data.maintenanceCycleMonths);
+        if (next) recalcNext = next;
+      }
     }
   }
 
@@ -102,6 +108,25 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
       include: { category: { include: { profile: true } }, location: true, issueUnit: true },
     });
+
+    // Tracked items keep the schedule per copy — re-date each copy from its own last
+    // maintenance + the new cycle. Copies never maintained (no baseline) are left null.
+    if (cycleChangedTo !== undefined && data.trackIndividually) {
+      const subs = await prisma.subItem.findMany({
+        // Written-off copies (DISPOSED/LOST) have no next round — don't re-date them.
+        where: { itemId: id, lastMaintenanceDate: { not: null }, status: { notIn: ["DISPOSED", "LOST"] } },
+        select: { id: true, lastMaintenanceDate: true },
+      });
+      await Promise.all(
+        subs.map((s) => {
+          const next = nextMaintenanceFromCycle(s.lastMaintenanceDate, cycleChangedTo!);
+          return next
+            ? prisma.subItem.update({ where: { id: s.id }, data: { nextMaintenanceDate: next } })
+            : Promise.resolve();
+        }),
+      );
+    }
+
     return json(item);
   } catch {
     return notFound("Item not found");

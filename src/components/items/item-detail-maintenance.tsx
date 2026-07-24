@@ -84,9 +84,9 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
         right={canAct ? (
           <button
             onClick={onRecordMaintenance}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition font-medium whitespace-nowrap"
+            className="inline-flex items-center gap-2 text-sm px-4 py-2.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition font-medium whitespace-nowrap"
           >
-            <Wrench className="size-3.5" /> บันทึกการซ่อม
+            <Wrench className="size-4" /> บันทึกการบำรุงรักษา
           </button>
         ) : undefined}
       />

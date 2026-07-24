@@ -3,6 +3,7 @@ import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from 
 import { itemCreateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
+import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { itemStatusWhere, andWhere } from "@/lib/item-status-where";
 import { NextRequest } from "next/server";
 import { Prisma, ItemStatus } from "@/generated/prisma/client";
@@ -115,8 +116,23 @@ export async function POST(request: NextRequest) {
     ? nextCountFrom(new Date(), countCycleFor(cat.profile.dispenseType, data.countCycleMonths))
     : null;
 
+  // Same for maintenance: seed the first due date so a new durable enters the
+  // cycle immediately. Only flat (non-tracked) items carry the schedule on the Item —
+  // tracked items schedule per copy on the SubItem, seeded when copies are created,
+  // and have no sub-items yet at this create step. Consumables get no cycle at all.
+  // Baseline = lastMaintenanceDate (if supplied) else purchaseDate else today.
+  const maintBaseline = (data.lastMaintenanceDate ?? data.purchaseDate ?? new Date()) as Date;
+  const nextMaintenanceDate =
+    cat?.profile && cat.profile.dispenseType !== "CONSUMABLE" && !data.trackIndividually
+      ? nextMaintenanceFromCycle(maintBaseline, data.maintenanceCycleMonths)
+      : null;
+
   const item = await prisma.item.create({
-    data: { ...data, ...(nextCountDate ? { nextCountDate } : {}) },
+    data: {
+      ...data,
+      ...(nextCountDate ? { nextCountDate } : {}),
+      ...(nextMaintenanceDate ? { nextMaintenanceDate } : {}),
+    },
     include: { category: { include: { profile: true } }, location: true, issueUnit: true },
   });
 

@@ -199,9 +199,9 @@ return (
               </button>
             )}
           </div>
-          <Button type="button" onClick={() => setScannerOpen(true)} aria-label="สแกน QR" className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center">
+          <Button type="button" onClick={() => setScannerOpen(true)} aria-label="เพิ่มด้วย QR" className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center">
             <QrCode className="size-5" />
-            <span className="font-medium hidden sm:inline">สแกน QR</span>
+            <span className="font-medium hidden sm:inline">เพิ่มด้วย QR</span>
           </Button>
           <Button
             type="button"

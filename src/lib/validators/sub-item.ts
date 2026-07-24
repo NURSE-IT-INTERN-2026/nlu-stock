@@ -12,7 +12,11 @@ export const subItemCreateSchema = z.object({
   images: z.array(z.string()).default([]),
 });
 
-export const subItemUpdateSchema = subItemCreateSchema.partial();
+// `status` is deliberately NOT updatable here. The settings PUT writes the row directly with
+// no ItemStatusLog, so allowing it would let a status change happen with no history at all —
+// and it would sidestep the lifecycle rules in status-utils.ts. Status moves only through
+// /api/items/[id]/status (single) or .../status/bulk.
+export const subItemUpdateSchema = subItemCreateSchema.omit({ status: true }).partial();
 
 export const subItemBatchCreateSchema = z.object({
   prefix: z.string().min(1).max(30),

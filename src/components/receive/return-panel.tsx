@@ -7,11 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Calendar, Package, ChevronRight, RotateCcw, MapPin, Search } from "lucide-react";
-import { pic } from "@/lib/image";
+import { ChevronRight, RotateCcw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getOpenBorrows, type OpenBorrow } from "@/lib/api";
-import { locationLabel } from "@/lib/constants";
 import { ReturnLoanDetail, type LoanGroup } from "@/components/receive/return-loan-detail";
 
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : null);
@@ -28,6 +26,30 @@ function dueAlert(dueAt: string | null): { text: string; cls: string } | null {
   if (days <= 3) return { text: "ใกล้ครบกำหนด", cls: "bg-amber-600 text-white hover:bg-amber-600" };
   return null;
 }
+
+// Row background by due status. Done (nothing outstanding) dims to grey so closed
+// loans don't shout; otherwise white / amber / red per dueAlert.
+function rowTint(dueAt: string | null, done: boolean): string {
+  if (done) return "bg-muted/60 border-border text-muted-foreground";
+  const a = dueAlert(dueAt);
+  if (a?.text === "เกินกำหนด") return "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900";
+  if (a?.text === "ใกล้ครบกำหนด") return "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900";
+  return "bg-card border-border";
+}
+
+// A loan row is a flex line: ผู้ยืม (flex-1) absorbs all slack so the number
+// columns stay clustered at a fixed gap — they never spread apart as the screen
+// widens. Number columns are fixed-width + right-aligned so header and rows line
+// up and dates show in full. Columns drop in progressively as width shrinks:
+// base (≥320) keeps ค้าง/กำหนดคืน/รายการ, ≥400 adds กี่วัน, ≥sm adds ยืมเมื่อ.
+const ROW_LINE = "flex items-center gap-2 sm:gap-3";
+const COL = {
+  owe: "w-11 sm:w-14 shrink-0",
+  borrowed: "hidden sm:block w-[4.5rem] shrink-0 text-right",
+  days: "hidden min-[400px]:block w-12 sm:w-14 shrink-0 text-right",
+  due: "w-16 sm:w-[5.25rem] shrink-0 text-right truncate",
+  count: "w-7 sm:w-9 shrink-0 text-right",
+} as const;
 
 const CHIP_STYLES: Record<"all" | "overdue" | "near", { active: string; idle: string }> = {
   all: { active: "bg-foreground text-background border-foreground", idle: "bg-card text-muted-foreground border-border hover:text-foreground" },
@@ -122,7 +144,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
         <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
           <RotateCcw className="h-6 w-6 text-muted-foreground" />
         </div>
-        <p className="text-sm text-muted-foreground">ไม่มีพัสดุที่ยืมอยู่</p>
+        <p className="text-sm text-muted-foreground">ไม่มีรายการที่อยู่ระหว่างยืม</p>
       </div>
     );
   }
@@ -162,9 +184,20 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
           </div>
           <Separator />
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-1 sm:grid-cols-2 gap-2 items-start pr-1">
+        {filteredGroups.length > 0 && (
+          <div className={cn(ROW_LINE, "shrink-0 px-2.5 text-[11px] text-muted-foreground")}>
+            <span className="flex-1 min-w-0">ผู้ยืม</span>
+            <span className={COL.owe}>ค้าง</span>
+            <span className={COL.borrowed}>ยืมเมื่อ</span>
+            <span className={COL.days}>กี่วัน</span>
+            <span className={COL.due}>กำหนดคืน</span>
+            <span className={COL.count}>รายการ</span>
+            <span className="w-4 shrink-0" aria-hidden />
+          </div>
+        )}
+        <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-1.5 pr-1">
           {filteredGroups.length === 0 ? (
-            <div className="col-span-full text-center py-10 text-sm text-muted-foreground">ไม่พบ &ldquo;{query}&rdquo;</div>
+            <div className="text-center py-10 text-sm text-muted-foreground">ไม่พบ &ldquo;{query}&rdquo;</div>
           ) : filteredGroups.map((g) => {
           const head = g.records[0];
           const total = g.records.reduce((s, r) => s + r.quantity, 0);
@@ -172,50 +205,31 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
           const itemCount = new Set(g.records.map((r) => r.item.id)).size;
           const borrowed = fmtDate(head.dispensedAt);
           const days = head.dispensedAt ? daysSince(head.dispensedAt) : null;
-          const alert = dueAlert(head.dueAt);
           const done = outstanding === 0;
           return (
-            <button key={g.key} type="button" onClick={() => setSelectedKey(g.key)} className="block w-full text-left">
-              <Card className="border shadow-none transition-colors hover:border-primary/50">
-                <CardContent>
-                  <div className="flex flex-col gap-1.5">
-                    <p className="font-semibold text-base leading-snug truncate">{head.recipient ?? "ไม่ระบุชื่อผู้ยืม"}</p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {alert && <Badge className={`text-xs ${alert.cls}`}>{alert.text}</Badge>}
-                      {done ? (
-                        <Badge variant="secondary" className="text-xs">คืนครบ</Badge>
-                      ) : (
-                        <Badge className="text-xs bg-red-700 text-white font-semibold hover:bg-red-700">ค้าง {outstanding}/{total}</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{head.item.location ? locationLabel(head.item.location) : "—"}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 shrink-0" />
-                      <span>ยืมเมื่อ {borrowed ?? "—"}{days !== null ? ` · ${days} วันที่แล้ว` : ""}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Package className="h-3.5 w-3.5 shrink-0" />
-                      <span>{itemCount} รายการ</span>
-                    </div>
-                  </div>
-                  {/* item thumbnails */}
-                  <div className="flex items-center gap-1.5 mt-2.5">
-                    <div className="flex -space-x-2">
-                      {[...new Map(g.records.map((r) => [r.item.id, r.item])).values()].slice(0, 5).map((it) => (
-                        <div key={it.id} className="size-8 overflow-hidden rounded-md border-2 border-card bg-muted">
-                          <img src={it.imageUrl ?? pic(it.code, 96)} alt={it.name} loading="lazy" className="size-full object-cover" />
-                        </div>
-                      ))}
-                    </div>
-                    <ChevronRight className="h-4 w-4 ml-auto text-muted-foreground" />
-                  </div>
-                </CardContent>
-              </Card>
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setSelectedKey(g.key)}
+              className={cn(
+                ROW_LINE,
+                "w-full text-left border rounded-lg px-2.5 py-2 text-xs sm:text-sm transition-colors hover:border-primary/50",
+                rowTint(head.dueAt, done),
+              )}
+            >
+              <span className="flex-1 min-w-0 truncate font-semibold text-foreground">{head.recipient ?? "ไม่ระบุชื่อผู้ยืม"}</span>
+              <span className={COL.owe}>
+                {done ? (
+                  <Badge variant="secondary" className="text-[10px]">คืนครบ</Badge>
+                ) : (
+                  <Badge className="text-[10px] bg-red-700 text-white font-semibold hover:bg-red-700">{outstanding}/{total}</Badge>
+                )}
+              </span>
+              <span className={cn(COL.borrowed, "tabular-nums text-muted-foreground")}>{borrowed ?? "—"}</span>
+              <span className={cn(COL.days, "tabular-nums text-muted-foreground")}>{days !== null ? `${days} วัน` : "—"}</span>
+              <span className={cn(COL.due, "tabular-nums text-muted-foreground")}>{fmtDate(head.dueAt) ?? "—"}</span>
+              <span className={cn(COL.count, "tabular-nums text-muted-foreground")}>{itemCount}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           );
         })}
