@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden } from "@/lib/api-utils";
+import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
+import { canTransition } from "@/lib/status-utils";
+import { STATUS_LABELS } from "@/lib/constants";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
 
 const maintenanceSchema = z.object({
   type: z.enum(["PREVENTIVE", "CORRECTIVE"]),
-  result: z.enum(["AVAILABLE", "NEEDS_MORE_REPAIR", "DISPOSED"]),
+  // รับซ่อม closes the repair: the piece either works again or it's written off. A piece that
+  // came back still broken is never "received" — it stays UNDER_REPAIR and staff edit the
+  // repair details (ภายใน → ภายนอก) instead, so there is no third outcome to record.
+  result: z.enum(["AVAILABLE", "DISPOSED"]),
   performedAt: z.coerce.date(),
   issue: z.string().max(500).optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
@@ -69,27 +74,28 @@ export async function POST(
         },
       });
 
-      // The recorded result IS the status change — AVAILABLE puts the piece back in
-      // service, DISPOSED (แทงจำหน่าย) removes it from inventory, NEEDS_MORE_REPAIR
-      // (ซ่อมแล้วยังไม่หาย) puts it into the repair queue — all here rather than in a
-      // second manual trip to the status screen. NEEDS_MORE_REPAIR keeps the due date so
-      // the piece stays on the overdue list until it's actually fixed.
+      // The recorded result IS the status change — AVAILABLE puts the piece back in service,
+      // DISPOSED (แทงจำหน่าย) removes it from inventory — done here rather than in a second
+      // manual trip to the status screen.
       const newStatus =
-        data.result === "AVAILABLE" ? ItemStatus.AVAILABLE
-        : data.result === "DISPOSED" ? ItemStatus.DISPOSED
-        : data.result === "NEEDS_MORE_REPAIR" ? ItemStatus.UNDER_REPAIR
-        : null;
+        data.result === "AVAILABLE" ? ItemStatus.AVAILABLE : ItemStatus.DISPOSED;
       const reason =
-        data.result === "DISPOSED" ? "ตัดจำหน่ายจากผลการบำรุงรักษา"
-        : data.result === "NEEDS_MORE_REPAIR" ? "ตรวจแล้วต้องซ่อมต่อ"
-        : "บำรุงรักษาเสร็จสิ้น";
+        data.result === "DISPOSED" ? "ตัดจำหน่ายจากผลการบำรุงรักษา" : "บำรุงรักษาเสร็จสิ้น";
 
       if (data.subItemId) {
         // Tracked copy: the schedule lives on the SubItem, so this copy alone gets
         // re-dated — servicing/disposing one piece never moves its siblings.
-        if (newStatus) {
+        {
           const sub = await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { status: true } });
           if (sub && sub.status !== newStatus) {
+            // Same lifecycle rules as the status screen: a DAMAGED piece can't be marked
+            // fixed here without going through ส่งซ่อม first. A PREVENTIVE round on a piece
+            // that is already AVAILABLE changes nothing and skips this branch entirely.
+            if (!canTransition(sub.status, newStatus)) {
+              throw new Error(
+                `บันทึกผลเป็น "${STATUS_LABELS[newStatus]}" ไม่ได้ — ชิ้นนี้สถานะ "${STATUS_LABELS[sub.status]}"`,
+              );
+            }
             await tx.subItem.update({ where: { id: data.subItemId }, data: { status: newStatus } });
             await tx.itemStatusLog.create({
               data: {
@@ -104,7 +110,6 @@ export async function POST(
           }
         }
         // Stamp this copy's schedule. DISPOSED → no next round. AVAILABLE → next cycle.
-        // NEEDS_MORE_REPAIR → leave nextMaintenanceDate untouched so it stays overdue.
         await tx.subItem.update({
           where: { id: data.subItemId },
           data: {
@@ -119,9 +124,9 @@ export async function POST(
         // Re-derive item status/qty from the aggregated sub-item statuses.
         await recomputeItemCounts(tx, itemId);
       } else {
-        // Flat (non-tracked) item: schedule lives on the Item. DISPOSED / UNDER_REPAIR
-        // are set here; AVAILABLE is left to qty derivation (recompute) below.
-        if (newStatus === ItemStatus.DISPOSED || newStatus === ItemStatus.UNDER_REPAIR) {
+        // Flat (non-tracked) item: schedule lives on the Item. DISPOSED is set here;
+        // AVAILABLE is left to qty derivation (recompute) below.
+        if (newStatus === ItemStatus.DISPOSED) {
           const cur = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } });
           if (cur.status !== newStatus) {
             await tx.item.update({ where: { id: itemId }, data: { status: newStatus } });
@@ -160,7 +165,8 @@ export async function POST(
 
     return NextResponse.json(record, { status: 201 });
   } catch (err) {
-    console.error("Maintenance create error:", err);
-    return NextResponse.json({ error: "Failed to create maintenance record" }, { status: 500 });
+    // Lifecycle violations are thrown inside the transaction — surface their message so the
+    // form can tell staff which step is missing instead of a blank 500.
+    return handleError(err, "Failed to create maintenance record");
   }
 }

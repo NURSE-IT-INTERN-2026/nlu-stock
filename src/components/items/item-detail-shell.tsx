@@ -25,6 +25,7 @@ import {
   type MaintenanceType, type MaintenanceResult, type ItemStatus,
   NON_TRACKED_STOCK_LABELS, nonTrackedStockKey, type NonTrackedStockKey,
 } from "@/lib/constants";
+import { canTransition } from "@/lib/status-utils";
 import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
 import { pic } from "@/lib/image";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
@@ -826,16 +827,18 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader eyebrow="การจัดการ" title="จัดการสต็อก" />
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={onStation} disabled={sub.status !== "AVAILABLE"} />
+              <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={onStation} disabled={!canTransition(sub.status, "IN_USE")} />
               <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={onReceive} />
               <DropdownMenu>
                 <DropdownMenuTrigger render={<ActionTile icon={Package} label="ปรับสต็อก" tone="default" />} />
                 <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onStatus("LOST")}><SearchX className="size-4" />สูญหาย</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />ตัดจำหน่าย</DropdownMenuItem>
+                  {/* Off-normal moves must respect the lifecycle order (e.g. can't lose a piece
+                      that's already ส่งซ่อม); server enforces it too, this just hides dead options. */}
+                  <DropdownMenuItem disabled={!canTransition(sub.status, "LOST")} onClick={() => onStatus("LOST")}><SearchX className="size-4" />สูญหาย</DropdownMenuItem>
+                  <DropdownMenuItem disabled={!canTransition(sub.status, "DISPOSED")} onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />ตัดจำหน่าย</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} disabled={!canTransition(sub.status, "DAMAGED")} />
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
             </div>

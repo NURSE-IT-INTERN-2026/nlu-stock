@@ -52,7 +52,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
 
   // ── Form fields ──
   const [type, setType] = useState<"PREVENTIVE" | "CORRECTIVE">("PREVENTIVE");
-  const [result, setResult] = useState<"AVAILABLE" | "NEEDS_MORE_REPAIR" | "DISPOSED">("AVAILABLE");
+  const [result, setResult] = useState<"AVAILABLE" | "DISPOSED">("AVAILABLE");
   const [performedAt, setPerformedAt] = useState(new Date().toISOString().split("T")[0]);
   const [issue, setIssue] = useState("");
   const [description, setDescription] = useState("");
@@ -269,8 +269,9 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                     <span className="text-foreground">{MAINT_RESULT_LABELS[result]}</span>
                   </SelectTrigger>
                   <SelectContent>
+                    {/* Only two outcomes: it works again, or it's written off. Still broken =
+                        don't receive it — leave it ส่งซ่อม and edit the repair details. */}
                     <SelectItem value="AVAILABLE">{MAINT_RESULT_LABELS.AVAILABLE}</SelectItem>
-                    <SelectItem value="NEEDS_MORE_REPAIR">{MAINT_RESULT_LABELS.NEEDS_MORE_REPAIR}</SelectItem>
                     <SelectItem value="DISPOSED">{MAINT_RESULT_LABELS.DISPOSED}</SelectItem>
                   </SelectContent>
                 </Select>
