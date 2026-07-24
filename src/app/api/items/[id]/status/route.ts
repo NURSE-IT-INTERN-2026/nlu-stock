@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { statusChangeSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
+import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { ReturnCondition } from "@/generated/prisma/enums";
 import { ItemStatus } from "@/generated/prisma/enums";
@@ -23,7 +24,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (data.subItemId) {
     const subItem = await prisma.subItem.findUnique({ where: { id: data.subItemId } });
     if (!subItem || subItem.itemId !== id) return notFound("Sub-item not found");
-    if (data.newStatus === subItem.status) return json(subItem); // no-op: no log, no recompute
+
+    // UNDER_REPAIR → UNDER_REPAIR is a real edit (แก้ข้อมูลส่งซ่อม: ภายใน → ภายนอก) that
+    // appends a log row, so it must survive the same-status short-circuit below.
+    const isRepairEdit =
+      subItem.status === ItemStatus.UNDER_REPAIR && data.newStatus === ItemStatus.UNDER_REPAIR;
+    if (data.newStatus === subItem.status && !isRepairEdit) return json(subItem); // no-op: no log, no recompute
+
+    if (!canTransition(subItem.status, data.newStatus, { isAdmin: auth.user.role === "ADMIN" })) {
+      return error(
+        `เปลี่ยนสถานะจาก "${STATUS_LABELS[subItem.status]}" เป็น "${STATUS_LABELS[data.newStatus]}" ไม่ได้ — ต้องทำตามลำดับ`,
+      );
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.subItem.update({

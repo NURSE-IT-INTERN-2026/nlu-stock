@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
-import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor, MANUAL_SETTABLE_STATUS_OPTIONS } from "@/lib/constants";
+import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
 
 // Sentinel for the "no condition" Select option. Base UI Select needs a concrete
 // value (not "") to match a SelectItem, so null condition ↔ "__NONE__".
@@ -77,7 +77,6 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
     try {
       if (editing) {
         await updateSubItem(editing.id, {
-          status: editForm.status,
           name: editForm.name || null,
           condition: editForm.condition === NO_CONDITION ? null : editForm.condition,
           serialNumber: editForm.serialNumber || null,
@@ -197,17 +196,9 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               <Label>ชื่อ</Label>
               <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="เช่น โต๊ะเขียนหนังสือ #1" />
             </div>
-            <div>
-              <Label>สถานะ</Label>
-              <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v ?? "AVAILABLE" })}>
-                <SelectTrigger><SelectValue>{labelFor(STATUS_LABELS, editForm.status)}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {MANUAL_SETTABLE_STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* No สถานะ field: this PUT writes the row with no ItemStatusLog, so a status set
+                here would leave no history and could skip the ชำรุด → ส่งซ่อม → รับซ่อม order.
+                Status moves happen on the item/รับเข้า screens instead. */}
             <div>
               <Label>สภาพ</Label>
               <Select value={editForm.condition} onValueChange={(v) => setEditForm({ ...editForm, condition: v ?? NO_CONDITION })}>

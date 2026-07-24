@@ -19,12 +19,36 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, MapPin, RotateCcw, Search, Send, Wrench } from "lucide-react";
+import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from "lucide-react";
 import { pic } from "@/lib/image";
 import { getSubItemsByStatus, updateItemStatus, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
+import { useSession } from "@/components/layout/auth-guard";
+
+// ภายใน / ภายนอก toggle — shared by send-to-repair and the edit-repair-details dialog.
+function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | ""; onChange: (v: "INTERNAL" | "EXTERNAL") => void }) {
+  return (
+    <div className="flex gap-2">
+      {([["INTERNAL", "ภายใน"], ["EXTERNAL", "ภายนอก"]] as const).map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          className={
+            "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors " +
+            (value === v
+              ? "border-primary bg-primary/10 text-primary font-medium"
+              : "border-border bg-card text-muted-foreground hover:text-foreground")
+          }
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // Generic "receive back" panel for per-unit sub-items in a fixed status
 // (IN_USE = placed in a room, UNDER_REPAIR = sent for repair, DAMAGED = reported
@@ -126,9 +150,13 @@ export function SubItemStatusPanel({
 }
 
 function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemByStatus; status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
+  const { user } = useSession();
+  const isAdmin = user?.role === "ADMIN";
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [maintOpen, setMaintOpen] = useState(false);
+  const [editRepairOpen, setEditRepairOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [note, setNote] = useState("");
   const [repairNote, setRepairNote] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -140,22 +168,19 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   // Prefer the piece's own location; fall back to the spec's location when unset.
   const loc = row.location ?? row.item.location;
 
-  const receive = async () => {
+  const reset = () => {
+    setNote("");
+    setRepairNote("");
+    setPhotoUrl(null);
+    setVenue("");
+  };
+
+  const save = async (body: Parameters<typeof updateItemStatus>[1], successMsg = "บันทึกเรียบร้อย") => {
     setSaving(true);
     try {
-      await updateItemStatus(row.item.id, {
-        newStatus: targetStatus,
-        subItemId: row.id,
-        notes: isDamaged ? note.trim() : undefined,
-        imageUrl: isDamaged ? (photoUrl ?? undefined) : undefined,
-        repairVenue: isDamaged && venue ? venue : undefined,
-        repairNote: isDamaged ? repairNote.trim() : undefined,
-      });
-      toast.success("บันทึกเรียบร้อย");
-      setNote("");
-      setRepairNote("");
-      setPhotoUrl(null);
-      setVenue("");
+      await updateItemStatus(row.item.id, { ...body, subItemId: row.id });
+      toast.success(successMsg);
+      reset();
       onResolved();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
@@ -163,6 +188,29 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
       setSaving(false);
     }
   };
+
+  const receive = () =>
+    save({
+      newStatus: targetStatus,
+      notes: isDamaged ? note.trim() : undefined,
+      imageUrl: isDamaged ? (photoUrl ?? undefined) : undefined,
+      repairVenue: isDamaged && venue ? venue : undefined,
+      repairNote: isDamaged ? repairNote.trim() : undefined,
+    });
+
+  // Still ส่งซ่อม, only the repair details change (ซ่อมภายในไม่ได้ → ส่งภายนอกต่อ). Writes a
+  // fresh UNDER_REPAIR → UNDER_REPAIR log row so the trail shows both trips, not just the last.
+  const editRepair = () =>
+    save({
+      newStatus: "UNDER_REPAIR",
+      notes: `แก้ข้อมูลการส่งซ่อม${repairNote.trim() ? ` · ${repairNote.trim()}` : ""}`,
+      repairVenue: venue || undefined,
+      repairNote: repairNote.trim() || undefined,
+    }, "แก้ข้อมูลการส่งซ่อมแล้ว");
+
+  // ADMIN only — the piece turned out not to be broken, so the ชำรุด report is withdrawn.
+  const cancelDamage = () =>
+    save({ newStatus: "AVAILABLE", notes: `ยกเลิกคำขอชำรุด · ${note.trim()}` }, "ยกเลิกคำขอชำรุดแล้ว");
 
   return (
     <Card className="border shadow-none py-2.5">
@@ -190,15 +238,28 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
               </div>
             </div>
           </div>
-          <Button
-            size="sm"
-            className="h-9 w-full shrink-0 sm:w-auto"
-            disabled={saving}
-            onClick={() => (isRepair ? setMaintOpen(true) : setConfirmOpen(true))}
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : isRepair ? <Wrench className="size-3.5" /> : isDamaged ? <Send className="size-3.5" /> : <RotateCcw className="size-3.5" />}
-            {actionLabel}
-          </Button>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+            {/* Secondary action on the repair/damage cards — shown left of the primary button. */}
+            {isRepair && (
+              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => setEditRepairOpen(true)}>
+                <Pencil className="size-3.5" />แก้ข้อมูลส่งซ่อม
+              </Button>
+            )}
+            {isDamaged && isAdmin && (
+              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => setCancelOpen(true)}>
+                <Undo2 className="size-3.5" />ยกเลิกคำขอชำรุด
+              </Button>
+            )}
+            <Button
+              size="sm"
+              className="h-9 w-full sm:w-auto"
+              disabled={saving}
+              onClick={() => (isRepair ? setMaintOpen(true) : setConfirmOpen(true))}
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : isRepair ? <Wrench className="size-3.5" /> : isDamaged ? <Send className="size-3.5" /> : <RotateCcw className="size-3.5" />}
+              {actionLabel}
+            </Button>
+          </div>
         </div>
       </CardContent>
 
@@ -247,23 +308,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground" required>ประเภทการซ่อม</Label>
-                  <div className="flex gap-2">
-                    {([["INTERNAL", "ภายใน"], ["EXTERNAL", "ภายนอก"]] as const).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setVenue(value)}
-                        className={
-                          "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors " +
-                          (venue === value
-                            ? "border-primary bg-primary/10 text-primary font-medium"
-                            : "border-border bg-card text-muted-foreground hover:text-foreground")
-                        }
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <VenuePicker value={venue} onChange={setVenue} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
@@ -290,6 +335,72 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
           subItemLabel={effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}
           onSuccess={onResolved}
         />
+      )}
+
+      {/* Repair details changed mid-repair (ซ่อมภายในไม่ได้ → ส่งภายนอก). Status stays ส่งซ่อม. */}
+      {isRepair && (
+        <AlertDialog open={editRepairOpen} onOpenChange={setEditRepairOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>แก้ข้อมูลการส่งซ่อม</AlertDialogTitle>
+              <AlertDialogDescription>
+                <span className="font-medium text-foreground">{row.item.name}</span> ยังอยู่ระหว่างส่งซ่อมเหมือนเดิม — แก้เฉพาะข้อมูลการส่งซ่อม ระบบจะบันทึกเป็นประวัติเพิ่ม ไม่ทับของเดิม
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="w-full space-y-3 text-left">
+              <div className="-mx-4"><Separator /></div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground" required>ประเภทการซ่อม</Label>
+                <VenuePicker value={venue} onChange={setVenue} />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" required>รายละเอียด/สถานที่ส่งซ่อม</Label>
+                <Textarea
+                  value={repairNote}
+                  onChange={(e) => setRepairNote(e.target.value)}
+                  placeholder="เช่น ซ่อมภายในไม่ได้ ส่งต่อร้าน ABC…"
+                  rows={2}
+                  className="bg-card"
+                />
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={reset}>ยกเลิก</AlertDialogCancel>
+              <AlertDialogAction disabled={!venue || !repairNote.trim()} onClick={() => { setEditRepairOpen(false); editRepair(); }}>บันทึก</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* ADMIN-only withdrawal of a ชำรุด report — the only step a role is allowed to undo. */}
+      {isDamaged && isAdmin && (
+        <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>ยกเลิกคำขอชำรุด</AlertDialogTitle>
+              <AlertDialogDescription>
+                คืน <span className="font-medium text-foreground">{row.item.name}</span> กลับเป็น &ldquo;พร้อมใช้งาน&rdquo; — ใช้เมื่อแจ้งชำรุดผิดหรือตรวจแล้วของไม่ได้เสีย
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="w-full space-y-3 text-left">
+              <div className="-mx-4"><Separator /></div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" required>เหตุผลที่ยกเลิก</Label>
+                <Textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="เช่น ตรวจแล้วใช้งานได้ปกติ แจ้งผิดชิ้น…"
+                  rows={2}
+                  className="bg-card"
+                />
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={reset}>ปิด</AlertDialogCancel>
+              <AlertDialogAction disabled={!note.trim()} onClick={() => { setCancelOpen(false); cancelDamage(); }}>ยืนยันยกเลิก</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </Card>
   );
