@@ -283,19 +283,6 @@
   }
 }
 
-/* ── Native date/time inputs: follow theme so popup + control match ── */
-input[type="date"],
-input[type="datetime-local"],
-input[type="time"] {
-  color-scheme: light dark;
-}
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-input[type="time"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0.55;
-}
-
 /* ── Status overview container query ── */
 .status-layout {
   container-type: inline-size;

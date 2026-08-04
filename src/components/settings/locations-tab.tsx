@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
+  DIALOG_SHELL,
+  DIALOG_SHELL_FIT,
+  DIALOG_BODY,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -192,7 +195,8 @@ function LocationPeek({ locationId, label }: { locationId: string; label: string
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md sm:rounded-2xl">
-          <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
+         <div className={DIALOG_SHELL}>
+          <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Eye className="h-4 w-4" />
             </div>
@@ -204,7 +208,7 @@ function LocationPeek({ locationId, label }: { locationId: string; label: string
             </div>
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto divide-y divide-border bg-secondary/40">
+          <div className={cn(DIALOG_BODY, "divide-y divide-border bg-secondary/40")}>
             {loading ? (
               <div className="space-y-2 p-5">
                 {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
@@ -224,9 +228,10 @@ function LocationPeek({ locationId, label }: { locationId: string; label: string
             ))}
           </div>
 
-          <div className="flex justify-end border-t border-border bg-card px-6 py-4">
+          <div className="flex shrink-0 justify-end border-t border-border bg-card px-6 py-4">
             <Button variant="outline" onClick={() => setOpen(false)}>ปิด</Button>
           </div>
+         </div>
         </DialogContent>
       </Dialog>
     </>
@@ -379,7 +384,8 @@ export function LocationsTab() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg sm:rounded-2xl">
-          <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
+         <div className={DIALOG_SHELL_FIT}>
+          <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <MapPin className="h-4 w-4" />
             </div>
@@ -393,7 +399,7 @@ export function LocationsTab() {
             </div>
           </div>
 
-          <div className="space-y-6 bg-secondary/40 px-6 py-6">
+          <div className={cn(DIALOG_BODY, "space-y-6 bg-secondary/40 px-6 py-6")}>
             <div className="space-y-2">
               <Label htmlFor="loc-building" required>อาคาร</Label>
               <Combobox id="loc-building" value={form.building} onChange={(v) => setForm({ ...form, building: v })} options={buildingOpts} placeholder="เช่น อาคาร 2" className="bg-card" />
@@ -406,7 +412,7 @@ export function LocationsTab() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loc-room" required>
-                  {noRoom ? "ตำแหน่ง" : "ห้อง"}
+                  {noRoom ? "จุดสังเกตุ" : "ห้อง"}
                 </Label>
                 <Combobox
                   id="loc-room"
@@ -431,7 +437,7 @@ export function LocationsTab() {
               <Switch checked={noRoom} tabIndex={-1} className="pointer-events-none" aria-hidden />
               <span className="flex-1">
                 <span className="block text-sm font-medium text-foreground">ไม่มีห้องเฉพาะ</span>
-                <span className="block text-xs text-muted-foreground">ระบุตำแหน่งแทน เช่น ล็อคเกอร์หน้าห้อง</span>
+                <span className="block text-xs text-muted-foreground">ระบุจุดสังเกตุแทน เช่น ล็อคเกอร์หน้าห้อง</span>
               </span>
             </button>
 
@@ -448,13 +454,14 @@ export function LocationsTab() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-card px-6 py-4">
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
             <Button onClick={handleSave} disabled={!form.building || !form.floor || !form.room.trim()} className="gap-1.5">
               <Check className="h-4 w-4" />
               {editing ? "บันทึก" : "สร้างสถานที่"}
             </Button>
           </div>
+         </div>
         </DialogContent>
       </Dialog>
 

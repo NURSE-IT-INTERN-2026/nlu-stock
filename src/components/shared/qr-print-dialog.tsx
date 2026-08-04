@@ -12,10 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Printer } from "lucide-react";
 import QRCode from "qrcode";
+import { qrUrl } from "@/lib/constants";
 
 export interface QrPrintItem {
   code: string;
   name: string;
+  /** QR payload. Defaults to the item-code URL; pass explicitly for a piece label. */
+  qr?: string;
 }
 
 interface Props {
@@ -38,6 +41,9 @@ const SIZE_LABELS: Record<LabelSize, string> = {
   large: "Large (240 x 160 mm)",
 };
 
+// Label text stays the plain code; the QR itself carries the URL.
+const qrValue = (item: QrPrintItem) => item.qr ?? qrUrl(item.code);
+
 export function QrPrintDialog({ open, onClose, items }: Props) {
   const [size, setSize] = useState<LabelSize>("medium");
   const [qrImages, setQrImages] = useState<Map<string, string>>(new Map());
@@ -48,13 +54,14 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
     const generate = async () => {
       const map = new Map<string, string>();
       for (const item of items) {
-        if (!map.has(item.code)) {
-          const url = await QRCode.toDataURL(item.code, {
+        const value = qrValue(item);
+        if (!map.has(value)) {
+          const url = await QRCode.toDataURL(value, {
             width: 200,
             margin: 1,
             color: { dark: "#000000", light: "#ffffff" },
           });
-          map.set(item.code, url);
+          map.set(value, url);
         }
       }
       setQrImages(map);
@@ -125,7 +132,7 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
         <div class="grid">
           ${items
             .map((item) => {
-              const img = qrImages.get(item.code) ?? "";
+              const img = qrImages.get(qrValue(item)) ?? "";
               return `
                 <div class="label">
                   <img src="${img}" alt="QR" />
@@ -185,9 +192,9 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
                   width: LABEL_SIZES[size].width,
                 }}
               >
-                {qrImages.get(item.code) && (
+                {qrImages.get(qrValue(item)) && (
                   <img
-                    src={qrImages.get(item.code)}
+                    src={qrImages.get(qrValue(item))}
                     alt="QR"
                     className="flex-shrink-0"
                     style={{ width: LABEL_SIZES[size].qr * 0.6, height: LABEL_SIZES[size].qr * 0.6 }}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
 import { stockAdjustSchema } from "@/lib/validators";
 import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
@@ -7,7 +8,6 @@ import { AdjustmentReason } from "@/generated/prisma/enums";
 import { ADJUSTMENT_REASON_LABELS } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
-const fmtDate = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth(request);
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const cycleMonths = countCycleFor(item.category.profile.dispenseType, item.countCycleMonths);
     const nextCount = nextCountFrom(now, cycleMonths)!;
     const countStamp = isCount ? { lastCountDate: now, nextCountDate: nextCount } : {};
-    const countSuffix = isCount ? ` (นับรอบถัดไป ${fmtDate(nextCount)})` : "";
+    const countSuffix = isCount ? ` (นับรอบถัดไป ${fmtDate(nextCount, TH_DATE)})` : "";
 
     // Resolve the reason for a scheduled count from the direction of the delta:
     // counted over = stock the system didn't know about (always COUNT_MISMATCH_OVER,

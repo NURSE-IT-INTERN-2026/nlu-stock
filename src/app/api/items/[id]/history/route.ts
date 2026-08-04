@@ -176,12 +176,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
-  await Promise.all(queries);
+  // Per-type totals straight from the DB, independent of the current filter and page —
+  // so the chips keep showing the whole picture while one type is selected. usedQty is
+  // the real "ถูกใช้งานไปเท่าไหร่": the sum of every dispensed quantity.
+  const summary = lost ? undefined : Promise.all([
+    prisma.dispenseRecord.count({ where: { itemId: id } }),
+    prisma.receiveRecord.count({ where: { itemId: id } }),
+    prisma.stockAdjustment.count({ where: { itemId: id } }),
+    prisma.itemStatusLog.count({ where: { itemId: id } }),
+    prisma.maintenanceRecord.count({ where: { itemId: id } }),
+    prisma.locationChangeLog.count({ where: { itemId: id } }),
+    prisma.dispenseRecord.aggregate({ where: { itemId: id }, _sum: { quantity: true } }),
+  ]).then(([DISPENSE, RECEIVE, ADJUSTMENT, STATUS_CHANGE, MAINTENANCE, LOCATION_CHANGE, qty]) => ({
+    DISPENSE, RECEIVE, ADJUSTMENT, STATUS_CHANGE, MAINTENANCE, LOCATION_CHANGE,
+    usedQty: qty._sum.quantity ?? 0,
+  }));
+
+  const [, counts] = await Promise.all([Promise.all(queries), summary]);
 
   events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const total = events.length;
   const paged = events.slice(skip, skip + take);
 
-  return json({ events: paged, page, perPage, total });
+  return json({ events: paged, page, perPage, total, counts });
 }

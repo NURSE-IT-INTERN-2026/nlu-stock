@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
 import { ChevronDown } from "lucide-react";
@@ -61,7 +61,7 @@ const columns: Column<Row>[] = [
   {
     key: "dispensedAt",
     header: "Date",
-    render: (r) => fmtDate(new Date(r.dispensedAt), "dd MMM yyyy HH:mm"),
+    render: (r) => fmtDate(new Date(r.dispensedAt), TH_DATETIME),
   },
   { key: "itemCode", header: "Code" },
   { key: "itemName", header: "Item" },
@@ -105,7 +105,7 @@ function LoanGroups({ groups }: { groups: LoanGroup[] }) {
           <details key={g.key} className="group rounded-lg border bg-card overflow-hidden">
             <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm list-none [&::-webkit-details-marker]:hidden hover:bg-muted/50">
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-              <span className="font-medium">{fmtDate(new Date(head.dispensedAt), "dd MMM yyyy HH:mm")}</span>
+              <span className="font-medium">{fmtDate(new Date(head.dispensedAt), TH_DATETIME)}</span>
               <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", status.cls)}>
                 {status.label}
               </span>

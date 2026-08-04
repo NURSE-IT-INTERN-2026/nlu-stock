@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { ChevronRight, CheckCircle2, MapPin, Package, Clock, Wrench, ClipboardCheck } from "lucide-react";
@@ -82,7 +83,10 @@ function alertDetail(item: ItemRecord, type: string): string {
     }
     case "nearExpiry": {
       const d = item.lots[0]?.expiryDate;
-      return d ? `หมดอายุ ${new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}` : ALERT_LABEL.nearExpiry;
+      if (!d) return ALERT_LABEL.nearExpiry;
+      const date = fmtDate(d, TH_DAY);
+      // Past expiry → say so outright; upcoming → show the date.
+      return new Date(d).getTime() < Date.now() ? `หมดอายุแล้ว · ${date}` : `หมดอายุ ${date}`;
     }
     case "overdueMaint": {
       const days = item.nextMaintenanceDate ? Math.max(0, Math.floor((Date.now() - new Date(item.nextMaintenanceDate).getTime()) / DAY_MS)) : 0;

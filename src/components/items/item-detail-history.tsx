@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, Package, RefreshCw, Wrench,
@@ -51,6 +52,9 @@ const EVENT_CHIPS = [
   { value: "LOCATION_CHANGE", label: "ที่ตั้ง", activeClass: "bg-sky-600 text-white border-sky-600" },
 ];
 
+// Per-type totals the API counts straight off the log tables, plus the dispensed quantity.
+type Counts = Record<string, number> & { usedQty: number };
+
 interface Props {
   itemId: string;
 }
@@ -58,6 +62,7 @@ interface Props {
 export function ItemDetailHistory({ itemId }: Props) {
   const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState("");
+  const [counts, setCounts] = useState<Counts | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   const fetchPage = useCallback(
@@ -65,6 +70,9 @@ export function ItemDetailHistory({ itemId }: Props) {
       const qs = new URLSearchParams({ page: String(p), perPage: String(perPage) });
       if (typeFilter) qs.set("type", typeFilter);
       const data = await getItemHistory(itemId, qs.toString());
+      // Filter-independent, so the chips stay complete while one type is selected.
+      const c = (data as Record<string, unknown>).counts as Counts | undefined;
+      if (c) setCounts(c);
       return {
         items: (data.events || []) as TimelineEvent[],
         total: ((data as Record<string, unknown>).total as number) || 0,
@@ -92,11 +100,21 @@ export function ItemDetailHistory({ itemId }: Props) {
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <SectionHeader eyebrow="กิจกรรม" title="ประวัติ" />
 
+      {/* ── Totals per type, straight from the log tables ── */}
+      {counts && (
+        <p className="px-4 sm:px-5 pt-4 text-sm text-muted-foreground">
+          เบิกไปแล้ว <span className="font-semibold text-foreground tabular-nums">{counts.DISPENSE}</span> ครั้ง
+          {" · รวม "}<span className="font-semibold text-foreground tabular-nums">{counts.usedQty}</span> หน่วย
+          {" · เปลี่ยนสถานะ "}<span className="font-semibold text-foreground tabular-nums">{counts.STATUS_CHANGE}</span> ครั้ง
+        </p>
+      )}
+
       {/* ── Quick filter chips ── */}
-      <div className="px-4 sm:px-5 pt-4 flex items-center gap-2 overflow-x-auto">
+      <div className="px-4 sm:px-5 pt-3 flex items-center gap-2 overflow-x-auto">
         <span className="text-sm text-muted-foreground shrink-0">Type:</span>
         {EVENT_CHIPS.map((chip) => {
           const active = typeFilter === chip.value;
+          const n = !counts ? null : chip.value ? counts[chip.value] : EVENT_CHIPS.reduce((sum, c) => sum + (c.value ? counts[c.value] ?? 0 : 0), 0);
           return (
             <button
               key={chip.value}
@@ -108,7 +126,7 @@ export function ItemDetailHistory({ itemId }: Props) {
               )}
               onClick={() => setTypeFilter(chip.value)}
             >
-              {chip.label}
+              {chip.label}{n === null ? "" : ` ${n}`}
             </button>
           );
         })}
@@ -139,7 +157,7 @@ export function ItemDetailHistory({ itemId }: Props) {
                     </span>
                     <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                       <CalendarDays className="size-3" />
-                      {new Date(event.date).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      {fmtDate(event.date, TH_DATETIME)}
                     </span>
                   </div>
                   <p className="text-sm font-medium">{event.description}</p>

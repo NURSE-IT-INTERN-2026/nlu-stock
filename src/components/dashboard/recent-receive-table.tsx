@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, TH_DAY } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -75,7 +75,7 @@ export function RecentReceiveTable({ data }: RecentReceiveTableProps) {
                     aria-label={`${r.item.code} ${r.item.name}, ${r.quantity} ชิ้น`}
                   >
                     <TableCell className="text-xs whitespace-nowrap text-muted-foreground px-2">
-                      {fmtDate(new Date(r.receivedAt), "dd MMM HH:mm")}
+                      {fmtDate(new Date(r.receivedAt), `${TH_DAY} HH:mm`)}
                     </TableCell>
                     <TableCell className="px-2">
                       <div className="flex items-center min-w-0 gap-1">

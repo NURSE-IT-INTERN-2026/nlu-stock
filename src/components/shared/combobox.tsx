@@ -9,18 +9,20 @@ import { cn } from "@/lib/utils";
  * Creatable combobox: styled Input with a dropdown of existing options that
  * also accepts a brand-new typed value. No cmdk dependency.
  */
-export function Combobox({ value, onChange, options, placeholder, className, id }: {
+export function Combobox({ value, onChange, options, placeholder, className, id, allowCreate = true }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
   placeholder?: string;
   className?: string;
   id?: string;
+  /** false = pick-only: no "เพิ่ม" affordance for typing a brand-new value */
+  allowCreate?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const q = value.trim().toLowerCase();
   const filtered = q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
-  const isNew = q !== "" && !options.some((o) => o.toLowerCase() === q);
+  const isNew = allowCreate && q !== "" && !options.some((o) => o.toLowerCase() === q);
 
   return (
     <div className="relative">

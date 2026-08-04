@@ -20,10 +20,13 @@ assert.equal(canTransition("DAMAGED", "AVAILABLE"), false);
 assert.equal(canTransition("DAMAGED", "AVAILABLE", { isAdmin: true }), true);
 assert.equal(canTransition("DAMAGED", "LOST", { isAdmin: true }), false, "ADMIN ก็ข้ามขั้นไม่ได้");
 
-// Written-off is terminal.
-assert.equal(canTransition("DISPOSED", "AVAILABLE"), false);
-assert.equal(canTransition("DISPOSED", "AVAILABLE", { isAdmin: true }), false);
+// Written-off can be undone (mirror of เรียกคืน): both LOST and DISPOSED → AVAILABLE.
+assert.equal(canTransition("DISPOSED", "AVAILABLE"), true, "ยกเลิกตัดจำหน่ายแล้วคืนได้");
+assert.equal(canTransition("DISPOSED", "AVAILABLE", { isAdmin: true }), true);
 assert.equal(canTransition("LOST", "AVAILABLE"), true, "เจอของที่หายแล้วคืนได้");
+// Still terminal to anything but AVAILABLE.
+assert.equal(canTransition("DISPOSED", "DAMAGED"), false);
+assert.equal(canTransition("DISPOSED", "LOST"), false);
 
 // allowedTargets adds the admin edge without duplicating.
 assert.deepEqual([...allowedTargets("DAMAGED")].sort(), ["DISPOSED", "UNDER_REPAIR"]);

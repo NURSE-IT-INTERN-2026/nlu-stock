@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const parsed = dispenseRequestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { items, usageType, usageNote, notes, recipient, dueAt } = parsed.data;
+  const { items, usageType, usageNote, notes, recipient, locationId, dueAt } = parsed.data;
   const inRoom = parsed.data.loanType === "INUSE"; // trackIndividually → IN_USE instead of ON_LOAN
 
   // One loanGroupId per borrow event → groups all lines for the return screen.
@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
             staffId: auth.user.userId,
             notes: notes ?? undefined,
             recipient: recipient ?? undefined,
+            locationId: locationId ?? undefined,
             loanGroupId,
             loanType: inRoom ? LoanType.INUSE : LoanType.BORROW,
             dueAt: dueAtDate ?? undefined,
@@ -91,7 +92,9 @@ export async function POST(req: NextRequest) {
           const sub = item.subItems[0];
           await tx.subItem.update({
             where: { id: di.subItemId },
-            data: { status: newStatus },
+            // นำไปใช้งาน (INUSE) moves this one physical piece — mirror the destination onto
+            // the sub-item's own locationId (only when it resolved to a real Location).
+            data: { status: newStatus, ...(inRoom && locationId ? { locationId } : {}) },
           });
           await tx.itemStatusLog.create({
             data: {

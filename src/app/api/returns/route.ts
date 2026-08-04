@@ -33,7 +33,10 @@ const ITEM_INCLUDE = {
 // Lists loans for the รับคืน tab grouped client-side by loanGroupId (one card per borrow event).
 // 2-step: find loanGroupIds with an open BORROW record, then fetch ALL records in those groups
 // (including already-returned ones) so the UI can show "ค้าง X/Y". Legacy null-loanGroupId
-// records are returned singly (Y = X). Consumables + INUSE (ตั้งใช้ในห้อง) are filtered out.
+// records are returned singly (Y = X). Consumables + INUSE (ตั้งใช้ในห้อง) are filtered out —
+// BORROWABLE must be on BOTH queries: a cart mixing วัสดุสิ้นเปลือง with a durable shares one
+// loanGroupId, and a consumable line never gets returnedAt, so without it the card counts a
+// permanently-open row as ค้าง and never clears.
 // Keep every open loan EXCEPT per-unit (trackIndividually) INUSE — those return via
 // คืนเข้าพัสดุ (status route), not here. COUNT-type INUSE still returns numerically through
 // this screen, so it must stay visible. null loanType = legacy BORROW.
@@ -57,7 +60,7 @@ export async function GET() {
 
   const [grouped, legacy] = await Promise.all([
     groupIds.length
-      ? prisma.dispenseRecord.findMany({ where: { loanGroupId: { in: groupIds }, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } })
+      ? prisma.dispenseRecord.findMany({ where: { loanGroupId: { in: groupIds }, item: BORROWABLE, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } })
       : Promise.resolve([]),
     prisma.dispenseRecord.findMany({ where: { returnedAt: null, loanGroupId: null, item: BORROWABLE, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } }),
   ]);

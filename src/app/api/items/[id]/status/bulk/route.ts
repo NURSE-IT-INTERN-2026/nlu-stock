@@ -4,6 +4,7 @@ import { bulkSubItemStatusSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
+import { closeOpenLoan } from "@/lib/returns";
 import { NextRequest } from "next/server";
 
 // Bulk per-piece status change for tracked items (adjust dialog). One atomic transaction,
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           changedBy: auth.user.userId,
           imageUrl: data.imageUrl,
         },
+      });
+      await closeOpenLoan(tx, {
+        itemId: id,
+        subItemId: sub.id,
+        previousStatus: sub.status,
+        newStatus: data.newStatus,
       });
     }
 

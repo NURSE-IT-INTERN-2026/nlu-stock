@@ -16,6 +16,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { searchDispenseItems } from "@/lib/api";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { parseScannedCode } from "@/lib/constants";
 import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/shared/pagination";
@@ -165,7 +166,8 @@ function DispenseContent() {
     if (added > 0) toast.success(`สุ่มเพิ่ม ${added} รายการเข้าตะกร้า (ครบ ${byProfile.size} ประเภท)`);
   };
 
-  const handleQrScan = async (code: string) => {
+  const handleQrScan = async (scanned: string) => {
+    const { code } = parseScannedCode(scanned);
     try {
       const data = await searchDispenseItems({ q: code, perPage: "1", categoryId: filterCategory || undefined, building: filterLocation.building || undefined, floor: filterLocation.floor || undefined, room: filterLocation.room || undefined, detail: filterLocation.detail || undefined, profileId: filterProfile || undefined });
       const found = (data.items ?? [])[0] as SearchItem | undefined;

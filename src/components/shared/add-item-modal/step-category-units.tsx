@@ -187,7 +187,7 @@ export function StepCategoryUnits({
         </div>
       ) : (
         <div className="space-y-2">
-          <Label htmlFor="issue-unit-select" className="text-xs" required>หน่วย</Label>
+          <Label htmlFor="issue-unit-select" className="text-xs" required>หน่วยนับ</Label>
           <Select
             value={issueUnitId}
             onValueChange={(v) => {

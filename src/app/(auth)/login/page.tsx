@@ -26,7 +26,10 @@ export default function LoginPage() {
     setError("");
     try {
       await login(loginEmail, "");
-      router.push("/");
+      // ?next= is set by middleware — send QR scanners back to the item they scanned.
+      // Same-origin paths only ("//host" is protocol-relative, i.e. off-site).
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.push(next?.startsWith("/") && !next.startsWith("//") ? next : "/");
     } catch (e) {
       if (e instanceof ApiError) {
         setError(e.message);
