@@ -31,6 +31,14 @@ function matchRoute(pathname: string): RouteRule | null {
   return null;
 }
 
+// Keep the scanned destination across the login bounce (external QR scan on a
+// phone that isn't signed in yet).
+function loginUrl(request: NextRequest) {
+  const url = new URL("/login", request.url);
+  url.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+  return url;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -42,7 +50,7 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
 
   if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(loginUrl(request));
   }
 
   try {
@@ -59,7 +67,7 @@ export async function middleware(request: NextRequest) {
 
     return NextResponse.next();
   } catch {
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(loginUrl(request));
     response.cookies.delete(COOKIE_NAME);
     return response;
   }

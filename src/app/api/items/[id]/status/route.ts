@@ -4,7 +4,7 @@ import { statusChangeSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
-import { ReturnCondition } from "@/generated/prisma/enums";
+import { closeOpenLoan } from "@/lib/returns";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
@@ -54,28 +54,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           imageUrl: data.imageUrl,
           repairVenue: data.repairVenue ?? undefined,
           repairNote: data.repairNote ?? undefined,
+          damageNote: data.damageNote ?? undefined,
         },
       });
 
-      // Leaving IN_USE (ตั้งใช้ในห้อง → คืนเข้าพัสดุ / แจ้งชำรุด-สูญหาย) closes the open INUSE
-      // dispense record so it doesn't linger as a phantom outstanding loan.
-      if (subItem.status === ItemStatus.IN_USE && data.newStatus !== ItemStatus.IN_USE) {
-        const open = await tx.dispenseRecord.findFirst({
-          where: { itemId: id, subItemId: data.subItemId, returnedAt: null, loanType: "INUSE" },
-          orderBy: { dispensedAt: "desc" },
-        });
-        if (open) {
-          const cond = (["AVAILABLE", "DAMAGED", "LOST"] as const).includes(
-            data.newStatus as "AVAILABLE" | "DAMAGED" | "LOST",
-          )
-            ? (data.newStatus as ReturnCondition)
-            : undefined;
-          await tx.dispenseRecord.update({
-            where: { id: open.id },
-            data: { resolvedQty: open.quantity, returnedAt: new Date(), ...(cond ? { returnCondition: cond } : {}) },
-          });
-        }
-      }
+      // Leaving ON_LOAN/IN_USE here (คืนเข้าพัสดุ / แจ้งชำรุด-สูญหาย from the detail page)
+      // closes the open dispense record so it doesn't linger as a phantom outstanding loan.
+      await closeOpenLoan(tx, {
+        itemId: id,
+        subItemId: data.subItemId!,
+        previousStatus: subItem.status,
+        newStatus: data.newStatus,
+      });
 
       // Recompute counts for tracked items after a per-piece status change (no-op for non-tracked).
       await recomputeItemCounts(tx, id);

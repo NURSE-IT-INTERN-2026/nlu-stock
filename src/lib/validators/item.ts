@@ -65,6 +65,8 @@ export const statusChangeSchema = z.object({
   imageUrl: z.string().optional().nullable(),
   repairVenue: z.nativeEnum(RepairVenue).optional().nullable(),
   repairNote: z.string().max(500).optional().nullable(),
+  // อาการที่ชำรุด carried on the repair rows so it can be corrected mid-trip.
+  damageNote: z.string().max(500).optional().nullable(),
 });
 
 // Bulk per-piece status change for tracked items (used by adjust dialog + subcodes tab batch).

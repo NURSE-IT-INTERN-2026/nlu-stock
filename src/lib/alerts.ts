@@ -20,8 +20,9 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
     `,
+    // Near-expiry = within 30 days OR already expired (no lower bound), still holding stock.
     prisma.lot.count({
-      where: { expiryDate: { gte: now, lte: in30Days } },
+      where: { expiryDate: { lte: in30Days }, remainingQty: { gt: 0 } },
     }),
     // Overdue maintenance = live tracked copies (schedule on SubItem) + flat items
     // (schedule on Item). Mirrors the /maintenance summary + schedule rows.

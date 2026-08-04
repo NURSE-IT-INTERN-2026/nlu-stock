@@ -5,7 +5,7 @@ import { ReportFilters, type FilterValues, type FilterConfig } from "./report-fi
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
@@ -35,7 +35,7 @@ const columns: Column<Row>[] = [
   {
     key: "performedAt",
     header: "Date",
-    render: (r) => fmtDate(new Date(r.performedAt), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.performedAt), TH_DATE),
   },
   { key: "itemCode", header: "Code", render: (r) => effectiveCode(r.itemCode, r.subCode, r.subCount) },
   { key: "itemName", header: "Item" },

@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback, type ReactNode } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { motion } from "motion/react";
 import { ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -181,13 +181,13 @@ interface ReceiveRow {
 }
 
 const receiveColumns: Column<ReceiveRow>[] = [
-  { key: "receivedAt", header: "Date", render: (r) => fmtDate(new Date(r.receivedAt), "dd MMM yyyy HH:mm") },
+  { key: "receivedAt", header: "Date", render: (r) => fmtDate(new Date(r.receivedAt), TH_DATETIME) },
   { key: "itemCode", header: "Code" },
   { key: "itemName", header: "Item" },
   { key: "category", header: "Category" },
   { key: "lotNumber", header: "Lot" },
   { key: "quantity", header: "Qty" },
-  { key: "expiryDate", header: "Expiry", render: (r) => (r.expiryDate ? fmtDate(new Date(r.expiryDate), "dd MMM yyyy") : "—") },
+  { key: "expiryDate", header: "Expiry", render: (r) => (r.expiryDate ? fmtDate(new Date(r.expiryDate), TH_DATE) : "—") },
   { key: "receiverName", header: "Receiver" },
 ];
 
@@ -210,7 +210,7 @@ interface StatusRow {
 }
 
 const statusColumns: Column<StatusRow>[] = [
-  { key: "changedAt", header: "Date", render: (r) => fmtDate(new Date(r.changedAt), "dd MMM yyyy HH:mm") },
+  { key: "changedAt", header: "Date", render: (r) => fmtDate(new Date(r.changedAt), TH_DATETIME) },
   { key: "itemCode", header: "Code" },
   { key: "itemName", header: "Item" },
   { key: "subCode", header: "Sub-code", render: (r) => r.subCode ?? "—" },

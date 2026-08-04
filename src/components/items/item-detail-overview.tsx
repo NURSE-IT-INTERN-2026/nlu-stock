@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -13,7 +14,7 @@ import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { countCycleFor } from "@/lib/stock-count";
-import { formatSubCode, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
+import { formatSubCode, qrUrl, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { ActionTile } from "@/components/items/action-tile";
@@ -96,7 +97,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   );
 
   useEffect(() => {
-    QRCode.toDataURL(item.code, { width: 128, margin: 1 }).then(setQrDataUrl);
+    QRCode.toDataURL(qrUrl(item.code), { width: 128, margin: 1 }).then(setQrDataUrl);
   }, [item.code]);
 
   // ── Handlers ──
@@ -128,7 +129,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     { icon: Tag, label: "ประเภท", value: item.category.profile?.name ?? item.category.name },
     { icon: FolderTree, label: "หมวดหมู่", value: item.category.name },
     { icon: Layers, label: "หน่วยเบิก", value: item.issueUnit.name },
-    { icon: MapPin, label: "ที่ตั้ง", value: locationStr },
+    { icon: MapPin, label: "สถานที่จัดเก็บ", value: locationStr },
     ...(item.storageRequirements
       ? [{ icon: ClipboardList, label: "การเก็บรักษา", value: item.storageRequirements }]
       : []),
@@ -137,7 +138,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       icon: CalendarClock,
       label: "ตรวจนับครั้งถัดไป",
       value: item.nextCountDate
-        ? new Date(item.nextCountDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })
+        ? fmtDate(item.nextCountDate, TH_DATE)
         : "ยังไม่เคยตรวจนับ",
     },
     ...(item.trackIndividually && item.subItems.length === 1 && item.subItems[0].serialNumber

@@ -11,8 +11,9 @@ import { ChevronRight, RotateCcw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getOpenBorrows, type OpenBorrow } from "@/lib/api";
 import { ReturnLoanDetail, type LoanGroup } from "@/components/receive/return-loan-detail";
+import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
-const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : null);
+const fmtDate = (iso: string | null) => (iso ? fmt(iso, TH_DATE) : null);
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 
 function outstandingOf(r: OpenBorrow) {
@@ -27,10 +28,9 @@ function dueAlert(dueAt: string | null): { text: string; cls: string } | null {
   return null;
 }
 
-// Row background by due status. Done (nothing outstanding) dims to grey so closed
-// loans don't shout; otherwise white / amber / red per dueAlert.
-function rowTint(dueAt: string | null, done: boolean): string {
-  if (done) return "bg-muted/60 border-border text-muted-foreground";
+// Row background by due status: white / amber / red per dueAlert. Fully-returned loans
+// never reach here — they're filtered out of the list entirely.
+function rowTint(dueAt: string | null): string {
   const a = dueAlert(dueAt);
   if (a?.text === "เกินกำหนด") return "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900";
   if (a?.text === "ใกล้ครบกำหนด") return "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900";
@@ -45,9 +45,11 @@ function rowTint(dueAt: string | null, done: boolean): string {
 const ROW_LINE = "flex items-center gap-2 sm:gap-3";
 const COL = {
   owe: "w-11 sm:w-14 shrink-0",
-  borrowed: "hidden sm:block w-[4.5rem] shrink-0 text-right",
+  // Thai dates ("31 ก.ค. 2569") are wider than the old 7/31/2026 — these two columns are
+  // sized to hold one on a single line, otherwise the date wraps and the row grows.
+  borrowed: "hidden sm:block w-24 shrink-0 text-right whitespace-nowrap",
   days: "hidden min-[400px]:block w-12 sm:w-14 shrink-0 text-right",
-  due: "w-16 sm:w-[5.25rem] shrink-0 text-right truncate",
+  due: "w-20 sm:w-24 shrink-0 text-right truncate",
   count: "w-7 sm:w-9 shrink-0 text-right",
 } as const;
 
@@ -88,7 +90,11 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
     if (g) g.records.push(r);
     else groupMap.set(key, { key, records: [r] });
   }
-  const groups = [...groupMap.values()];
+  // A loan leaves this screen the moment nothing is owed on it — "คืนแล้ว" rows lingering
+  // in the list is what staff found confusing. Closed loans live in รายงาน/ประวัติ instead.
+  const groups = [...groupMap.values()].filter(
+    (g) => g.records.reduce((s, r) => s + outstandingOf(r), 0) > 0,
+  );
 
   const totalOutstanding = records.reduce((s, r) => s + outstandingOf(r), 0);
   const selected = groups.find((g) => g.key === selectedKey) ?? null;
@@ -138,7 +144,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
     );
   }
 
-  if (records.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
         <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
@@ -205,7 +211,6 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
           const itemCount = new Set(g.records.map((r) => r.item.id)).size;
           const borrowed = fmtDate(head.dispensedAt);
           const days = head.dispensedAt ? daysSince(head.dispensedAt) : null;
-          const done = outstanding === 0;
           return (
             <button
               key={g.key}
@@ -214,16 +219,12 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
               className={cn(
                 ROW_LINE,
                 "w-full text-left border rounded-lg px-2.5 py-2 text-xs sm:text-sm transition-colors hover:border-primary/50",
-                rowTint(head.dueAt, done),
+                rowTint(head.dueAt),
               )}
             >
               <span className="flex-1 min-w-0 truncate font-semibold text-foreground">{head.recipient ?? "ไม่ระบุชื่อผู้ยืม"}</span>
               <span className={COL.owe}>
-                {done ? (
-                  <Badge variant="secondary" className="text-[10px]">คืนครบ</Badge>
-                ) : (
-                  <Badge className="text-[10px] bg-red-700 text-white font-semibold hover:bg-red-700">{outstanding}/{total}</Badge>
-                )}
+                <Badge className="text-[10px] bg-red-700 text-white font-semibold hover:bg-red-700">{outstanding}/{total}</Badge>
               </span>
               <span className={cn(COL.borrowed, "tabular-nums text-muted-foreground")}>{borrowed ?? "—"}</span>
               <span className={cn(COL.days, "tabular-nums text-muted-foreground")}>{days !== null ? `${days} วัน` : "—"}</span>

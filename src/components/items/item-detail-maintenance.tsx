@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
@@ -43,8 +44,8 @@ function getMaintenanceStatus(nextDate: string | null): { label: string; variant
   const now = new Date();
   const next = new Date(nextDate);
   const diffDays = (next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-  if (diffDays < 0) return { label: "เลยรอบ", variant: "destructive" };
-  if (diffDays <= 30) return { label: "ใกล้ถึงรอบ", variant: "secondary" };
+  if (diffDays < 0) return { label: "เกินกำหนดซ่อมบำรุง", variant: "destructive" };
+  if (diffDays <= 30) return { label: "ใกล้ถึงกำหนดซ่อมบำรุง", variant: "secondary" };
   return { label: "ปกติ", variant: "default" };
 }
 
@@ -61,7 +62,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
   // profile owns one now (sanitizeItemByProfile), so it gets its own block below.
   const assetFields = !showAssetInfo ? [] : [
     item.model && { label: "รุ่น", value: item.model },
-    item.purchaseDate && { label: "วันที่ซื้อ", value: new Date(item.purchaseDate).toLocaleDateString("th-TH") },
+    item.purchaseDate && { label: "วันที่ซื้อ", value: fmtDate(item.purchaseDate, TH_DATE) },
     item.purchasePrice != null && { label: "ราคา", value: `฿${item.purchasePrice.toLocaleString()}` },
     item.vendorCompany && { label: "บริษัท", value: item.vendorCompany },
     item.vendorContact && { label: "ตัวแทน", value: item.vendorContact },
@@ -72,8 +73,8 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
   // Always shown: the tab only opens for profiles that can be maintained at all.
   const planFields: { label: string; value: string }[] = [
     { label: "รอบบำรุงรักษา", value: `${item.maintenanceCycleMonths} เดือน` },
-    { label: "ครั้งล่าสุด", value: item.lastMaintenanceDate ? new Date(item.lastMaintenanceDate).toLocaleDateString("th-TH") : "—" },
-    { label: "ครั้งถัดไป", value: item.nextMaintenanceDate ? new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH") : "—" },
+    { label: "ครั้งล่าสุด", value: item.lastMaintenanceDate ? fmtDate(item.lastMaintenanceDate, TH_DATE) : "—" },
+    { label: "ครั้งถัดไป", value: item.nextMaintenanceDate ? fmtDate(item.nextMaintenanceDate, TH_DATE) : "—" },
   ];
 
   return (
@@ -95,7 +96,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
       <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
         <StatCard
           label="รอบถัดไป"
-          value={item.nextMaintenanceDate ? new Date(item.nextMaintenanceDate).toLocaleDateString("th-TH") : "—"}
+          value={item.nextMaintenanceDate ? fmtDate(item.nextMaintenanceDate, TH_DATE) : "—"}
           icon={CalendarDays}
         />
         <StatCard label="จำนวนการซ่อมบำรุง" value={`${maintenanceRecords.length} ครั้ง`} icon={Wrench} />
@@ -149,7 +150,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                       <CalendarDays className="size-3" />
-                      {new Date(rec.performedAt).toLocaleDateString("th-TH")}
+                      {fmtDate(rec.performedAt, TH_DATE)}
                     </span>
                     <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">
                       {labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}

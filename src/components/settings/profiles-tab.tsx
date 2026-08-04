@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Layers, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  DIALOG_SHELL_FIT,
+  DIALOG_BODY,
   Dialog, DialogContent, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -33,9 +36,9 @@ import { PROFILE_COLOR_OPTIONS, profileIcon } from "@/lib/profile-icons";
 import { IconColorPicker } from "./icon-picker";
 
 const DISPENSE_OPTIONS: { value: "CONSUMABLE" | "COUNT" | "ITEM"; label: string }[] = [
-  { value: "CONSUMABLE", label: "ใช้แล้วทิ้ง" },
-  { value: "COUNT", label: "ยืม-คืน (นับจำนวน)" },
-  { value: "ITEM", label: "ยืม-คืน (รายชิ้น)" },
+  { value: "CONSUMABLE", label: "ตัดจ่ายจริงตามจำนวน" },
+  { value: "COUNT", label: "ยืม-คืน ตามจำนวน" },
+  { value: "ITEM", label: "ยืม-คืน ตาม Code" },
 ];
 
 function dispenseLabel(d: string) {
@@ -201,7 +204,7 @@ export function ProfilesTab() {
   );
 
   const modalBody = (
-    <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+    <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="p-name" required>ชื่อประเภท</Label>
@@ -353,7 +356,7 @@ export function ProfilesTab() {
           <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
             <DialogTitle className="sr-only">{title}</DialogTitle>
             <DialogDescription className="sr-only">{subtitle}</DialogDescription>
-            <div className="flex max-h-[85vh] flex-col overflow-hidden">
+            <div className={DIALOG_SHELL_FIT}>
               {modalHeader}
               {modalBody}
               {modalFooter}

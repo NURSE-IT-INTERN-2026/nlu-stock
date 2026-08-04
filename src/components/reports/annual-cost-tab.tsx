@@ -6,7 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart } from "./charts/annual-cost-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
 import { MAINT_TYPE_LABELS, labelFor, type MaintenanceType } from "@/lib/constants";
 
@@ -44,7 +44,7 @@ const purchaseColumns: Column<PurchaseRow>[] = [
   {
     key: "purchaseDate",
     header: "Date",
-    render: (r) => fmtDate(new Date(r.purchaseDate), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.purchaseDate), TH_DATE),
   },
 ];
 
@@ -60,7 +60,7 @@ const repairColumns: Column<RepairRow>[] = [
   {
     key: "performedAt",
     header: "Date",
-    render: (r) => fmtDate(new Date(r.performedAt), "dd MMM yyyy"),
+    render: (r) => fmtDate(new Date(r.performedAt), TH_DATE),
   },
   { key: "performer", header: "By" },
 ];

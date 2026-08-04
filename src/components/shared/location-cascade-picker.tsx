@@ -35,14 +35,19 @@ interface Props {
   /** reports the resolved destination descriptor whenever it changes */
   onChange: (ref: LocationRef) => void;
   className?: string;
+  /** true = pick-only: no "เพิ่ม" affordance, and only a combo that matches an
+   *  existing Location is ever emitted (e.g. นำไปใช้งาน — locations must already
+   *  be set up by an admin, staff can't create new ones from here). */
+  restrictToExisting?: boolean;
 }
 
 /**
  * Location picker with creatable comboboxes (อาคาร → ชั้น → ห้อง/ตำแหน่ง → รายละเอียด).
  * `noRoom` toggle = ของไม่ได้อยู่ในห้อง → ฟิลด์ "ตำแหน่ง" แทน "ห้อง". Every field accepts a
- * brand-new value. Emits a LocationRef; shared by MoveLocationDialog + EditItemDialog.
+ * brand-new value (unless `restrictToExisting`). Emits a LocationRef; shared by
+ * MoveLocationDialog + EditItemDialog + StationInRoomDialog.
  */
-export function LocationCascadePicker({ initialLocationId, onChange, className }: Props) {
+export function LocationCascadePicker({ initialLocationId, onChange, className, restrictToExisting = false }: Props) {
   const [locs, setLocs] = useState<Loc[]>([]);
   const [b, setB] = useState("");
   const [f, setF] = useState("");
@@ -79,16 +84,17 @@ export function LocationCascadePicker({ initialLocationId, onChange, className }
   const detail = (!noRoom && d.trim()) ? d.trim() : null;
   const bt = b.trim(), ft = f.trim(), rt = room.trim();
   const key = (bt && ft && rt) ? `ok|${bt}|${ft}|${rt}|${detail ?? ""}` : "none";
+  const isExisting = !!(bt && ft && rt && locs.some((l) => l.building === bt && l.floor === ft && l.room === rt && (l.detail ?? null) === detail));
 
   useEffect(() => {
     if (locs.length === 0) return; // wait for seed before emitting
-    if (bt && ft && rt) {
+    if (bt && ft && rt && (!restrictToExisting || isExisting)) {
       onChange({ kind: "ok", building: bt, floor: ft, room: rt, detail, name: [bt, ft, rt, detail].filter(Boolean).join(" / ") });
     } else {
       onChange({ kind: "none" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, locs.length]);
+  }, [key, locs.length, restrictToExisting]);
 
   const toggleNoRoom = (v: boolean) => {
     setNoRoom(v);
@@ -120,26 +126,28 @@ export function LocationCascadePicker({ initialLocationId, onChange, className }
       </div>
       <p className="-mt-1 text-xs text-muted-foreground">{noRoom ? "ของไม่ได้อยู่ในห้อง — ระบุตำแหน่งแทน" : "เลือก อาคาร → ชั้น → ห้อง"}</p>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+      {/* One field per row: these are dropdowns, and a half-width dropdown clips
+          long building/room names into an ellipsis you have to open to read. */}
+      <div className="grid grid-cols-1 gap-3">
         <Field label="อาคาร">
-          <Combobox value={b} onChange={setB} options={buildings} placeholder="เช่น อาคาร 2" className={inputCls} />
+          <Combobox value={b} onChange={setB} options={buildings} placeholder="เช่น อาคาร 2" className={inputCls} allowCreate={!restrictToExisting} />
         </Field>
         <Field label="ชั้น">
-          <Combobox value={f} onChange={setF} options={buildings.includes(b) ? floorsFor(b) : [...new Set(locs.map((l) => l.floor))]} placeholder="เช่น 4" className={inputCls} />
+          <Combobox value={f} onChange={setF} options={buildings.includes(b) ? floorsFor(b) : [...new Set(locs.map((l) => l.floor))]} placeholder="เช่น 4" className={inputCls} allowCreate={!restrictToExisting} />
         </Field>
 
         {noRoom ? (
-          <Field label="ตำแหน่ง" className="col-span-2">
-            <Combobox value={pos} onChange={setPos} options={b && f ? roomsFor(b, f) : [...new Set(locs.map((l) => l.room))]} placeholder="เช่น ล็อคเกอร์หน้าห้อง 402" className={inputCls} />
+          <Field label="ตำแหน่ง">
+            <Combobox value={pos} onChange={setPos} options={b && f ? roomsFor(b, f) : [...new Set(locs.map((l) => l.room))]} placeholder="เช่น ล็อคเกอร์หน้าห้อง 402" className={inputCls} allowCreate={!restrictToExisting} />
           </Field>
         ) : (
           <>
-            <Field label="ห้อง" className={detailsFor(b, f, r).length === 0 ? "col-span-2" : ""}>
-              <Combobox value={r} onChange={setR} options={b && f ? roomsFor(b, f) : [...new Set(locs.map((l) => l.room))]} placeholder="เช่น 402" className={inputCls} />
+            <Field label="ห้อง">
+              <Combobox value={r} onChange={setR} options={b && f ? roomsFor(b, f) : [...new Set(locs.map((l) => l.room))]} placeholder="เช่น 402" className={inputCls} allowCreate={!restrictToExisting} />
             </Field>
             {detailsFor(b, f, r).length > 0 && (
               <Field label="รายละเอียด">
-                <Combobox value={d} onChange={setD} options={detailsFor(b, f, r)} placeholder="ไม่มีรายละเอียด" className={inputCls} />
+                <Combobox value={d} onChange={setD} options={detailsFor(b, f, r)} placeholder="ไม่มีรายละเอียด" className={inputCls} allowCreate={!restrictToExisting} />
               </Field>
             )}
           </>
@@ -147,10 +155,14 @@ export function LocationCascadePicker({ initialLocationId, onChange, className }
       </div>
 
       {bt && ft && rt && (
-        <div className="flex items-center gap-1.5 text-sm">
-          <MapPin className="size-4 shrink-0 text-primary" />
-          <span className="font-medium text-foreground">{[bt, ft, rt, detail].filter(Boolean).join(" / ")}</span>
-        </div>
+        isExisting || !restrictToExisting ? (
+          <div className="flex items-center gap-1.5 text-sm">
+            <MapPin className="size-4 shrink-0 text-primary" />
+            <span className="font-medium text-foreground">{[bt, ft, rt, detail].filter(Boolean).join(" / ")}</span>
+          </div>
+        ) : (
+          <p className="text-xs text-destructive">ไม่พบสถานที่นี้ในระบบ — กรุณาเลือกจากรายการที่มีอยู่</p>
+        )
       )}
     </div>
   );

@@ -360,6 +360,69 @@ export function createDispense(data: Record<string, unknown>) {
   });
 }
 
+// ─── Dispense templates (shared, reusable cart sets) ───
+
+export interface TemplateSummary {
+  id: string;
+  name: string;
+  updatedAt: string;
+  createdByName: string;
+  lineCount: number;
+}
+
+// A loaded line's item — same fields buildCartItem needs.
+export interface TemplateLineItem {
+  id: string;
+  code: string;
+  name: string;
+  imageUrl: string | null;
+  isActive: boolean;
+  availableQty: number;
+  trackIndividually: boolean;
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+  issueUnit: { name: string };
+  lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
+  subItems: { id: string; subCode: string; condition: string | null }[];
+  location: { building: string; floor: string; room: string; detail: string | null } | null;
+}
+
+export interface TemplateDetail {
+  id: string;
+  name: string;
+  lines: { id: string; quantity: number; unavailable: boolean; item: TemplateLineItem }[];
+}
+
+export interface TemplateLineInput {
+  itemId: string;
+  quantity: number;
+}
+
+export function getDispenseTemplates() {
+  return request<{ templates: TemplateSummary[] }>("/api/dispense-templates");
+}
+
+export function getDispenseTemplate(id: string) {
+  return request<TemplateDetail>(`/api/dispense-templates/${id}`);
+}
+
+export function createDispenseTemplate(data: { name: string; lines: TemplateLineInput[] }) {
+  return request<{ id: string }>("/api/dispense-templates", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateDispenseTemplate(id: string, data: { name?: string; lines?: TemplateLineInput[] }) {
+  return request<{ ok: true }>(`/api/dispense-templates/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteDispenseTemplate(id: string) {
+  return request<{ ok: true }>(`/api/dispense-templates/${id}`, { method: "DELETE" });
+}
+
 // ─── Kit assembly ───
 
 export interface KitComponentInput {
@@ -412,7 +475,7 @@ export function adjustStock(
 
 export function updateItemStatus(
   itemId: string,
-  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null },
+  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null; damageNote?: string | null },
 ) {
   return request<unknown>(`/api/items/${itemId}/status`, {
     method: "POST",
@@ -499,6 +562,8 @@ export interface SubItemByStatus {
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   damageNote: string | null;
   repairNote: string | null;
+  // When the piece entered its current UNDER_REPAIR trip — not the last edit to the repair info.
+  repairSentAt: string | null;
   location: { building: string; floor: string; room: string; detail: string | null } | null;
   item: {
     id: string;
@@ -508,6 +573,7 @@ export interface SubItemByStatus {
     issueUnit: { name: string };
     category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
+    maintenanceCycleMonths: number;
     _count: { subItems: number };
   };
 }

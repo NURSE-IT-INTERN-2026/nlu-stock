@@ -4,7 +4,8 @@ import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
-import { nextMaintenanceFromCycle } from "@/lib/maintenance";
+import { nextDateAfterJob } from "@/lib/maintenance";
+import { closeOpenLoan } from "@/lib/returns";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
 
@@ -40,22 +41,42 @@ export async function POST(
 
   try {
     const record = await prisma.$transaction(async (tx) => {
-      // Repair finished (result AVAILABLE) but no next date sent → schedule the next
-      // preventive round one cycle (default 12 months) from the day it came back.
-      // The form normally fills this in; the fallback keeps API-only callers on cadence.
-      let nextAt = data.nextMaintenanceAt ?? null;
-      if (!nextAt && data.result === "AVAILABLE") {
-        const it = await tx.item.findUnique({ where: { id: itemId }, select: { maintenanceCycleMonths: true } });
-        nextAt = nextMaintenanceFromCycle(data.performedAt, it?.maintenanceCycleMonths ?? 12);
-      }
+      // Scheduling is the server's call — see nextDateAfterJob for the rule and why.
+      // A PREVENTIVE round may carry an override (staff typed their own date); the repair
+      // screen has no such field, so any date arriving with a CORRECTIVE job is ignored
+      // rather than allowed to shift a cadence the repair isn't supposed to touch.
+      // undefined = leave nextMaintenanceDate as it is; null = clear it (written off).
+      const isRepair = data.type === "CORRECTIVE";
+      const it = await tx.item.findUnique({
+        where: { id: itemId },
+        select: { maintenanceCycleMonths: true, nextMaintenanceDate: true },
+      });
+      const currentNext = data.subItemId
+        ? (await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { nextMaintenanceDate: true } }))?.nextMaintenanceDate ?? null
+        : it?.nextMaintenanceDate ?? null;
+      const nextAt =
+        (isRepair ? null : data.nextMaintenanceAt) ??
+        nextDateAfterJob({
+          type: data.type,
+          result: data.result,
+          performedAt: data.performedAt,
+          cycleMonths: it?.maintenanceCycleMonths ?? 12,
+          currentNext,
+        });
 
       // Denormalize the repair venue (ภายใน/ภายนอก) captured at send-to-repair time onto
       // the maintenance record so cost-by-venue reporting works without a fuzzy join.
-      const venueLog = await tx.itemStatusLog.findFirst({
-        where: { itemId, newStatus: ItemStatus.UNDER_REPAIR, subItemId: data.subItemId ?? null },
-        orderBy: { changedAt: "desc" },
-        select: { repairVenue: true },
-      });
+      // CORRECTIVE only: this record closes a ส่งซ่อม trip, so the newest UNDER_REPAIR log
+      // IS that trip. A PREVENTIVE round has no trip — looking one up would inherit the
+      // venue of whatever repair happened last (possibly a year ago) and skew the report.
+      const venueLog =
+        data.type === "CORRECTIVE"
+          ? await tx.itemStatusLog.findFirst({
+              where: { itemId, newStatus: ItemStatus.UNDER_REPAIR, subItemId: data.subItemId ?? null },
+              orderBy: { changedAt: "desc" },
+              select: { repairVenue: true },
+            })
+          : null;
 
       const rec = await tx.maintenanceRecord.create({
         data: {
@@ -107,18 +128,25 @@ export async function POST(
                 changedBy: auth.user.userId,
               },
             });
+            // A piece serviced while still out on loan comes back in service here — close the
+            // loan too, or it stays on รับคืน forever with the piece already พร้อมใช้งาน.
+            await closeOpenLoan(tx, {
+              itemId,
+              subItemId: data.subItemId,
+              previousStatus: sub.status,
+              newStatus,
+            });
           }
         }
-        // Stamp this copy's schedule. DISPOSED → no next round. AVAILABLE → next cycle.
+        // Stamp this copy's schedule. A repair is not a maintenance round, so it leaves both
+        // dates alone — ครั้งล่าสุด stays the last real round (it is also the baseline the
+        // admin cycle-change recalc reads, so writing the repair date here would shift the
+        // cadence by the back door). nextAt undefined = nothing to write.
         await tx.subItem.update({
           where: { id: data.subItemId },
           data: {
-            lastMaintenanceDate: data.performedAt,
-            ...(data.result === "DISPOSED"
-              ? { nextMaintenanceDate: null }
-              : nextAt
-                ? { nextMaintenanceDate: nextAt }
-                : {}),
+            ...(isRepair ? {} : { lastMaintenanceDate: data.performedAt }),
+            ...(nextAt !== undefined ? { nextMaintenanceDate: nextAt } : {}),
           },
         });
         // Re-derive item status/qty from the aggregated sub-item statuses.
@@ -145,8 +173,8 @@ export async function POST(
         await tx.item.update({
           where: { id: itemId },
           data: {
-            lastMaintenanceDate: data.performedAt,
-            ...(nextAt && { nextMaintenanceDate: nextAt }),
+            ...(isRepair ? {} : { lastMaintenanceDate: data.performedAt }),
+            ...(nextAt !== undefined ? { nextMaintenanceDate: nextAt } : {}),
           },
         });
 

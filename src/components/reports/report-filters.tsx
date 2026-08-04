@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
-  CalendarDays, Layers, MapPin, Users, Activity, ListChecks,
+  Layers, MapPin, Users, Activity, ListChecks,
   CalendarRange, Wrench, X, Boxes, Package, Beaker, Hammer,
   Building2, Monitor, BookOpen, Puzzle, type LucideIcon,
 } from "lucide-react";
@@ -147,21 +147,18 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
         {leading}
         {config.dateRange && (
           <div className="flex w-full items-center gap-1.5 sm:w-auto">
-            <CalendarDays className="size-4 text-muted-foreground shrink-0" />
-            <Input
-              type="date"
+            <DatePicker
               value={values.dateFrom ?? ""}
-              onChange={(e) => onChange({ ...values, dateFrom: e.target.value || undefined })}
+              onChange={(v) => onChange({ ...values, dateFrom: v || undefined })}
+              placeholder="จากวันที่"
               className={dateInputCls}
-              aria-label="จากวันที่"
             />
             <span className="text-xs text-muted-foreground">ถึง</span>
-            <Input
-              type="date"
+            <DatePicker
               value={values.dateTo ?? ""}
-              onChange={(e) => onChange({ ...values, dateTo: e.target.value || undefined })}
+              onChange={(v) => onChange({ ...values, dateTo: v || undefined })}
+              placeholder="ถึงวันที่"
               className={dateInputCls}
-              aria-label="ถึงวันที่"
             />
           </div>
         )}

@@ -4,7 +4,10 @@ import { itemUpdateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
+import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { STATUS_LABELS } from "@/lib/constants";
 import type { DispenseType } from "@/generated/prisma/enums";
+import { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -139,13 +142,91 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id } = await params;
 
-  // Soft delete: deactivate instead of hard-deleting so history (dispense/receive/maintenance/…)
-  // stays intact. All operational pages filter isActive:true, so the row disappears from use;
-  // settings keeps it faded for admin oversight. update throws P2025 only if the id is gone.
-  try {
-    await prisma.item.update({ where: { id }, data: { isActive: false } });
-    return json({ success: true });
-  } catch {
-    return notFound("Item not found");
+  // Write-off + deactivate. Remaining on-shelf stock is cut from the books (tracked pieces →
+  // DISPOSED, consumable qty → 0 via StockAdjustment) so an admin removing an item leaves no
+  // phantom stock. Pieces currently OUT (ON_LOAN / IN_USE, or open BORROW loans for COUNT)
+  // block deletion — they must be returned first. The row is kept (isActive:false) so the
+  // full history (dispense/receive/maintenance/audit) stays auditable; the Code can't be reused.
+  const item = await prisma.item.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      trackIndividually: true,
+      availableQty: true,
+      code: true,
+      category: { select: { profile: { select: { dispenseType: true } } } },
+    },
+  });
+  if (!item) return notFound("Item not found");
+
+  // ── Pre-checks (outside the tx so a refusal doesn't burn a round-trip) ──
+  if (item.trackIndividually) {
+    const subs = await prisma.subItem.findMany({
+      where: { itemId: id, status: { in: [ItemStatus.ON_LOAN, ItemStatus.IN_USE] } },
+      select: { id: true },
+    });
+    if (subs.length > 0) {
+      return error(
+        `มีพัสดุกำลัง${STATUS_LABELS[ItemStatus.ON_LOAN]}/${STATUS_LABELS[ItemStatus.IN_USE]}อยู่ ${subs.length} ชิ้น กรุณารับคืนก่อนลบ`,
+      );
+    }
+  } else {
+    const openLoans = await prisma.dispenseRecord.count({
+      where: { itemId: id, returnedAt: null, loanType: "BORROW" },
+    });
+    if (openLoans > 0) return error(`มีพัสดุถูกยืมอยู่ ${openLoans} รายการ กรุณารับคืนก่อนลบ`);
   }
+
+  const result = await prisma.$transaction(async (tx) => {
+    let disposed = 0;
+
+    if (item.trackIndividually) {
+      // Dispose every still-on-the-books piece. AVAILABLE/DAMAGED/UNDER_REPAIR all reach
+      // DISPOSED legally (status-utils ALLOWED_TRANSITIONS); LOST/DISPOSED are already off
+      // the books and skipped. ON_LOAN/IN_USE were refused above.
+      const live = await tx.subItem.findMany({
+        where: { itemId: id, status: { in: [ItemStatus.AVAILABLE, ItemStatus.DAMAGED, ItemStatus.UNDER_REPAIR] } },
+        select: { id: true, status: true },
+      });
+      for (const sub of live) {
+        await tx.subItem.update({ where: { id: sub.id }, data: { status: ItemStatus.DISPOSED } });
+        await tx.itemStatusLog.create({
+          data: {
+            itemId: id,
+            subItemId: sub.id,
+            previousStatus: sub.status,
+            newStatus: ItemStatus.DISPOSED,
+            reason: `ตัดจำหน่าย — ลบรายการพัสดุ ${item.code}`,
+            changedBy: auth.user.userId,
+          },
+        });
+        disposed++;
+      }
+    } else if (item.availableQty > 0) {
+      // Non-tracked: drain whatever is on the shelf to 0. allocateAcrossLots spreads the
+      // negative delta across lots FEFO; for lot-less consumables it returns false and we
+      // own availableQty directly (then recompute is a no-op for them — no lots to resync).
+      const prev = item.availableQty;
+      await allocateAcrossLots(tx, id, -prev);
+      await tx.stockAdjustment.create({
+        data: {
+          itemId: id,
+          delta: -prev,
+          previousQty: prev,
+          newQty: 0,
+          reason: AdjustmentReason.DISPOSAL,
+          notes: `ตัดจำหน่าย — ลบรายการพัสดุ ${item.code}`,
+          adjustedBy: auth.user.userId,
+        },
+      });
+      await tx.item.update({ where: { id }, data: { availableQty: 0 } });
+      disposed = prev;
+    }
+
+    await recomputeItemCounts(tx, id);
+    await tx.item.update({ where: { id }, data: { isActive: false } });
+    return { disposed };
+  });
+
+  return json({ success: true, disposed: result.disposed });
 }

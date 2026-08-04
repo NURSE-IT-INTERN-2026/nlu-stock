@@ -29,6 +29,7 @@ import {
   type OpenBorrow, type ReturnCondition,
 } from "@/lib/api";
 import { effectiveCode } from "@/lib/constants";
+import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
 export interface LoanGroup {
   key: string;
@@ -57,7 +58,7 @@ const COND_CHIP: Record<ReturnCondition, { active: string; idle: string }> = {
   LOST: { active: "bg-slate-700 text-white border-slate-700", idle: "text-slate-600 border-slate-300 hover:bg-slate-50" },
 };
 
-const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : null);
+const fmtDate = (iso: string | null) => (iso ? fmt(iso, TH_DATE) : null);
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 
 function dueAlert(dueAt: string | null): { text: string; cls: string } | null {
@@ -89,8 +90,10 @@ export function ReturnLoanDetail({
   const due = fmtDate(head.dueAt);
 
   // Group records by item, then split tracked vs count within each item.
+  // Already-returned pieces drop out — this person's card lists only what's still outstanding.
   const itemMap = new Map<string, OpenBorrow[]>();
   for (const r of group.records) {
+    if (outstandingOf(r) === 0) continue;
     const arr = itemMap.get(r.item.id);
     if (arr) arr.push(r);
     else itemMap.set(r.item.id, [r]);
@@ -346,6 +349,8 @@ export function ReturnLoanDetail({
             const tracked = rs.filter((r) => r.subItem);
             const countRec = rs.find((r) => !r.subItem);
             const isTracked = tracked.length > 0;
+            // Fully returned item → gone from the return screen (same rule as the rows below).
+            if (rs.reduce((s, r) => s + outstandingOf(r), 0) === 0) return null;
             return (
               <Card key={item.id} className="border shadow-none">
                 <CardContent className="space-y-3">
@@ -484,16 +489,12 @@ export function ReturnLoanDetail({
   );
 }
 
+// Fully-returned items never render a card, so this badge is always the ค้าง X/Y case —
+// X = still owed, Y = the whole borrow, which is where the returned pieces stay visible.
 function ItemBadge({ records }: { records: OpenBorrow[] }) {
   const total = records.reduce((s, r) => s + r.quantity, 0);
   const outstanding = records.reduce((s, r) => s + outstandingOf(r), 0);
-  if (outstanding === 0)
-    return (
-      <Badge variant="secondary" className="gap-1 shrink-0">
-        <Check className="h-3 w-3" /> คืนครบ
-      </Badge>
-    );
-  return <Badge className="text-xs shrink-0 bg-red-700 text-white font-semibold hover:bg-red-700">ค้าง {outstanding}/{total}</Badge>;
+  return <Badge className="shrink-0 bg-red-700 text-white font-semibold hover:bg-red-700 text-sm px-2.5 py-1 tabular-nums">ค้าง {outstanding}/{total}</Badge>;
 }
 
 function TrackedRows({
@@ -514,41 +515,49 @@ function TrackedRows({
 }) {
   const code = records[0].item.code;
   const open = records.filter((r) => !r.returnedAt);
-  const anyOpenOutstanding = open.length > 0;
-  const allOpenSel = anyOpenOutstanding && open.every((r) => selected.has(r.id));
+  const allOpenSel = open.length > 0 && open.every((r) => selected.has(r.id));
   return (
     <div className="space-y-2">
+      {/* Select-all sits right under the item header (below the image) and reads as a
+          check-all: one checkbox that toggles every still-open piece at once. */}
+      {open.length > 1 && (
+        <button
+          type="button"
+          onClick={onSelectAll}
+          className="flex w-full items-center gap-2.5 rounded-lg border border-dashed px-3 py-2 text-left transition-colors hover:bg-foreground/[0.04]"
+        >
+          <Checkbox checked={allOpenSel} tabIndex={-1} className="pointer-events-none" />
+          <span className="text-xs font-medium text-muted-foreground">
+            {allOpenSel ? "ยกเลิกเลือกทั้งหมด" : `เลือกคืนทั้งหมด (${open.length} ชิ้น)`}
+          </span>
+        </button>
+      )}
       <div className="space-y-2">
-        {records.map((r) => {
-          const done = !!r.returnedAt;
+        {/* Only still-owed pieces are listed. A returned piece leaves the screen entirely —
+            staff asked for the list to be "what's left to hand back", not a mixed ledger.
+            The ค้าง X/Y badge on the item header keeps the returned count visible. */}
+        {open.map((r) => {
           const isSel = selected.has(r.id);
           const c = conditions[r.id] ?? "AVAILABLE";
           const condLabel = CONDITION_OPTIONS.find((o) => o.value === c)?.label;
           return (
-            <div key={r.id} className={cn("rounded-lg border overflow-hidden", !done && isSel && c !== "AVAILABLE" && "bg-red-50")}>
+            <div key={r.id} className={cn("rounded-lg border overflow-hidden", isSel && c !== "AVAILABLE" && "bg-red-50")}>
               <button
                 type="button"
-                disabled={done}
                 onClick={() => onToggle(r.id)}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.04] disabled:opacity-100 disabled:hover:bg-transparent"
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.04]"
               >
-                <Checkbox checked={done || isSel} disabled={done} tabIndex={-1} className="pointer-events-none" />
+                <Checkbox checked={isSel} tabIndex={-1} className="pointer-events-none" />
                 <div className="min-w-0 flex-1">
                   {r.subItem!.name && <p className="text-sm truncate">{r.subItem!.name}</p>}
                   <span className="font-mono text-xs text-muted-foreground truncate">{effectiveCode(code, r.subItem!.subCode, r.item._count.subItems)}</span>
                 </div>
-                {done ? (
-                  <Badge variant="secondary" className="gap-1 text-xs"><Check className="h-3 w-3" /> คืนแล้ว</Badge>
-                ) : (
-                  <>
-                    {isSel && (
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded border", COND_CHIP[c].active)}>{condLabel}</span>
-                    )}
-                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isSel && "rotate-180")} />
-                  </>
+                {isSel && (
+                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded border", COND_CHIP[c].active)}>{condLabel}</span>
                 )}
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isSel && "rotate-180")} />
               </button>
-              {isSel && !done && (
+              {isSel && (
                 <div className="px-3 pb-3 pt-3 space-y-2 border-t border-border/60">
                   <div className="flex flex-wrap gap-1.5">
                     {CONDITION_OPTIONS.map((o) => (
@@ -608,13 +617,6 @@ function TrackedRows({
           );
         })}
       </div>
-      {anyOpenOutstanding && (
-        <div className="flex justify-end">
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onSelectAll}>
-            {allOpenSel ? "ยกเลิกเลือกทั้งหมด" : "ทำเครื่องหมายคืนทั้งหมด"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -623,6 +625,7 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
   const outstanding = outstandingOf(record);
   const alreadyReturned = record.resolvedQty;
   const normal = normalOf(bucket);
+  const unit = record.item.issueUnit.name;
 
   // Keep buckets internally consistent when any leg changes.
   const setTotal = (v: number) => {
@@ -640,8 +643,11 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
     const lost = Math.max(0, Math.min(bucket.total - bucket.damaged, v));
     onChange({ ...bucket, lost });
   };
-  const toggleDamaged = () => onChange(bucket.damaged > 0 ? { ...bucket, damaged: 0 } : { ...bucket, damaged: 1 });
-  const toggleLost = () => onChange(bucket.lost > 0 ? { ...bucket, lost: 0 } : { ...bucket, lost: 1 });
+  // Room left for each leg — damaged + lost may never exceed the units being returned.
+  const damagedMax = bucket.total - bucket.lost;
+  const lostMax = bucket.total - bucket.damaged;
+  const toggleDamaged = () => onChange(bucket.damaged > 0 ? { ...bucket, damaged: 0 } : { ...bucket, damaged: Math.min(1, damagedMax) });
+  const toggleLost = () => onChange(bucket.lost > 0 ? { ...bucket, lost: 0 } : { ...bucket, lost: Math.min(1, lostMax) });
 
   return (
     <div className="space-y-3">
@@ -671,8 +677,9 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
             <button
               type="button"
               onClick={toggleDamaged}
+              disabled={bucket.damaged === 0 && damagedMax === 0}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
                 bucket.damaged > 0
                   ? "bg-red-700 text-white border-red-700"
                   : "border-dashed border-red-300 text-red-700 hover:bg-red-50",
@@ -684,8 +691,9 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
             <button
               type="button"
               onClick={toggleLost}
+              disabled={bucket.lost === 0 && lostMax === 0}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
                 bucket.lost > 0
                   ? "bg-slate-700 text-white border-slate-700"
                   : "border-dashed border-slate-300 text-slate-600 hover:bg-slate-50",
@@ -700,15 +708,16 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
           )}
 
           {bucket.damaged > 0 && (
-            <ConditionQtyRow label="ชำรุด" value={bucket.damaged} unit={record.item.issueUnit.name} onDec={() => setDamaged(bucket.damaged - 1)} onInc={() => setDamaged(bucket.damaged + 1)} />
+            <ConditionQtyRow label="ชำรุด" value={bucket.damaged} unit={record.item.issueUnit.name} onDec={() => setDamaged(bucket.damaged - 1)} onInc={() => setDamaged(bucket.damaged + 1)} disableInc={bucket.damaged >= damagedMax} />
           )}
           {bucket.lost > 0 && (
-            <ConditionQtyRow label="สูญหาย" value={bucket.lost} unit={record.item.issueUnit.name} onDec={() => setLost(bucket.lost - 1)} onInc={() => setLost(bucket.lost + 1)} />
+            <ConditionQtyRow label="สูญหาย" value={bucket.lost} unit={record.item.issueUnit.name} onDec={() => setLost(bucket.lost - 1)} onInc={() => setLost(bucket.lost + 1)} disableInc={bucket.lost >= lostMax} />
           )}
 
-          {/* Live breakdown so staff can see how the total splits */}
+          {/* Live breakdown so staff can see how the total splits. "ปกติ" is derived
+              (total − ชำรุด − สูญหาย), so it's framed as a split, and every leg carries the unit. */}
           <p className="text-[11px] text-muted-foreground">
-            ปกติ {normal} · ชำรุด {bucket.damaged} · สูญหาย {bucket.lost} {record.item.issueUnit.name}
+            แยกเป็น ปกติ {normal} {unit} · ชำรุด {bucket.damaged} {unit} · สูญหาย {bucket.lost} {unit}
           </p>
         </div>
       )}
@@ -716,7 +725,7 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
   );
 }
 
-function ConditionQtyRow({ label, value, unit, onDec, onInc }: { label: string; value: number; unit: string; onDec: () => void; onInc: () => void }) {
+function ConditionQtyRow({ label, value, unit, onDec, onInc, disableInc }: { label: string; value: number; unit: string; onDec: () => void; onInc: () => void; disableInc?: boolean }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-xs font-medium">{label}</span>
@@ -725,7 +734,7 @@ function ConditionQtyRow({ label, value, unit, onDec, onInc }: { label: string; 
           <Minus className="h-3 w-3" />
         </Button>
         <span className="min-w-[3.5rem] text-center text-xs tabular-nums">{value} {unit}</span>
-        <Button variant="outline" size="icon" className="h-7 w-7" onClick={onInc}>
+        <Button variant="outline" size="icon" className="h-7 w-7" onClick={onInc} disabled={disableInc}>
           <Plus className="h-3 w-3" />
         </Button>
       </div>

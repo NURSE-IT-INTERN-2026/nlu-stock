@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { autoLotLabel, isAutoLot, lotDisplay } from "@/lib/lot-code";
@@ -16,29 +18,194 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCart, useCartLineActions } from "@/components/dispense/cart-context";
+import { useCart, useCartLineActions, buildCartItem } from "@/components/dispense/cart-context";
 import { EditableQty } from "@/components/dispense/editable-qty";
-import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat } from "lucide-react";
+import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat, Bookmark, FolderOpen } from "lucide-react";
 import { pic } from "@/lib/image";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS, locationLabel, effectiveCode, CONDITION_LABELS } from "@/lib/constants";
-import { createDispense } from "@/lib/api";
+import { createDispense, getDispenseTemplates, getDispenseTemplate, createDispenseTemplate, type TemplateSummary } from "@/lib/api";
 import type { CartItem } from "@/lib/validators/dispense";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function ConfirmDispensePage() {
-  const { items, clearCart } = useCart();
+  const { items, clearCart, addItem } = useCart();
   const router = useRouter();
   const [usageType, setUsageType] = useState<string>("");
   const [usageNote, setUsageNote] = useState("");
   const [notes, setNotes] = useState("");
   const [recipient, setRecipient] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("en-CA"); // "YYYY-MM-DD" in local time
+  });
   const [submitting, setSubmitting] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+
+  // ── Cart templates (reusable withdrawal sets) ──
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateBusy, setTemplateBusy] = useState(false);
+
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const d = await getDispenseTemplates();
+      setTemplates(d.templates);
+    } catch {
+      /* non-blocking — the save/load buttons just show an empty list */
+    }
+  }, []);
+  useEffect(() => {
+    void refreshTemplates();
+  }, [refreshTemplates]);
+
+  const handleSaveTemplate = async () => {
+    const name = templateName.trim();
+    if (!name || items.length === 0) return;
+    // Collapse cart lines to itemId + total qty — templates don't pin lots/copies.
+    const byItem = new Map<string, number>();
+    for (const i of items) byItem.set(i.itemId, (byItem.get(i.itemId) ?? 0) + i.quantity);
+    setTemplateBusy(true);
+    try {
+      await createDispenseTemplate({ name, lines: [...byItem].map(([itemId, quantity]) => ({ itemId, quantity })) });
+      toast.success("บันทึกเทมเพลตแล้ว");
+      setSaveDialogOpen(false);
+      setTemplateName("");
+      void refreshTemplates();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "บันทึกเทมเพลตไม่สำเร็จ");
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const handleLoadTemplate = async (id: string) => {
+    setTemplateBusy(true);
+    try {
+      const t = await getDispenseTemplate(id);
+      // Seed used sub-ids per item from what's already in the cart so we don't re-pick a copy.
+      const usedByItem = new Map<string, Set<string | null | undefined>>();
+      for (const c of items) {
+        if (!usedByItem.has(c.itemId)) usedByItem.set(c.itemId, new Set());
+        usedByItem.get(c.itemId)!.add(c.subItemId);
+      }
+      let skipped = 0;
+      for (const line of t.lines) {
+        const it = line.item;
+        if (line.unavailable) {
+          skipped += line.quantity;
+          continue;
+        }
+        const used = usedByItem.get(it.id) ?? new Set<string | null | undefined>();
+        usedByItem.set(it.id, used);
+        const dItem = {
+          id: it.id,
+          code: it.code,
+          name: it.name,
+          imageUrl: it.imageUrl,
+          categoryName: it.category.name,
+          dispenseType: it.category.profile.dispenseType,
+          trackIndividually: it.trackIndividually,
+          issueUnit: it.issueUnit.name,
+          availableQty: it.availableQty,
+          location: it.location,
+          lots: it.lots,
+          subItems: it.subItems,
+        };
+        if (it.trackIndividually) {
+          // One line per copy — resolve the next free sub-item each pass.
+          for (let n = 0; n < line.quantity; n++) {
+            const r = buildCartItem(dItem, used);
+            if (!r.ok) {
+              skipped += line.quantity - n;
+              break;
+            }
+            addItem(r.cartItem);
+            used.add(r.cartItem.subItemId);
+          }
+        } else {
+          const r = buildCartItem(dItem, used);
+          if (!r.ok) {
+            skipped += line.quantity;
+            continue;
+          }
+          // addItem clamps to availableQty and merges same item+lot lines.
+          addItem({ ...r.cartItem, quantity: Math.min(line.quantity, it.availableQty) });
+        }
+      }
+      setLoadDialogOpen(false);
+      toast.success(skipped > 0 ? `โหลดเทมเพลตแล้ว (ข้าม ${skipped} ที่ของไม่พอ)` : "โหลดเทมเพลตแล้ว");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "โหลดเทมเพลตไม่สำเร็จ");
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const templateDialogs = (
+    <>
+      {/* Save current cart as a template */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>บันทึกเป็นเทมเพลต</DialogTitle>
+            <DialogDescription>บันทึกรายการในตะกร้าไว้ใช้เบิกซ้ำ (เก็บเฉพาะพัสดุ + จำนวน)</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            placeholder="ชื่อเทมเพลต เช่น ชุดเบิกประจำห้องแล็บ"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleSaveTemplate();
+            }}
+            className="text-sm"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={() => void handleSaveTemplate()} disabled={templateBusy || !templateName.trim()}>
+              {templateBusy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              บันทึก
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Load a template into the cart */}
+      <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>โหลดเทมเพลต</DialogTitle>
+            <DialogDescription>เลือกเทมเพลตเพื่อเติมพัสดุลงตะกร้า (lot/ชิ้นจะเลือกจากสต็อกปัจจุบัน)</DialogDescription>
+          </DialogHeader>
+          {templates.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีเทมเพลต</p>
+          ) : (
+            <div className="max-h-72 space-y-1 overflow-y-auto">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={templateBusy}
+                  onClick={() => void handleLoadTemplate(t.id)}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-50"
+                >
+                  <span className="min-w-0 truncate font-medium">{t.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{t.lineCount} รายการ</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0);
   const today = new Date().toISOString().split("T")[0];
@@ -75,11 +242,16 @@ export default function ConfirmDispensePage() {
   const durables = items.filter((i) => i.dispenseType !== "CONSUMABLE");
   const hasDurable = durables.length > 0;
 
+  // "ระบุกิจกรรมที่นำไปใช้" โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) หรือ อื่นๆ (OTHER).
+  const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
+  const activityLabel = usageType === "OTHER" ? "ระบุรายละเอียดการนำไปใช้" : "ระบุกิจกรรมที่นำไปใช้";
+
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).
   const errors = {
     usageType: usageType ? null : "เลือกการใช้งาน",
     recipient: recipient.trim() ? null : "ระบุผู้รับ",
     ...(hasDurable ? { dueDate: dueDate ? null : "เลือกกำหนดคืน" } : {}),
+    ...(needsActivity ? { notes: notes.trim() ? null : "ระบุกิจกรรมที่นำไปใช้" } : {}),
   } as Record<string, string | null>;
   const canConfirm = Object.values(errors).every((v) => !v);
 
@@ -105,9 +277,16 @@ export default function ConfirmDispensePage() {
           <p className="text-lg font-medium">ตะกร้าว่าง</p>
           <p className="text-sm text-muted-foreground mt-1">เพิ่มพัสดุจากหน้าเบิก-ยืมพัสดุก่อน</p>
         </div>
-        <Button variant="outline" size="lg" className="bg-white" onClick={() => router.push("/dispense")}>
-          เพิ่มรายการ
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="lg" className="bg-white" onClick={() => router.push("/dispense")}>
+            เพิ่มรายการ
+          </Button>
+          <Button variant="outline" size="lg" className="bg-white" onClick={() => setLoadDialogOpen(true)}>
+            <FolderOpen className="mr-1 h-4 w-4" />
+            โหลดเทมเพลต
+          </Button>
+        </div>
+        {templateDialogs}
       </div>
     );
   }
@@ -117,13 +296,23 @@ export default function ConfirmDispensePage() {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
       {/* ── Items list (scrollable) ── */}
       <div className="flex-1 min-w-0 p-6 lg:min-h-0 lg:overflow-y-auto">
-        <div className="mb-4 flex items-start justify-between">
+        <div className="mb-4 flex items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-semibold">ตะกร้าของฉัน</h2>
           </div>
-          <Button size="lg" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => router.push("/dispense")}>
-            เพิ่มรายการ
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setLoadDialogOpen(true)}>
+              <FolderOpen className="mr-1 h-4 w-4" />
+              โหลดเทมเพลต
+            </Button>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(true)}>
+              <Bookmark className="mr-1 h-4 w-4" />
+              บันทึกเทมเพลต
+            </Button>
+            <Button size="lg" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => router.push("/dispense")}>
+              เพิ่มรายการ
+            </Button>
+          </div>
         </div>
         <div className="space-y-6">
         {(["consumable", "durable"] as const).map((group) => {
@@ -330,16 +519,20 @@ export default function ConfirmDispensePage() {
                 {showErrors && errors.usageType && <FieldError id="usageType-error">{errors.usageType}</FieldError>}
               </div>
 
-              {usageType === "OTHER" && (
+              {needsActivity && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="usageNote" className="text-xs text-muted-foreground">ระบุการใช้งาน</Label>
-                  <Input
-                    id="usageNote"
-                    placeholder="ระบุการใช้งาน..."
-                    value={usageNote}
-                    onChange={(e) => setUsageNote(e.target.value)}
+                  <Label htmlFor="notes" className="text-xs text-muted-foreground" required>{activityLabel}</Label>
+                  <Textarea
+                    id="notes"
+                    aria-invalid={showErrors && !!errors.notes}
+                    aria-describedby={showErrors && errors.notes ? "notes-error" : undefined}
+                    placeholder="ระบุว่านำไปใช้ทำอะไร..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
                     className="text-sm"
                   />
+                  {showErrors && errors.notes && <FieldError id="notes-error">{errors.notes}</FieldError>}
                 </div>
               )}
 
@@ -361,32 +554,18 @@ export default function ConfirmDispensePage() {
               {hasDurable && (
                 <div className="space-y-1.5">
                   <Label htmlFor="dueDate" className="text-xs text-muted-foreground" required>กำหนดคืน</Label>
-                  <Input
+                  <DatePicker
                     id="dueDate"
-                    type="date"
                     min={today}
-                    required
-                    aria-invalid={showErrors && !!errors.dueDate}
-                    aria-describedby={showErrors && errors.dueDate ? "dueDate-error" : undefined}
+                    invalid={showErrors && !!errors.dueDate}
+                    describedBy={showErrors && errors.dueDate ? "dueDate-error" : undefined}
                     value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="text-sm"
+                    onChange={setDueDate}
+                    className="h-9 text-sm"
                   />
                   {showErrors && errors.dueDate && <FieldError id="dueDate-error">{errors.dueDate}</FieldError>}
                 </div>
               )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="notes" className="text-xs text-muted-foreground">หมายเหตุ</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="หมายเหตุ (optional)..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
             </fieldset>
 
             <p className="mt-4 mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -403,6 +582,7 @@ export default function ConfirmDispensePage() {
         </DialogContent>
       </Dialog>
 
+      {templateDialogs}
     </div>
   );
 }
@@ -473,7 +653,7 @@ function CartLotChip({ item, variant = "chip" }: { item: CartItem; variant?: "ch
         {item.lots.map((lot) => (
           <SelectItem key={lot.id} value={lot.id} className={cn("text-xs", !isAutoLot(lot.lotNumber) && "font-mono")}>
             {autoLotLabel(lot.lotNumber)} — {lot.quantity} {item.issueUnit}
-            {lot.expiryDate && ` (หมดอายุ: ${new Date(lot.expiryDate).toLocaleDateString()})`}
+            {lot.expiryDate && ` (หมดอายุ: ${fmtDate(lot.expiryDate, TH_DATE)})`}
           </SelectItem>
         ))}
       </SelectContent>

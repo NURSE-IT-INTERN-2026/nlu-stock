@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { STATUS_PILLS, STATUS_LABELS, statusDisplay, locationLabel, formatSubCode, type ItemStatus } from "@/lib/constants";
+import { STATUS_PILLS, STATUS_LABELS, statusDisplay, locationLabel, formatSubCode, parseScannedCode, type ItemStatus } from "@/lib/constants";
 import { parseItemStatusList } from "@/lib/status-utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -146,13 +146,14 @@ function ItemsContent() {
   });
   const clearSelection = () => setSelected(new Set());
 
-  const handleQrScan = async (code: string) => {
+  const handleQrScan = async (scanned: string) => {
     setScannerOpen(false);
+    const { code, copy } = parseScannedCode(scanned);
     try {
       const data = await getItems({ search: code, perPage: "1" });
       const match = (data.items as ItemRecord[])?.find((it: ItemRecord) => it.code === code);
       if (match) {
-        router.push(`/items/${match.code}`);
+        router.push(`/items/${match.code}${copy ? `?copy=${encodeURIComponent(copy)}` : ""}`);
         return;
       }
     } catch {}

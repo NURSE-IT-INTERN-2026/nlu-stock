@@ -52,7 +52,9 @@ export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
   UNDER_REPAIR: ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"],
   LOST: ["AVAILABLE"],
   PENDING_MAINTENANCE: [],
-  DISPOSED: [],
+  // ยกเลิกตัดจำหน่าย — mirror of LOST → AVAILABLE (เรียกคืน): a disposed piece can be
+  // brought back to พร้อมใช้งาน, so dispose is repeatable across the lifecycle like lost.
+  DISPOSED: ["AVAILABLE"],
 };
 
 // ยกเลิกคำขอชำรุด — the piece turned out not to be broken. ADMIN only, and it is the ONLY

@@ -145,6 +145,10 @@ export const STATUS_VARIANTS = {
   PENDING_MAINTENANCE: "secondary",
 } satisfies Record<ItemStatus, "default" | "secondary" | "destructive" | "outline">;
 
+// The six statuses shown in the "สัดส่วนการใช้งาน" breakdown. LOST/DISPOSED are written
+// off — never counted, never rendered. Every one of the six renders even at count 0.
+export const USAGE_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "PENDING_MAINTENANCE", "UNDER_REPAIR", "DAMAGED"] as const;
+
 // Non-tracked items (consumable / COUNT durable) have no per-unit lifecycle status —
 // their stock state derives from available/total. COUNT (ยืม-คืน) has a middle "on loan"
 // band; consumables only deplete (no borrowing) so they're binary. Used by the item
@@ -154,7 +158,9 @@ export type NonTrackedStockKey = "AVAILABLE" | "ON_LOAN" | "OUT";
 export const NON_TRACKED_STOCK_LABELS: Record<NonTrackedStockKey, string> = {
   AVAILABLE: "พร้อมใช้งาน",
   ON_LOAN: "ถูกยืม",
-  OUT: "ไม่พร้อมใช้งาน",
+  // "หมด" everywhere — the breadcrumb chip already said หมด while the card said
+  // ไม่พร้อมใช้งาน for the same state. One word for one thing.
+  OUT: "หมด",
 };
 
 export const NON_TRACKED_STOCK_PILLS: Record<NonTrackedStockKey, string> = {
@@ -204,6 +210,32 @@ export function locationLabel(loc: { building: string; floor: string; room: stri
 // subCode may be stored as suffix ("C01") or full ("ITM001-01"); show full, avoid doubling prefix.
 export function formatSubCode(itemCode: string, subCode: string): string {
   return subCode.startsWith(itemCode) ? subCode : `${itemCode}-${subCode}`;
+}
+
+// ─── QR payload helpers ───
+// Printed QR encodes an absolute URL so an external scanner (iPhone Camera etc.)
+// opens the item page directly. /items/[id] already resolves by code, and the
+// detail shell already honours ?copy=<subCode>, so no resolver route is needed.
+
+export function qrUrl(itemCode: string, subCode?: string | null): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL
+    || (typeof window !== "undefined" ? window.location.origin : "");
+  const q = subCode ? `?copy=${encodeURIComponent(subCode)}` : "";
+  return `${base}/items/${encodeURIComponent(itemCode)}${q}`;
+}
+
+// Scanned string → { code, copy }. Accepts the new URL payload and legacy
+// bare-code labels already printed and stuck on shelves.
+export function parseScannedCode(raw: string): { code: string; copy?: string } {
+  const s = raw.trim();
+  if (!/^https?:\/\//i.test(s)) return { code: s };
+  try {
+    const u = new URL(s);
+    const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    return { code: decodeURIComponent(last), copy: u.searchParams.get("copy") || undefined };
+  } catch {
+    return { code: s };
+  }
 }
 
 /**

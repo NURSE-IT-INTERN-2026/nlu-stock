@@ -33,6 +33,8 @@ export const dispenseRequestSchema = z.object({
   usageNote: z.string().max(500).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   recipient: z.string().max(255).optional().nullable(),
+  // นำไปใช้งาน (INUSE) only — set when the destination resolved to an existing Location.
+  locationId: z.string().optional().nullable(),
   dueAt: z.string().optional().nullable(), // "YYYY-MM-DD" from <input type="date">, one per borrow
   // ponytail: per-dispense flag, not a DB column — API flips trackIndividually sub-item status to
   // ON_LOAN (ยืม, default) or IN_USE (ตั้งใช้ในห้อง). Ignored for CONSUMABLE/COUNT.

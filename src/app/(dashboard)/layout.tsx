@@ -21,7 +21,7 @@ const pageTitles: Record<string, string> = {
   "/alerts": "การแจ้งเตือน",
   "/dispense": "เบิก-ยืมพัสดุ",
   "/receive": "รับพัสดุเข้า",
-  "/maintenance": "การซ่อมบำรุง",
+  "/maintenance": "บันทึกการบำรุงรักษา",
   "/reports": "รายงาน",
   "/settings": "ตั้งค่าระบบ",
 };

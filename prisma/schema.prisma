@@ -109,8 +109,37 @@ model User {
   maintenanceRecords MaintenanceRecord[]
   statusChanges      ItemStatusLog[]
   locationChanges    LocationChangeLog[]
+  dispenseTemplates  DispenseTemplate[]
 
   @@map("users")
+}
+
+// --- Dispense cart templates (shared, reusable withdrawal sets) ---
+// Lines store only itemId + quantity — NOT lotId/subItemId. Lots get consumed/expire and
+// tracked copies get borrowed, so pinning specific stock in a reusable set rots fast. The
+// cart resolves lot/copy fresh at load time via buildCartItem (src/components/dispense/cart-context.tsx).
+model DispenseTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  lines       DispenseTemplateLine[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("dispense_templates")
+}
+
+model DispenseTemplateLine {
+  id         String           @id @default(cuid())
+  templateId String
+  template   DispenseTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       Item             @relation(fields: [itemId], references: [id])
+  quantity   Int
+
+  @@index([templateId])
+  @@map("dispense_template_lines")
 }
 
 // --- Categories ---
@@ -159,6 +188,7 @@ model Location {
 
   items Item[]
   subItems SubItem[]
+  dispenseRecords  DispenseRecord[]
 
   @@unique([building, floor, room, detail])
   @@map("locations")
@@ -245,6 +275,7 @@ model Item {
   maintenanceRecords MaintenanceRecord[]
   statusLogs         ItemStatusLog[]
   locationChanges    LocationChangeLog[]
+  templateLines      DispenseTemplateLine[]
 
   @@index([categoryId, isActive])
   @@index([locationId])
@@ -337,6 +368,10 @@ model DispenseRecord {
   subItem     SubItem?   @relation(fields: [subItemId], references: [id])
   lotId       String?
   lot         Lot?       @relation(fields: [lotId], references: [id])
+  // Where this specific batch/piece was placed (นำไปใช้งาน / INUSE only). Must be an
+  // existing Location — the picker only offers locations already in the system.
+  locationId  String?
+  location    Location?  @relation(fields: [locationId], references: [id])
   quantity    Int
   resolvedQty Int        @default(0) // units no longer outstanding (returned + written off); returnedAt set when >= quantity
   usageType   UsageType?
@@ -444,6 +479,12 @@ model ItemStatusLog {
   imageUrl       String?
   repairVenue    RepairVenue?
   repairNote     String?
+  // อาการที่ชำรุด for this repair trip. Set when the piece is sent for repair and again on
+  // every แก้ข้อมูลการส่งซ่อม row, so a mistyped or incomplete symptom can be corrected
+  // without overwriting the original log line — the newest non-null one is the current
+  // symptom, the older rows keep the history. Null on non-repair rows and legacy rows
+  // (those fall back to the trip-opening row's `reason`).
+  damageNote     String?
   changedAt      DateTime   @default(now())
   recoveredAt    DateTime? // set when a →LOST transition is reversed (เรียกคืน)
 

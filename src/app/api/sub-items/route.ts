@@ -31,17 +31,22 @@ export async function GET(req: NextRequest) {
           issueUnit: { select: { name: true } },
           category: { select: { name: true, profile: { select: { dispenseType: true } } } },
           location: true,
+          // Lets the รับคืนจากส่งซ่อม form preview the next-round date the server will set.
+          maintenanceCycleMonths: true,
           _count: { select: { subItems: true } },
         },
       },
-      // UNDER_REPAIR: pull the DAMAGED → UNDER_REPAIR log so the card can show
-      // venue (ภายใน/ภายนอก) + the repair note captured at send time.
+      // UNDER_REPAIR: pull the UNDER_REPAIR logs so the card can show venue (ภายใน/ภายนอก),
+      // the repair note, and when the piece was sent. แก้ข้อมูลส่งซ่อม appends an
+      // UNDER_REPAIR → UNDER_REPAIR row per edit, so the newest row holds the current
+      // venue/note but NOT the send date — that's the row that started the trip.
+      // ponytail: 10 rows = 9 edits in one trip; deeper falls back to the oldest fetched row.
       ...(includeRepairLog && {
         statusLogs: {
           where: { newStatus: ItemStatus.UNDER_REPAIR },
           orderBy: { changedAt: "desc" },
-          take: 1,
-          select: { repairVenue: true, reason: true, repairNote: true },
+          take: 10,
+          select: { repairVenue: true, reason: true, repairNote: true, damageNote: true, changedAt: true, previousStatus: true },
         },
       }),
     },
@@ -51,12 +56,22 @@ export async function GET(req: NextRequest) {
   // ponytail: conditional include widens the type — flatten the latest log into
   // repairVenue/repairNote on the row so the client type stays uniform.
   const subItemsOut = subItems.map((s) => {
-    const log = (s as { statusLogs?: { repairVenue: string | null; reason: string | null; repairNote: string | null }[] }).statusLogs?.[0];
+    const logs =
+      (s as { statusLogs?: { repairVenue: string | null; reason: string | null; repairNote: string | null; damageNote: string | null; changedAt: Date; previousStatus: string | null }[] }).statusLogs ?? [];
+    const log = logs[0];
+    // The trip started at the newest log that came from another status; edits keep
+    // previousStatus = UNDER_REPAIR, so they're skipped and the day count stays honest.
+    const start = logs.find((l) => l.previousStatus !== ItemStatus.UNDER_REPAIR) ?? logs.at(-1);
     return {
       ...s,
       repairVenue: log?.repairVenue ?? null,
-      damageNote: log?.reason ?? null,
+      // Venue/note track the newest edit. So does the symptom now that แก้ข้อมูลการส่งซ่อม can
+      // correct it — newest non-null damageNote wins, falling back to the trip-opening row's
+      // reason for trips recorded before the column existed. The send date always belongs to
+      // the row that started the trip.
+      damageNote: logs.find((l) => l.damageNote)?.damageNote ?? start?.reason ?? null,
       repairNote: log?.repairNote ?? null,
+      repairSentAt: start?.changedAt.toISOString() ?? null,
     };
   });
 
