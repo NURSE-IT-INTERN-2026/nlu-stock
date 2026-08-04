@@ -254,7 +254,9 @@ return (
               const atMax = !item.trackIndividually && inCart >= item.availableQty;
               const stockNum = item.trackIndividually ? item.subItems.length : item.availableQty;
               const outOfStock = stockNum <= 0;
-              const stockLabel = item.trackIndividually ? `${stockNum} ชิ้น` : `${stockNum} ${item.issueUnit.name}`;
+              // Tracked items used to hard-code "ชิ้น", which hid the real unit (เครื่อง/ตัว/ชุด).
+              // Both kinds read from issueUnit now — "ชิ้น" only shows when that IS the unit.
+              const stockLabel = `${stockNum} ${item.issueUnit.name}`;
               const locText = item.location && !locActive
                 ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
                 : "";
