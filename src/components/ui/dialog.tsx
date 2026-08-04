@@ -7,6 +7,30 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
+/**
+ * Dialog height — the one place it is decided.
+ *
+ * Put a shell on a div wrapping header + body + footer, and DIALOG_BODY on the
+ * scroll area between them. Header and footer then stay put and only the body
+ * scrolls, in both variants.
+ *
+ * DIALOG_SHELL — fixed height. For dialogs whose content changes while they are
+ * open: a mode switch, conditional fields, a wizard step, a tab. The box keeps
+ * its size and the scroll position moves instead of the dialog.
+ *
+ * DIALOG_SHELL_FIT — natural height, capped so it can never outgrow a short
+ * viewport. For dialogs that cannot change shape while open. Forcing 36rem
+ * around four inputs would only add dead space, and there is nothing to jump.
+ * Check before choosing: content behind a portal (a Select or Popover menu)
+ * does not change the dialog's height, so it does not make a dialog "variable".
+ *
+ * ponytail: never put overflow-hidden and overflow-y-auto in one className —
+ * they fight, and the loser clips.
+ */
+const DIALOG_SHELL = "flex h-[min(85vh,36rem)] flex-col overflow-hidden"
+const DIALOG_SHELL_FIT = "flex max-h-[85vh] flex-col overflow-hidden"
+const DIALOG_BODY = "min-h-0 flex-1 overflow-y-auto"
+
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -147,6 +171,9 @@ function DialogDescription({
 }
 
 export {
+  DIALOG_SHELL,
+  DIALOG_SHELL_FIT,
+  DIALOG_BODY,
   Dialog,
   DialogClose,
   DialogContent,

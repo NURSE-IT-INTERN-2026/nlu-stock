@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogTitle,
+  DIALOG_SHELL, DIALOG_BODY, Dialog, DialogContent, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -130,8 +130,9 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
       <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
         <DialogTitle className="sr-only">{title}</DialogTitle>
 
+       <div className={DIALOG_SHELL}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
           <div className="flex items-center gap-3">
             <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", isDamage ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")}>
               {isDamage ? <TriangleAlert className="h-4 w-4" /> : <Package className="h-4 w-4" />}
@@ -151,7 +152,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
         </div>
 
         {/* Body */}
-        <div className="max-h-[70vh] space-y-6 overflow-y-auto bg-secondary/40 px-6 py-6">
+        <div className={cn(DIALOG_BODY, "space-y-6 bg-secondary/40 px-6 py-6")}>
           {/* What are we doing? The answer picks the qty input below. */}
           {!fixedReason && !confirmOnly && (
             <div className="space-y-2">
@@ -265,13 +266,14 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
           <Button className="gap-1.5" onClick={handleSave} disabled={saving || !canSave}>
             <Check className="h-4 w-4" />
             {saving ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
         </div>
+       </div>
       </DialogContent>
     </Dialog>
   );
