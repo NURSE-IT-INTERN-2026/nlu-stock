@@ -159,7 +159,8 @@ export function EditDialogShell({
               })}
             </TabsList>
 
-            <div className="min-h-[300px] max-h-[55vh] overflow-y-auto bg-secondary/40 px-6 py-5">
+            {/* Fixed height, not min/max: a short tab must not shrink the dialog when you switch to it. */}
+            <div className="h-[55vh] overflow-y-auto bg-secondary/40 px-6 py-5">
               {children}
             </div>
           </Tabs>

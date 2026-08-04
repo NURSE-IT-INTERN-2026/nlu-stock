@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Lock, Info,
-  Package, Ruler, Warehouse,
+  Package, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { NumericInput } from "@/components/shared/numeric-input";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EditDialogShell } from "@/components/shared/edit-dialog-shell";
@@ -114,10 +114,12 @@ function prefillFrom(item: SettingsItem): FormState {
   };
 }
 
+// Two tabs, split by "what the item IS" vs "the numbers/rules around it".
+// หน่วยนับ and สถานที่จัดเก็บ used to be tabs of their own holding 1–2 fields each;
+// they are sections of ข้อมูลพื้นฐาน now.
 const DIALOG_TABS = [
   { value: "basic", label: "ข้อมูลพื้นฐาน", icon: Package },
-  { value: "units", label: "หน่วยนับ", icon: Ruler },
-  { value: "stock", label: "สถานที่จัดเก็บ", icon: Warehouse },
+  { value: "rules", label: "เกณฑ์และจัดซื้อ", icon: ClipboardList },
 ] as const;
 
 const SUB_NONE = "__none__";
@@ -274,6 +276,93 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                     <Input value={form.nameEn} onChange={(e) => setForm({ ...form, nameEn: e.target.value })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" placeholder="e.g. Banana Blossom Drink" />
                   </div>
                 </div>
+                {item._count && (item._count.dispenseRecords + item._count.receiveRecords) > 0 && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-300">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-medium">มี {item._count.dispenseRecords + item._count.receiveRecords} transaction ที่อ้างอิงหน่วยปัจจุบัน</p>
+                      <p className="text-amber-700 dark:text-amber-400 mt-0.5">เปลี่ยนหน่วยจะไม่กระทบ transaction เก่า แต่ตัวเลขอาจอ่านต่างกัน</p>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground" required>หน่วย</Label>
+                    <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
+                      <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
+                        <span className={form.issueUnitId ? "text-foreground" : "text-muted-foreground"}>
+                          {form.issueUnitId ? (units.find((u) => u.id === form.issueUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  {/* ponytail: track mode is forced by the category profile (always present, category
+                      locked on edit) — never a user choice here. Show it as a read-only status, not a
+                      dead disabled switch that reads as "pick one" and confuses staff. */}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">รูปแบบการจัดการ</Label>
+                    <div className="flex h-10 items-center rounded-md border border-border/60 bg-muted/30 px-3">
+                      <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        {(trackForced ?? form.trackIndividually) ? "ติดตามรายชิ้น" : "นับจำนวน"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium text-muted-foreground">
+                    สถานที่จัดเก็บ{subItem ? " (ของชิ้นนี้)" : ""}
+                  </Label>
+                  <LocationCascadePicker
+                    initialLocationId={subItem ? (subItem.locationId || form.locationId || null) : (form.locationId || null)}
+                    onChange={subItem ? setSubLocRef : setLocRef}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium text-muted-foreground">คำอธิบาย</Label>
+                  <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="text-foreground bg-muted/50 border border-input shadow-none resize-none" rows={3} />
+                </div>
+                {isConsumable && (
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">เงื่อนไขการจัดเก็บ</Label>
+                    <Textarea value={form.storageRequirements} onChange={(e) => setForm({ ...form, storageRequirements: e.target.value })} className="text-foreground bg-muted/50 border border-input shadow-none resize-none" placeholder="เช่น เก็บในตู้เย็น ไม่เกิน 30°C" rows={2} />
+                  </div>
+                )}
+
+                {subItem && (
+                  <>
+                    <Separator className="mt-2" />
+                    <p className="pt-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">ข้อมูลพัสดุย่อย</p>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">หมายเลขซีเรียล</Label>
+                      <Input value={subSerial} onChange={(e) => setSubSerial(e.target.value)} className="h-10 bg-muted/50 border border-input shadow-none" placeholder="ไม่ระบุ" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">สภาพ</Label>
+                      <Select value={subCondition || SUB_NONE} onValueChange={(v) => setSubCondition(v === SUB_NONE ? "" : v ?? "")}>
+                        <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
+                          <SelectValue>{subCondition ? (CONDITION_LABELS[subCondition] ?? subCondition) : "ไม่ระบุ"}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SUB_NONE}>ไม่ระบุ</SelectItem>
+                          {Object.entries(CONDITION_LABELS).map(([v, label]) => (
+                            <SelectItem key={v} value={v}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-medium text-muted-foreground">หมายเหตุ</Label>
+                      <Textarea value={subNotes} onChange={(e) => setSubNotes(e.target.value)} rows={2} className="bg-muted/50 border border-input shadow-none resize-none" placeholder="หมายเหตุ (optional)" />
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+
+              {/* ── Tab 2: เกณฑ์และจัดซื้อ ── */}
+              <TabsContent value="rules" className="mt-0 space-y-4">
                 <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
                   {isSetTracked && (
                     <div className="space-y-1.5">
@@ -325,17 +414,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">คำอธิบาย</Label>
-                  <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="text-foreground bg-muted/50 border border-input shadow-none resize-none" rows={3} />
-                </div>
-                {isConsumable && (
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">เงื่อนไขการจัดเก็บ</Label>
-                    <Textarea value={form.storageRequirements} onChange={(e) => setForm({ ...form, storageRequirements: e.target.value })} className="text-foreground bg-muted/50 border border-input shadow-none resize-none" placeholder="เช่น เก็บในตู้เย็น ไม่เกิน 30°C" rows={2} />
-                  </div>
-                )}
-
                 {isFixedAsset && (
                   <>
                     <Separator className="mt-2" />
@@ -347,7 +425,7 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-[11px] font-medium text-muted-foreground">วันที่จัดซื้อ</Label>
-                        <Input type="date" value={form.purchaseDate} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
+                        <DatePicker value={form.purchaseDate} onChange={(v) => setForm({ ...form, purchaseDate: v })} placeholder="เลือกวันที่" className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-[11px] font-medium text-muted-foreground">ราคาจัดซื้อ</Label>
@@ -371,85 +449,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-medium text-muted-foreground">รับประกัน (เดือน)</Label>
                       <Input type="number" value={form.warrantyMonths} onChange={(e) => setForm({ ...form, warrantyMonths: parseInt(e.target.value) || 0 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
-                    </div>
-                  </>
-                )}
-              </TabsContent>
-
-              {/* ── Tab 2: หน่วย ── */}
-              <TabsContent value="units" className="mt-0 space-y-4">
-                {item._count && (item._count.dispenseRecords + item._count.receiveRecords) > 0 && (
-                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-300">
-                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                    <div className="text-xs">
-                      <p className="font-medium">มี {item._count.dispenseRecords + item._count.receiveRecords} transaction ที่อ้างอิงหน่วยปัจจุบัน</p>
-                      <p className="text-amber-700 dark:text-amber-400 mt-0.5">เปลี่ยนหน่วยจะไม่กระทบ transaction เก่า แต่ตัวเลขอาจอ่านต่างกัน</p>
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground" required>หน่วย</Label>
-                  <Select value={form.issueUnitId} onValueChange={(v) => setForm({ ...form, issueUnitId: v ?? "" })}>
-                    <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
-                      <span className={form.issueUnitId ? "text-foreground" : "text-muted-foreground"}>
-                        {form.issueUnitId ? (units.find((u) => u.id === form.issueUnitId)?.name ?? "เลือกหน่วย") : "เลือกหน่วย"}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
-                  <div>
-                    <div className="text-sm font-medium">Track รายชิ้น (sub-codes)</div>
-                    <div className="text-xs text-muted-foreground">
-                      {trackForced === true ? "บังคับเปิด — หมวดหมู่นี้ต้องมี sub-code" : trackForced === false ? "ปิดเสมอสำหรับหมวดนี้" : "เปิดใช้ sub-codes ต่อชิ้น"}
-                    </div>
-                  </div>
-                  <Switch
-                    checked={trackForced !== undefined ? trackForced : form.trackIndividually}
-                    onCheckedChange={trackForced !== undefined ? undefined : (v) => setForm({ ...form, trackIndividually: v })}
-                    disabled={trackForced !== undefined}
-                  />
-                </div>
-              </TabsContent>
-
-              {/* ── Tab 3: สต็อก ── */}
-              <TabsContent value="stock" className="mt-0 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">
-                    สถานที่จัดเก็บ{subItem ? " (ของชิ้นนี้)" : ""}
-                  </Label>
-                  <LocationCascadePicker
-                    initialLocationId={subItem ? (subItem.locationId || form.locationId || null) : (form.locationId || null)}
-                    onChange={subItem ? setSubLocRef : setLocRef}
-                  />
-                </div>
-
-                {subItem && (
-                  <>
-                    <Separator className="mt-2" />
-                    <p className="pt-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">ข้อมูลพัสดุย่อย</p>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-medium text-muted-foreground">หมายเลขซีเรียล</Label>
-                      <Input value={subSerial} onChange={(e) => setSubSerial(e.target.value)} className="h-10 bg-muted/50 border border-input shadow-none" placeholder="ไม่ระบุ" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-medium text-muted-foreground">สภาพ</Label>
-                      <Select value={subCondition || SUB_NONE} onValueChange={(v) => setSubCondition(v === SUB_NONE ? "" : v ?? "")}>
-                        <SelectTrigger className="h-10 bg-muted/50 border border-input shadow-none">
-                          <SelectValue>{subCondition ? (CONDITION_LABELS[subCondition] ?? subCondition) : "ไม่ระบุ"}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={SUB_NONE}>ไม่ระบุ</SelectItem>
-                          {Object.entries(CONDITION_LABELS).map(([v, label]) => (
-                            <SelectItem key={v} value={v}>{label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-medium text-muted-foreground">หมายเหตุ</Label>
-                      <Textarea value={subNotes} onChange={(e) => setSubNotes(e.target.value)} rows={2} className="bg-muted/50 border border-input shadow-none resize-none" placeholder="หมายเหตุ (optional)" />
                     </div>
                   </>
                 )}
