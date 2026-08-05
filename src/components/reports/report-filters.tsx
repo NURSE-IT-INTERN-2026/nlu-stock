@@ -15,7 +15,7 @@ import {
   CalendarRange, Wrench, X, Boxes, Package, Beaker, Hammer,
   Building2, Monitor, BookOpen, Puzzle, type LucideIcon,
 } from "lucide-react";
-import { USAGE_TYPE_OPTIONS } from "@/lib/constants";
+import { USAGE_TYPE_LABELS } from "@/lib/constants";
 import {
   getPublicCategories, getPublicLocations, getUsers, getProfiles,
 } from "@/lib/api";
@@ -230,12 +230,15 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
             icon={Activity}
             value={values.usageType ?? "all"}
             placeholder="ประเภทการใช้งาน"
-            selectedLabel={values.usageType ? USAGE_TYPE_OPTIONS.find((o) => o.value === values.usageType)?.label : undefined}
+            selectedLabel={values.usageType ? USAGE_TYPE_LABELS[values.usageType] : undefined}
             onValueChange={(v) => onChange({ ...values, usageType: v === "all" ? undefined : String(v) })}
           >
             <SelectItem value="all">ทุกประเภท</SelectItem>
-            {USAGE_TYPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            {/* LABELS, not OPTIONS: a filter has to reach every value the data holds,
+                including OTHER, which is retired from the เบิก form but still sits in
+                old records (and is still written by api/items/[id]/recover-loss). */}
+            {Object.entries(USAGE_TYPE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
             ))}
           </FilterSelect>
         )}
