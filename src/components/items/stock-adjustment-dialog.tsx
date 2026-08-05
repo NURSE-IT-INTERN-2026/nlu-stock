@@ -74,7 +74,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
   // did not, which had it backwards — a short count is the one that ends up in the
   // loss figures, and สูญหาย/ตัดจำหน่าย is often a best guess at the moment of counting.
   // The note is where "ยังไม่ทราบสาเหตุ" can be said out loud.
-  const notesRequired = (isCount && (over || short)) || (!fixedReason && !isCount && (mode === "LOST" || mode === "DISPOSAL"));
+  const notesRequired = isCount ? (over || short) : !fixedReason;
 
   const modeHint = fixedReason ? null : ADJUST_MODE_OPTIONS.find((m) => m.value === mode)?.hint;
 

@@ -39,16 +39,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const countSuffix = isCount ? ` (นับรอบถัดไป ${fmtDate(nextCount, TH_DATE)})` : "";
 
     // Resolve the reason for a scheduled count from the direction of the delta:
-    // counted over = stock the system didn't know about (always COUNT_MISMATCH_OVER,
-    // and it must carry a note so the extra units are explainable after the fact),
+    // counted over = stock the system didn't know about (always COUNT_MISMATCH_OVER),
     // counted short = สูญหาย unless the UI says the missing stock was thrown away
-    // (DISPOSAL) or otherwise accounted for.
+    // (DISPOSAL).
+    //
+    // Either direction has to carry a note. A surplus needs the extra units explained;
+    // a shortfall needs it more, because it is the one that lands in the loss figures
+    // and LOST/DISPOSAL is often the counter's best guess. The dialog blocks an empty
+    // note too, but the rule belongs here — the dialog is not the only way in.
     const reasonFor = (delta: number): AdjustmentReason => {
       if (!isCount) return data.reason!;
-      if (delta > 0) {
-        if (!data.notes?.trim()) throw new Error("NOTES_REQUIRED");
-        return AdjustmentReason.COUNT_MISMATCH_OVER;
-      }
+      if (!data.notes?.trim()) throw new Error("NOTES_REQUIRED");
+      if (delta > 0) return AdjustmentReason.COUNT_MISMATCH_OVER;
       return data.reason ?? AdjustmentReason.LOST;
     };
 
@@ -197,7 +199,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (result === null) return notFound("Item not found");
   if (result === "SAME_QTY") return error("Shelf count is the same as current available quantity");
   if (result === "TRACKED_NOT_ALLOWED") return error("รายการนับรายชิ้น ใช้การเปลี่ยนสถานะรายชิ้นแทน");
-  if (result === "NOTES_REQUIRED") return error("นับได้เกินยอดระบบ ต้องระบุหมายเหตุ");
+  if (result === "NOTES_REQUIRED") return error("ยอดที่นับได้ไม่ตรงกับระบบ ต้องระบุหมายเหตุ");
 
   return json(result, 201);
 }
