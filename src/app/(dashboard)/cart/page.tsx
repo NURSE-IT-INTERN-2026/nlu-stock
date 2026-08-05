@@ -33,7 +33,6 @@ export default function ConfirmDispensePage() {
   const { items, clearCart, addItem } = useCart();
   const router = useRouter();
   const [usageType, setUsageType] = useState<string>("");
-  const [usageNote, setUsageNote] = useState("");
   const [notes, setNotes] = useState("");
   const [recipient, setRecipient] = useState("");
   const [dueDate, setDueDate] = useState(() => {
@@ -222,7 +221,6 @@ export default function ConfirmDispensePage() {
           quantity: i.quantity,
         })),
         usageType: usageType || null,
-        usageNote: usageType === "OTHER" ? usageNote || null : null,
         notes: notes.trim() || null,
         recipient: recipient || null,
         dueAt: dueDate || null,
@@ -242,9 +240,8 @@ export default function ConfirmDispensePage() {
   const durables = items.filter((i) => i.dispenseType !== "CONSUMABLE");
   const hasDurable = durables.length > 0;
 
-  // "ระบุกิจกรรมที่นำไปใช้" โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) หรือ อื่นๆ (OTHER).
-  const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
-  const activityLabel = usageType === "OTHER" ? "ระบุรายละเอียดการนำไปใช้" : "ระบุกิจกรรมที่นำไปใช้";
+  // "ระบุกิจกรรมที่นำไปใช้" โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY).
+  const needsActivity = usageType === "ACTIVITY";
 
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).
   const errors = {
@@ -521,7 +518,7 @@ export default function ConfirmDispensePage() {
 
               {needsActivity && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="notes" className="text-xs text-muted-foreground" required>{activityLabel}</Label>
+                  <Label htmlFor="notes" className="text-xs text-muted-foreground" required>ระบุกิจกรรมที่นำไปใช้</Label>
                   <Textarea
                     id="notes"
                     aria-invalid={showErrors && !!errors.notes}

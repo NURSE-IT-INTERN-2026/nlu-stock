@@ -70,8 +70,11 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
   const tooMany = !isCount && safe !== null && (safe < 1 || safe > prev);
   const unitSuffix = unit ? ` ${unit}` : "";
 
-  // Free-text reasons need a note to be auditable later; so does surplus stock.
-  const notesRequired = (isCount && over) || (!fixedReason && !isCount && (mode === "OTHER" || mode === "LOST" || mode === "DISPOSAL"));
+  // Every count that does not balance needs a note. Surplus always did; a shortfall
+  // did not, which had it backwards — a short count is the one that ends up in the
+  // loss figures, and สูญหาย/ตัดจำหน่าย is often a best guess at the moment of counting.
+  // The note is where "ยังไม่ทราบสาเหตุ" can be said out loud.
+  const notesRequired = (isCount && (over || short)) || (!fixedReason && !isCount && (mode === "LOST" || mode === "DISPOSAL"));
 
   const modeHint = fixedReason ? null : ADJUST_MODE_OPTIONS.find((m) => m.value === mode)?.hint;
 
@@ -86,7 +89,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
         await adjustStock(itemId, {
           stockCount: true,
           ...qtyPayload,
-          // Short counts default to สูญหาย but may be booked as ตัดจำหน่าย/อื่นๆ;
+          // Short counts default to สูญหาย but may be booked as ตัดจำหน่าย;
           // a surplus is always COUNT_MISMATCH_OVER, decided server-side.
           ...(short ? { reason: shortReason } : {}),
           notes: notes || null,
@@ -259,7 +262,15 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder={isCount && over ? "นับได้เกินยอดระบบ — ระบุที่มาของของส่วนเกิน" : notesRequired ? "ระบุเหตุผลที่ปรับยอด" : "เพิ่มรายละเอียด (ถ้ามี)"}
+              placeholder={
+                isCount && over
+                  ? "นับได้เกินยอดระบบ — ระบุที่มาของของส่วนเกิน"
+                  : isCount && short
+                    ? "นับได้น้อยกว่ายอดระบบ — ระบุสาเหตุ หรือ “ยังไม่ทราบสาเหตุ รอตรวจสอบ”"
+                    : notesRequired
+                      ? "ระบุเหตุผลที่ปรับยอด"
+                      : "เพิ่มรายละเอียด (ถ้ามี)"
+              }
               className="bg-card"
             />
           </div>

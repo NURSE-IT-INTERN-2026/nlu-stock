@@ -59,10 +59,12 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   OTHER: "อื่นๆ",
 };
 
+// OTHER stays in USAGE_TYPE_LABELS (and in the DB enum) for records already written,
+// but it is no longer offered: "อื่นๆ" told a reader nothing that ACTIVITY plus the
+// free-text line does not already say.
 export const USAGE_TYPE_OPTIONS = [
   { value: "COURSE", label: "รายวิชา" },
   { value: "ACTIVITY", label: "กิจกรรม" },
-  { value: "OTHER", label: "อื่นๆ" },
 ] as const;
 
 // ─── Adjustment Reason ───
@@ -85,20 +87,25 @@ export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
 //   ASSEMBLY — system-driven (kit assembly in api/kits)
 //   DAMAGED_PENDING_REPAIR — entered via the "แจ้งชำรุด" tile (fixedReason)
 //   COUNT_MISMATCH_SHORT/OVER — server-assigned from a count's delta, never picked by hand
+//   OTHER — "แก้ยอดให้ตรงความจริง" is what ตรวจนับตามรอบ already does, and it does it
+//     better: a count moves the number in either direction, while every other mode can
+//     only subtract. Knowing the true shelf figure means someone looked at the shelf,
+//     so recording it as a count is honest, not a workaround.
 export const STOCK_COUNT_MODE = "STOCK_COUNT";
 export const ADJUST_MODE_OPTIONS: { value: string; label: string; hint: string }[] = [
   { value: STOCK_COUNT_MODE, label: "ตรวจนับตามรอบ", hint: "กรอกยอดที่นับได้จริง — ระบบเทียบกับยอดในระบบให้" },
   { value: "DISPOSAL", label: "ตัดจำหน่าย", hint: "ของหมดอายุ/ใช้ไม่ได้ ทิ้งออกจากระบบ" },
   { value: "LOST", label: "สูญหาย", hint: "หาไม่เจอ ไม่ทราบสาเหตุ" },
-  { value: "OTHER", label: "อื่นๆ", hint: "แก้ยอดให้ตรงความจริง ระบุเหตุผลในหมายเหตุ" },
 ];
 
 // Reasons a short count can carry — default LOST, but stock thrown away between
-// counts is DISPOSAL, not missing stock.
+// counts is DISPOSAL, not missing stock. This list answers "why", so it holds no
+// "อื่นๆ": the shortfall itself is already known from the delta, and an option that
+// only repeats it adds nothing. Staff who cannot tell yet still have to pick one —
+// the dialog requires a note on a short count so the doubt is written down.
 export const COUNT_SHORT_REASON_OPTIONS: { value: string; label: string }[] = [
   { value: "LOST", label: "สูญหาย" },
   { value: "DISPOSAL", label: "ตัดจำหน่าย (ทิ้งไปแล้ว)" },
-  { value: "OTHER", label: "อื่นๆ" },
 ];
 
 export const STATUS_LABELS = {
