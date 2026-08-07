@@ -1,10 +1,17 @@
 import { getAlertCounts } from "@/lib/alerts";
+import { getSessionUser } from "@/lib/auth";
+import { canManageStock } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 import { DashboardKpiGrid } from "@/components/dashboard/dashboard-kpi-grid";
-import { DashboardTabs } from "@/components/dashboard/dashboard-tabs";
+import { DashboardAlertBar } from "@/components/dashboard/dashboard-alert-bar";
+import { DashboardBody } from "@/components/dashboard/dashboard-body";
 
 export default async function DashboardPage() {
+  const user = await getSessionUser();
+  // EXECUTIVE is bounced off /receive and /maintenance by middleware and lands back here,
+  // so their KPI cards must point at the read-only report that shows the same rows.
+  const canManage = canManageStock(user?.role ?? "");
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -55,9 +62,12 @@ export default async function DashboardPage() {
           lowStock: counts.lowStock,
           outOfStock,
         }}
+        canManage={canManage}
       />
 
-      <DashboardTabs />
+      <DashboardAlertBar counts={counts} />
+
+      <DashboardBody />
     </div>
   );
 }
