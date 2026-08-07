@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,24 +11,27 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon,
   Undo2, Package, Tag, FolderTree, Layers, MapPin, ClipboardList,
   QrCode, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2,
-  RefreshCw, CalendarDays, User2, ShieldAlert, Home, Printer,
+  CalendarDays, User2, ShieldAlert, Home, Printer,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
+import { canManageStock } from "@/lib/roles";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { lotDisplay } from "@/lib/lot-code";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import {
-  STATUS_LABELS, locationLabel, formatSubCode, EVENT_TYPE_LABELS, labelFor,
+  STATUS_LABELS, locationLabel, formatSubCode, qrUrl, labelFor,
   CONDITION_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
   type MaintenanceType, type MaintenanceResult, type ItemStatus,
-  NON_TRACKED_STOCK_LABELS, nonTrackedStockKey, type NonTrackedStockKey,
+  USAGE_STATUS_ORDER, STATUS_PILLS,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
 import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
+import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
+import type { OpenDamage } from "@/components/items/recover-damage-dialog";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
@@ -66,6 +70,10 @@ interface ItemData {
   dispenseRecords: unknown[]; receiveRecords: unknown[];
   maintenanceRecords: { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }[];
   statusLogs: unknown[]; adjustments: unknown[];
+  /** Derived server-side (lib/distribution.ts) — where the stock actually is. */
+  distribution?: DistributionRow[];
+  /** Open แจ้งชำรุด bookings awaiting repair (GET /api/items/:id). */
+  openDamage?: OpenDamage[];
   kitComponents: { quantity: number; name: string; componentItem: { code: string; name: string; availableQty: number } | null; unit: { name: string } }[];
 }
 
@@ -97,7 +105,6 @@ interface SubItemData {
 }
 
 // ── Item-mode stock status meta ──
-const STOCK_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "PENDING_MAINTENANCE", "UNDER_REPAIR", "DAMAGED", "LOST", "DISPOSED"];
 const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: string }> = {
   AVAILABLE: { label: "พร้อมใช้งาน", bar: "bg-success", dot: "bg-success" },
   ON_LOAN: { label: "ถูกยืม", bar: "bg-primary", dot: "bg-primary" },
@@ -105,8 +112,6 @@ const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: strin
   PENDING_MAINTENANCE: { label: "รอบำรุงรักษา", bar: "bg-warning", dot: "bg-warning" },
   UNDER_REPAIR: { label: "ส่งซ่อม", bar: "bg-warning", dot: "bg-warning" },
   DAMAGED: { label: "ชำรุด", bar: "bg-warning", dot: "bg-warning" },
-  LOST: { label: "สูญหาย", bar: "bg-destructive", dot: "bg-destructive" },
-  DISPOSED: { label: "ตัดจำหน่าย", bar: "bg-destructive", dot: "bg-destructive" },
 };
 
 // ── Piece-mode status meta ──
@@ -129,21 +134,6 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 const TONE_BAR: Record<Tone, string> = { success: "bg-success", primary: "bg-primary", warning: "bg-warning", destructive: "bg-destructive" };
 
-// ── Piece-mode history timeline ──
-type HistType = "DISPENSE" | "STATUS_CHANGE" | "MAINTENANCE";
-const HIST_ICONS: Record<HistType, typeof Package> = { DISPENSE: ShoppingCart, STATUS_CHANGE: RefreshCw, MAINTENANCE: Wrench };
-const HIST_BADGE: Record<HistType, string> = {
-  DISPENSE: "bg-primary/10 text-primary border-primary/20",
-  STATUS_CHANGE: "bg-warning/10 text-warning-700 border-warning/20",
-  MAINTENANCE: "bg-primary/5 text-primary border-primary/15",
-};
-const HIST_CHIPS: { value: HistType | ""; label: string }[] = [
-  { value: "", label: "ทั้งหมด" },
-  { value: "DISPENSE", label: "เบิก" },
-  { value: "STATUS_CHANGE", label: "เปลี่ยนสถานะ" },
-  { value: "MAINTENANCE", label: "บำรุงรักษา" },
-];
-
 function maintTone(nextDate: string | null): Tone {
   if (!nextDate) return "primary";
   const diff = (new Date(nextDate).getTime() - Date.now()) / 86_400_000;
@@ -152,8 +142,8 @@ function maintTone(nextDate: string | null): Tone {
   return "success";
 }
 
-const fmtDate = (s: string) => new Date(s).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
-const fmtDay = (s: string) => new Date(s).toLocaleDateString("th-TH");
+const fmtDT = (s: string) => fmtDate(s, TH_DATETIME);
+const fmtDay = (s: string) => fmtDate(s, TH_DATE);
 
 // ════════════════════════════════════════
 // Shell — one page, two modes (item / piece)
@@ -166,7 +156,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const searchParams = useSearchParams();
   const copy = searchParams.get("copy");
   const { user } = useSession();
-  const canAct = user?.role === "ADMIN" || user?.role === "STAFF";
+  const canAct = canManageStock(user?.role ?? "");
 
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
@@ -179,6 +169,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // Shared dialog state
   const [maintOpen, setMaintOpen] = useState(false);
   const [statusAction, setStatusAction] = useState<"AVAILABLE" | "DAMAGED" | "LOST" | "DISPOSED" | null>(null);
+  // Piece a pending status action targets. Defaults to the viewed piece; the sub-codes table
+  // undo-dispose button repoints it at a sibling so the shared dialog acts on that copy.
+  const [statusTarget, setStatusTarget] = useState<{ id: string; subCode: string; status: ItemStatus } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   // Item-mode only
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -186,7 +179,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // Piece-mode only
   const [stationOpen, setStationOpen] = useState(false);
   const [returning, setReturning] = useState<string | null>(null); // subItemId being returned
-  const [histFilter, setHistFilter] = useState<HistType | "">("");
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   // Fetch the item (spec) once per item. Non-tracked → item-mode; tracked → piece/empty.
@@ -235,8 +227,8 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // Switch copy via query (shallow — item not refetched).
   const selectCopy = (subCode: string) => router.replace(`/items/${itemId}?copy=${subCode}`, { scroll: false });
 
-  // Reset tab + filters when switching copy.
-  useEffect(() => { setTab("overview"); setHistFilter(""); }, [mode, itemId, selectedSubCode]);
+  // Reset tab when switching copy (the history tab owns its own filter state).
+  useEffect(() => { setTab("overview"); }, [mode, itemId, selectedSubCode]);
 
   const { setDetail } = usePageHeader();
   useEffect(() => {
@@ -249,7 +241,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
 
   // Piece QR (1-copy → base code; ≥2 → full code)
   useEffect(() => {
-    if (mode === "piece" && sub) QRCode.toDataURL(isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code, { width: 128, margin: 1 }).then(setQrDataUrl).catch(() => {});
+    if (mode === "piece" && sub) QRCode.toDataURL(qrUrl(sub.item.code, isMulti ? sub.subCode : null), { width: 128, margin: 1 }).then(setQrDataUrl).catch(() => {});
   }, [mode, isMulti, sub]);
 
   // Piece siblings
@@ -274,14 +266,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
 
   // ── Piece-mode derived (hooks run before early returns) ──
   const activeDispense = useMemo(() => sub?.dispenseRecords.find((d) => d.returnedAt === null) ?? null, [sub]);
-  const historyEvents = useMemo<{ id: string; type: HistType; date: string; description: string; user: string }[]>(() => {
-    if (!sub) return [];
-    const dispense = sub.dispenseRecords.map((d) => ({ id: d.id, type: "DISPENSE" as const, date: d.dispensedAt, description: `เบิกออก${d.returnedAt ? " · คืนแล้ว" : ""}${d.usageNote ? ` · ${d.usageNote}` : ""}`, user: d.staff.name }));
-    const status = sub.statusLogs.map((l) => ({ id: l.id, type: "STATUS_CHANGE" as const, date: l.changedAt, description: `${STATUS_LABELS[l.previousStatus] ?? l.previousStatus} → ${STATUS_LABELS[l.newStatus] ?? l.newStatus}${l.repairVenue && l.newStatus === "UNDER_REPAIR" ? ` · ส่งซ่อม${l.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}` : ""}${l.reason ? ` · ${l.reason}` : ""}`, user: l.changer.name }));
-    const maint = sub.maintenanceRecords.map((r) => ({ id: r.id, type: "MAINTENANCE" as const, date: r.performedAt, description: `${labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType)} · ${labelFor(MAINT_RESULT_LABELS, r.result as MaintenanceResult)}${r.issue ? ` · ${r.issue}` : ""}`, user: r.performer.name }));
-    return [...dispense, ...status, ...maint].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [sub]);
-  const filteredEvents = useMemo(() => (histFilter ? historyEvents.filter((e) => e.type === histFilter) : historyEvents), [historyEvents, histFilter]);
 
   if (loading) {
     return (
@@ -307,7 +291,8 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // ── Item-mode derived ──
   const stockStatus = item ? (() => {
     const s = item.minThreshold > 0
-      ? item.availableQty < item.minThreshold ? { color: "bg-warning", label: "ต่ำ" } : { color: "bg-success", label: "ปกติ" }
+      // Same wording as the card's chip — one word per state across the page.
+      ? item.availableQty < item.minThreshold ? { color: "bg-warning", label: "ต่ำกว่าขั้นต่ำ" } : { color: "bg-success", label: "ปกติ" }
       : { color: "bg-success", label: "ปกติ" };
     if (item.availableQty === 0) { s.color = "bg-destructive"; s.label = "หมด"; }
     return s;
@@ -320,7 +305,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     if (!l.expiryDate) continue;
     const days = Math.floor((new Date(l.expiryDate).getTime() - now.getTime()) / 86_400_000);
     if (days < 0) expiredLots.push({ lotNumber: l.lotNumber, expiryDate: l.expiryDate });
-    else if (days <= 60) soonLots.push({ lotNumber: l.lotNumber, days });
+    else if (days <= 30) soonLots.push({ lotNumber: l.lotNumber, days });
   }
   const hasExpiryAlert = expiredLots.length > 0 || soonLots.length > 0;
 
@@ -357,7 +342,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                 <div className="text-sm min-w-0">
                   <span className="font-semibold text-destructive">หมดอายุแล้ว ({expiredLots.length})</span>
                   <span className="text-muted-foreground ml-2">
-                    {expiredLots.map((l) => `${lotDisplay(l.lotNumber)} · ${new Date(l.expiryDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}`).join("  ·  ")}
+                    {expiredLots.map((l) => `${lotDisplay(l.lotNumber)} · ${fmtDate(l.expiryDate, TH_DATE)}`).join("  ·  ")}
                   </span>
                 </div>
               </div>
@@ -381,7 +366,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
           {mode === "item" && item && stockStatus ? (
             <ItemHero item={item} stockStatus={stockStatus} />
           ) : sub ? (
-            <PieceHero sub={sub} isMulti={isMulti} siblingCount={siblings.length} siblingStatuses={siblings.map((s) => s.status)}
+            <PieceHero sub={sub} isMulti={isMulti} siblings={siblings} onSelect={selectCopy}
               // Return lives in the รหัสย่อย table when there is one; a lone piece has no
               // such tab, so it keeps the hero button.
               canAct={canAct && siblings.length <= 1} activeLoan={activeDispense} onReturn={() => onReturn()} returning={returning === sub.id} />
@@ -439,7 +424,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   qrDataUrl={qrDataUrl}
                   onStation={() => setStationOpen(true)}
                   onReportDamage={() => setStatusAction("DAMAGED")}
-                  onStatus={(s) => setStatusAction(s)}
+                  onStatus={(s) => { setStatusAction(s); setStatusTarget({ id: sub.id, subCode: sub.subCode, status: sub.status }); }}
                   onEdit={() => setEditOpen(true)}
                   onReceive={() => router.push(`/receive?item=${sub.item.id}`)}
                 />
@@ -451,47 +436,11 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                 <SubCodesTable
                   rows={siblings} itemCode={sub.item.code} itemLocation={sub.item.location} currentId={sub.id} canAct={canAct}
                   returning={returning} onSelect={selectCopy} onReturn={onReturn}
+                  onUndoDispose={(row) => { setStatusAction("AVAILABLE"); setStatusTarget({ id: row.id, subCode: row.subCode, status: row.status }); }}
                 />
               )}
               {tab === "lost" && <ItemDetailLostHistory itemId={sub.item.id} itemCode={sub.item.code} isMulti={isMulti} onSuccess={fetchSub} />}
-              {tab === "history" && (
-                <section className="rounded-2xl border border-border bg-card overflow-hidden">
-                  <SectionHeader eyebrow="กิจกรรม" title="ประวัติ" />
-                  <div className="px-4 sm:px-5 pt-4 flex items-center gap-2 overflow-x-auto">
-                    <span className="text-sm text-muted-foreground shrink-0">Type:</span>
-                    {HIST_CHIPS.map((chip) => {
-                      const active = histFilter === chip.value;
-                      return (
-                        <button key={chip.value} className={cn("px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:bg-muted")} onClick={() => setHistFilter(chip.value)}>
-                          {chip.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {filteredEvents.length === 0 ? (
-                    <p className="text-center py-10 text-sm text-muted-foreground">ไม่มีรายการในหมวดนี้</p>
-                  ) : (
-                    <ol className="p-4 sm:p-5 space-y-3">
-                      {filteredEvents.map((e) => {
-                        const Icon = HIST_ICONS[e.type] || Package;
-                        return (
-                          <li key={`${e.type}-${e.id}`} className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20">
-                            <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary"><Icon className="size-4" /></div>
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border", HIST_BADGE[e.type])}>{labelFor(EVENT_TYPE_LABELS, e.type)}</span>
-                                <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><CalendarDays className="size-3" />{fmtDate(e.date)}</span>
-                              </div>
-                              <p className="text-sm font-medium">{e.description}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1"><User2 className="size-3" /> by {e.user}</p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </section>
-              )}
+              {tab === "history" && <ItemDetailHistory itemId={sub.item.id} subItemId={sub.id} />}
               {tab === "maintenance" && (
                 <PieceMaintenance sub={sub} canAct={canAct} onRecord={() => setMaintOpen(true)} />
               )}
@@ -527,8 +476,14 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
       {/* ── Piece-mode dialogs ── */}
       {mode === "piece" && sub && (
         <>
-          <MaintenanceFormDialog open={maintOpen} onOpenChange={setMaintOpen} itemId={sub.item.id} itemLabel={sub.item.name} subItemId={sub.id} subItemLabel={isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code} onSuccess={fetchSub} />
-          <ReportStatusDialog open={statusAction !== null} onOpenChange={(o) => { if (!o) setStatusAction(null); }} itemId={sub.item.id} itemCode={sub.item.code} status={statusAction ?? "DAMAGED"} trackIndividually subItems={[{ id: sub.id, subCode: sub.subCode, status: sub.status }]} onSuccess={fetchSub} />
+          <MaintenanceFormDialog open={maintOpen} onOpenChange={setMaintOpen} itemId={sub.item.id} itemLabel={sub.item.name} subItemId={sub.id} subItemLabel={isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code} maintenanceCycleMonths={sub.item.maintenanceCycleMonths} onSuccess={fetchSub} />
+          <ReportStatusDialog
+            open={statusAction !== null}
+            onOpenChange={(o) => { if (!o) { setStatusAction(null); setStatusTarget(null); } }}
+            itemId={sub.item.id} itemCode={sub.item.code} status={statusAction ?? "DAMAGED"} trackIndividually
+            subItems={[statusTarget ?? { id: sub.id, subCode: sub.subCode, status: sub.status }]}
+            onSuccess={async () => { await Promise.all([fetchSub(), fetchSiblings()]); }}
+          />
           <EditItemDialog open={editOpen} itemId={sub.item.id} subItem={{ id: sub.id, serialNumber: sub.serialNumber, condition: sub.condition, notes: sub.notes, locationId: sub.location?.id ?? null }} onOpenChange={setEditOpen} onSaved={fetchSub} />
           <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={sub.item.id} itemCode={sub.item.code} itemName={sub.item.name} subItemId={sub.id} onSuccess={fetchSub} />
         </>
@@ -578,10 +533,12 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
   return (
     <div className="grid gap-5 sm:gap-6 lg:gap-8 p-4 sm:p-6 grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]">
       <div className="relative w-full md:w-48 lg:w-56 aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-muted shadow-sm">
-        <img src={coverSrc ?? pic(item.code, 640, 480)} alt={item.name} className="size-full object-cover" />
+        <ItemThumb src={coverSrc} alt={item.name} />
         <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
       </div>
-      <div className="flex flex-col justify-between min-w-0 py-1">
+      {/* Top-aligned: the stock card is taller than the title, and justify-between used to
+          park the chips at the bottom with a hole in the middle. */}
+      <div className="flex flex-col min-w-0 py-1">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs mb-3">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">{item.category.profile?.name ?? item.category.name}</span>
@@ -599,15 +556,17 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
           {item.location && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">{locationLabel(item.location)}</span>}
         </div>
       </div>
-      <StockSummary status={item.status} available={item.availableQty} total={item.totalQty} unit={item.issueUnit.name} minThreshold={item.minThreshold} dispenseType={item.category.profile?.dispenseType ?? "COUNT"} />
+      <StockSummary available={item.availableQty} total={item.totalQty} unit={item.issueUnit.name} minThreshold={item.minThreshold} dispenseType={item.category.profile?.dispenseType ?? "COUNT"} distribution={item.distribution} />
     </div>
   );
 }
 
 // ── Piece hero (breadcrumb + cover + title + status summary) ──
-function PieceHero({ sub, isMulti, siblingCount, siblingStatuses, canAct, activeLoan, onReturn, returning }: {
-  sub: SubItemData; isMulti: boolean; siblingCount: number; siblingStatuses: ItemStatus[]; canAct: boolean; activeLoan: DispenseRecord | null; onReturn: () => void; returning: boolean;
+function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onReturn, returning }: {
+  sub: SubItemData; isMulti: boolean; siblings: SiblingRow[]; onSelect: (subCode: string) => void;
+  canAct: boolean; activeLoan: DispenseRecord | null; onReturn: () => void; returning: boolean;
 }) {
+  const siblingCount = siblings.length;
   const fullCode = isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code;
   const loc = sub.location ?? sub.item.location;
   const cover = sub.imageUrl ?? sub.images?.[0] ?? sub.item.imageUrl ?? null;
@@ -615,10 +574,12 @@ function PieceHero({ sub, isMulti, siblingCount, siblingStatuses, canAct, active
     <div className="p-4 sm:p-6">
       <div className="grid gap-5 sm:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]">
         <div className="relative w-full md:w-48 lg:w-56 aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-muted shadow-sm">
-          <img src={cover ?? pic(fullCode, 640, 480)} alt={sub.name ?? fullCode} className="size-full object-cover" />
+          <ItemThumb src={cover} alt={sub.name ?? fullCode} />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
         </div>
-        <div className="flex flex-col justify-between min-w-0 py-1">
+        {/* Top-aligned: the stock card is taller than the title, and justify-between used to
+          park the chips at the bottom with a hole in the middle. */}
+      <div className="flex flex-col min-w-0 py-1">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs mb-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">{sub.item.category.profile?.name ?? sub.item.category.name}</span>
@@ -636,72 +597,141 @@ function PieceHero({ sub, isMulti, siblingCount, siblingStatuses, canAct, active
             {sub.condition && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">สภาพ <span className="text-foreground font-medium">{CONDITION_LABELS[sub.condition] ?? sub.condition}</span></span>}
             {sub.serialNumber && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground font-mono">S/N <span className="text-foreground font-medium">{sub.serialNumber}</span></span>}
             <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">หน่วย <span className="text-foreground font-medium">{sub.item.issueUnit.name}</span></span>
-            <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">{loc ? locationLabel(loc) : "ไม่ระบุที่ตั้ง"}</span>
+            <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">{loc ? locationLabel(loc) : "ไม่ระบุสถานที่จัดเก็บ"}</span>
           </div>
         </div>
-        <StatusSummary status={sub.status} siblingStatuses={siblingStatuses} activeLoan={activeLoan} canAct={canAct} onReturn={onReturn} returning={returning} />
+        <StatusSummary status={sub.status} siblings={siblings} itemCode={sub.item.code} itemLocation={sub.item.location} currentId={sub.id} onSelect={onSelect}
+          activeLoan={activeLoan} canAct={canAct} onReturn={onReturn} returning={returning} dispenseType={sub.item.category.profile?.dispenseType ?? "COUNT"} />
       </div>
     </div>
   );
 }
 
 // ── Stock summary (item hero right slot) ──
-// Item-mode (non-tracked) status card. COUNT (วัสดุคงทน ยืม-คืน) surfaces real stock
-// state — partial-on-loan is meaningful, so it shows headline + available/total + proportion
-// bar. CONSUMABLE/ITEM only deplete, so they show a fixed "พร้อมใช้งาน" + available count.
-// A manually set status (ชำรุด/ส่งซ่อม/สูญหาย/ตัดจำหน่าย) overrides the derived headline.
-function StockSummary({ status, available, total, unit, minThreshold, dispenseType }: {
-  status: ItemStatus; available: number; total: number; unit: string; minThreshold: number; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+// Item-mode (non-tracked) stock card. No status headline at all: a non-tracked item is a
+// *pile*, and a pile holds several states at once (25 ว่าง + 115 ไม่อยู่ในคลัง) — squeezing
+// that into one word is always wrong. Only the tracked card names a status, because there
+// the headline describes one piece. Here the number, the bar and the two-row table do it.
+// COUNT (วัสดุคงทน ยืม-คืน) gets the table; consumables just deplete, so they get the bar.
+function StockSummary({ available, total, unit, minThreshold, dispenseType, distribution }: {
+  available: number; total: number; unit: string; minThreshold: number; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  distribution?: DistributionRow[];
 }) {
   const isCount = dispenseType === "COUNT";
-  const manual = status !== "AVAILABLE" && status !== "ON_LOAN";
-  const STOCK_HEADLINE: Record<NonTrackedStockKey, { icon: typeof CheckCircle2; tone: Tone }> = {
-    AVAILABLE: { icon: CheckCircle2, tone: "success" },
-    ON_LOAN: { icon: Undo2, tone: "primary" },
-    OUT: { icon: XCircle, tone: "destructive" },
-  };
-  const key: NonTrackedStockKey = isCount ? nonTrackedStockKey(dispenseType, available, total) : "AVAILABLE";
-  const manualMeta = STATUS_META[status] ?? { icon: Info, tone: "primary" as Tone };
-  const { icon: Icon, tone } = manual ? manualMeta : STOCK_HEADLINE[key];
-  const label = manual ? (STATUS_LABELS[status] ?? status.replace(/_/g, " ")) : NON_TRACKED_STOCK_LABELS[key];
 
-  // Low-stock alert only (out-of-stock is the headline itself).
+  // Low-stock alert only (zero stock gets its own banner).
   const isLow = minThreshold > 0 && available > 0 && available < minThreshold;
   const stockTag = isLow
-    ? { label: "เหลือน้อย", dot: "bg-warning", cls: "bg-warning/10 text-warning-700 border-warning/20" }
+    ? { label: "ต่ำกว่าขั้นต่ำ", dot: "bg-warning", cls: "bg-warning/10 text-warning-700 border-warning/20" }
     : null;
 
-  const used = Math.max(0, total - available);
-  const segments: { key: string; label: string; bar: string; dot: string; count: number }[] = [];
-  if (available > 0) segments.push({ key: "AVAILABLE", ...STOCK_STATUS_META.AVAILABLE, count: available });
-  if (isCount && used > 0) segments.push({ key: "ON_LOAN", ...STOCK_STATUS_META.ON_LOAN, count: used });
+  // The breakdown is the DistributionTable's own numbers, summed per state — same source,
+  // so the card and the table two screens down cannot disagree about one quantity.
+  // It used to mirror the six-row tracked breakdown by pouring the whole totalQty−availableQty
+  // gap into ถูกยืม and hard-coding the other four to 0. That reads as a fact and was not one:
+  // on NLU-DUR-003 it claimed 89 ถูกยืม when 5 were borrowed and 84 were stationed in rooms.
+  // A pile has no per-piece status to count, but the open records do say where the stock went.
+  const byState = { AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, DAMAGED: 0 };
+  for (const r of distribution ?? []) byState[r.state] += r.qty;
+  // Whatever the records still don't account for. Every named state above is backed by open
+  // rows — available qty, INUSE placements, open loans, open damage adjustments — so this
+  // should be 0. Showing the remainder beats folding it into a state that would then be
+  // overstated, and it is how a drift between totalQty and the ledgers becomes visible.
+  const unaccounted = Math.max(0, total - (byState.AVAILABLE + byState.IN_USE + byState.ON_LOAN + byState.DAMAGED));
+  const segments = [
+    { key: "AVAILABLE", ...STATE_META.AVAILABLE, count: byState.AVAILABLE },
+    { key: "IN_USE", ...STATE_META.IN_USE, count: byState.IN_USE },
+    { key: "ON_LOAN", ...STATE_META.ON_LOAN, count: byState.ON_LOAN },
+    ...(byState.DAMAGED > 0 ? [{ key: "DAMAGED", ...STATE_META.DAMAGED, count: byState.DAMAGED }] : []),
+    ...(unaccounted > 0
+      ? [{ key: "OTHER", label: "ไม่ระบุ", dot: "bg-muted-foreground/40", count: unaccounted }]
+      : []),
+  ];
+  const pct = (n: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0);
+  // The จำนวนขั้นต่ำ marker rides the same bar. It measures stock level against minThreshold —
+  // a different question from the status split, which is why consumables get a bar too.
+  const showMinMarker = minThreshold > 0 && total > 0 && minThreshold < total;
+  // Nothing available, but the pieces still exist somewhere. For ยืม-คืน that is usually a
+  // loan — usually is not always, so the banner reports the count and skips the reason.
+  const stillOut = isCount && total > 0;
 
   return (
-    <div className="w-full xl:w-72 rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">สถานะปัจจุบัน</div>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <span className={cn("size-12 grid place-items-center rounded-xl border", TONE_CLASS[tone])}><Icon className="size-6" /></span>
-        <span className="text-3xl font-semibold leading-none">{label}</span>
+    <div className="w-full xl:w-80 rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">สต็อกคงเหลือ</div>
         {stockTag && (
-          <span className={cn("ml-auto inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border", stockTag.cls)}>
+          <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border shrink-0", stockTag.cls)}>
             <span className={cn("size-1.5 rounded-full", stockTag.dot)} />{stockTag.label}
           </span>
         )}
       </div>
-      <div className="mt-4 flex items-center justify-between text-xs"><span className="text-muted-foreground">{isCount ? "สัดส่วนการใช้งาน" : "คงเหลือ"}</span><span className="text-muted-foreground tabular-nums">{isCount ? `${available}/${total}` : available} {unit}</span></div>
-      <div className="mt-2 flex h-2.5 rounded-full overflow-hidden bg-muted">
-        {segments.map((s) => (<div key={s.key} className={cn("h-full", s.bar)} style={{ width: `${isCount ? (total > 0 ? (s.count / total) * 100 : 0) : (s.count > 0 ? 100 : 0)}%` }} title={`${s.label}: ${s.count}`} />))}
+
+      <div className="mt-3 flex items-end justify-between gap-2">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-5xl sm:text-6xl font-semibold leading-none tabular-nums">{available}</span>
+          <span className="text-sm text-muted-foreground truncate">/ {total} {unit}</span>
+        </div>
+        <span className="text-xs text-muted-foreground shrink-0 pb-1">คงเหลือ {Math.round(pct(available))}%</span>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
-        {segments.map((s) => (<div key={s.key} className="flex items-center gap-1.5 text-xs min-w-0"><span className={cn("size-2 rounded-full shrink-0", s.dot)} /><span className="text-muted-foreground truncate">{s.label}</span><span className="ml-auto font-semibold tabular-nums">{s.count}</span></div>))}
+
+      {/* Zero available is the one state a number alone doesn't shout loud enough. For
+          ยืม-คืน it does NOT mean the stock is gone — the pieces still exist and most of
+          them come back, so it gets its own wording and a softer tone. It says where the
+          stock is not, rather than claiming a loan it cannot verify. */}
+      {available === 0 && (
+        stillOut ? (
+          <div className={cn("mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm", TONE_CLASS.warning)}>
+            <Undo2 className="size-4 shrink-0" />
+            <span className="font-medium">ไม่มีของว่าง</span>
+            <span className="ml-auto text-xs opacity-80 shrink-0">{total} {unit} อยู่นอกคลัง</span>
+          </div>
+        ) : (
+          <div className={cn("mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm", TONE_CLASS.destructive)}>
+            <XCircle className="size-4 shrink-0" />
+            <span className="font-medium">ของหมด</span>
+          </div>
+        )
+      )}
+
+      <div className="mt-4 relative h-4 rounded-full bg-muted overflow-hidden">
+        <div className="flex h-full">
+          {isCount
+            ? segments.map((s) => (<div key={s.key} className={cn("h-full", s.dot)} style={{ width: `${pct(s.count)}%` }} title={`${s.label}: ${s.count}`} />))
+            : <div className="h-full bg-success" style={{ width: `${pct(available)}%` }} title={`คงเหลือ ${available}`} />}
+        </div>
+        {showMinMarker && <span className="absolute inset-y-0 w-0.5 bg-destructive" style={{ left: `${pct(minThreshold)}%` }} title={`จำนวนขั้นต่ำ ${minThreshold} ${unit}`} />}
       </div>
+      {showMinMarker && (
+        <div className="mt-1.5 text-[11px] text-muted-foreground">จำนวนขั้นต่ำ <span className="text-destructive font-medium tabular-nums">{minThreshold} {unit}</span></div>
+      )}
+
+      {/* Two columns, so three or four states stay visible at half the height and the hero
+          row does not tower over the title column beside it. Unit is in the header line. */}
+      {isCount && (
+        <div className="mt-3 rounded-lg border border-border bg-card grid grid-cols-2">
+          {segments.map((s, i) => (
+            <div key={s.key} className={cn("flex items-center gap-1.5 px-2.5 py-2 text-xs min-w-0", i % 2 === 0 && "border-r border-border", i > 1 && "border-t border-border")}>
+              <span className={cn("size-2 rounded-full shrink-0", s.dot)} />
+              <span className="text-muted-foreground truncate">{s.label}</span>
+              <span className="ml-auto font-semibold tabular-nums">{s.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Status summary (piece hero right slot) ──
 // Fleet breakdown across sibling pieces, excluding written-off (LOST/DISPOSED).
-function StatusSummary({ status, siblingStatuses, activeLoan, canAct, onReturn, returning }: { status: ItemStatus; siblingStatuses: ItemStatus[]; activeLoan: DispenseRecord | null; canAct: boolean; onReturn: () => void; returning: boolean }) {
+// The breakdown is COUNT-only: an item dispensed piece by piece (ITEM/CONSUMABLE) leaves
+// for good, so a "how much of the fleet is where" ratio says nothing about it — the
+// per-copy table in the รหัสย่อย tab is the honest view there.
+function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, onSelect, activeLoan, canAct, onReturn, returning, dispenseType }: {
+  status: ItemStatus; siblings: SiblingRow[]; itemCode: string; itemLocation: LocationType | null; currentId: string; onSelect: (subCode: string) => void;
+  activeLoan: DispenseRecord | null; canAct: boolean; onReturn: () => void; returning: boolean; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+}) {
+  const siblingStatuses = siblings.map((s) => s.status);
   const meta = STATUS_META[status] ?? { icon: Info, tone: "primary" as Tone };
   const tone = meta.tone;
   const Icon = meta.icon;
@@ -711,49 +741,106 @@ function StatusSummary({ status, siblingStatuses, activeLoan, canAct, onReturn, 
   // ponytail: LOST/DISPOSED are written off — excluded from the fleet total and breakdown.
   // DAMAGED/UNDER_REPAIR/etc stay (still on the books). Headline still shows the current
   // piece's true status even when it's LOST/DISPOSED.
+  const showRatio = dispenseType === "COUNT";
   const HIDDEN = new Set<string>(["LOST", "DISPOSED"]);
   const visible = siblingStatuses.filter((s) => !HIDDEN.has(s));
   const total = visible.length;
   const counts: Record<string, number> = {};
   for (const s of visible) counts[s] = (counts[s] ?? 0) + 1;
-  const segments: { key: string; label: string; bar: string; dot: string; count: number }[] = [];
-  for (const key of STOCK_STATUS_ORDER) if (counts[key]) segments.push({ key, ...STOCK_STATUS_META[key], count: counts[key] });
-  for (const [key, count] of Object.entries(counts)) if (!STOCK_STATUS_ORDER.includes(key)) segments.push({ key, label: key.replace(/_/g, " "), bar: "bg-muted-foreground", dot: "bg-muted-foreground", count });
+  // All six render, zeros included — a missing row reads as "not applicable" instead of "none".
+  const segments = USAGE_STATUS_ORDER.map((key) => ({ key, ...STOCK_STATUS_META[key], count: counts[key] ?? 0 }));
   const statusHidden = HIDDEN.has(status);
   const currentCount = counts[status] ?? 0;
 
+  const all: Record<string, number> = {};
+  for (const s of siblingStatuses) all[s] = (all[s] ?? 0) + 1;
+  const mixedStatuses = Object.keys(all).length > 1;
+  const listSummary = [...USAGE_STATUS_ORDER, "LOST", "DISPOSED"]
+    .filter((k) => all[k])
+    .map((k) => `${STOCK_STATUS_META[k]?.label ?? STATUS_LABELS[k as ItemStatus] ?? k} ${all[k]}`)
+    .join(" · ");
+  const specWhere = itemLocation ? locationLabel(itemLocation) : null;
+
   return (
-    <div className="w-full xl:w-72 rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1">
+    // Capped at xl once there is a list: a few pieces keep the card compact, thirty make the
+    // list scroll inside instead of stretching the hero row past the cover image.
+    <div className={cn("w-full xl:w-80 flex flex-col rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1", siblings.length > 1 && "xl:max-h-72")}>
       <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">สถานะปัจจุบัน</div>
       <div className="mt-3 flex items-center gap-3">
         <span className={cn("size-12 grid place-items-center rounded-xl border", TONE_CLASS[tone])}><Icon className="size-6" /></span>
         <span className="text-3xl font-semibold leading-none">{label}</span>
       </div>
-      <div className="mt-4 flex items-center justify-between text-xs"><span className="text-muted-foreground">สัดส่วนการใช้งาน</span><span className="text-muted-foreground">{!statusHidden && total > 0 ? `${currentCount}/${total} ชิ้น` : isOnLoan ? "กำลังยืมอยู่" : label}</span></div>
-      {total > 0 ? (
+      {showRatio && (
         <>
-          <div className="mt-2 flex h-2.5 rounded-full overflow-hidden bg-muted">
-            {segments.map((s) => (<div key={s.key} className={cn("h-full", s.bar)} style={{ width: `${total > 0 ? (s.count / total) * 100 : 0}%` }} title={`${s.label}: ${s.count}`} />))}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {segments.map((s) => (
-              <div key={s.key} className={cn("flex items-center gap-1.5 text-xs min-w-0", s.key === status && "font-semibold")}>
-                <span className={cn("size-2 rounded-full shrink-0", s.dot)} />
-                <span className={cn("truncate", s.key === status ? "text-foreground" : "text-muted-foreground")}>{s.label}</span>
-                <span className="ml-auto tabular-nums">{s.count}</span>
+          <div className="mt-4 flex items-center justify-between text-xs"><span className="text-muted-foreground">สัดส่วนการใช้งาน</span><span className="text-muted-foreground">{!statusHidden && total > 0 ? `${currentCount}/${total} ชิ้น` : isOnLoan ? "กำลังยืมอยู่" : label}</span></div>
+          {total > 0 ? (
+            <>
+              <div className="mt-2 flex h-4 rounded-full overflow-hidden bg-muted">
+                {segments.map((s) => (<div key={s.key} className={cn("h-full", s.bar)} style={{ width: `${total > 0 ? (s.count / total) * 100 : 0}%` }} title={`${s.label}: ${s.count}`} />))}
               </div>
-            ))}
-          </div>
+              <div className="mt-3 divide-y divide-border rounded-lg border border-border bg-card">
+                {segments.map((s) => (
+                  <div key={s.key} className={cn("flex items-center gap-2 px-3 py-2 text-xs", s.key === status && "font-semibold")}>
+                    <span className={cn("size-2.5 rounded-full shrink-0", s.dot)} />
+                    <span className={cn("truncate", s.key === status ? "text-foreground" : "text-muted-foreground")}>{s.label}</span>
+                    <span className="ml-auto tabular-nums">{s.count} ชิ้น</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="mt-2 flex h-2.5 rounded-full overflow-hidden bg-muted"><div className={cn("h-full", TONE_BAR[tone])} style={{ width: "100%" }} /></div>
+          )}
         </>
-      ) : (
-        <div className="mt-2 flex h-2.5 rounded-full overflow-hidden bg-muted"><div className={cn("h-full", TONE_BAR[tone])} style={{ width: "100%" }} /></div>
       )}
-      {isOnLoan && (
-        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <div className="text-xs text-muted-foreground">ผู้ยืม</div>
-          <div className="font-medium text-primary mt-0.5">→ {activeLoan!.staff.name}</div>
-          {canAct && <Button size="sm" variant="outline" className="mt-2 w-full" onClick={onReturn} disabled={returning}><Undo2 className="h-3.5 w-3.5 mr-1" />คืนพัสดุ</Button>}
+      <div className="mt-4 flex flex-col min-h-0 flex-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">รายชิ้น</span>
+          <span className="text-muted-foreground tabular-nums">{siblings.length} ชิ้น</span>
         </div>
+        {/* Counts every piece the list below shows, written-off included — a legend for
+            that list, not the สัดส่วน total (which drops LOST/DISPOSED by design). One
+            status across the board needs no legend: the headline already said it. */}
+        {mixedStatuses && <div className="mt-1 text-[11px] text-muted-foreground">{listSummary}</div>}
+        {/* Summary only — the รหัสย่อย tab keeps the full table with the row actions.
+            Definite height at xl so the card stops growing with the fleet; max-h keeps
+            the scroll working on the narrower breakpoints where the row height is auto. */}
+        <div className="mt-1.5 max-h-56 xl:max-h-none flex-1 min-h-0 overflow-y-auto rounded-lg border border-border divide-y divide-border bg-card">
+          {siblings.map((s) => {
+            const m = STOCK_STATUS_META[s.status];
+            const loan = s.dispenseRecords[0] ?? null;
+            // Same fallback as the รหัสย่อย table: a piece with no location sits where its spec sits.
+            const loc = s.location ?? itemLocation;
+            const where = s.status === "ON_LOAN" && loan
+              ? loan.recipient || loan.staff.name
+              : roomFromNotes(loan?.notes) ?? (loc ? locationLabel(loc) : null);
+            // Repeating the spec's own location on every row says nothing — only a piece
+            // that sits somewhere else (or is out with someone) is worth a second line.
+            const showWhere = where && where !== specWhere;
+            return (
+              <button key={s.id} onClick={() => onSelect(s.subCode)}
+                className={cn("w-full grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-0.5 px-2.5 py-2 text-xs text-left hover:bg-muted transition-colors", s.id === currentId && "bg-primary/10 hover:bg-primary/15")}>
+                <span className={cn("size-2 rounded-full shrink-0", m?.dot ?? "bg-muted-foreground")} />
+                <span className={cn("font-mono truncate", s.id === currentId && "font-semibold text-primary")}>{formatSubCode(itemCode, s.subCode)}</span>
+                {/* Chip only where the piece differs from the one on screen — the headline
+                    already names that status, and the dot still carries the colour. */}
+                {s.status !== status && (
+                  <span className={cn("shrink-0 px-1.5 py-0.5 rounded-md border text-[10px]", STATUS_PILLS[s.status] ?? "bg-muted text-muted-foreground border-border")}>
+                    {m?.label ?? STATUS_LABELS[s.status] ?? s.status}
+                  </span>
+                )}
+                {showWhere && <span className="col-start-2 col-span-2 text-[11px] text-muted-foreground truncate">{s.status === "ON_LOAN" ? <User2 className="size-3 inline mr-1 -mt-0.5" /> : <MapPin className="size-3 inline mr-1 -mt-0.5" />}{where}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {/* Single-copy loan has no รหัสย่อย tab, so the return action lives here.
+          Multi-copy returns via the รหัสย่อย table — canAct is false here then. */}
+      {isOnLoan && canAct && (
+        <Button size="sm" variant="outline" className="mt-3 w-full" onClick={onReturn} disabled={returning}>
+          <Undo2 className="h-3.5 w-3.5 mr-1" />คืนพัสดุ
+        </Button>
       )}
     </div>
   );
@@ -762,12 +849,12 @@ function StatusSummary({ status, siblingStatuses, activeLoan, canAct, onReturn, 
 // ── Piece overview tab (detail rows + manage tiles + QR) ──
 function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
   sub: SubItemData; isMulti: boolean; canAct: boolean; qrDataUrl: string;
-  onStation: () => void; onReportDamage: () => void; onStatus: (s: "LOST" | "DISPOSED") => void; onEdit: () => void; onReceive: () => void;
+  onStation: () => void; onReportDamage: () => void; onStatus: (s: "AVAILABLE" | "LOST" | "DISPOSED") => void; onEdit: () => void; onReceive: () => void;
 }) {
   const [printOpen, setPrintOpen] = useState(false);
   const fullCode = isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code;
   // Each piece carries its own label, so it prints its own code — not the parent item's.
-  const printItems: QrPrintItem[] = [{ code: fullCode, name: sub.name ?? sub.item.name }];
+  const printItems: QrPrintItem[] = [{ code: fullCode, name: sub.name ?? sub.item.name, qr: qrUrl(sub.item.code, isMulti ? sub.subCode : null) }];
   const loc = sub.location ?? sub.item.location;
   const detailRows: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; mono?: boolean }[] = [
     { icon: Hash, label: "รหัส", value: fullCode, mono: true },
@@ -778,7 +865,7 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
     ...(sub.condition ? [{ icon: ClipboardList, label: "สภาพ", value: CONDITION_LABELS[sub.condition] ?? sub.condition }] : []),
     ...(sub.serialNumber ? [{ icon: Hash, label: "หมายเลขซีเรียล", value: sub.serialNumber, mono: true }] : []),
     { icon: Layers, label: "หน่วยเบิก", value: sub.item.issueUnit.name },
-    { icon: MapPin, label: "ที่ตั้ง", value: loc ? locationLabel(loc) : "-" },
+    { icon: MapPin, label: sub.status === "IN_USE" ? "สถานที่ที่นำไปใช้งาน" : "สถานที่จัดเก็บ", value: loc ? locationLabel(loc) : "-" },
     { icon: Clock, label: "วันที่สร้าง", value: fmtDay(sub.createdAt) },
   ];
 
@@ -838,6 +925,9 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
                   <DropdownMenuItem disabled={!canTransition(sub.status, "DISPOSED")} onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />ตัดจำหน่าย</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {sub.status === "DISPOSED" && (
+                <ActionTile icon={Undo2} label="ยกเลิกตัดจำหน่าย" tone="default" onClick={() => onStatus("AVAILABLE")} />
+              )}
               <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} disabled={!canTransition(sub.status, "DAMAGED")} />
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
@@ -857,13 +947,15 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
 }
 
 // ── Sub-codes tab (table: status + who/where + return) ──
-// StationInRoomDialog folds the room into notes as "ห้องที่ตั้ง: X", so an IN_USE piece
-// reads its room back out of there and falls back to its assigned location.
+// LEGACY READER. StationInRoomDialog used to fold the room into notes as "ห้องที่ตั้ง: X"
+// because locationId could come back null; INUSE now requires a real Location (see
+// validators/dispense.ts) and the dialog no longer writes the note. Kept only so the rows
+// written before that — the ones whose room is a typo like "asad" — still show something.
 const roomFromNotes = (notes: string | null | undefined) => notes?.match(/ห้องที่ตั้ง:\s*([^|]+)/)?.[1].trim() || null;
 
-function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, returning, onSelect, onReturn }: {
+function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, returning, onSelect, onReturn, onUndoDispose }: {
   rows: SiblingRow[]; itemCode: string; itemLocation: LocationType | null; currentId: string; canAct: boolean;
-  returning: string | null; onSelect: (subCode: string) => void; onReturn: (subItemId: string) => void;
+  returning: string | null; onSelect: (subCode: string) => void; onReturn: (subItemId: string) => void; onUndoDispose: (row: SiblingRow) => void;
 }) {
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -902,7 +994,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
                   </TableCell>
                   <TableCell className="px-3 text-sm text-muted-foreground">
                     {s.status === "ON_LOAN" && loan ? (
-                      <span><User2 className="size-3 inline mr-1 -mt-0.5" />{loan.recipient || loan.staff.name} · {fmtDate(loan.dispensedAt)}</span>
+                      <span><User2 className="size-3 inline mr-1 -mt-0.5" />{loan.recipient || loan.staff.name} · {fmtDT(loan.dispensedAt)}</span>
                     ) : s.status === "IN_USE" ? (
                       <span><MapPin className="size-3 inline mr-1 -mt-0.5" />{where ?? "ไม่ระบุที่ตั้ง"}{loan ? ` · ${fmtDay(loan.dispensedAt)}` : ""}</span>
                     ) : where ? (
@@ -914,6 +1006,12 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
                       <Button size="sm" variant="outline" disabled={returning === s.id}
                         onClick={(e) => { e.stopPropagation(); onReturn(s.id); }}>
                         <Undo2 className="h-3.5 w-3.5 mr-1" />รับคืน
+                      </Button>
+                    )}
+                    {canAct && s.status === "DISPOSED" && (
+                      <Button size="sm" variant="outline"
+                        onClick={(e) => { e.stopPropagation(); onUndoDispose(s); }}>
+                        <Undo2 className="h-3.5 w-3.5 mr-1" />ยกเลิกตัดจำหน่าย
                       </Button>
                     )}
                   </TableCell>

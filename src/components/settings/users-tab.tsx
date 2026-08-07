@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, UserCheck, UserX, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  DIALOG_SHELL_FIT,
+  DIALOG_BODY,
   Dialog, DialogContent, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -20,6 +23,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
+import { ROLE_LABELS, type Role } from "@/lib/constants";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,23 +41,18 @@ interface UserRecord {
   id: string;
   email: string;
   name: string;
-  role: string;
+  /** Derived from the env allowlists by the API, never stored. null = not listed
+   *  anywhere, so this account cannot sign in until an env list mentions it. */
+  role: Role | null;
   isActive: boolean;
 }
-
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: "ผู้ดูแล",
-  STAFF: "เจ้าหน้าที่",
-  INSTRUCTOR: "ผู้สอน",
-  CHILDREN: "นักศึกษา",
-};
 
 export function UsersTab() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<UserRecord | null>(null);
-  const [form, setForm] = useState({ email: "", name: "", role: "STAFF" });
+  const [form, setForm] = useState({ email: "", name: "" });
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
 
   const [isDesktop, setIsDesktop] = useState(false);
@@ -80,20 +79,20 @@ export function UsersTab() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ email: "", name: "", role: "STAFF" });
+    setForm({ email: "", name: "" });
     setDialogOpen(true);
   }
 
   function openEdit(user: UserRecord) {
     setEditing(user);
-    setForm({ email: user.email, name: user.name, role: user.role });
+    setForm({ email: user.email, name: user.name });
     setDialogOpen(true);
   }
 
   async function handleSave() {
     try {
       if (editing) {
-        await updateSettingsUser(editing.id, { name: form.name, role: form.role });
+        await updateSettingsUser(editing.id, { name: form.name });
         toast.success("อัปเดตผู้ใช้สำเร็จ");
       } else {
         await createSettingsUser(form);
@@ -181,7 +180,7 @@ export function UsersTab() {
   );
 
   const modalBody = (
-    <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+    <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="user-email">อีเมล</Label>
@@ -198,18 +197,9 @@ export function UsersTab() {
           <Label htmlFor="user-name">ชื่อ-นามสกุล</Label>
           <Input id="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="user-role">บทบาท</Label>
-          <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v ?? "STAFF" })}>
-            <SelectTrigger className="bg-card"><SelectValue>{ROLE_LABELS[form.role] ?? form.role}</SelectValue></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ADMIN">ผู้ดูแล</SelectItem>
-              <SelectItem value="STAFF">เจ้าหน้าที่</SelectItem>
-              <SelectItem value="INSTRUCTOR">ผู้สอน</SelectItem>
-              <SelectItem value="CHILDREN">นักศึกษา</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          บทบาทกำหนดจากรายชื่ออีเมลในค่าตั้งระบบ (env) ไม่ได้แก้จากหน้านี้
+        </p>
       </div>
     </div>
   );
@@ -254,7 +244,11 @@ export function UsersTab() {
               <TableRow key={user.id} className={`h-9 [&>td]:py-1 ${!user.isActive ? "opacity-50" : ""}`}>
                 <TableCell className="px-2"><span className="block truncate font-medium">{user.name}</span></TableCell>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{user.email}</span></TableCell>
-                <TableCell className="px-2"><Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{ROLE_LABELS[user.role] || user.role}</Badge></TableCell>
+                <TableCell className="px-2">
+                  {user.role
+                    ? <Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{ROLE_LABELS[user.role]}</Badge>
+                    : <span className="text-[11px] text-muted-foreground">ไม่มีสิทธิ์</span>}
+                </TableCell>
                 <TableCell className="px-2">
                   {user.isActive
                     ? <span className="inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium bg-success/15 text-success-700 border-success/30">ใช้งาน</span>
@@ -295,7 +289,7 @@ export function UsersTab() {
           <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
             <DialogTitle className="sr-only">{title}</DialogTitle>
             <DialogDescription className="sr-only">{subtitle}</DialogDescription>
-            <div className="flex max-h-[85vh] flex-col overflow-hidden">
+            <div className={DIALOG_SHELL_FIT}>
               {modalHeader}
               {modalBody}
               {modalFooter}

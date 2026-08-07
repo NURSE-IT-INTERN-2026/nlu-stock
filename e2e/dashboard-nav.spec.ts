@@ -1,11 +1,11 @@
 import { test, expect } from "./fixtures";
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 // Dashboard navigation sanity: every clickable that navigates reaches its page,
 // then returns to the dashboard before the next. Catches broken hrefs / dead links.
 
 async function clickExpectReturn(
-  page,
+  page: Page,
   label: string,
   locator: Locator,
   expectedUrl: RegExp
@@ -23,10 +23,15 @@ test("dashboard: every nav element reaches its page", async ({ page }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  await clickExpectReturn(page, "การ์ด รายการพัสดุทั้งหมด → /items", page.locator("a", { hasText: "รายการพัสดุทั้งหมด" }), /\/items$/);
-  await clickExpectReturn(page, "การ์ด ใกล้หมด → /alerts?lowStock", page.locator("a", { hasText: "ใกล้หมด" }), /lowStock=true/);
-  await clickExpectReturn(page, "การ์ด หมดอายุใน 30 วัน → /alerts?nearExpiry", page.locator("a", { hasText: "หมดอายุใน 30 วัน" }), /nearExpiry=true/);
-  await clickExpectReturn(page, "การ์ด ยืมอยู่ → /items?onLoan", page.locator("a", { hasText: "ยืมอยู่" }), /onLoan=true/);
+  // Alert chips only render when their count is non-zero, so drive whatever is on screen
+  // rather than a fixed list of labels. Each href is /alerts?<key>=true.
+  const chipHrefs = await page.locator("a[href^='/alerts?']").evaluateAll((els) =>
+    els.map((e) => e.getAttribute("href") ?? "")
+  );
+  for (const href of chipHrefs) {
+    const param = href.split("?")[1]; // e.g. lowStock=true — no regex metacharacters
+    await clickExpectReturn(page, `chip แจ้งเตือน → ${href}`, page.locator(`a[href="${href}"]`), new RegExp(param));
+  }
   await clickExpectReturn(page, "แถว แยกตามประเภทพัสดุ → /items?profile", page.locator("a[href*='profile=']").first(), /\/items\?profile=[^&]+/);
   await clickExpectReturn(page, "ลิงก์ ดูรายงาน → /reports", page.locator("a", { hasText: "ดูรายงาน" }), /\/reports$/);
   await clickExpectReturn(page, "แถว recent dispense → /items/{id}", page.locator("tbody tr").first(), /\/items\/[^/]+$/);

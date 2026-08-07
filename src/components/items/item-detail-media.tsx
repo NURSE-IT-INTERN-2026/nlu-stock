@@ -7,6 +7,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { uploadFile, updateItem } from "@/lib/api";
 
+// 1 cover + 2 extras. Existing items that already hold more are not rewritten —
+// the surplus is simply not rendered, and the next save trims it.
+const MAX_IMAGES = 3;
+
 interface MediaItem {
   id: string;
   imageUrl: string | null;
@@ -35,8 +39,12 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
   const allImages = useMemo(() => {
     const server = item.imageUrl ? [item.imageUrl] : [];
     const serverExtras = item.images || [];
-    return [...server, ...serverExtras, ...uploadedUrls, ...pendingImages.map((p) => p.localUrl)].slice(0, 8);
+    return [...server, ...serverExtras, ...uploadedUrls, ...pendingImages.map((p) => p.localUrl)].slice(0, MAX_IMAGES);
   }, [item.imageUrl, item.images, uploadedUrls, pendingImages]);
+
+  // Slot 0 is the cover, the rest are extras — the same ordering removeImage indexes into.
+  const cover = allImages[0] ?? null;
+  const extras = allImages.slice(1);
 
   // cleanup blob URLs on unmount
   useEffect(() => {
@@ -53,7 +61,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
       localUrl: URL.createObjectURL(f),
       file: f,
     }));
-    setPendingImages((prev) => [...prev, ...pending].slice(0, 8));
+    setPendingImages((prev) => [...prev, ...pending].slice(0, MAX_IMAGES));
 
     // upload each file
     setUploading(true);
@@ -75,7 +83,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
     // persist: merge server + newly-uploaded, first slot = cover
     if (newUrls.length > 0) {
       const serverCover = item.imageUrl ? [item.imageUrl] : [];
-      const combined = [...serverCover, ...(item.images || []), ...newUrls].slice(0, 8);
+      const combined = [...serverCover, ...(item.images || []), ...newUrls].slice(0, MAX_IMAGES);
       await save({ imageUrl: combined[0] ?? null, images: combined.slice(1) });
       setUploadedUrls([]);
     }
@@ -142,84 +150,78 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
           title="รูปภาพ"
           right={
             <span className="text-sm text-muted-foreground whitespace-nowrap">
-              <span className="text-foreground font-semibold">{allImages.length}</span> / 8
+              <span className="text-foreground font-semibold">{allImages.length}</span> / {MAX_IMAGES}
             </span>
           }
         />
-        <div className={cn(
-          "p-4 sm:p-5 grid gap-3 sm:gap-4",
-          allImages.length > 0 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1",
-        )}>
-        {/* Drop zone — staff only, hidden when full */}
-        {canAct && allImages.length < 8 && (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
-            className={cn(
-              "rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 text-center px-3 transition-all",
-              allImages.length > 0 ? "aspect-square" : "py-10",
-              dragOver
-                ? "border-primary bg-primary/5 scale-[1.01]"
-                : "border-border hover:border-primary/50 hover:bg-accent/40",
-            )}
-          >
-            <span className="grid place-items-center size-10 rounded-full bg-primary/10 text-primary">
-              <ImagePlus className="size-5" />
-            </span>
-            {allImages.length === 0 ? (
-              <>
-                <span className="text-sm font-medium">ยังไม่มีรูปภาพ</span>
-                <span className="text-[11px] text-muted-foreground">ลากหรือคลิกเพื่ออัปโหลด · PNG, JPG สูงสุด 5MB</span>
-              </>
+        <div className="p-4 sm:p-5 space-y-5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => addFiles(e.target.files)}
+            disabled={uploading}
+          />
+
+          {/* ── รูปปก — its own slot, wide, never mixed into the extras grid ── */}
+          <div>
+            <SlotLabel text="รูปปก" hint="แสดงในรายการพัสดุและผลค้นหา" />
+            {cover ? (
+              <Thumb
+                src={cover}
+                alt="รูปปก"
+                canAct={canAct}
+                onOpen={() => setLightboxIdx(0)}
+                onRemove={() => removeImage(0)}
+                className="aspect-video"
+              />
             ) : (
-              <>
-                <span className="text-sm font-medium">ลากหรือคลิก</span>
-                <span className="text-[11px] text-muted-foreground">PNG, JPG</span>
-              </>
-            )}
-          </button>
-        )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
-          disabled={uploading}
-        />
-
-        {allImages.map((src, i) => (
-          <div
-            key={src}
-            role="button"
-            tabIndex={0}
-            onClick={() => setLightboxIdx(i)}
-            onKeyDown={(e) => { if (e.key === "Enter") setLightboxIdx(i); }}
-            className="relative group aspect-square rounded-2xl overflow-hidden border border-border bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:ring-2 hover:ring-primary/30 cursor-pointer"
-          >
-            <img src={src} alt={`รูปที่ ${i + 1}`} loading="lazy" className="size-full object-cover" />
-            {canAct && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); removeImage(i); }}
-                className="absolute top-2 right-2 size-7 grid place-items-center rounded-full bg-background/90 text-foreground shadow opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
-                aria-label="ลบรูป"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-            {i === 0 && (
-              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full">
-                หน้าปก
-              </span>
+              <UploadTile
+                title="ยังไม่มีรูปปก"
+                hint="ลากหรือคลิกเพื่ออัปโหลด · PNG, JPG สูงสุด 5MB"
+                className="aspect-video w-full"
+                disabled={!canAct}
+                dragOver={dragOver}
+                setDragOver={setDragOver}
+                onPick={() => fileInputRef.current?.click()}
+                onFiles={addFiles}
+              />
             )}
           </div>
-        ))}
+
+          {/* ── รูปประกอบ ── */}
+          <div>
+            <SlotLabel text="รูปประกอบ" hint={`สูงสุด ${MAX_IMAGES - 1} รูป`} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+              {extras.map((src, i) => (
+                <Thumb
+                  key={src}
+                  src={src}
+                  alt={`รูปประกอบที่ ${i + 1}`}
+                  canAct={canAct}
+                  onOpen={() => setLightboxIdx(i + 1)}
+                  onRemove={() => removeImage(i + 1)}
+                  className="aspect-square"
+                />
+              ))}
+              {canAct && cover && allImages.length < MAX_IMAGES && (
+                <UploadTile
+                  title="ลากหรือคลิก"
+                  hint="PNG, JPG"
+                  className="aspect-square"
+                  dragOver={dragOver}
+                  setDragOver={setDragOver}
+                  onPick={() => fileInputRef.current?.click()}
+                  onFiles={addFiles}
+                />
+              )}
+              {!cover && (
+                <p className="col-span-full text-xs text-muted-foreground">อัปโหลดรูปปกก่อน แล้วรูปถัดไปจะมาอยู่ตรงนี้</p>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -277,6 +279,77 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function SlotLabel({ text, hint }: { text: string; hint?: string }) {
+  return (
+    <div className="mb-2 flex items-baseline gap-2">
+      <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{text}</span>
+      {hint && <span className="text-[11px] text-muted-foreground/70">{hint}</span>}
+    </div>
+  );
+}
+
+function Thumb({ src, alt, canAct, onOpen, onRemove, className }: {
+  src: string; alt: string; canAct: boolean; onOpen: () => void; onRemove: () => void; className?: string;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
+      className={cn(
+        "relative group overflow-hidden rounded-2xl border border-border bg-muted transition-all cursor-pointer",
+        "focus:outline-none focus:ring-2 focus:ring-primary/50 hover:ring-2 hover:ring-primary/30",
+        className,
+      )}
+    >
+      <img src={src} alt={alt} loading="lazy" className="size-full object-cover" />
+      {canAct && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="absolute top-2 right-2 size-7 grid place-items-center rounded-full bg-background/90 text-foreground shadow opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
+          aria-label="ลบรูป"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function UploadTile({ title, hint, className, disabled, dragOver, setDragOver, onPick, onFiles }: {
+  title: string; hint?: string; className?: string; disabled?: boolean;
+  dragOver: boolean; setDragOver: (v: boolean) => void;
+  onPick: () => void; onFiles: (f: FileList | null) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onPick}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => { e.preventDefault(); setDragOver(false); onFiles(e.dataTransfer.files); }}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-3 text-center transition-all",
+        disabled
+          ? "border-border opacity-60 cursor-default"
+          : dragOver
+            ? "border-primary bg-primary/5 scale-[1.01]"
+            : "border-border hover:border-primary/50 hover:bg-accent/40",
+        className,
+      )}
+    >
+      <span className="grid place-items-center size-10 rounded-full bg-primary/10 text-primary">
+        <ImagePlus className="size-5" />
+      </span>
+      <span className="text-sm font-medium">{title}</span>
+      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+    </button>
   );
 }
 

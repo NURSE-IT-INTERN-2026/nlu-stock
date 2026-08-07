@@ -6,29 +6,48 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
 
-  const groups = await prisma.item.groupBy({
-    by: ["categoryId"],
-    where: { isActive: true },
-    _count: true,
+  // Per-profile stock-status buckets. Each active item lands in exactly one bucket:
+  //   out  = availableQty 0, low = 0 < availableQty < minThreshold (same predicate as the
+  //   low-stock alert in lib/alerts.ts), ok = availableQty >= minThreshold.
+  const groups = await prisma.$queryRaw<Array<{
+    profileId: string; total: bigint; ok: bigint; low: bigint; out: bigint;
+  }>>`
+    SELECT c."profileId" AS "profileId",
+      COUNT(*) AS total,
+      SUM(CASE WHEN i."availableQty" > 0 AND i."availableQty" >= i."minThreshold" THEN 1 ELSE 0 END) AS ok,
+      SUM(CASE WHEN i."availableQty" > 0 AND i."availableQty" <  i."minThreshold" THEN 1 ELSE 0 END) AS low,
+      SUM(CASE WHEN i."availableQty" = 0 THEN 1 ELSE 0 END) AS out
+    FROM items i
+    JOIN categories c ON c.id = i."categoryId"
+    WHERE i."isActive" = true
+    GROUP BY c."profileId"
+  `;
+
+  const profiles = await prisma.categoryProfile.findMany({
+    where: { id: { in: groups.map((g) => g.profileId) } },
+    select: { id: true, name: true, sortOrder: true, icon: true, color: true },
   });
+  const profMap = new Map(profiles.map((p) => [p.id, p]));
 
-  const cats = await prisma.categoryType.findMany({
-    where: { id: { in: groups.map((g) => g.categoryId) } },
-    select: { id: true, profile: { select: { id: true, name: true, sortOrder: true, icon: true, color: true } } },
-  });
-  const catMap = new Map(cats.map((c) => [c.id, c.profile]));
-
-  const byProfile = new Map<string, { profileId: string; profileName: string; sortOrder: number; icon: string; color: string; count: number }>();
-  for (const g of groups) {
-    const profile = catMap.get(g.categoryId);
-    if (!profile) continue;
-    const cur = byProfile.get(profile.id);
-    if (cur) cur.count += g._count;
-    else byProfile.set(profile.id, { profileId: profile.id, profileName: profile.name, sortOrder: profile.sortOrder, icon: profile.icon, color: profile.color, count: g._count });
-  }
-
-  const data = [...byProfile.values()].sort((a, b) => a.sortOrder - b.sortOrder)
-    .map(({ profileId, profileName, icon, color, count }) => ({ profileId, profileName, icon, color, count }));
+  const data = groups
+    .map((g) => {
+      const p = profMap.get(g.profileId);
+      if (!p) return null;
+      return {
+        profileId: p.id,
+        profileName: p.name,
+        sortOrder: p.sortOrder,
+        icon: p.icon,
+        color: p.color,
+        count: Number(g.total),
+        ok: Number(g.ok),
+        low: Number(g.low),
+        out: Number(g.out),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(({ sortOrder: _sortOrder, ...rest }) => rest);
 
   return json(data);
 }

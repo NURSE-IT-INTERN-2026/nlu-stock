@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogTitle,
+  DIALOG_SHELL, DIALOG_BODY, Dialog, DialogContent, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -70,8 +70,11 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
   const tooMany = !isCount && safe !== null && (safe < 1 || safe > prev);
   const unitSuffix = unit ? ` ${unit}` : "";
 
-  // Free-text reasons need a note to be auditable later; so does surplus stock.
-  const notesRequired = (isCount && over) || (!fixedReason && !isCount && (mode === "OTHER" || mode === "LOST" || mode === "DISPOSAL"));
+  // Every count that does not balance needs a note. Surplus always did; a shortfall
+  // did not, which had it backwards — a short count is the one that ends up in the
+  // loss figures, and สูญหาย/ตัดจำหน่าย is often a best guess at the moment of counting.
+  // The note is where "ยังไม่ทราบสาเหตุ" can be said out loud.
+  const notesRequired = isCount ? (over || short) : !fixedReason;
 
   const modeHint = fixedReason ? null : ADJUST_MODE_OPTIONS.find((m) => m.value === mode)?.hint;
 
@@ -86,7 +89,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
         await adjustStock(itemId, {
           stockCount: true,
           ...qtyPayload,
-          // Short counts default to สูญหาย but may be booked as ตัดจำหน่าย/อื่นๆ;
+          // Short counts default to สูญหาย but may be booked as ตัดจำหน่าย;
           // a surplus is always COUNT_MISMATCH_OVER, decided server-side.
           ...(short ? { reason: shortReason } : {}),
           notes: notes || null,
@@ -130,8 +133,9 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
       <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
         <DialogTitle className="sr-only">{title}</DialogTitle>
 
+       <div className={DIALOG_SHELL}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
           <div className="flex items-center gap-3">
             <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", isDamage ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")}>
               {isDamage ? <TriangleAlert className="h-4 w-4" /> : <Package className="h-4 w-4" />}
@@ -151,7 +155,7 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
         </div>
 
         {/* Body */}
-        <div className="max-h-[70vh] space-y-6 overflow-y-auto bg-secondary/40 px-6 py-6">
+        <div className={cn(DIALOG_BODY, "space-y-6 bg-secondary/40 px-6 py-6")}>
           {/* What are we doing? The answer picks the qty input below. */}
           {!fixedReason && !confirmOnly && (
             <div className="space-y-2">
@@ -258,20 +262,29 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, av
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder={isCount && over ? "นับได้เกินยอดระบบ — ระบุที่มาของของส่วนเกิน" : notesRequired ? "ระบุเหตุผลที่ปรับยอด" : "เพิ่มรายละเอียด (ถ้ามี)"}
+              placeholder={
+                isCount && over
+                  ? "นับได้เกินยอดระบบ — ระบุที่มาของของส่วนเกิน"
+                  : isCount && short
+                    ? "นับได้น้อยกว่ายอดระบบ — ระบุสาเหตุ หรือ “ยังไม่ทราบสาเหตุ รอตรวจสอบ”"
+                    : notesRequired
+                      ? "ระบุเหตุผลที่ปรับยอด"
+                      : "เพิ่มรายละเอียด (ถ้ามี)"
+              }
               className="bg-card"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
           <Button className="gap-1.5" onClick={handleSave} disabled={saving || !canSave}>
             <Check className="h-4 w-4" />
             {saving ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
         </div>
+       </div>
       </DialogContent>
     </Dialog>
   );

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, error } from "@/lib/api-utils";
+import { requireSuperAdmin, json, error } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { ItemCondition } from "@/generated/prisma/enums";
@@ -318,7 +318,7 @@ async function importKitBom(rows: ImportRow[]): Promise<ImportResult> {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   try {
@@ -386,7 +386,7 @@ const TEMPLATES: Record<string, { headers: string[]; example: string[] }> = {
 };
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const type = request.nextUrl.searchParams.get("type");

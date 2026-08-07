@@ -20,6 +20,22 @@ export function parseItemStatusList(value: string | null): ItemStatus[] {
 export const WRITTEN_OFF: ReadonlySet<ItemStatus> = new Set<ItemStatus>(["LOST", "DISPOSED"]);
 
 /**
+ * Is this a status a staff member set by hand and must clear by hand?
+ *
+ * AVAILABLE and ON_LOAN are the two derived states of a non-tracked item — ON_LOAN just
+ * means availableQty < totalQty, the normal state of anything with stock out. Everything
+ * else (ชำรุด/ส่งซ่อม/บำรุงรักษา/สูญหาย/ตัดจำหน่าย) was set by a person and means the item
+ * is out of service until they say otherwise.
+ *
+ * Stated once here because two places must agree: recomputeItemCounts keeps such a status
+ * instead of re-deriving it, and the dispense route refuses to hand the item out. If they
+ * drifted, an item could be flagged ชำรุด and still be dispensable.
+ */
+export function isManualHold(status: ItemStatus): boolean {
+  return status !== "AVAILABLE" && status !== "ON_LOAN";
+}
+
+/**
  * Statuses a user may pick for a given dispense type.
  * CONSUMABLE has no lifecycle (dispensed = gone) → AVAILABLE only.
  * null/undefined (no profile selected) = the union, i.e. everything but written-off.
@@ -52,27 +68,29 @@ export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
   UNDER_REPAIR: ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"],
   LOST: ["AVAILABLE"],
   PENDING_MAINTENANCE: [],
-  DISPOSED: [],
+  // ยกเลิกตัดจำหน่าย — mirror of LOST → AVAILABLE (เรียกคืน): a disposed piece can be
+  // brought back to พร้อมใช้งาน, so dispose is repeatable across the lifecycle like lost.
+  DISPOSED: ["AVAILABLE"],
 };
 
-// ยกเลิกคำขอชำรุด — the piece turned out not to be broken. ADMIN only, and it is the ONLY
-// edge a role unlocks: an admin still cannot skip any other step.
-const ADMIN_ONLY: readonly (readonly [ItemStatus, ItemStatus])[] = [["DAMAGED", "AVAILABLE"]];
+// ยกเลิกคำขอชำรุด — the piece turned out not to be broken. SUPERADMIN only, and it is the ONLY
+// edge a role unlocks: a superadmin still cannot skip any other step.
+const SUPERADMIN_ONLY: readonly (readonly [ItemStatus, ItemStatus])[] = [["DAMAGED", "AVAILABLE"]];
 
 export function canTransition(
   from: ItemStatus,
   to: ItemStatus,
-  opts?: { isAdmin?: boolean },
+  opts?: { isSuperAdmin?: boolean },
 ): boolean {
   if (ALLOWED_TRANSITIONS[from].includes(to)) return true;
-  return !!opts?.isAdmin && ADMIN_ONLY.some(([f, t]) => f === from && t === to);
+  return !!opts?.isSuperAdmin && SUPERADMIN_ONLY.some(([f, t]) => f === from && t === to);
 }
 
 /** Targets reachable from `from` — use this to build/filter the status buttons a user sees. */
-export function allowedTargets(from: ItemStatus, opts?: { isAdmin?: boolean }): ItemStatus[] {
+export function allowedTargets(from: ItemStatus, opts?: { isSuperAdmin?: boolean }): ItemStatus[] {
   const base = [...ALLOWED_TRANSITIONS[from]];
-  if (opts?.isAdmin) {
-    for (const [f, t] of ADMIN_ONLY) if (f === from && !base.includes(t)) base.push(t);
+  if (opts?.isSuperAdmin) {
+    for (const [f, t] of SUPERADMIN_ONLY) if (f === from && !base.includes(t)) base.push(t);
   }
   return base;
 }

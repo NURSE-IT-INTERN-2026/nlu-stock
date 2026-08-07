@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { autoLotLabel, isAutoLot, lotDisplay } from "@/lib/lot-code";
@@ -16,29 +18,261 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCart, useCartLineActions } from "@/components/dispense/cart-context";
+import { Combobox, ComboboxField, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem, ComboboxEmpty } from "@/components/ui/combobox";
+import { useCart, useCartLineActions, buildCartItem } from "@/components/dispense/cart-context";
 import { EditableQty } from "@/components/dispense/editable-qty";
-import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat } from "lucide-react";
-import { pic } from "@/lib/image";
+import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat, Bookmark, FolderOpen, AlertTriangle } from "lucide-react";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS, locationLabel, effectiveCode, CONDITION_LABELS } from "@/lib/constants";
-import { createDispense } from "@/lib/api";
+import { createDispense, getDispenseTemplates, getDispenseTemplate, createDispenseTemplate, getCourses, getCourseName, type TemplateSummary, type CourseOption } from "@/lib/api";
 import type { CartItem } from "@/lib/validators/dispense";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function ConfirmDispensePage() {
-  const { items, clearCart } = useCart();
+  const { items, clearCart, addItem } = useCart();
   const router = useRouter();
   const [usageType, setUsageType] = useState<string>("");
-  const [usageNote, setUsageNote] = useState("");
   const [notes, setNotes] = useState("");
+  // ── รายวิชา (COURSE) — codes from the คณะพยาบาล API, names from the CMU registrar ──
+  const [courseCode, setCourseCode] = useState("");
+  const [courseName, setCourseName] = useState<string | null>(null);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  // Set whenever a CMU course API fails. The picker keeps working off cached data either way,
+  // so this is a notice, not an error state — but it has to be visible, because nobody is
+  // watching the server log and the person at this screen is the one who can report it.
+  const [courseApiError, setCourseApiError] = useState<string | null>(null);
   const [recipient, setRecipient] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("en-CA"); // "YYYY-MM-DD" in local time
+  });
   const [submitting, setSubmitting] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+
+  // ── Cart templates (reusable withdrawal sets) ──
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateBusy, setTemplateBusy] = useState(false);
+
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const d = await getDispenseTemplates();
+      setTemplates(d.templates);
+    } catch {
+      /* non-blocking — the save/load buttons just show an empty list */
+    }
+  }, []);
+  useEffect(() => {
+    void refreshTemplates();
+  }, [refreshTemplates]);
+
+  // Fetched only once "รายวิชา" is actually picked — most dispenses are not for a course,
+  // and this is the one field that reaches outside the building for its options.
+  const needsCourse = usageType === "COURSE";
+  const loadCourses = useCallback(async () => {
+    setCoursesLoading(true);
+    try {
+      const d = await getCourses();
+      setCourses(d.courses);
+      // A stale list means the CMU end failed and this came out of our own copy. Say that
+      // outright rather than only dating it — a quiet date reads as trivia, and the person
+      // looking at it is the only one in a position to report that something is broken.
+      setCourseApiError(
+        d.stale
+          ? `เชื่อมต่อระบบรายวิชาไม่ได้ · กำลังใช้รายชื่อที่บันทึกไว้เมื่อ ${d.syncedAt ? fmtDate(d.syncedAt, TH_DATE) : "ก่อนหน้านี้"} — วิชาที่เพิ่งเปิดใหม่อาจยังไม่มี`
+          : null,
+      );
+    } catch {
+      toast.error("ดึงรายชื่อวิชาไม่สำเร็จ");
+      setCourseApiError("เชื่อมต่อระบบรายวิชาไม่ได้ — แจ้งผู้ดูแลระบบ");
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, []);
+  // Ref, not `courses.length`, so an upstream that legitimately answers with an empty list
+  // doesn't get re-fetched on every render.
+  const coursesRequested = useRef(false);
+  useEffect(() => {
+    if (!needsCourse || coursesRequested.current) return;
+    coursesRequested.current = true;
+    void loadCourses();
+  }, [needsCourse, loadCourses]);
+
+  // `{ value, label }` is the shape Base UI's combobox filters and displays without extra
+  // config, and the label carries the name so typing "พยาบาล" finds the course too, not just
+  // its number. Memoised because the registrar returns a couple of hundred of these.
+  const courseItems = useMemo(
+    () => courses.map((c) => ({ value: c.code, label: c.name ? `${c.code} — ${c.name}` : c.code })),
+    [courses],
+  );
+
+  // The code is what gets stored and grouped on; the name is shown so the user can confirm
+  // they picked the right subject. A registrar outage returns null — the code still submits.
+  const handleCourseChange = (code: string) => {
+    setCourseCode(code);
+    setCourseName(courses.find((c) => c.code === code)?.name ?? null);
+    void getCourseName(code)
+      .then((c) => {
+        setCourseName(c.name);
+        // `stale` here means the registrar itself refused; a course it simply has no bulletin
+        // for comes back with name null and stale false, which is not a fault worth reporting.
+        if (c.stale) setCourseApiError("เชื่อมต่อสำนักทะเบียนไม่ได้ — บันทึกเฉพาะรหัสวิชา ไม่มีชื่อวิชา");
+      })
+      .catch(() => {
+        setCourseName(null);
+        setCourseApiError("เชื่อมต่อสำนักทะเบียนไม่ได้ — บันทึกเฉพาะรหัสวิชา ไม่มีชื่อวิชา");
+      });
+  };
+
+  const handleSaveTemplate = async () => {
+    const name = templateName.trim();
+    if (!name || items.length === 0) return;
+    // Collapse cart lines to itemId + total qty — templates don't pin lots/copies.
+    const byItem = new Map<string, number>();
+    for (const i of items) byItem.set(i.itemId, (byItem.get(i.itemId) ?? 0) + i.quantity);
+    setTemplateBusy(true);
+    try {
+      await createDispenseTemplate({ name, lines: [...byItem].map(([itemId, quantity]) => ({ itemId, quantity })) });
+      toast.success("บันทึกเทมเพลตแล้ว");
+      setSaveDialogOpen(false);
+      setTemplateName("");
+      void refreshTemplates();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "บันทึกเทมเพลตไม่สำเร็จ");
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const handleLoadTemplate = async (id: string) => {
+    setTemplateBusy(true);
+    try {
+      const t = await getDispenseTemplate(id);
+      // Seed used sub-ids per item from what's already in the cart so we don't re-pick a copy.
+      const usedByItem = new Map<string, Set<string | null | undefined>>();
+      for (const c of items) {
+        if (!usedByItem.has(c.itemId)) usedByItem.set(c.itemId, new Set());
+        usedByItem.get(c.itemId)!.add(c.subItemId);
+      }
+      let skipped = 0;
+      for (const line of t.lines) {
+        const it = line.item;
+        if (line.unavailable) {
+          skipped += line.quantity;
+          continue;
+        }
+        const used = usedByItem.get(it.id) ?? new Set<string | null | undefined>();
+        usedByItem.set(it.id, used);
+        const dItem = {
+          id: it.id,
+          code: it.code,
+          name: it.name,
+          imageUrl: it.imageUrl,
+          categoryName: it.category.name,
+          dispenseType: it.category.profile.dispenseType,
+          trackIndividually: it.trackIndividually,
+          issueUnit: it.issueUnit.name,
+          availableQty: it.availableQty,
+          location: it.location,
+          lots: it.lots,
+          subItems: it.subItems,
+        };
+        if (it.trackIndividually) {
+          // One line per copy — resolve the next free sub-item each pass.
+          for (let n = 0; n < line.quantity; n++) {
+            const r = buildCartItem(dItem, used);
+            if (!r.ok) {
+              skipped += line.quantity - n;
+              break;
+            }
+            addItem(r.cartItem);
+            used.add(r.cartItem.subItemId);
+          }
+        } else {
+          const r = buildCartItem(dItem, used);
+          if (!r.ok) {
+            skipped += line.quantity;
+            continue;
+          }
+          // addItem clamps to availableQty and merges same item+lot lines.
+          addItem({ ...r.cartItem, quantity: Math.min(line.quantity, it.availableQty) });
+        }
+      }
+      setLoadDialogOpen(false);
+      toast.success(skipped > 0 ? `โหลดเทมเพลตแล้ว (ข้าม ${skipped} ที่ของไม่พอ)` : "โหลดเทมเพลตแล้ว");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "โหลดเทมเพลตไม่สำเร็จ");
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const templateDialogs = (
+    <>
+      {/* Save current cart as a template */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>บันทึกเป็นเทมเพลต</DialogTitle>
+            <DialogDescription>บันทึกรายการในตะกร้าไว้ใช้เบิกซ้ำ (เก็บเฉพาะพัสดุ + จำนวน)</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            placeholder="ชื่อเทมเพลต เช่น ชุดเบิกประจำห้องแล็บ"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleSaveTemplate();
+            }}
+            className="text-sm"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={() => void handleSaveTemplate()} disabled={templateBusy || !templateName.trim()}>
+              {templateBusy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              บันทึก
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Load a template into the cart */}
+      <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>โหลดเทมเพลต</DialogTitle>
+            <DialogDescription>เลือกเทมเพลตเพื่อเติมพัสดุลงตะกร้า (lot/ชิ้นจะเลือกจากสต็อกปัจจุบัน)</DialogDescription>
+          </DialogHeader>
+          {templates.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีเทมเพลต</p>
+          ) : (
+            <div className="max-h-72 space-y-1 overflow-y-auto">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={templateBusy}
+                  onClick={() => void handleLoadTemplate(t.id)}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-50"
+                >
+                  <span className="min-w-0 truncate font-medium">{t.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{t.lineCount} รายการ</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0);
   const today = new Date().toISOString().split("T")[0];
@@ -55,8 +289,14 @@ export default function ConfirmDispensePage() {
           quantity: i.quantity,
         })),
         usageType: usageType || null,
-        usageNote: usageType === "OTHER" ? usageNote || null : null,
-        notes: notes.trim() || null,
+        // Only the types that show the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
+        // hides the textarea but leaves its text in state, and posting that would file one
+        // usage type's description under another. Same for the course going the other way.
+        notes: needsActivity ? notes.trim() || null : null,
+        courseCode: needsCourse ? courseCode || null : null,
+        // The course name is snapshotted, not looked up at read time: history has to stay
+        // readable when the registrar is down, and a renamed course must not rewrite it.
+        usageNote: needsCourse ? courseName : null,
         recipient: recipient || null,
         dueAt: dueDate || null,
       });
@@ -75,11 +315,17 @@ export default function ConfirmDispensePage() {
   const durables = items.filter((i) => i.dispenseType !== "CONSUMABLE");
   const hasDurable = durables.length > 0;
 
+  // Free-text line โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) กับ อื่นๆ (OTHER).
+  const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
+  const activityLabel = usageType === "OTHER" ? "ระบุการนำไปใช้" : "ระบุกิจกรรมที่นำไปใช้";
+
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).
   const errors = {
     usageType: usageType ? null : "เลือกการใช้งาน",
     recipient: recipient.trim() ? null : "ระบุผู้รับ",
     ...(hasDurable ? { dueDate: dueDate ? null : "เลือกกำหนดคืน" } : {}),
+    ...(needsActivity ? { notes: notes.trim() ? null : activityLabel } : {}),
+    ...(needsCourse ? { courseCode: courseCode ? null : "เลือกรายวิชา" } : {}),
   } as Record<string, string | null>;
   const canConfirm = Object.values(errors).every((v) => !v);
 
@@ -105,9 +351,16 @@ export default function ConfirmDispensePage() {
           <p className="text-lg font-medium">ตะกร้าว่าง</p>
           <p className="text-sm text-muted-foreground mt-1">เพิ่มพัสดุจากหน้าเบิก-ยืมพัสดุก่อน</p>
         </div>
-        <Button variant="outline" size="lg" className="bg-white" onClick={() => router.push("/dispense")}>
-          เพิ่มรายการ
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="lg" className="bg-white" onClick={() => router.push("/dispense")}>
+            เพิ่มรายการ
+          </Button>
+          <Button variant="outline" size="lg" className="bg-white" onClick={() => setLoadDialogOpen(true)}>
+            <FolderOpen className="mr-1 h-4 w-4" />
+            โหลดเทมเพลต
+          </Button>
+        </div>
+        {templateDialogs}
       </div>
     );
   }
@@ -117,13 +370,23 @@ export default function ConfirmDispensePage() {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
       {/* ── Items list (scrollable) ── */}
       <div className="flex-1 min-w-0 p-6 lg:min-h-0 lg:overflow-y-auto">
-        <div className="mb-4 flex items-start justify-between">
+        <div className="mb-4 flex items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-semibold">ตะกร้าของฉัน</h2>
           </div>
-          <Button size="lg" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => router.push("/dispense")}>
-            เพิ่มรายการ
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setLoadDialogOpen(true)}>
+              <FolderOpen className="mr-1 h-4 w-4" />
+              โหลดเทมเพลต
+            </Button>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(true)}>
+              <Bookmark className="mr-1 h-4 w-4" />
+              บันทึกเทมเพลต
+            </Button>
+            <Button size="lg" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => router.push("/dispense")}>
+              เพิ่มรายการ
+            </Button>
+          </div>
         </div>
         <div className="space-y-6">
         {(["consumable", "durable"] as const).map((group) => {
@@ -167,7 +430,7 @@ export default function ConfirmDispensePage() {
                           </div>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{item.categoryName}</span>
+                          <span className="inline-flex max-w-full items-center truncate rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{item.categoryName}</span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {item.dispenseType === "CONSUMABLE" ? (
@@ -318,7 +581,7 @@ export default function ConfirmDispensePage() {
               <div className="space-y-1.5">
                 <Label htmlFor="usageType" id="usageType-label" className="text-xs text-muted-foreground" required>ใช้ใน</Label>
                 <Select value={usageType} onValueChange={(v) => v !== null && setUsageType(v)}>
-                  <SelectTrigger id="usageType" aria-labelledby="usageType-label" aria-required="true" aria-invalid={showErrors && !!errors.usageType} aria-describedby={showErrors && errors.usageType ? "usageType-error" : undefined} className="text-sm">
+                  <SelectTrigger id="usageType" aria-labelledby="usageType-label" aria-required="true" aria-invalid={showErrors && !!errors.usageType} aria-describedby={showErrors && errors.usageType ? "usageType-error" : undefined} className="w-full text-sm">
                     <SelectValue placeholder="เลือกการใช้งาน">{USAGE_TYPE_OPTIONS.find((o) => o.value === usageType)?.label ?? "เลือกการใช้งาน"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -330,16 +593,72 @@ export default function ConfirmDispensePage() {
                 {showErrors && errors.usageType && <FieldError id="usageType-error">{errors.usageType}</FieldError>}
               </div>
 
-              {usageType === "OTHER" && (
+              {needsCourse && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="usageNote" className="text-xs text-muted-foreground">ระบุการใช้งาน</Label>
-                  <Input
-                    id="usageNote"
-                    placeholder="ระบุการใช้งาน..."
-                    value={usageNote}
-                    onChange={(e) => setUsageNote(e.target.value)}
+                  <Label htmlFor="courseCode" id="courseCode-label" className="text-xs text-muted-foreground" required>รายวิชา</Label>
+                  {/* Typed filtering rather than a plain Select: the registrar hands back a
+                      couple of hundred courses, and scrolling that as a flat list to find one
+                      six-digit code is not something anyone should have to do. */}
+                  <Combobox
+                    items={courseItems}
+                    value={courseItems.find((i) => i.value === courseCode) ?? null}
+                    onValueChange={(item) => handleCourseChange(item?.value ?? "")}
+                    disabled={coursesLoading || courses.length === 0}
+                  >
+                    <ComboboxField>
+                      <ComboboxInput
+                        id="courseCode"
+                        aria-labelledby="courseCode-label"
+                        aria-required="true"
+                        aria-invalid={showErrors && !!errors.courseCode}
+                        aria-describedby={showErrors && errors.courseCode ? "courseCode-error" : "courseCode-source"}
+                        placeholder={coursesLoading ? "กำลังโหลดรายวิชา..." : "พิมพ์รหัสหรือชื่อวิชา"}
+                      />
+                    </ComboboxField>
+                    <ComboboxContent>
+                      <ComboboxEmpty>ไม่พบรายวิชาที่ค้นหา</ComboboxEmpty>
+                      <ComboboxList>
+                        {(item: { value: string; label: string }) => (
+                          <ComboboxItem key={item.value} value={item}>{item.label}</ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  {/* The input shows "รหัส — ชื่อ" once picked, so this only earns its place
+                      when the registrar had no title and the input is a bare code. */}
+                  {courseCode && courseName && !courses.find((c) => c.code === courseCode)?.name && (
+                    <p className="text-xs text-foreground">{courseName}</p>
+                  )}
+                  {/* Warning, not an error: the dispense still goes through. role="status"
+                      rather than "alert" for the same reason — it should be announced, not
+                      interrupt. Muted styling would bury it next to the source caption. */}
+                  {courseApiError && (
+                    <p role="status" className="flex items-start gap-1.5 text-xs text-warning-700 dark:text-warning-200">
+                      <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                      <span>{courseApiError}</span>
+                    </p>
+                  )}
+                  <p id="courseCode-source" className="text-xs text-muted-foreground">
+                    * รายชื่อวิชาจากสำนักทะเบียน มหาวิทยาลัยเชียงใหม่
+                  </p>
+                  {showErrors && errors.courseCode && <FieldError id="courseCode-error">{errors.courseCode}</FieldError>}
+                </div>
+              )}
+
+              {needsActivity && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="notes" className="text-xs text-muted-foreground" required>{activityLabel}</Label>
+                  <Textarea
+                    id="notes"
+                    aria-invalid={showErrors && !!errors.notes}
+                    aria-describedby={showErrors && errors.notes ? "notes-error" : undefined}
+                    placeholder="ระบุว่านำไปใช้ทำอะไร..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
                     className="text-sm"
                   />
+                  {showErrors && errors.notes && <FieldError id="notes-error">{errors.notes}</FieldError>}
                 </div>
               )}
 
@@ -361,32 +680,18 @@ export default function ConfirmDispensePage() {
               {hasDurable && (
                 <div className="space-y-1.5">
                   <Label htmlFor="dueDate" className="text-xs text-muted-foreground" required>กำหนดคืน</Label>
-                  <Input
+                  <DatePicker
                     id="dueDate"
-                    type="date"
                     min={today}
-                    required
-                    aria-invalid={showErrors && !!errors.dueDate}
-                    aria-describedby={showErrors && errors.dueDate ? "dueDate-error" : undefined}
+                    invalid={showErrors && !!errors.dueDate}
+                    describedBy={showErrors && errors.dueDate ? "dueDate-error" : undefined}
                     value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="text-sm"
+                    onChange={setDueDate}
+                    className="h-8 text-sm"
                   />
                   {showErrors && errors.dueDate && <FieldError id="dueDate-error">{errors.dueDate}</FieldError>}
                 </div>
               )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="notes" className="text-xs text-muted-foreground">หมายเหตุ</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="หมายเหตุ (optional)..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
             </fieldset>
 
             <p className="mt-4 mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -403,6 +708,7 @@ export default function ConfirmDispensePage() {
         </DialogContent>
       </Dialog>
 
+      {templateDialogs}
     </div>
   );
 }
@@ -473,7 +779,7 @@ function CartLotChip({ item, variant = "chip" }: { item: CartItem; variant?: "ch
         {item.lots.map((lot) => (
           <SelectItem key={lot.id} value={lot.id} className={cn("text-xs", !isAutoLot(lot.lotNumber) && "font-mono")}>
             {autoLotLabel(lot.lotNumber)} — {lot.quantity} {item.issueUnit}
-            {lot.expiryDate && ` (หมดอายุ: ${new Date(lot.expiryDate).toLocaleDateString()})`}
+            {lot.expiryDate && ` (หมดอายุ: ${fmtDate(lot.expiryDate, TH_DATE)})`}
           </SelectItem>
         ))}
       </SelectContent>
@@ -573,7 +879,7 @@ function CartQtyStepper({ item }: { item: CartItem }) {
 function CartThumb({ item }: { item: CartItem }) {
   return (
     <div className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
-      <img src={item.imageUrl ?? pic(item.itemCode, 128)} alt={item.itemName} loading="lazy" className="size-full object-cover" />
+      <ItemThumb src={item.imageUrl} alt={item.itemName} />
     </div>
   );
 }

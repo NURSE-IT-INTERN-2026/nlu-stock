@@ -16,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DIALOG_SHELL_FIT,
+  DIALOG_BODY,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -63,9 +65,9 @@ interface CategoryType {
 
 function dispenseTypeLabel(p: ProfileOption | null): string {
   if (!p) return "—";
-  if (p.dispenseType === "CONSUMABLE") return "ใช้แล้วทิ้ง";
-  if (p.dispenseType === "COUNT") return "ยืม-คืน (นับจำนวน)";
-  return "ยืม-คืน (รายชิ้น)";
+  if (p.dispenseType === "CONSUMABLE") return "ตัดจ่ายจริงตามจำนวน";
+  if (p.dispenseType === "COUNT") return "ยืม-คืน ตามจำนวน";
+  return "ยืม-คืน ตาม Code";
 }
 
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
@@ -227,7 +229,7 @@ export function CategoriesTab() {
   );
 
   const modalBody = (
-    <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+    <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
       <div className="space-y-4">
         <div>
           <Label htmlFor="cat-name">ชื่อหมวดหมู่</Label>
@@ -310,7 +312,7 @@ export function CategoriesTab() {
           <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
             <DialogTitle className="sr-only">{title}</DialogTitle>
             <DialogDescription className="sr-only">{subtitle}</DialogDescription>
-            <div className="flex max-h-[85vh] flex-col overflow-hidden">
+            <div className={DIALOG_SHELL_FIT}>
               {modalHeader}
               {modalBody}
               {modalFooter}

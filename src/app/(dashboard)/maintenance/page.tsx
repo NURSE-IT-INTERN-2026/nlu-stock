@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import Link from "next/link";
-import { motion } from "motion/react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X, ClipboardList, CalendarClock } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 import {
@@ -15,7 +15,8 @@ import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
-import { MaintenanceScheduleTab } from "@/components/reports/maintenance-schedule-tab";
+import { ReportFilters, type FilterValues } from "@/components/reports/report-filters";
+import { ExportButtons } from "@/components/reports/export-buttons";
 import { getMaintenanceSummary, getReport } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -65,10 +66,21 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
 }
 
-const SCHEDULE_VIEWS = [
-  { value: "urgent", label: "รายการที่ต้องบำรุง", Icon: ClipboardList },
-  { value: "full", label: "ตารางบำรุงรักษา", Icon: CalendarClock },
-] as const;
+function fmtThaiDate(dateStr: string): string {
+  return fmtDate(dateStr, TH_DATE);
+}
+
+// สถานะกำหนดบำรุง (คำนวณฝั่ง server ใน /api/reports/maintenance-schedule)
+// ปกติ = outline เพื่อให้เงียบที่สุด — แถวส่วนใหญ่เป็นค่านี้
+const STATUS_META = {
+  overdue: { label: "เกินกำหนดซ่อมบำรุง", variant: "destructive", tone: "text-destructive" },
+  "due-soon": { label: "ใกล้ถึงกำหนดซ่อมบำรุง", variant: "secondary", tone: "text-amber-600 dark:text-amber-400" },
+  normal: { label: "ปกติ", variant: "outline", tone: "text-muted-foreground" },
+} as const satisfies Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; tone: string }>;
+
+function statusMeta(status: string) {
+  return STATUS_META[status as keyof typeof STATUS_META] ?? STATUS_META.normal;
+}
 
 // ── Page ──
 
@@ -79,7 +91,7 @@ export default function MaintenancePage() {
   const [loading, setLoading] = useState(true);
   const [schedulePage, setSchedulePage] = useState(1);
   const [filter, setFilter] = useState<"all" | "overdue" | "due-soon">("all");
-  const [view, setView] = useState<"urgent" | "full">("urgent");
+  const [filters, setFilters] = useState<FilterValues>({});
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,24 +103,20 @@ export default function MaintenancePage() {
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    // ponytail: perPage 200 — covers the whole schedule; bump if a tenant exceeds it.
+    const params: Record<string, string> = { perPage: "200" };
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.locationId) params.locationId = filters.locationId;
     try {
       const [sum, sched, hist] = await Promise.all([
         getMaintenanceSummary(),
-        // ponytail: perPage 200 — covers overdue + due-soon set; bump if a tenant exceeds it.
-        getReport("maintenance-schedule", { perPage: "200" }) as Promise<{ items: ScheduleRow[] }>,
+        getReport("maintenance-schedule", params) as Promise<{ items: ScheduleRow[] }>,
         getReport("maintenance-history", { perPage: "5" }) as Promise<{ records: HistoryRow[] }>,
       ]);
       setSummary(sum);
-      // Urgent set = overdue + due-soon (drives both the detailed tab and the sticky footer).
-      const urgent = (sched.items ?? []).filter(
-        (i) => i.maintenanceStatus === "overdue" || i.maintenanceStatus === "due-soon",
-      );
-      urgent.sort((a, b) => {
-        if (a.maintenanceStatus === "overdue" && b.maintenanceStatus !== "overdue") return -1;
-        if (a.maintenanceStatus !== "overdue" && b.maintenanceStatus === "overdue") return 1;
-        return new Date(a.nextMaintenanceDate).getTime() - new Date(b.nextMaintenanceDate).getTime();
-      });
-      setScheduleItems(urgent);
+      // ทั้งตาราง เรียงตามกำหนดบำรุงเก่า→ใหม่ (API sort ให้แล้ว)
+      setScheduleItems(sched.items ?? []);
       setRecentRecords(hist.records ?? []);
       setSchedulePage(1);
     } catch {
@@ -116,7 +124,7 @@ export default function MaintenancePage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   useEffect(() => {
     fetchData();
@@ -130,7 +138,6 @@ export default function MaintenancePage() {
   const pagedSchedule = filteredSchedule.slice((schedulePage - 1) * PAGE_SIZE.COMPACT, schedulePage * PAGE_SIZE.COMPACT);
 
   const toggleFilter = (target: "overdue" | "due-soon") => {
-    setView("urgent");
     setFilter((f) => (f === target ? "all" : target));
     setSchedulePage(1);
   };
@@ -156,7 +163,7 @@ export default function MaintenancePage() {
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <DashboardMetricCard
-            title="เลยรอบ"
+            title="เกินกำหนดซ่อมบำรุง"
             value={summary.overdue}
             subtitle={filter === "overdue" ? "กดเพื่อยกเลิก" : summary.overdue > 0 ? "ต้องดำเนินการ" : undefined}
             iconName="Wrench"
@@ -165,7 +172,7 @@ export default function MaintenancePage() {
             active={filter === "overdue"}
           />
           <DashboardMetricCard
-            title="ใกล้ถึงรอบ"
+            title="ใกล้ถึงกำหนดซ่อมบำรุง"
             value={summary.dueSoon}
             subtitle={filter === "due-soon" ? "กดเพื่อยกเลิก" : summary.dueSoon > 0 ? "ภายใน 30 วัน" : undefined}
             iconName="AlertTriangle"
@@ -174,210 +181,188 @@ export default function MaintenancePage() {
             active={filter === "due-soon"}
           />
           <DashboardMetricCard
-            title="บำรุงเดือนนี้"
+            title="กำหนดการซ่อมบำรุงเดือนนี้"
             value={summary.completedThisMonth}
-            subtitle="ครั้ง"
+            subtitle="รายการ"
             iconName="CheckCircle2"
             color="text-success"
           />
         </div>
 
-        {/* ── Segment tabs ── */}
+        {/* ── ตารางบำรุงรักษา ── */}
         <section>
-          <div className="mb-3 sm:mb-4 border-b">
-            <nav className="flex gap-1 -mb-px overflow-x-auto">
-              {SCHEDULE_VIEWS.map(({ value, label, Icon }) => {
-                const isActive = view === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setView(value)}
-                    className={cn(
-                      "relative flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium transition-colors",
-                      isActive
-                        ? "text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {label}
-                    {isActive && (
-                      <motion.span
-                        layoutId="maintenance-view"
-                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        className="absolute -bottom-[2px] left-0 right-0 h-0.5 bg-primary"
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
+          <h2 className="mb-3 text-lg font-semibold sm:mb-4">ตารางบำรุงรักษา</h2>
+
+          <div className="mb-3 sm:mb-4">
+            <ReportFilters
+              config={{ dateRange: true, locations: true }}
+              values={filters}
+              onChange={setFilters}
+              actions={<ExportButtons reportType="maintenance-schedule" filters={filters} />}
+            />
           </div>
 
-          {view === "full" ? (
-            <MaintenanceScheduleTab />
-          ) : (
-            <>
-              {filter !== "all" && (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                    {filter === "overdue" ? "เลยรอบ" : "ใกล้ถึงรอบ"}
-                    <button
-                      type="button"
-                      onClick={clearFilter}
-                      aria-label="ล้างตัวกรอง"
-                      className="-mr-1 ml-0.5 rounded-full p-0.5 transition-colors hover:bg-primary/20"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearFilter}
-                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                  >
-                    ล้างตัวกรอง
-                  </button>
-                </div>
-              )}
+          {filter !== "all" && (
+            <div className="mb-3 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {filter === "overdue" ? "เกินกำหนดซ่อมบำรุง" : "ใกล้ถึงกำหนดซ่อมบำรุง"}
+                <button
+                  type="button"
+                  onClick={clearFilter}
+                  aria-label="ล้างตัวกรอง"
+                  className="-mr-1 ml-0.5 rounded-full p-0.5 transition-colors hover:bg-primary/20"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+              <button
+                type="button"
+                onClick={clearFilter}
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                ล้างตัวกรอง
+              </button>
+            </div>
+          )}
 
-              <div className="overflow-hidden rounded-2xl border bg-card">
-                <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
-                  <Table className="table-fixed">
-                    <TableHeader>
-                      <TableRow className="sticky top-0 z-10 border-b border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
-                        <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>
-                        <TableHead className="px-2">ชื่อ</TableHead>
-                        <TableHead className="w-24 px-2">สถานะ</TableHead>
-                        <TableHead className="w-32 px-2">กำหนด</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        Array.from({ length: 5 }).map((_, i) => (
-                          <TableRow key={i}>
-                            {Array.from({ length: 4 }).map((_, j) => (
-                              <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
-                            ))}
-                          </TableRow>
-                        ))
-                      ) : scheduleItems.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                            ไม่มีรายการที่เลยรอบหรือใกล้ถึงรอบ
-                          </TableCell>
-                        </TableRow>
-                      ) : pagedSchedule.map((row) => {
-                        const days = daysUntil(row.nextMaintenanceDate);
-                        const isOverdue = row.maintenanceStatus === "overdue";
-                        return (
-                          <TableRow
-                            key={row.id}
-                            className="h-9 [&>td]:py-1"
-                          >
-                            {/* รหัส → ลิงก์ไปหน้าพัสดุ. ชื่อ → ปุ่มบันทึกบำรุง (target แค่ชื่อ ไม่ทั้งแถว) */}
-                            <TableCell className="font-mono text-xs px-2">
-                              <Link href={`/items/${row.itemId}`} className="block truncate text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
-                            </TableCell>
-                            <TableCell className="px-2">
-                              <button
-                                type="button"
-                                onClick={() => openRecordDialog(row)}
-                                aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
-                                className="block w-full truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none cursor-pointer"
-                              >
-                                {row.name}
-                              </button>
-                            </TableCell>
-                            <TableCell className="px-2">
-                              <Badge variant={isOverdue ? "destructive" : "secondary"} className="px-1.5 py-0 leading-5 text-[11px]">
-                                {isOverdue ? "เลยรอบ" : "ใกล้ถึงรอบ"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs px-2">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="tabular-nums">
-                                  {new Date(row.nextMaintenanceDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
-                                </span>
-                                <span className={isOverdue ? "text-destructive text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
-                                  {isOverdue ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`}
-                                </span>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Mobile: stacked cards (no horizontal scroll) */}
-                <div className="divide-y divide-border md:hidden">
+          <div className="overflow-hidden rounded-2xl border bg-card">
+            <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow className="sticky top-0 z-10 border-b border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                    <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>
+                    <TableHead className="px-2">ชื่อ</TableHead>
+                    <TableHead className="w-40 px-2">สถานะ</TableHead>
+                    <TableHead className="w-24 px-2">จำนวนวัน</TableHead>
+                    <TableHead className="w-36 px-2">กำหนดการซ่อมบำรุง</TableHead>
+                    <TableHead className="w-40 px-2">สถานที่</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className="px-4 py-2.5"><Skeleton className="h-10 w-full" /></div>
+                      <TableRow key={i}>
+                        {Array.from({ length: 6 }).map((_, j) => (
+                          <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                        ))}
+                      </TableRow>
                     ))
-                  ) : scheduleItems.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">ไม่มีรายการที่เลยรอบหรือใกล้ถึงรอบ</div>
+                  ) : filteredSchedule.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        ไม่พบรายการตามตัวกรอง
+                      </TableCell>
+                    </TableRow>
                   ) : pagedSchedule.map((row) => {
                     const days = daysUntil(row.nextMaintenanceDate);
-                    const isOverdue = row.maintenanceStatus === "overdue";
+                    const meta = statusMeta(row.maintenanceStatus);
                     return (
-                      <div key={row.id} className="flex flex-col gap-1.5 px-4 py-2.5">
-                        <div className="flex items-start justify-between gap-2">
-                          {/* ชื่อ = ปุ่มบันทึกบำรุง (target แค่ชื่อ) */}
+                      <TableRow
+                        key={row.id}
+                        className="h-9 [&>td]:py-1"
+                      >
+                        {/* รหัส → ลิงก์ไปหน้าพัสดุ. ชื่อ → ปุ่มบันทึกบำรุง (target แค่ชื่อ ไม่ทั้งแถว) */}
+                        <TableCell className="font-mono text-xs px-2">
+                          <Link href={`/items/${row.itemId}`} className="block truncate text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
+                        </TableCell>
+                        <TableCell className="px-2">
                           <button
                             type="button"
                             onClick={() => openRecordDialog(row)}
                             aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
-                            className="min-w-0 text-left font-medium leading-tight hover:underline focus-visible:underline focus-visible:outline-none"
+                            className="block w-full truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none cursor-pointer"
                           >
                             {row.name}
                           </button>
-                          <Badge variant={isOverdue ? "destructive" : "secondary"} className="shrink-0">
-                            {isOverdue ? "เลยรอบ" : "ใกล้ถึงรอบ"}
+                        </TableCell>
+                        <TableCell className="px-2">
+                          <Badge variant={meta.variant} className="px-1.5 py-0 leading-5 text-[11px]">
+                            {meta.label}
                           </Badge>
-                        </div>
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <Link href={`/items/${row.itemId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
-                          <span className="flex items-center gap-1.5 tabular-nums">
-                            {new Date(row.nextMaintenanceDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
-                            <span className={isOverdue ? "text-destructive text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
-                              ({isOverdue ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`})
-                            </span>
-                          </span>
-                        </div>
-                      </div>
+                        </TableCell>
+                        <TableCell className={cn("text-xs px-2 tabular-nums", meta.tone)}>
+                          {days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`}
+                        </TableCell>
+                        <TableCell className="text-xs px-2 tabular-nums">
+                          {fmtThaiDate(row.nextMaintenanceDate)}
+                        </TableCell>
+                        <TableCell className="px-2 text-xs text-muted-foreground">
+                          <span className="block truncate" title={row.location}>{row.location || "—"}</span>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </div>
-                {!loading && filteredSchedule.length > 0 && (
-                  <div className="flex items-center justify-between gap-4 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-                    <span>แสดง {filteredSchedule.length} รายการ</span>
-                    {/* ponytail: reserved slot for future pagination */}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile: stacked cards (no horizontal scroll) */}
+            <div className="divide-y divide-border md:hidden">
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="px-4 py-2.5"><Skeleton className="h-10 w-full" /></div>
+                ))
+              ) : filteredSchedule.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">ไม่พบรายการตามตัวกรอง</div>
+              ) : pagedSchedule.map((row) => {
+                const days = daysUntil(row.nextMaintenanceDate);
+                const meta = statusMeta(row.maintenanceStatus);
+                return (
+                  <div key={row.id} className="flex flex-col gap-1.5 px-4 py-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      {/* ชื่อ = ปุ่มบันทึกบำรุง (target แค่ชื่อ) */}
+                      <button
+                        type="button"
+                        onClick={() => openRecordDialog(row)}
+                        aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
+                        className="min-w-0 text-left font-medium leading-tight hover:underline focus-visible:underline focus-visible:outline-none"
+                      >
+                        {row.name}
+                      </button>
+                      <Badge variant={meta.variant} className="shrink-0">
+                        {meta.label}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <Link href={`/items/${row.itemId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
+                      <span className="flex items-center gap-1.5 tabular-nums">
+                        {fmtThaiDate(row.nextMaintenanceDate)}
+                        <span className={cn("text-xs", meta.tone)}>
+                          ({days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`})
+                        </span>
+                      </span>
+                    </div>
+                    {row.location && (
+                      <div className="text-xs text-muted-foreground">{row.location}</div>
+                    )}
                   </div>
-                )}
+                );
+              })}
+            </div>
+            {!loading && filteredSchedule.length > 0 && (
+              <div className="flex items-center justify-between gap-4 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                <span>แสดง {filteredSchedule.length} รายการ</span>
+                {/* ponytail: reserved slot for future pagination */}
               </div>
+            )}
+          </div>
 
-              {!loading && filteredSchedule.length > PAGE_SIZE.COMPACT && (
-                <Pagination
-                  page={schedulePage}
-                  total={filteredSchedule.length}
-                  pageSize={PAGE_SIZE.COMPACT}
-                  onChange={setSchedulePage}
-                />
-              )}
-
-              {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. Count summary moved into the card footer above. */}
-            </>
+          {!loading && filteredSchedule.length > PAGE_SIZE.COMPACT && (
+            <Pagination
+              page={schedulePage}
+              total={filteredSchedule.length}
+              pageSize={PAGE_SIZE.COMPACT}
+              onChange={setSchedulePage}
+            />
           )}
+
+          {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. Count summary moved into the card footer above. */}
         </section>
 
         {/* ── Recent records ── */}
         <section>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">บันทึกล่าสุด</h2>
+            <h2 className="text-lg font-semibold">บันทึกการบำรุงรักษาล่าสุด</h2>
             <Link href="/reports?tab=maintenance-history" className="text-sm text-primary hover:underline">
               ดูทั้งหมดในรายงาน →
             </Link>
@@ -411,7 +396,7 @@ export default function MaintenancePage() {
                       {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
                     </Badge>
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {new Date(rec.performedAt).toLocaleDateString("th-TH")}
+                      {fmtDate(rec.performedAt, TH_DATE)}
                     </span>
                   </div>
                   <div className="text-sm">

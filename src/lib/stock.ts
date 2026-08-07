@@ -1,6 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { ItemStatus } from "@/generated/prisma/enums";
-import { WRITTEN_OFF } from "@/lib/status-utils";
+import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
+import { isManualHold, WRITTEN_OFF } from "@/lib/status-utils";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -139,10 +139,7 @@ export async function recomputeItemCounts(
     // until they clear it — a receive/dispense/adjust is not a reason to silently drop it.
     // CONSUMABLE is exempt: no lifecycle, always derived.
     const dispenseType = item.category.profile.dispenseType;
-    const manual =
-      dispenseType !== "CONSUMABLE" &&
-      item.status !== ItemStatus.AVAILABLE &&
-      item.status !== ItemStatus.ON_LOAN;
+    const manual = dispenseType !== "CONSUMABLE" && isManualHold(item.status);
     const status = manual
       ? item.status
       : deriveNonTrackedStatus(dispenseType, availableQty, item.totalQty);
@@ -173,4 +170,36 @@ export async function recomputeItemCounts(
     },
   });
   return { availableQty, totalQty };
+}
+
+// ── Damaged stock (non-tracked items) ──
+// แจ้งชำรุด books a StockAdjustment with reason DAMAGED_PENDING_REPAIR that takes the qty
+// out of availableQty. The two rules below decide what that means for the item's books, and
+// they are stated here rather than at the call sites so the write path (api/.../adjust) and
+// the read path (lib/distribution + the item detail response) cannot drift apart.
+
+/**
+ * Does an adjustment's qty stay counted in Item.totalQty?
+ *
+ * Only damage does. สูญหาย / ตัดจำหน่าย / a short count mean the units are gone from the
+ * institution, so totalQty follows availableQty down. Damaged units are still owned and
+ * still in the storeroom — the reason literally says PENDING_REPAIR — so they stay on the
+ * books and reappear as the ชำรุด bucket until รับคืนจากซ่อม hands them back.
+ */
+export function holdsTotalQty(reason: AdjustmentReason): boolean {
+  return reason === AdjustmentReason.DAMAGED_PENDING_REPAIR;
+}
+
+/**
+ * How much is still broken: the damage bookings that nobody has recovered yet.
+ *
+ * Derived from the adjustment rows on purpose — no damagedQty column. A counter would be a
+ * fourth running total to keep in sync (see lib/distribution.ts and AGENTS.md on
+ * availableQty vs SUM(lots)); the open rows already are the answer, the way open loans are.
+ * `previousQty - newQty` is the deduction, matching what the recover route hands back.
+ */
+export function damagedQtyOf(
+  rows: { previousQty: number; newQty: number; recoveredAt: Date | null }[],
+): number {
+  return rows.reduce((sum, r) => (r.recoveredAt ? sum : sum + Math.max(0, r.previousQty - r.newQty)), 0);
 }

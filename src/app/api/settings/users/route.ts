@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
+import { requireSuperAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
 import { userCreateSchema } from "@/lib/validators";
+import { roleForEmail } from "@/lib/roles";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const params = getSearchParams(request);
@@ -18,11 +19,18 @@ export async function GET(request: NextRequest) {
     prisma.user.count({ where }),
   ]);
 
-  return json({ users, page, perPage, total });
+  // role isn't stored — derive it from the env allowlists for display. null = the
+  // account exists but no list mentions it, so it can no longer sign in.
+  return json({
+    users: users.map((u) => ({ ...u, role: roleForEmail(u.email) })),
+    page,
+    perPage,
+    total,
+  });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { data, error: parseError } = await parseBody(userCreateSchema)(request);

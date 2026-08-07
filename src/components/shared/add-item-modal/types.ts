@@ -22,9 +22,9 @@ export interface UsageOption {
 }
 
 export const USAGE_OPTIONS: UsageOption[] = [
-  { id: "consumable", icon: Package, title: "ใช้แล้วทิ้ง", desc: "เบิกไปแล้วหมดไป — ระบบนับของที่เหลือในสต็อก", dispenseType: "CONSUMABLE" },
-  { id: "borrow-count", icon: Repeat, title: "ยืม-คืน แบบนับจำนวน", desc: "ยืมไปแล้วต้องคืน — ระบบนับว่าตอนนี้ถูกยืมไปกี่ชิ้น", dispenseType: "COUNT" },
-  { id: "borrow-item", icon: ListChecks, title: "ยืม-คืน รายชิ้น", desc: "ของมีค่าที่ต้องติดตามทีละตัว — แต่ละชิ้นมีสถานะว่าอยู่กับใคร", dispenseType: "ITEM" },
+  { id: "consumable", icon: Package, title: "ตัดจ่ายจริงตามจำนวน", desc: "เบิกไปแล้วหมดไป — ระบบนับของที่เหลือในสต็อก", dispenseType: "CONSUMABLE" },
+  { id: "borrow-count", icon: Repeat, title: "ยืม-คืน ตามจำนวน", desc: "ยืมไปแล้วต้องคืน — ระบบนับว่าตอนนี้ถูกยืมไปกี่ชิ้น", dispenseType: "COUNT" },
+  { id: "borrow-item", icon: ListChecks, title: "ยืม-คืน ตาม Code", desc: "ของมีค่าที่ต้องติดตามทีละตัว — แต่ละชิ้นมีสถานะว่าอยู่กับใคร", dispenseType: "ITEM" },
 ];
 
 /** Subset of CategoryProfile carried in the form to drive behavior/code-gen. */

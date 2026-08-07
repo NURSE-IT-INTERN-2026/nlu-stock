@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireAuth, json, error } from "@/lib/api-utils";
+import { requireAdmin, json, error } from "@/lib/api-utils";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
@@ -14,7 +14,7 @@ const ALLOWED_TYPES = new Set([
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: NextRequest) {
-  const { denied } = await requireAuth(request);
+  const { denied } = await requireAdmin(request);
   if (denied) return denied;
 
   const formData = await request.formData();

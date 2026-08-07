@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound, forbidden, error } from "@/lib/api-utils";
+import { requireAuth, requireAdmin, json, notFound, error } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 
 // GET /api/items/:id/sub-items/:subId — single sub-item with parent context + history.
@@ -63,9 +63,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; subId: string }> },
 ) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id: itemIdRef, subId } = await params;
   const body = await request.json().catch(() => ({}));

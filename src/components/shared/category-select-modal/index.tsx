@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  DIALOG_SHELL,
+  DIALOG_BODY,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -209,7 +211,7 @@ export function CategorySelectModal({
 
   function renderBody() {
     return (
-      <div className="max-h-[60vh] overflow-y-auto bg-secondary/40 px-6 py-6">
+      <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
         {state.step === "select" && (
           <StepSelect
             selectedId={state.selectedExisting?.id ?? null}
@@ -287,10 +289,12 @@ export function CategorySelectModal({
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>
           <DialogDescription className="sr-only">{stepTitle}</DialogDescription>
-          {renderHeader()}
-          {renderProgress()}
-          {renderBody()}
-          {renderFooter()}
+          <div className={DIALOG_SHELL}>
+            {renderHeader()}
+            {renderProgress()}
+            {renderBody()}
+            {renderFooter()}
+          </div>
         </DialogContent>
       </Dialog>
     );

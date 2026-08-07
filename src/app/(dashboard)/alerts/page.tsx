@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { ChevronRight, CheckCircle2, MapPin, Package, Clock, Wrench, ClipboardCheck } from "lucide-react";
@@ -22,6 +23,7 @@ import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
 import { ReturnPanel } from "@/components/receive/return-panel";
+import { OverdueMaintenancePanel } from "@/components/items/overdue-maintenance-panel";
 import { cn } from "@/lib/utils";
 
 interface UnitType { id: string; name: string }
@@ -56,9 +58,9 @@ const ALERT_BADGE: Record<string, string> = {
 };
 
 const ALERT_LABEL: Record<string, string> = {
-  lowStock: "ต่ำกว่ากำหนด",
+  lowStock: "ต่ำกว่าขั้นต่ำ",
   nearExpiry: "ใกล้หมดอายุ",
-  overdueMaint: "เกินกำหนดซ่อม",
+  overdueMaint: "เกินกำหนดซ่อมบำรุง",
   overdueReturn: "คืนเกินกำหนด",
   damagedPending: "ชำรุดรอดำเนินการ",
   dueCount: "ถึงรอบตรวจนับ",
@@ -82,7 +84,10 @@ function alertDetail(item: ItemRecord, type: string): string {
     }
     case "nearExpiry": {
       const d = item.lots[0]?.expiryDate;
-      return d ? `หมดอายุ ${new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}` : ALERT_LABEL.nearExpiry;
+      if (!d) return ALERT_LABEL.nearExpiry;
+      const date = fmtDate(d, TH_DAY);
+      // Past expiry → say so outright; upcoming → show the date.
+      return new Date(d).getTime() < Date.now() ? `หมดอายุแล้ว · ${date}` : `หมดอายุ ${date}`;
     }
     case "overdueMaint": {
       const days = item.nextMaintenanceDate ? Math.max(0, Math.floor((Date.now() - new Date(item.nextMaintenanceDate).getTime()) / DAY_MS)) : 0;
@@ -156,9 +161,9 @@ function AlertsContent() {
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); }, []);
 
   const fetchPage = useCallback(async (p: number) => {
-    // "แจ้งชำรุด" and "เกินกำหนดคืน" render their own worklist panels below instead of
-    // the item table — skip the item fetch entirely while either is active.
-    if (alertType === "damagedPending" || alertType === "overdueReturn") {
+    // "แจ้งชำรุด", "เกินกำหนดคืน", and "เกินกำหนดซ่อม" render their own worklist panels below
+    // instead of the item table — skip the item fetch entirely while any is active.
+    if (alertType === "damagedPending" || alertType === "overdueReturn" || alertType === "overdueMaint") {
       return { items: [], total: 0 };
     }
     const params: Record<string, string> = { page: String(p), perPage: String(perPage) };
@@ -183,12 +188,12 @@ function AlertsContent() {
 
   const alertChips: { key: AlertTypeKey; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: alerts.total },
-    { key: "lowStock", label: "ต่ำกว่ากำหนด", count: alerts.lowStock },
+    { key: "lowStock", label: "ต่ำกว่าขั้นต่ำ", count: alerts.lowStock },
     { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
-    { key: "overdueMaint", label: "เกินกำหนดซ่อม", count: alerts.overdueMaintenance },
+    { key: "overdueMaint", label: "เกินกำหนดซ่อมบำรุง", count: alerts.overdueMaintenance },
+    { key: "dueCount", label: "ถึงรอบตรวจนับ", count: alerts.dueCount },
     { key: "overdueReturn", label: "เกินกำหนดคืน", count: alerts.overdueReturn },
     { key: "damagedPending", label: "ชำรุด (รอส่งซ่อม)", count: alerts.damagedPending },
-    { key: "dueCount", label: "ถึงรอบตรวจนับ", count: alerts.dueCount },
   ];
 
   // Reflect the active tab in the header breadcrumb ("การแจ้งเตือน › <tab>").
@@ -222,7 +227,13 @@ function AlertsContent() {
 
   // Panel branches (damagedPending / overdueReturn) own their internal scroll — give them a
   // flex root that fills main so only the panel scrolls, not the page (no double scrollbar).
+  // overdueMaint is NOT here on purpose: it renders a plain page-flow table like the item tabs.
   const isPanel = alertType === "damagedPending" || alertType === "overdueReturn";
+
+  // Badge/detail column answers the active tab: a specific tab shows only its own type,
+  // "ทั้งหมด" shows every reason the row is flagged.
+  const typesFor = (item: ItemRecord) =>
+    alertType === "all" ? item.alertTypes : item.alertTypes.filter((t) => t === alertType);
 
   return (
     <div className={isPanel ? "flex flex-col h-full min-h-0 gap-3 sm:gap-6" : "space-y-3 sm:space-y-6"}>
@@ -295,7 +306,15 @@ function AlertsContent() {
         </div>
       </div>
 
-      {alertType === "damagedPending" ? (
+      {alertType === "overdueMaint" ? (
+        <OverdueMaintenancePanel
+          profiles={profiles}
+          categories={categories}
+          locations={locations}
+          filter={filter}
+          onFilterChange={handleFilterChange}
+        />
+      ) : alertType === "damagedPending" ? (
         <div className="flex-1 min-h-0">
           <SubItemStatusPanel status="DAMAGED" actionLabel="ส่งซ่อม" emptyText="ไม่มีพัสดุที่แจ้งชำรุดอยู่" />
         </div>
@@ -363,7 +382,7 @@ function AlertsContent() {
                   </TableCell>
                   <TableCell className="px-2">
                     <div className="flex flex-wrap gap-1">
-                      {item.alertTypes.map((t) => (
+                      {typesFor(item).map((t) => (
                         <span key={t} className={cn("inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5 whitespace-nowrap", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
                           {ALERT_LABEL[t] ?? t}
                         </span>
@@ -372,7 +391,7 @@ function AlertsContent() {
                   </TableCell>
                   <TableCell className="text-xs px-2">
                     <div className="flex flex-col gap-0.5">
-                      {item.alertTypes.map((t) => (
+                      {typesFor(item).map((t) => (
                         <span key={t} className="text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
                       ))}
                     </div>
@@ -393,7 +412,7 @@ function AlertsContent() {
           ) : items.length === 0 ? (
             <div className="rounded-2xl border border-border/60 bg-card px-4 py-10 text-center text-sm text-muted-foreground">ไม่มีรายการแจ้งเตือน</div>
           ) : items.map((item) => {
-            const primary = item.alertTypes.find((t) => ALERT_ICON[t]) ?? "lowStock";
+            const primary = alertType === "all" ? (item.alertTypes.find((t) => ALERT_ICON[t]) ?? "lowStock") : alertType;
             const meta = ALERT_ICON[primary] ?? ALERT_ICON.lowStock;
             const Icon = meta.icon;
             return (
@@ -408,7 +427,7 @@ function AlertsContent() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    {item.alertTypes.map((t) => (
+                    {typesFor(item).map((t) => (
                       <span key={t} className={cn("inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium leading-5", ALERT_BADGE[t] ?? "bg-muted text-muted-foreground border-border")}>
                         {ALERT_LABEL[t] ?? t}
                       </span>
@@ -420,7 +439,7 @@ function AlertsContent() {
                     {item.nameEn && <span className="font-normal text-muted-foreground"> ({item.nameEn})</span>}
                   </p>
                   <div className="mt-0.5 flex flex-col gap-0.5">
-                    {item.alertTypes.map((t) => (
+                    {typesFor(item).map((t) => (
                       <span key={t} className="text-xs text-muted-foreground tabular-nums">{alertDetail(item, t)}</span>
                     ))}
                   </div>

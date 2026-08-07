@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
+import { requireSuperAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { profileUpdateSchema } from "@/lib/validators";
 import { NextRequest } from "next/server";
 
@@ -7,7 +7,7 @@ import { NextRequest } from "next/server";
 const BEHAVIOR_FIELDS = ["code", "dispenseType", "assetTracking", "setTracking"] as const;
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;

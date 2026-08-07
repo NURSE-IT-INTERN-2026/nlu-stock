@@ -99,6 +99,10 @@
   --color-success-500: oklch(60% 0.13 185);
   --color-success-700: oklch(50% 0.13 185);
 
+  /* Danger palette (red). The -400 step exists because --destructive is tuned for solid
+     fills; as coloured *text* on a dark card it only reaches 4.2:1, just under AA. */
+  --color-danger-400: oklch(75% 0.15 25);
+
   /* Warning palette (amber) */
   --color-warning: oklch(72% 0.16 75);
   --color-warning-foreground: oklch(25% 0.05 75);
@@ -281,19 +285,6 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* ── Native date/time inputs: follow theme so popup + control match ── */
-input[type="date"],
-input[type="datetime-local"],
-input[type="time"] {
-  color-scheme: light dark;
-}
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-input[type="time"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0.55;
 }
 
 /* ── Status overview container query ── */

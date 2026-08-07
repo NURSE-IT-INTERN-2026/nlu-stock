@@ -75,7 +75,7 @@ export interface ItemsFilterBarProps {
 const ALL_STATUS_KEYS = Object.keys(STATUS_LABELS) as ItemStatus[];
 
 const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpiry" | "overdueMaintenance"; activeCls: string; badgeCls: string }[] = [
-  { key: "lowStock", label: "สต๊อกต่ำ", countKey: "lowStock", activeCls: "bg-primary text-primary-foreground", badgeCls: "bg-white/25" },
+  { key: "lowStock", label: "ต่ำกว่าขั้นต่ำ", countKey: "lowStock", activeCls: "bg-primary text-primary-foreground", badgeCls: "bg-white/25" },
   { key: "nearExpiry", label: "ใกล้หมดอายุ", countKey: "nearExpiry", activeCls: "bg-warning text-warning-foreground", badgeCls: "bg-black/10" },
   { key: "overdueMaint", label: "บำรุงเกินกำหนด", countKey: "overdueMaintenance", activeCls: "bg-destructive text-destructive-foreground", badgeCls: "bg-white/25" },
 ];
