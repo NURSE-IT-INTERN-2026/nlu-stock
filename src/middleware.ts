@@ -11,14 +11,21 @@ interface RouteRule {
   exact?: boolean;          // default false (startsWith match)
 }
 
+const STOCK_ROLES = ["SUPERADMIN", "ADMIN"];
+
+// Only list pages an EXECUTIVE must not reach. Everything unlisted (/, /items,
+// /dispense, /cart, /reports, /alerts) is open to every signed-in role.
 const routeRules: RouteRule[] = [
-  // Settings: admin only
-  { path: "/settings", allowedRoles: ["ADMIN"] },
-  // Dashboard: CHILDREN excluded — they land on /items (see redirect below)
-  { path: "/", allowedRoles: ["ADMIN", "STAFF", "INSTRUCTOR"], exact: true },
-  { path: "/items", allowedRoles: ["ADMIN", "STAFF", "INSTRUCTOR", "CHILDREN"] },
-  { path: "/reports", allowedRoles: ["ADMIN", "STAFF", "INSTRUCTOR", "CHILDREN"] },
+  { path: "/settings", allowedRoles: ["SUPERADMIN"] },
+  { path: "/receive", allowedRoles: STOCK_ROLES },
+  { path: "/maintenance", allowedRoles: STOCK_ROLES },
 ];
+
+// The ONLY writes an EXECUTIVE may perform: เบิก/ยืม and its cart templates.
+// Everything else — รับคืน, แจ้งชำรุด, รับเข้า, ปรับยอด — is stock management.
+// Exact match on /api/dispense so /api/dispense/in-use/*/return stays blocked.
+// This is default-deny: a new write route is blocked until it's added here.
+const EXEC_WRITE = [/^\/api\/dispense$/, /^\/api\/dispense-templates(\/|$)/];
 
 function matchRoute(pathname: string): RouteRule | null {
   for (const rule of routeRules) {
@@ -57,12 +64,21 @@ export async function middleware(request: NextRequest) {
     const { payload } = await jwtVerify(token, getJwtSecret());
     const role = payload.role as string;
 
+    // Executives are read-only apart from เบิก/ยืม. Blanket guard so a route added
+    // later is denied by default rather than silently writable.
+    if (
+      role === "EXECUTIVE" &&
+      request.method !== "GET" &&
+      pathname.startsWith("/api/") &&
+      !EXEC_WRITE.some((re) => re.test(pathname))
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     // Check route rules
     const rule = matchRoute(pathname);
     if (rule?.allowedRoles && !rule.allowedRoles.includes(role)) {
-      // CHILDREN can't see the dashboard — avoid a redirect loop by landing on /items
-      const home = role === "CHILDREN" ? "/items" : "/";
-      return NextResponse.redirect(new URL(home, request.url));
+      return NextResponse.redirect(new URL("/", request.url));
     }
 
     return NextResponse.next();

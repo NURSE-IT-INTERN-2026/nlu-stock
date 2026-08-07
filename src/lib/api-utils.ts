@@ -3,8 +3,9 @@ import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ZodSchema, ZodError } from "zod";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { canManageStock, type Role } from "@/lib/roles";
 
-type SessionUser = { userId: string; email: string; name: string; role: string };
+type SessionUser = { userId: string; email: string; name: string; role: Role };
 type AuthResult = { user: SessionUser; denied: null } | { user: null; denied: NextResponse };
 
 export function json(data: unknown, status = 200) {
@@ -50,18 +51,20 @@ export async function requireAuth(_request?: NextRequest): Promise<AuthResult> {
   return { user, denied: null };
 }
 
-export async function requireAdmin(request: NextRequest): Promise<AuthResult> {
+/** ตั้งค่า and the few reversal edges — SUPERADMIN only. */
+export async function requireSuperAdmin(request?: NextRequest): Promise<AuthResult> {
   const result = await requireAuth(request);
   if (result.denied) return result;
-  if (result.user.role !== "ADMIN") return { user: null, denied: forbidden() };
+  if (result.user.role !== "SUPERADMIN") return { user: null, denied: forbidden() };
   return result;
 }
 
-// ponytail: STAFF+ — aligns the item edit dialog (canAct = ADMIN/STAFF) with the API.
-export async function requireStaff(request?: NextRequest): Promise<AuthResult> {
+/** Anything that touches stock. Keeps EXECUTIVE out at the route level too, so the
+ *  middleware guard isn't the only thing standing between them and a write. */
+export async function requireAdmin(request?: NextRequest): Promise<AuthResult> {
   const result = await requireAuth(request);
   if (result.denied) return result;
-  if (result.user.role !== "ADMIN" && result.user.role !== "STAFF") return { user: null, denied: forbidden() };
+  if (!canManageStock(result.user.role)) return { user: null, denied: forbidden() };
   return result;
 }
 

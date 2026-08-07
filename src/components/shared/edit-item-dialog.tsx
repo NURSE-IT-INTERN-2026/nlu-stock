@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { LocationCascadePicker, type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
-import { useSession } from "@/components/layout/auth-guard";
 import { getSettingsItem, getUnits, saveSettingsItem, updateSubItemFields } from "@/lib/api";
 import { CONDITION_LABELS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, UnitOption } from "@/lib/api";
@@ -51,8 +50,6 @@ interface SettingsItem {
   countCycleMonths: number | null;
   storageRequirements: string | null;
   setSize: number;
-  borrowLimit: number;
-  borrowable: boolean;
   _count: { subItems: number; dispenseRecords: number; receiveRecords: number };
 }
 
@@ -66,7 +63,7 @@ interface FormState {
   warrantyMonths: number; maintenanceCycleMonths: number;
   countCycleMonths: string; // "" = follow the profile default (3 mo consumable, 12 mo rest)
   storageRequirements: string;
-  setSize: number; borrowLimit: number; borrowable: boolean;
+  setSize: number;
 }
 
 const emptyForm: FormState = {
@@ -79,7 +76,7 @@ const emptyForm: FormState = {
   warrantyMonths: 0, maintenanceCycleMonths: 12,
   countCycleMonths: "",
   storageRequirements: "",
-  setSize: 1, borrowLimit: 0, borrowable: false,
+  setSize: 1,
 };
 
 function prefillFrom(item: SettingsItem): FormState {
@@ -106,8 +103,6 @@ function prefillFrom(item: SettingsItem): FormState {
     countCycleMonths: item.countCycleMonths != null ? String(item.countCycleMonths) : "",
     storageRequirements: item.storageRequirements || "",
     setSize: item.setSize ?? 1,
-    borrowLimit: item.borrowLimit ?? 0,
-    borrowable: item.borrowable ?? false,
   };
 }
 
@@ -125,8 +120,6 @@ interface Props {
 
 export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }: Props) {
   const { categories } = useCategories();
-  const { user } = useSession();
-  const isSuperAdmin = user?.role === "ADMIN";
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [item, setItem] = useState<SettingsItem | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -185,7 +178,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
       maintenanceCycleMonths: Number(form.maintenanceCycleMonths),
       countCycleMonths: form.countCycleMonths === "" ? null : Number(form.countCycleMonths),
       warrantyMonths: Number(form.warrantyMonths),
-      borrowLimit: Number(form.borrowLimit),
       purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
       purchaseDate: form.purchaseDate || null,
       model: form.model || null,
@@ -337,7 +329,7 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                     </div>
                   )}
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">จำนวนคงคลังขั้นต่ำ</Label>
+                    <Label className="text-[11px] font-medium text-muted-foreground">จำนวนขั้นต่ำ</Label>
                     <Input type="number" min={0} value={form.minThreshold} onChange={(e) => setForm({ ...form, minThreshold: parseInt(e.target.value) || 0 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
                   </div>
                   <div className="space-y-1.5">
@@ -359,20 +351,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                       <Input type="number" min={1} value={form.maintenanceCycleMonths} onChange={(e) => setForm({ ...form, maintenanceCycleMonths: parseInt(e.target.value) || 12 })} className="h-10 text-foreground bg-muted/50 border border-input shadow-none" />
                     </div>
                   )}
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">
-                      จำนวนที่อนุญาตให้ยืม {!isSuperAdmin && <Lock className="inline h-3 w-3 align-[-1px] text-primary/40" />}
-                    </Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.borrowLimit}
-                      onChange={(e) => setForm({ ...form, borrowLimit: parseInt(e.target.value) || 0 })}
-                      disabled={!isSuperAdmin}
-                      className="h-10 text-foreground bg-muted/50 border border-input shadow-none disabled:opacity-100 disabled:text-muted-foreground"
-                    />
-                    <p className="text-[10px] text-muted-foreground">0 = ไม่อนุญาตให้ยืม{!isSuperAdmin && " · แก้ไขได้เฉพาะ SuperAdmin"}</p>
-                  </div>
                 </div>
               </Section>
 

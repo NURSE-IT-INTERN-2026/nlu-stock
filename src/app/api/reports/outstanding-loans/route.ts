@@ -24,12 +24,11 @@ export async function GET(request: NextRequest) {
     const where: Prisma.DispenseRecordWhereInput = {
       returnedAt: null,
       item: BORROWABLE,
-      // Exclude only per-unit (trackIndividually) INUSE — returned via คืนเข้าพัสดุ, not here.
-      // COUNT-type INUSE returns numerically through this screen, so keep it visible.
+      // รายการยืมค้าง = stock somebody owes back. นำไปใช้งาน (INUSE) has no due date and
+      // nobody to chase; it comes back through คืนเข้าคลัง. null loanType = legacy BORROW.
       OR: [
         { loanType: null },
         { loanType: "BORROW" },
-        { AND: [{ loanType: "INUSE" }, { item: { trackIndividually: false } }] },
       ],
       ...(staffId && { staffId }),
       ...((dateFrom || dateTo) && {

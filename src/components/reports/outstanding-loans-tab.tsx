@@ -65,6 +65,12 @@ const columns: Column<Row>[] = [
   { key: "staffName", header: "Staff" },
 ];
 
+// Fetch-everything, group, then page the groups client-side — deliberately NOT the
+// server-side grouping that api/reports/dispense-history does. Both tabs render the same
+// loan card and both must never split one, but the sets differ: this one is only the loans
+// still open, which is bounded by how much stock is out at once, while ประวัติการเบิก is the
+// whole ledger and grows forever. Paging groups in memory is the smaller thing that works
+// here; move to the server version if "ยังไม่คืน" ever stops being a short list.
 function groupRecords(records: Row[]): LoanGroup[] {
   const map = new Map<string, LoanGroup>();
   for (const r of records) {

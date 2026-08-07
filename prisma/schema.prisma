@@ -30,13 +30,6 @@ enum ItemStatus {
   DISPOSED
 }
 
-enum Role {
-  ADMIN
-  STAFF
-  INSTRUCTOR
-  CHILDREN
-}
-
 enum AdjustmentReason {
   LOST
   DAMAGED_PENDING_REPAIR
@@ -98,7 +91,8 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
-  role      Role     @default(STAFF)
+  // No role column — roles come from env allowlists (src/lib/roles.ts). This row
+  // exists only so every movement record has an owner to point at (8 FKs below).
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,6 +104,7 @@ model User {
   statusChanges      ItemStatusLog[]
   locationChanges    LocationChangeLog[]
   dispenseTemplates  DispenseTemplate[]
+  returnRecords      ReturnRecord[]
 
   @@map("users")
 }
@@ -119,13 +114,13 @@ model User {
 // tracked copies get borrowed, so pinning specific stock in a reusable set rots fast. The
 // cart resolves lot/copy fresh at load time via buildCartItem (src/components/dispense/cart-context.tsx).
 model DispenseTemplate {
-  id          String   @id @default(cuid())
+  id          String                 @id @default(cuid())
   name        String
   createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdBy   User                   @relation(fields: [createdById], references: [id])
   lines       DispenseTemplateLine[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 
   @@map("dispense_templates")
 }
@@ -167,7 +162,7 @@ model CategoryProfile {
   description   String?
   dispenseType  DispenseType
   assetTracking Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
-  setTracking   Boolean      @default(false) // โชว์ setSize/borrowable (BOOK/TOY)
+  setTracking   Boolean      @default(false) // โชว์ setSize (BOOK/TOY)
   icon          String       @default("Package")
   color         String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
   sortOrder     Int          @default(0)
@@ -186,9 +181,9 @@ model Location {
   room     String
   detail   String?
 
-  items Item[]
-  subItems SubItem[]
-  dispenseRecords  DispenseRecord[]
+  items           Item[]
+  subItems        SubItem[]
+  dispenseRecords DispenseRecord[]
 
   @@unique([building, floor, room, detail])
   @@map("locations")
@@ -199,7 +194,7 @@ model Unit {
   id   String @id @default(cuid())
   name String @unique
 
-  items      Item[]  @relation("UnitItem")
+  items       Item[]   @relation("UnitItem")
   kitBomItems KitBom[]
 
   @@map("units")
@@ -237,12 +232,12 @@ model Item {
   // Consumable fields (used when category = CON)
   storageRequirements String?
 
-  // Book/Toy set + borrowing (see ADR-0001)
-  setSize    Int     @default(1) // volumes per set; 1 = single
-  // How many may be out on loan at once. 0 = ห้ามยืม. borrowable is derived from
-  // it on write (borrowLimit > 0) — edit borrowLimit, never borrowable.
-  borrowLimit Int     @default(0)
-  borrowable  Boolean @default(false)
+  // Book/Toy set size — volumes per set; 1 = single.
+  // No borrowLimit/borrowable here: both were write-only for their whole life (nothing
+  // read them to allow or deny a loan) while the UI promised "0 = ห้ามยืม". What actually
+  // stops a loan is the piece's status — dispense rejects any SubItem that is not
+  // AVAILABLE, and ตั้งใช้ในห้อง (IN_USE) is how a piece is kept off the loan pool.
+  setSize Int @default(1)
 
   // Stock count cycle (ตรวจนับ). countCycleMonths null = use the profile default
   // (CONSUMABLE 3 months, everything else 12) — see src/lib/stock-count.ts. Set a
@@ -267,8 +262,8 @@ model Item {
   // Relations
   subItems           SubItem[]
   lots               Lot[]
-  kitComponents      KitBom[] @relation("KitBomItems") // KIT "ภายในชุดประกอบด้วย" (BOM)
-  componentsInKits   KitBom[] @relation("KitComponents") // reverse: ถูกใช้เป็นส่วนประกอบในชุดอื่น
+  kitComponents      KitBom[]               @relation("KitBomItems") // KIT "ภายในชุดประกอบด้วย" (BOM)
+  componentsInKits   KitBom[]               @relation("KitComponents") // reverse: ถูกใช้เป็นส่วนประกอบในชุดอื่น
   dispenseRecords    DispenseRecord[]
   receiveRecords     ReceiveRecord[]
   adjustments        StockAdjustment[]
@@ -276,6 +271,7 @@ model Item {
   statusLogs         ItemStatusLog[]
   locationChanges    LocationChangeLog[]
   templateLines      DispenseTemplateLine[]
+  returnRecords      ReturnRecord[]
 
   @@index([categoryId, isActive])
   @@index([locationId])
@@ -285,31 +281,32 @@ model Item {
 
 // --- Sub-Items ---
 model SubItem {
-  id           String         @id @default(cuid())
-  itemId       String
-  item         Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  subCode      String
-  name         String?
-  status       ItemStatus     @default(AVAILABLE)
-  condition    ItemCondition?
-  serialNumber String?
-  notes        String?
-  imageUrl     String?
-  images       String[]
-  locationId   String?
-  location     Location?       @relation(fields: [locationId], references: [id])
+  id                  String         @id @default(cuid())
+  itemId              String
+  item                Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  subCode             String
+  name                String?
+  status              ItemStatus     @default(AVAILABLE)
+  condition           ItemCondition?
+  serialNumber        String?
+  notes               String?
+  imageUrl            String?
+  images              String[]
+  locationId          String?
+  location            Location?      @relation(fields: [locationId], references: [id])
   // Per-copy maintenance schedule (tracked items). Cycle length stays on the parent
   // Item.maintenanceCycleMonths; each copy tracks its own last/next so servicing or
   // disposing one piece doesn't move the others. Flat (non-tracked) items keep using
   // the Item-level columns instead.
   lastMaintenanceDate DateTime?
   nextMaintenanceDate DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   dispenseRecords    DispenseRecord[]
   statusLogs         ItemStatusLog[]
   maintenanceRecords MaintenanceRecord[]
+  returnRecords      ReturnRecord[]
 
   @@unique([itemId, subCode])
   @@index([itemId, status])
@@ -325,7 +322,7 @@ model Lot {
   expiryDate   DateTime?
   receivedQty  Int       @default(0) // immutable: how much entered this lot
   remainingQty Int       @default(0) // decremented on dispense; see ADR-0002
-  unitCost     Float?    // weighted-avg cost per unit (set on receive); null = unknown
+  unitCost     Float? // weighted-avg cost per unit (set on receive); null = unknown
   receivedDate DateTime  @default(now())
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -361,41 +358,47 @@ model KitBom {
 
 // --- Dispense ---
 model DispenseRecord {
-  id          String     @id @default(cuid())
-  itemId      String
-  item        Item       @relation(fields: [itemId], references: [id])
-  subItemId   String?
-  subItem     SubItem?   @relation(fields: [subItemId], references: [id])
-  lotId       String?
-  lot         Lot?       @relation(fields: [lotId], references: [id])
+  id              String           @id @default(cuid())
+  itemId          String
+  item            Item             @relation(fields: [itemId], references: [id])
+  subItemId       String?
+  subItem         SubItem?         @relation(fields: [subItemId], references: [id])
+  lotId           String?
+  lot             Lot?             @relation(fields: [lotId], references: [id])
   // Where this specific batch/piece was placed (นำไปใช้งาน / INUSE only). Must be an
   // existing Location — the picker only offers locations already in the system.
-  locationId  String?
-  location    Location?  @relation(fields: [locationId], references: [id])
-  quantity    Int
-  resolvedQty Int        @default(0) // units no longer outstanding (returned + written off); returnedAt set when >= quantity
-  usageType   UsageType?
-  usageNote   String?
-  staffId     String
-  staff       User       @relation(fields: [staffId], references: [id])
-  dispensedAt DateTime   @default(now())
-  returnedAt  DateTime?
+  locationId      String?
+  location        Location?        @relation(fields: [locationId], references: [id])
+  quantity        Int
+  resolvedQty     Int              @default(0) // units no longer outstanding (returned + written off); returnedAt set when >= quantity
+  usageType       UsageType?
+  // COURSE only: the CMU รหัสวิชา this was dispensed for, and the course name as it read
+  // at dispense time (usageNote). Snapshotting the name keeps history readable when the
+  // registrar API is down and stops a renamed/retired course from rewriting old records.
+  courseCode      String?
+  usageNote       String?
+  staffId         String
+  staff           User             @relation(fields: [staffId], references: [id])
+  dispensedAt     DateTime         @default(now())
+  returnedAt      DateTime?
   // Condition recorded when the loan is returned; null until then (and for legacy rows).
   returnCondition ReturnCondition?
-  notes       String?
-  recipient   String?
+  notes           String?
+  recipient       String?
   // Groups all lines of a single borrow event (1 dispense POST = 1 loanGroupId).
   // Lets the return screen show one card per loan instead of merging by item.
-  loanGroupId String?
+  loanGroupId     String?
   // null (legacy) treated as BORROW. INUSE records are excluded from the รับคืน/outstanding-loan screens.
-  loanType    LoanType?
-  dueAt       DateTime?
-  returnProofUrls String[] @default([]) // photos uploaded when the loan is returned
+  loanType        LoanType?
+  dueAt           DateTime?
+  returnProofUrls String[]         @default([]) // photos uploaded when the loan is returned
   recoveredAt     DateTime? // set when a return-as-LOST is reversed (เรียกคืน)
+  returns         ReturnRecord[]
 
   @@index([itemId, dispensedAt])
   @@index([staffId, dispensedAt])
   @@index([usageType, dispensedAt])
+  @@index([courseCode, dispensedAt])
   @@index([loanGroupId])
   @@map("dispense_records")
 }
@@ -415,6 +418,31 @@ model ReceiveRecord {
 
   @@index([itemId, receivedAt])
   @@map("receive_records")
+}
+
+// --- Return log ---
+// One row per act of returning stock, written at every path that closes a loan.
+// Before this existed a return only mutated the DispenseRecord in place, so a partial
+// COUNT return (คืน 3 จาก 10) left no trace at all and the only name on file was the
+// borrower's — never the person who took the stock back.
+model ReturnRecord {
+  id               String          @id @default(cuid())
+  itemId           String
+  item             Item            @relation(fields: [itemId], references: [id])
+  subItemId        String?
+  subItem          SubItem?        @relation(fields: [subItemId], references: [id])
+  dispenseRecordId String?
+  dispenseRecord   DispenseRecord? @relation(fields: [dispenseRecordId], references: [id])
+  quantity         Int
+  condition        ReturnCondition
+  notes            String?
+  returnedBy       String
+  returner         User            @relation(fields: [returnedBy], references: [id])
+  returnedAt       DateTime        @default(now())
+
+  @@index([itemId, returnedAt])
+  @@index([subItemId])
+  @@map("return_records")
 }
 
 // --- Stock Adjustment ---
@@ -466,16 +494,16 @@ model MaintenanceRecord {
 
 // --- Status Change Log ---
 model ItemStatusLog {
-  id             String     @id @default(cuid())
+  id             String       @id @default(cuid())
   itemId         String
-  item           Item       @relation(fields: [itemId], references: [id])
+  item           Item         @relation(fields: [itemId], references: [id])
   subItemId      String?
-  subItem        SubItem?   @relation(fields: [subItemId], references: [id])
+  subItem        SubItem?     @relation(fields: [subItemId], references: [id])
   previousStatus ItemStatus
   newStatus      ItemStatus
   reason         String?
   changedBy      String
-  changer        User       @relation(fields: [changedBy], references: [id])
+  changer        User         @relation(fields: [changedBy], references: [id])
   imageUrl       String?
   repairVenue    RepairVenue?
   repairNote     String?
@@ -485,7 +513,7 @@ model ItemStatusLog {
   // symptom, the older rows keep the history. Null on non-repair rows and legacy rows
   // (those fall back to the trip-opening row's `reason`).
   damageNote     String?
-  changedAt      DateTime   @default(now())
+  changedAt      DateTime     @default(now())
   recoveredAt    DateTime? // set when a →LOST transition is reversed (เรียกคืน)
 
   @@map("item_status_logs")
@@ -506,4 +534,18 @@ model LocationChangeLog {
 
   @@index([itemId, changedAt])
   @@map("location_change_logs")
+}
+
+// --- Course cache (CMU รายวิชา) ---
+// Read-through mirror of two APIs owned by other faculties: the course code list from
+// edu.nurse.cmu.ac.th and the course title from the registrar's bulletin. Both can go
+// down or change shape without notice, so the picker reads this table and only calls
+// upstream when the rows go stale — an upstream failure degrades to last-known-good
+// instead of taking the dispense cart down with it.
+model Course {
+  code     String   @id // รหัสวิชา
+  name     String? // title_long_th from the registrar; null until first resolved
+  syncedAt DateTime @default(now()) @updatedAt
+
+  @@map("courses")
 }

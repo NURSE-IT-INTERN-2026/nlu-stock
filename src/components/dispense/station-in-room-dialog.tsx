@@ -60,7 +60,7 @@ export function StationInRoomDialog({
   };
 
   // Only the destination is required; หมายเหตุ is optional context.
-  const locError = locRef.kind === "ok" ? null : "เลือกสถานที่ที่นำไปตั้ง";
+  const locError = locRef.kind === "ok" ? null : "เลือกสถานที่ที่นำไปใช้งาน";
   const canConfirm = !locError;
 
   const handleSubmit = async () => {
@@ -70,10 +70,13 @@ export function StationInRoomDialog({
     }
     setSubmitting(true);
     try {
-      const locationId = await resolveLocationId(locRef).catch(() => null);
+      // No .catch(() => null): a record that can't name its room is stock we've lost.
+      // The API refuses it too — this just fails the click instead of the request.
+      const locationId = await resolveLocationId(locRef);
+      if (!locationId) throw new Error("ไม่พบสถานที่ที่เลือก ลองใหม่อีกครั้ง");
       await createDispense({
         items: [{ itemId, subItemId: subItemId ?? null, quantity: isTracked ? 1 : qty }],
-        notes: [notes.trim(), `ห้องที่ตั้ง: ${locRef.name}`].filter(Boolean).join(" | ") || null,
+        notes: notes.trim() || null,
         locationId,
         dueAt: null, // INUSE: open-ended, no return date
         loanType: "INUSE",
@@ -126,7 +129,7 @@ export function StationInRoomDialog({
         <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
           <fieldset disabled={submitting} className="m-0 min-w-0 space-y-5 border-0">
             <div className="space-y-2">
-              <Label required>สถานที่ที่นำไปตั้ง</Label>
+              <Label required>สถานที่ที่นำไปใช้งาน</Label>
               <LocationCascadePicker initialLocationId={null} onChange={setLocRef} restrictToExisting />
               {showErrors && locError && <FieldError>{locError}</FieldError>}
             </div>

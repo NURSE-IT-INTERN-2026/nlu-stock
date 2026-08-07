@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
+import { requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
-import { resolveSubItemReturn, type ReturnStatus } from "@/lib/returns";
+import { resolveSubItemReturn, logReturn, type ReturnStatus } from "@/lib/returns";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
 const RETURN_STATUSES = ["AVAILABLE", "DAMAGED", "LOST"] as const;
@@ -11,9 +11,8 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth(_req);
+  const auth = await requireAdmin(_req);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id: itemId } = await params;
   const body = await _req.json();
@@ -90,6 +89,16 @@ export async function POST(
           // ponytail: no repair queue for COUNT stock — without per-piece identity there is
           // nothing to send to a shop or receive back. The StockAdjustment above is the record.
         }
+
+        // One row per act of returning, not per loan — คืน 3 แล้วค่อยคืน 7 leaves two rows.
+        await logReturn(tx, {
+          itemId,
+          dispenseRecordId: dispense.id,
+          quantity: qty,
+          condition: status,
+          notes: note,
+          userId: auth.user.userId,
+        });
 
         const newResolved = dispense.resolvedQty + qty;
         const returnCondition = status;

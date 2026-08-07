@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireStaff, json, notFound, error, parseBody } from "@/lib/api-utils";
+import { requireSuperAdmin, requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { itemUpdateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
@@ -11,7 +11,7 @@ import { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireStaff(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireStaff(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -58,12 +58,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       sanitizeItemByProfile(cat.profile, data);
     }
   }
-  // Borrow allowance is admin-only; borrowable is derived from the quantity — set
-  // after sanitize so it wins over the setTracking-only rule (any category may
-  // now have a borrow limit).
-  if (auth.user.role !== "ADMIN") delete data.borrowLimit;
-  if (data.borrowLimit !== undefined) data.borrowable = data.borrowLimit > 0;
-
   // Recalc nextMaintenanceDate when the maintenance cycle changes, so overdue/
   // due-soon alerts follow the new cadence immediately — not only after the
   // next maintenance record. Baseline = last performed maintenance; no baseline
@@ -137,7 +131,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;

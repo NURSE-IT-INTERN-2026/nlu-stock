@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
+import { requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
@@ -28,9 +28,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth(req);
+  const auth = await requireAdmin(req);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id: itemId } = await params;
   const body = await req.json();
@@ -135,6 +134,7 @@ export async function POST(
               subItemId: data.subItemId,
               previousStatus: sub.status,
               newStatus,
+              userId: auth.user.userId,
             });
           }
         }

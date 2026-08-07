@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Plus, Minus, Search, QrCode, X, Dices, MapPin } from "lucide-react";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
@@ -16,7 +16,9 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { searchDispenseItems } from "@/lib/api";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
-import { parseScannedCode } from "@/lib/constants";
+import { parseScannedCode, STATUS_LABELS } from "@/lib/constants";
+import { isManualHold } from "@/lib/status-utils";
+import type { ItemStatus } from "@/generated/prisma/enums";
 import { useCart, buildCartItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/shared/pagination";
@@ -31,6 +33,7 @@ interface SearchItem {
   nameEn: string | null;
   imageUrl: string | null;
   availableQty: number;
+  status: ItemStatus;
   issueUnit: { id: string; name: string };
   trackIndividually: boolean;
   category: { name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; setTracking: boolean; color: string } };
@@ -205,18 +208,23 @@ return (
             <QrCode className="size-5" />
             <span className="font-medium hidden sm:inline">เพิ่มด้วย QR</span>
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleAutoAdd}
-            disabled={items.length === 0}
-            aria-label="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า"
-            title="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า (≤10 ชิ้น, ครบทุกประเภท)"
-            className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center"
-          >
-            <Dices className="size-5" />
-            <span className="font-medium hidden sm:inline">สุ่มเพิ่ม</span>
-          </Button>
+          {/* Test helper, dev only. It sat beside เพิ่มด้วย QR at the same weight, so a real
+              cart was one mis-tap from ten random items. NODE_ENV is inlined at build time,
+              so this whole branch is dropped from the production bundle. */}
+          {process.env.NODE_ENV !== "production" && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleAutoAdd}
+              disabled={items.length === 0}
+              aria-label="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า"
+              title="สุ่มเพิ่มพัสดุจาก list เข้าตะกร้า (≤10 ชิ้น, ครบทุกประเภท)"
+              className="h-11 sm:h-12 w-11 sm:w-auto px-0 sm:px-4 rounded-xl gap-2 shrink-0 justify-center"
+            >
+              <Dices className="size-5" />
+              <span className="font-medium hidden sm:inline">สุ่มเพิ่ม</span>
+            </Button>
+          )}
         </div>
 
         {/* Row 2: filter pickers */}
@@ -249,13 +257,21 @@ return (
             {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {items.map((item) => {
               const inCart = getItemQty(item.id);
               const cartEntry = cartItems.find((c) => c.itemId === item.id);
-              const atMax = !item.trackIndividually && inCart >= item.availableQty;
+              // ชำรุด/ส่งซ่อม/สูญหาย on a non-tracked item moves no qty, so it still reads
+              // "เหลือ 5" here. The server refuses it (api/dispense); say so before the click
+              // rather than after. Tracked items keep their per-piece rules.
+              const held = !item.trackIndividually && isManualHold(item.status);
+              const atMax = !item.trackIndividually && (held || inCart >= item.availableQty);
               const stockNum = item.trackIndividually ? item.subItems.length : item.availableQty;
-              const outOfStock = stockNum <= 0;
+              const outOfStock = stockNum <= 0 || held;
+              // What is still addable, which is what the badge is asked. Stock already sitting
+              // in the cart is spoken for: the badge used to keep saying "เหลือ 3" next to a +
+              // button that had gone quietly disabled, so the number and the control disagreed.
+              const addable = Math.max(0, stockNum - inCart);
               // Tracked items used to hard-code "ชิ้น", which hid the real unit (เครื่อง/ตัว/ชุด).
               // Both kinds read from issueUnit now — "ชิ้น" only shows when that IS the unit.
               const stockLabel = `${stockNum} ${item.issueUnit.name}`;
@@ -265,21 +281,20 @@ return (
               return (
                 <article
                   key={item.id}
-                  className="group rounded-2xl border border-border/60 bg-card p-3 shadow-sm transition-all hover:border-primary/30 hover:shadow-md sm:p-4"
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                 >
-                  <div className="flex items-start gap-3 sm:gap-4">
+                  <div className="flex items-start gap-3 p-3">
                     {/* Thumbnail + floating stock badge */}
                     <Link href={`/items/${item.id}`} className="relative shrink-0">
                       <div className="size-20 sm:size-24 overflow-hidden rounded-xl bg-muted ring-1 ring-border">
-                        <img
-                          src={item.imageUrl ?? pic(item.code)}
+                        <ItemThumb
+                          src={item.imageUrl}
                           alt={item.name}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          className="transition-transform duration-500 group-hover:scale-105"
                         />
                       </div>
-                      <span className={`absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ring-2 ring-card ${outOfStock ? "bg-destructive" : "bg-success"}`}>
-                        {outOfStock ? "หมด" : `เหลือ ${stockNum}`}
+                      <span className={`absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ring-2 ring-card ${outOfStock ? "bg-destructive" : addable === 0 ? "bg-muted-foreground" : "bg-success"}`}>
+                        {held ? STATUS_LABELS[item.status] : outOfStock ? "หมด" : addable === 0 ? "อยู่ในตะกร้าหมด" : `เหลือ ${addable}`}
                       </span>
                     </Link>
 
@@ -304,9 +319,13 @@ return (
                   </div>
 
                   {/* Footer: คงเหลือ + morph stepper */}
-                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-dashed border-border pt-3 sm:mt-4">
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-border bg-muted/40 px-3 py-2.5">
+                    {/* Stock, then what the cart already holds of it — so the badge on the
+                        thumbnail (what is still addable) is arithmetic the card shows, not a
+                        third number the reader has to take on faith. */}
                     <span className="text-xs text-muted-foreground sm:text-sm">
                       คงเหลือ <span className="font-semibold text-foreground">{stockLabel}</span>
+                      {inCart > 0 && <span className="ml-1.5">· ในตะกร้า <span className="font-semibold text-foreground">{inCart}</span></span>}
                     </span>
 
                     {inCart > 0 && cartEntry ? (

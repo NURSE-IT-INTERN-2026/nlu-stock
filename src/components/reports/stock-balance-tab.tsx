@@ -70,6 +70,9 @@ export function StockBalanceTab() {
     fetchData();
   }, [fetchData]);
 
+  // Derived from the rows the table already has — no extra summary field to keep in sync.
+  const pricedInStock = data.filter((r) => r.availableQty > 0 && r.unitCost !== null).length;
+
   return (
     <div className="space-y-4">
       <ReportFilters
@@ -83,6 +86,14 @@ export function StockBalanceTab() {
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">มูลค่าคงเหลือรวม</p>
             <p className="text-lg font-bold">{baht(summary.totalValue)}</p>
+            {/* The sum can only count rows that carry a cost, and most don't — durables need
+                purchasePrice, consumables need unitCost on a lot, both optional. Without this
+                line the headline reads as the value of the whole storeroom when it is the value
+                of the handful of items somebody priced. The ยังไม่ระบุราคา card beside it is
+                the same fact from the other side; this makes the connection explicit. */}
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              คิดจาก {pricedInStock.toLocaleString()} จาก {summary.totalAvailableItems.toLocaleString()} รายการที่มีสต็อก
+            </p>
           </div>
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">รายการที่มีสต็อก</p>

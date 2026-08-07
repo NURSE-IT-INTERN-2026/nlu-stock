@@ -1,6 +1,9 @@
 // Re-export enums from Prisma generated client — single source of truth
-export { ItemStatus, Role, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
-import type { ItemStatus, AdjustmentReason, Role, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
+export { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
+import type { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
+// Role is NOT a Prisma enum — it comes from env allowlists.
+export { ROLES, type Role } from "@/lib/roles";
+import type { Role } from "@/lib/roles";
 
 // ─── Item Condition (sub-item สภาพ) ───
 export const CONDITION_LABELS: Record<string, string> = {
@@ -14,10 +17,9 @@ export const CONDITION_LABELS: Record<string, string> = {
 
 // ─── Role ───
 export const ROLE_LABELS: Record<Role, string> = {
+  SUPERADMIN: "ผู้ดูแลระบบ",
   ADMIN: "ผู้ดูแล",
-  STAFF: "เจ้าหน้าที่",
-  INSTRUCTOR: "ผู้สอน",
-  CHILDREN: "นักศึกษา",
+  EXECUTIVE: "ผู้บริหาร",
 };
 
 // ─── Maintenance ───
@@ -33,17 +35,29 @@ export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
 };
 
 // ─── Timeline event type ───
+// One DispenseRecord is three different real events depending on the item's dispenseType
+// and loanType, so they get three separate types here — calling all of them "เบิก" told a
+// reader nothing about whether the stock is coming back.
 export type TimelineEventType =
-  | "DISPENSE" | "RECEIVE" | "ADJUSTMENT"
+  | "DISPENSE" | "INUSE" | "BORROW" | "RETURN" | "RECEIVE" | "ADJUSTMENT"
   | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
 
 export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   DISPENSE: "เบิก",
+  INUSE: "นำไปใช้งาน",
+  BORROW: "ถูกยืม",
+  RETURN: "รับคืน",
   RECEIVE: "รับเข้า",
   ADJUSTMENT: "ปรับสต๊อก",
   STATUS_CHANGE: "เปลี่ยนสถานะ",
-  MAINTENANCE: "บำรุงรักษา",
-  LOCATION_CHANGE: "ที่ตั้ง",
+  MAINTENANCE: "ซ่อมบำรุง",
+  LOCATION_CHANGE: "ย้ายที่ตั้ง",
+};
+
+export const RETURN_CONDITION_LABELS: Record<string, string> = {
+  AVAILABLE: "ปกติ",
+  DAMAGED: "ชำรุด",
+  LOST: "สูญหาย",
 };
 
 // ─── Category ───
@@ -59,12 +73,12 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   OTHER: "อื่นๆ",
 };
 
-// OTHER stays in USAGE_TYPE_LABELS (and in the DB enum) for records already written,
-// but it is no longer offered: "อื่นๆ" told a reader nothing that ACTIVITY plus the
-// free-text line does not already say.
+// OTHER requires the free-text line in the cart dialog, so it never lands as a bare
+// "อื่นๆ" with nothing behind it.
 export const USAGE_TYPE_OPTIONS = [
   { value: "COURSE", label: "รายวิชา" },
   { value: "ACTIVITY", label: "กิจกรรม" },
+  { value: "OTHER", label: "อื่นๆ" },
 ] as const;
 
 // ─── Adjustment Reason ───

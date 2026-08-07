@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
+import { requireAuth, handleError } from "@/lib/api-utils";
 import { dispenseRequestSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
+import { isManualHold } from "@/lib/status-utils";
+import { STATUS_LABELS } from "@/lib/constants";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { LoanType } from "@/generated/prisma/enums";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const body = await req.json();
   const parsed = dispenseRequestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { items, usageType, usageNote, notes, recipient, locationId, dueAt } = parsed.data;
+  const { items, usageType, courseCode, usageNote, notes, recipient, locationId, dueAt } = parsed.data;
   const inRoom = parsed.data.loanType === "INUSE"; // trackIndividually → IN_USE instead of ON_LOAN
 
   // One loanGroupId per borrow event → groups all lines for the return screen.
@@ -52,6 +53,14 @@ export async function POST(req: NextRequest) {
           throw new Error(`${item.name}: พัสดุติดตามรายชิ้นต้องเลือกชิ้นย่อยก่อนเบิก (ติดต่อผู้ดูแลเพิ่มชิ้นย่อย)`);
         }
 
+        // Guard: an item pulled from service must not go out. "ทั้งรายการชำรุด" writes
+        // Item.status without moving any qty, so availableQty alone can't tell — this is the
+        // only check that sees it. Tracked items are covered per piece below (their aggregate
+        // status can read DAMAGED while individual pieces are still fine).
+        if (!item.trackIndividually && isManualHold(item.status)) {
+          throw new Error(`${item.name}: สถานะ ${STATUS_LABELS[item.status]} — เบิกไม่ได้`);
+        }
+
         // Validate quantity vs available
         if (item.trackIndividually && di.subItemId) {
           const sub = item.subItems[0];
@@ -73,6 +82,7 @@ export async function POST(req: NextRequest) {
             lotId: di.lotId ?? undefined,
             quantity: di.quantity,
             usageType: usageType ?? undefined,
+            courseCode: courseCode ?? undefined,
             usageNote: usageNote ?? undefined,
             staffId: auth.user.userId,
             notes: notes ?? undefined,
@@ -96,6 +106,9 @@ export async function POST(req: NextRequest) {
             // the sub-item's own locationId (only when it resolved to a real Location).
             data: { status: newStatus, ...(inRoom && locationId ? { locationId } : {}) },
           });
+          // This is the ONLY writer that moves a piece INTO ON_LOAN/IN_USE, which is what lets
+          // an item's ประวัติ drop those rows as duplicates of the เบิก row it sits beside
+          // (api/items/[id]/history). A second writer would make that event vanish silently.
           await tx.itemStatusLog.create({
             data: {
               itemId: di.itemId,

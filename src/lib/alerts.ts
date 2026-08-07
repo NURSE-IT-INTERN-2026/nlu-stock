@@ -16,16 +16,28 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  const [lowStockIds, nearExpiry, overdueMaint, totalItems, onLoan, overdueLoans, damagedSubItems, damagedItems, dueCount] = await Promise.all([
+  // Each count must be in the same unit as the rows its chip opens — an item count over an
+  // item table, a piece count over a piece panel. They differ by chip, and that is fine;
+  // what is not fine is a badge in a unit its own list never renders.
+  const [lowStockIds, nearExpiry, overdueMaint, totalItems, onLoan, overdueLoans, damagedPending, dueCount] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
     `,
     // Near-expiry = within 30 days OR already expired (no lower bound), still holding stock.
-    prisma.lot.count({
-      where: { expiryDate: { lte: in30Days }, remainingQty: { gt: 0 } },
+    // Counted as ITEMS, not lots: this chip opens the items table, where an item holding four
+    // expiring lots is one row. Counting lots made the badge say 12 over a list of 4 — and the
+    // dashboard card repeated it under the word "รายการ". Same predicate the list filter uses
+    // (api/items/route.ts `expiryAlert`); keep them in step.
+    prisma.item.count({
+      where: {
+        isActive: true,
+        lots: { some: { expiryDate: { lte: in30Days }, remainingQty: { gt: 0 } } },
+      },
     }),
     // Overdue maintenance = live tracked copies (schedule on SubItem) + flat items
-    // (schedule on Item). Mirrors the /maintenance summary + schedule rows.
+    // (schedule on Item). Pieces + items looks like mixed units but is not: this chip opens
+    // OverdueMaintenancePanel, and the maintenance-schedule report behind it emits exactly
+    // one row per live copy and one per flat item. Keep the two shapes in step.
     Promise.all([
       prisma.subItem.count({
         where: {
@@ -42,8 +54,8 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       where: { isActive: true },
     }),
     prisma.item.count({
-      // onLoan = ยืมออกไป (incl. COUNT-type ตั้งใช้ในห้อง still outstanding numerically).
-      // Per-unit (trackIndividually) INUSE returned via คืนเข้าพัสดุ — excluded here.
+      // onLoan = ยืมออกไปและยังไม่คืน. นำไปใช้งาน (INUSE) is not a loan — it is stationed
+      // somewhere with no due date, so it never counts as ค้าง. null loanType = legacy BORROW.
       where: {
         dispenseRecords: {
           some: {
@@ -51,7 +63,6 @@ export async function getAlertCounts(): Promise<AlertCounts> {
             OR: [
               { loanType: null },
               { loanType: "BORROW" },
-              { AND: [{ loanType: "INUSE" }, { item: { trackIndividually: false } }] },
             ],
           },
         },
@@ -68,10 +79,13 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       },
       select: { id: true, loanGroupId: true },
     }),
-    // Reported-damaged, not yet sent to repair — tracked sub-items.
+    // Reported-damaged, not yet sent to repair. Sub-items only, because the chip opens a
+    // panel fed by GET /api/sub-items — a `subItem.findMany`, so a non-tracked item flagged
+    // DAMAGED has no row there to be. Adding those to the badge only promised worklist rows
+    // that cannot appear. They are not lost by this: nothing acts on a non-tracked DAMAGED
+    // flag anywhere today (it moves no quantity and does not block a dispense), so the gap
+    // to close is a write path for damaged qty, not a number on a chip.
     prisma.subItem.count({ where: { status: "DAMAGED" } }),
-    // Same, for non-tracked (count-based) items.
-    prisma.item.count({ where: { status: "DAMAGED", trackIndividually: false, isActive: true } }),
     // ถึงรอบตรวจนับ — null nextCountDate = never counted, also due.
     prisma.item.count({
       where: { isActive: true, OR: [{ nextCountDate: null }, { nextCountDate: { lt: now } }] },
@@ -80,11 +94,11 @@ export async function getAlertCounts(): Promise<AlertCounts> {
 
   const lowStock = lowStockIds.length;
   const overdueReturn = new Set(overdueLoans.map((r) => r.loanGroupId ?? r.id)).size;
-  const damagedPending = damagedSubItems + damagedItems;
 
-  // "ทั้งหมด" = sum of alert-type counts (each chip added together). onLoan is NOT an alert —
-  // it's a normal operational state, surfaced as a filter on /items instead. The table paginates
-  // distinct items separately, so this need not equal the row count.
+  // "ทั้งหมด" = how many alerts are outstanding, added across the chips. It is NOT the row
+  // count of the ทั้งหมด tab and cannot be: the chips count different things (items, pieces,
+  // loan events) and one item can raise several alerts at once. The tab paginates distinct
+  // items. onLoan is not an alert — it is a normal state, filtered on /items instead.
   const total = lowStock + nearExpiry + overdueMaint + overdueReturn + damagedPending + dueCount;
 
   return {

@@ -1,17 +1,16 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
+import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { statusChangeSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
-import { closeOpenLoan } from "@/lib/returns";
+import { closeOpenLoan, returnLocationUpdate } from "@/lib/returns";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id } = await params;
   const { data, error: parseError } = await parseBody(statusChangeSchema)(request);
@@ -31,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       subItem.status === ItemStatus.UNDER_REPAIR && data.newStatus === ItemStatus.UNDER_REPAIR;
     if (data.newStatus === subItem.status && !isRepairEdit) return json(subItem); // no-op: no log, no recompute
 
-    if (!canTransition(subItem.status, data.newStatus, { isAdmin: auth.user.role === "ADMIN" })) {
+    if (!canTransition(subItem.status, data.newStatus, { isSuperAdmin: auth.user.role === "SUPERADMIN" })) {
       return error(
         `เปลี่ยนสถานะจาก "${STATUS_LABELS[subItem.status]}" เป็น "${STATUS_LABELS[data.newStatus]}" ไม่ได้ — ต้องทำตามลำดับ`,
       );
@@ -40,7 +39,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.subItem.update({
         where: { id: data.subItemId! },
-        data: { status: data.newStatus },
+        data: {
+          status: data.newStatus,
+          ...returnLocationUpdate({
+            previousStatus: subItem.status,
+            newStatus: data.newStatus,
+            dest: data.locationId,
+            itemLocationId: item.locationId,
+          }),
+        },
       });
 
       await tx.itemStatusLog.create({
@@ -65,6 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         subItemId: data.subItemId!,
         previousStatus: subItem.status,
         newStatus: data.newStatus,
+        userId: auth.user.userId,
       });
 
       // Recompute counts for tracked items after a per-piece status change (no-op for non-tracked).

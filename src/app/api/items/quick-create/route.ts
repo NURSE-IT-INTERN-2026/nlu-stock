@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, error, parseBody } from "@/lib/api-utils";
+import { requireAdmin, json, error, parseBody } from "@/lib/api-utils";
 import { isItemTracked } from "@/lib/category-profile";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
@@ -19,11 +19,8 @@ const quickCreateSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = await requireAuth(request);
+  const session = await requireAdmin(request);
   if (session.denied) return session.denied;
-  if (session.user.role === "INSTRUCTOR") {
-    return error("Instructors cannot create items", 403);
-  }
 
   const { data, error: parseError } = await parseBody(quickCreateSchema)(request);
   if (parseError) return parseError;

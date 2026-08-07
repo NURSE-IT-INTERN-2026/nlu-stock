@@ -8,11 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Loader2 } from "lucide-react";
 import { login, ApiError } from "@/lib/api";
 
+// Dev shortcuts. These emails must be listed in the matching *_EMAILS env var
+// (see .env.example) — the allowlist is what grants the role, not this array.
 const quickLogins = [
+  { label: "SuperAdmin", email: "superadmin@nlu.ac.th", role: "SUPERADMIN" },
   { label: "Admin", email: "admin@nlu.ac.th", role: "ADMIN" },
-  { label: "Staff", email: "staff@nlu.ac.th", role: "STAFF" },
-  { label: "Instructor", email: "instructor@nlu.ac.th", role: "INSTRUCTOR" },
-  { label: "Student", email: "children@nlu.ac.th", role: "CHILDREN" },
+  { label: "Executive", email: "executive@nlu.ac.th", role: "EXECUTIVE" },
 ];
 
 export default function LoginPage() {

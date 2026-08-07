@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Check, Minus, Plus, Camera, X, Save, Loader2, Calendar, ChevronDown,
 } from "lucide-react";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { cn } from "@/lib/utils";
 import {
   returnLoanEntries, returnItem, uploadFile,
@@ -285,7 +285,7 @@ export function ReturnLoanDetail({
                   <CardContent className="space-y-2">
                     <div className="flex items-start gap-3">
                       <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
-                        <img src={item.imageUrl ?? pic(item.code, 192)} alt={item.name} loading="lazy" className="size-full object-cover" />
+                        <ItemThumb src={item.imageUrl} alt={item.name} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-medium leading-tight truncate">{item.name}</h3>
@@ -356,7 +356,7 @@ export function ReturnLoanDetail({
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
-                      <img src={item.imageUrl ?? pic(item.code, 192)} alt={item.name} loading="lazy" className="size-full object-cover" />
+                      <ItemThumb src={item.imageUrl} alt={item.name} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="font-medium leading-tight truncate">{item.name}</h3>

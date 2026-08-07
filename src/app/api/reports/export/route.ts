@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { USAGE_TYPE_LABELS, STATUS_LABELS, effectiveCode } from "@/lib/constants";
+import { groupUsageBySubject } from "@/lib/usage-by-subject";
 
 // ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
 function toCsv(data: Record<string, unknown>[], filename: string): Response {
@@ -280,12 +281,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const where: Record<string, unknown> = {
         returnedAt: null,
         item: { category: { profile: { dispenseType: { in: ["COUNT", "ITEM"] } } } },
-        // Exclude only per-unit (trackIndividually) INUSE — returned via คืนเข้าพัสดุ.
-        // COUNT-type INUSE returns numerically through this screen, keep visible.
+        // Mirrors api/reports/outstanding-loans: นำไปใช้งาน (INUSE) is not owed back by
+        // anyone, so it never appears on a loan report. null loanType = legacy BORROW.
         OR: [
           { loanType: null },
           { loanType: "BORROW" },
-          { AND: [{ loanType: "INUSE" }, { item: { trackIndividually: false } }] },
         ],
       };
       const dateFrom = params.get("dateFrom");
@@ -433,19 +433,16 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const categoryId = params.get("categoryId");
       if (categoryId) where.item = { categoryId };
 
-      const groups = await prisma.dispenseRecord.groupBy({
-        by: ["usageType"],
-        where: { ...where, usageType: { not: null } },
-        _sum: { quantity: true },
-        orderBy: { _sum: { quantity: "desc" } },
-      });
+      const rows = await groupUsageBySubject(where);
 
-      return groups.map((g) => {
-        return {
-          "Usage Type": USAGE_TYPE_LABELS[g.usageType ?? ""] ?? g.usageType ?? "Unknown",
-          "Total Quantity": g._sum.quantity ?? 0,
-        };
-      });
+      return rows.map((r) => ({
+        "Usage Type": USAGE_TYPE_LABELS[r.usageType ?? ""] ?? r.usageType ?? "Unknown",
+        // Kept as its own column so a spreadsheet can pivot on the code, not just read it
+        // out of the combined label.
+        "Course Code": r.courseCode ?? "",
+        Subject: r.label,
+        "Total Quantity": r.totalQuantity,
+      }));
     }
 
     case "annual-cost": {
