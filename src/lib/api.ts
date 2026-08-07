@@ -768,6 +768,26 @@ export function getDashboardUsageBySubject(categoryId?: string, profileId?: stri
   return request<unknown[]>(`/api/dashboard/usage-by-subject${q ? `?${q}` : ""}`);
 }
 
+export function getDashboardRepairStatus() {
+  return request<unknown>("/api/dashboard/repair-status");
+}
+
+export function getDashboardRepairInProgress() {
+  return request<unknown[]>("/api/dashboard/repair-inprogress");
+}
+
+export function getDashboardOverdueReturn() {
+  return request<unknown[]>("/api/dashboard/overdue-return");
+}
+
+export function getDashboardLowStock() {
+  return request<unknown[]>("/api/dashboard/low-stock");
+}
+
+export function getDashboardMaintenanceFollowup() {
+  return request<unknown[]>("/api/dashboard/maintenance-followup");
+}
+
 // ─── Reports ───
 
 export function getReport(path: string, params?: Record<string, string>) {
