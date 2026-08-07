@@ -732,10 +732,6 @@ export function importRows(type: string, rows: Record<string, string>[]) {
 
 // ─── Dashboard ───
 
-export function getDashboardDispenseMonthly() {
-  return request<unknown[]>("/api/dashboard/dispense-monthly");
-}
-
 export function getDashboardProfileSummary() {
   return request<unknown[]>("/api/dashboard/profile-summary");
 }

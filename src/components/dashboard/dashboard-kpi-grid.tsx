@@ -69,7 +69,10 @@ interface CardModel {
   cta: string;
 }
 
-export function DashboardKpiGrid({ kpis }: { kpis: DashboardKpis }) {
+// canManage=false is an EXECUTIVE: middleware blocks them from /receive and /maintenance
+// and redirects back to "/", so those two cards would read as dead buttons. They keep the
+// same numbers and land on the report carrying the same rows instead.
+export function DashboardKpiGrid({ kpis, canManage }: { kpis: DashboardKpis; canManage: boolean }) {
   const loanSub = kpis.overdueReturn > 0
     ? `เกินกำหนด ${kpis.overdueReturn}${kpis.dueTodayReturns > 0 ? ` · คืนวันนี้ ${kpis.dueTodayReturns}` : ""}`
     : kpis.dueTodayReturns > 0 ? `คืนวันนี้ ${kpis.dueTodayReturns}` : "ไม่มีเกินกำหนด";
@@ -87,7 +90,8 @@ export function DashboardKpiGrid({ kpis }: { kpis: DashboardKpis }) {
     {
       label: "รับเข้าเดือนนี้", Icon: ArrowDownToLine, tone: "success", value: kpis.receiveThisMonth, unit: "ครั้ง",
       status: "neutral", sub: `${kpis.receiveQtyThisMonth.toLocaleString("th-TH")} ชิ้น`,
-      trend: trendOf(kpis.receiveQtyThisMonth, kpis.receiveQtyLastMonth), href: "/receive", cta: "ประวัติรับเข้า",
+      trend: trendOf(kpis.receiveQtyThisMonth, kpis.receiveQtyLastMonth),
+      href: canManage ? "/receive" : "/reports?tab=receive-history", cta: "ประวัติรับเข้า",
     },
     {
       label: "เบิกออกเดือนนี้", Icon: ArrowUpFromLine, tone: "info", value: kpis.dispenseThisMonth, unit: "ครั้ง",
@@ -103,7 +107,8 @@ export function DashboardKpiGrid({ kpis }: { kpis: DashboardKpis }) {
       label: "ส่งซ่อม", Icon: Wrench, tone: "warning", value: kpis.inRepair, unit: "งาน",
       status: kpis.damagedPending > 0 || kpis.inRepair > 0 ? "warn" : "ok",
       sub: kpis.damagedPending > 0 ? `รอส่งซ่อม ${kpis.damagedPending}` : "ไม่มีคิวรอ", trend: null,
-      href: "/maintenance", cta: "ไปบำรุงรักษา",
+      href: canManage ? "/maintenance" : "/reports?tab=damaged-assets",
+      cta: canManage ? "ไปบำรุงรักษา" : "ดูครุภัณฑ์ชำรุด",
     },
     {
       label: "ใกล้หมด", Icon: TriangleAlert, tone: "danger", value: kpis.lowStock, unit: "รายการ",

@@ -6,14 +6,12 @@ import {
   getDashboardRecentReceive,
   getDashboardTopDispense,
   getDashboardUsageBySubject,
-  getDashboardDispenseMonthly,
 } from "@/lib/api";
 import {
   DispenseRecordArraySchema,
   ReceiveRecordArraySchema,
   TopDispenseDataArraySchema,
   UsageByTypeDataArraySchema,
-  MonthlyDispenseDataArraySchema,
 } from "@/lib/dashboard-types";
 
 function validate<T>(schema: import("zod").ZodSchema<T>, data: unknown): T {
@@ -49,13 +47,5 @@ export function useUsageBySubject(categoryId?: string, profileId?: string) {
   return useAsync(
     async () => validate(UsageByTypeDataArraySchema, await getDashboardUsageBySubject(categoryId, profileId)),
     [nonce, categoryId ?? "all", profileId ?? "all"],
-  );
-}
-
-export function useDispenseMonthly() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(MonthlyDispenseDataArraySchema, await getDashboardDispenseMonthly()),
-    [nonce],
   );
 }

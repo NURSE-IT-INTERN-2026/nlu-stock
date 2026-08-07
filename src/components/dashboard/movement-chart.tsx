@@ -1,6 +1,7 @@
 "use client";
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,23 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
+// A year of all-zero buckets still draws two flat lines along the x-axis, which reads as
+// "movement collapsed to nothing" rather than "nothing has been recorded yet". Until the
+// first รับเข้า/เบิกออก lands — master data imports carry no movement history — say so.
+function MovementEmpty() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16">
+      <div className="flex size-12 items-center justify-center rounded-full bg-secondary">
+        <Activity className="size-5 text-muted-foreground" />
+      </div>
+      <div className="text-center">
+        <p className="text-[13px] font-medium text-foreground">ยังไม่มีการเคลื่อนไหว</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">กราฟจะแสดงเมื่อมีการรับเข้าหรือเบิกออกครั้งแรก</p>
+      </div>
+    </div>
+  );
+}
+
 export function MovementChart() {
   const nonce = useDashboardRefreshNonce();
   const { data: rows = [], isLoading, error, refetch } = useAsync(
@@ -38,6 +56,9 @@ export function MovementChart() {
   );
   const inColor = useThemeColor("--chart-2");
   const outColor = useThemeColor("--chart-1");
+  // The route always returns 12 buckets, so an empty array never happens — "no data" is
+  // every bucket sitting at zero.
+  const noMovement = rows.every((r) => r.in === 0 && r.out === 0);
 
   return (
     <Card className="w-full">
@@ -53,6 +74,8 @@ export function MovementChart() {
             <p className="text-sm text-destructive">{error.message}</p>
             <Button variant="outline" size="sm" onClick={() => refetch()}>โหลดใหม่</Button>
           </div>
+        ) : noMovement ? (
+          <MovementEmpty />
         ) : (
           <>
             <div className="mb-3 flex flex-wrap gap-4 text-xs">
