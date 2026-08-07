@@ -35,6 +35,7 @@ interface Row {
   notes: string;
   loanGroupId: string | null;
   recipient: string | null;
+  isLoanable: boolean;
 }
 
 interface LoanGroup {
@@ -71,12 +72,15 @@ const columns: Column<Row>[] = [
   { key: "returnedAt", header: "Status", render: (r) => <StatusBadge r={r} /> },
 ];
 
-// ponytail: client-side grouping of the current page. A loan whose records
-// straddle a page boundary renders split — rare (records share dispensedAt so
-// they cluster). Upgrade to 2-step server grouping if it bites.
+// Grouping stays on the client, but the page it runs over is now a page of whole loan
+// events (api/reports/dispense-history pages by group, not by row), so a card can no longer
+// be built from half a loan and report half its totals as the whole.
+// Only borrowable (COUNT/ITEM) records group into a loan card with due/return
+// status — CONSUMABLE dispenses never come back, so they list flat instead.
 function groupRecords(records: Row[]): LoanGroup[] {
   const map = new Map<string, LoanGroup>();
   for (const r of records) {
+    if (!r.isLoanable) continue;
     const key = r.loanGroupId ?? r.id;
     const g = map.get(key);
     if (g) g.records.push(r);
@@ -146,6 +150,13 @@ export function DispenseHistoryTab() {
   } = usePagedList<Row>({ fetchPage, pageSize: perPage, isMobile });
 
   const groups = useMemo(() => groupRecords(data), [data]);
+  const flatRows = useMemo(() => data.filter((r) => !r.isLoanable), [data]);
+  // `total` from the API counts loan events, so the "shown" half of the mobile counter has
+  // to be events too — data.length is rows, and a page of 20 loans is far more than 20 rows.
+  const shownEvents = useMemo(
+    () => new Set(data.map((r) => r.loanGroupId ?? r.id)).size,
+    [data],
+  );
 
   return (
     <div className="space-y-4 pb-2">
@@ -157,16 +168,21 @@ export function DispenseHistoryTab() {
       />
       {loading ? (
         <ReportDataTable columns={columns} data={[]} loading pageSize={perPage} />
-      ) : groups.length === 0 ? (
+      ) : groups.length === 0 && flatRows.length === 0 ? (
         <ReportDataTable columns={columns} data={[]} pageSize={perPage} />
       ) : (
-        <LoanGroups groups={groups} />
+        <div className="space-y-4">
+          {groups.length > 0 && <LoanGroups groups={groups} />}
+          {flatRows.length > 0 && (
+            <ReportDataTable columns={columns} data={flatRows} pageSize={flatRows.length} />
+          )}
+        </div>
       )}
       {isMobile ? (
         data.length > 0 && (
           <Pagination
             mode="loadMore"
-            shown={data.length}
+            shown={shownEvents}
             total={total}
             hasMore={hasNext}
             isLoading={isLoadingMore}
@@ -176,7 +192,7 @@ export function DispenseHistoryTab() {
       ) : (
         <>
           <p className="text-xs text-muted-foreground py-1">
-            Page {page} of {totalPages} ({total} records)
+            หน้า {page} จาก {totalPages} ({total} ครั้งการเบิก)
           </p>
           <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
         </>

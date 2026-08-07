@@ -1,23 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden } from "@/lib/api-utils";
+import { requireAdmin } from "@/lib/api-utils";
 import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
-// Reverse a LOST event ("เรียกคืน"): restore the piece/qty to available, mark the source
-// record recoveredAt so it can't be recovered twice. source ∈ PIECE | ADJUSTMENT | RETURN.
+// Put stock back that an earlier event took out of circulation: a LOST event ("เรียกคืน")
+// or damaged qty coming home from repair ("รับคืนจากซ่อม"). Both restore the piece/qty to
+// available and stamp `recoveredAt` on the source record so it can't be recovered twice.
+// source ∈ PIECE | ADJUSTMENT. Was /recover-loss until damage recovery joined it.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(req);
+  const auth = await requireAdmin(req);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id: itemId } = await params;
   const body = await req.json();
   const source = body?.source as string;
   const recordId = body?.recordId as string;
   const note = (body?.note as string | undefined)?.trim() || null;
-  if (!recordId || !["PIECE", "ADJUSTMENT"].includes(source)) {
+  // Which kind of event is being undone. Defaults to LOST so the existing เรียกคืนสูญหาย
+  // callers keep working unchanged.
+  const kind = (body?.kind as string) ?? "LOST";
+  if (!recordId || !["PIECE", "ADJUSTMENT"].includes(source) || !["LOST", "DAMAGED"].includes(kind)) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  if (kind === "DAMAGED" && source !== "ADJUSTMENT") {
+    // Damage on a tracked piece is undone through the repair lifecycle
+    // (UNDER_REPAIR → AVAILABLE on the status route), not here.
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
@@ -41,10 +50,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
 
       // ADJUSTMENT (count items): put the qty back on the shelf.
+      const isDamage = kind === "DAMAGED";
+      const wantReason = isDamage ? AdjustmentReason.DAMAGED_PENDING_REPAIR : AdjustmentReason.LOST;
+      const label = isDamage ? "รับคืนจากซ่อม" : "เรียกคืนสูญหาย";
       const adj = await tx.stockAdjustment.findUnique({ where: { id: recordId } });
       if (!adj || adj.itemId !== itemId) throw new Error("ไม่พบรายการ");
-      if (adj.reason !== AdjustmentReason.LOST) throw new Error("ไม่ใช่รายการสูญหาย");
-      if (adj.recoveredAt) throw new Error("เรียกคืนแล้ว");
+      if (adj.reason !== wantReason) throw new Error(isDamage ? "ไม่ใช่รายการชำรุด" : "ไม่ใช่รายการสูญหาย");
+      if (adj.recoveredAt) throw new Error(isDamage ? "รับคืนแล้ว" : "เรียกคืนแล้ว");
       const qty = adj.previousQty - adj.newQty;
       const origNotes = adj.notes ?? "";
       await tx.stockAdjustment.update({ where: { id: recordId }, data: { recoveredAt: new Date() } });
@@ -72,7 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           previousQty: prev,
           newQty: prev + qty,
           reason: AdjustmentReason.OTHER,
-          notes: `เรียกคืนสูญหาย${origNotes ? ` (${origNotes})` : ""}${note ? ` — ${note}` : ""}`,
+          notes: `${label}${origNotes ? ` (${origNotes})` : ""}${note ? ` — ${note}` : ""}`,
           adjustedBy: auth.user.userId,
         },
       });
@@ -81,6 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: true, qty });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "เรียกคืนไม่สำเร็จ";
-    return NextResponse.json({ error: msg }, { status: msg === "เรียกคืนแล้ว" ? 409 : 400 });
+    const alreadyDone = msg === "เรียกคืนแล้ว" || msg === "รับคืนแล้ว";
+    return NextResponse.json({ error: msg }, { status: alreadyDone ? 409 : 400 });
   }
 }

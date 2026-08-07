@@ -15,13 +15,14 @@ import {
 } from "@/components/ui/sheet";
 import type { SessionUser } from "@/types";
 import { useAlerts } from "@/hooks/use-alerts";
+import { canManageStock } from "@/lib/roles";
 
 const tabs = [
   { href: "/", label: "หน้าหลัก", icon: LayoutDashboard },
   { href: "/items", label: "พัสดุ", icon: Package },
   { href: "/alerts", label: "แจ้งเตือน", icon: Bell },
   { href: "/dispense", label: "เบิก", icon: ShoppingCart },
-  { href: "/receive", label: "รับเข้า", icon: Truck },
+  { href: "/receive", label: "รับเข้า", icon: Truck, stockOnly: true },
 ];
 
 interface BottomTabProps {
@@ -37,8 +38,8 @@ export function BottomTab({ user }: BottomTabProps) {
     return pathname.startsWith(href);
   }
 
-  // CHILDREN can't see the dashboard — hide the Home tab
-  const visibleTabs = tabs.filter((t) => !(t.href === "/" && user.role === "CHILDREN"));
+  const canStock = canManageStock(user.role);
+  const visibleTabs = tabs.filter((t) => !t.stockOnly || canStock);
 
   async function handleLogout() {
     await logout();
@@ -96,13 +97,15 @@ export function BottomTab({ user }: BottomTabProps) {
             <SheetContent side="bottom" className="h-auto rounded-t-xl">
               <SheetTitle className="sr-only">เมนูเพิ่มเติม</SheetTitle>
               <div className="space-y-1 pb-4">
-                <SheetClose
-                  nativeButton={false}
-                  render={<Link href="/maintenance" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
-                >
-                  <Wrench className="h-4 w-4" />
-                  บำรุงรักษา
-                </SheetClose>
+                {canStock && (
+                  <SheetClose
+                    nativeButton={false}
+                    render={<Link href="/maintenance" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
+                  >
+                    <Wrench className="h-4 w-4" />
+                    บำรุงรักษา
+                  </SheetClose>
+                )}
                 <SheetClose
                   nativeButton={false}
                   render={<Link href="/reports" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
@@ -110,7 +113,7 @@ export function BottomTab({ user }: BottomTabProps) {
                   <BarChart3 className="h-4 w-4" />
                   รายงาน
                 </SheetClose>
-                {user.role === "ADMIN" && (
+                {user.role === "SUPERADMIN" && (
                   <SheetClose
                     nativeButton={false}
                     render={<Link href="/settings" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}

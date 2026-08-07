@@ -28,10 +28,8 @@ const itemBaseSchema = z.object({
   countCycleMonths: z.number().int().min(1).optional().nullable(),
   // Consumable fields
   storageRequirements: z.string().max(500).optional().nullable(),
-  // Book/Toy set + borrowing (ADR-0001)
+  // Book/Toy set size
   setSize: z.number().int().min(1).default(1),
-  borrowLimit: z.number().int().min(0).default(0),
-  borrowable: z.boolean().default(false),
 });
 
 export const itemCreateSchema = itemBaseSchema;
@@ -67,6 +65,10 @@ export const statusChangeSchema = z.object({
   repairNote: z.string().max(500).optional().nullable(),
   // อาการที่ชำรุด carried on the repair rows so it can be corrected mid-trip.
   damageNote: z.string().max(500).optional().nullable(),
+  // Where the piece ends up when it leaves IN_USE (คืนเข้าคลัง). นำไปใช้งาน overwrote its
+  // SubItem.locationId on the way out, so without this the piece keeps claiming the room
+  // it was returned FROM. Omit to leave the location untouched (repair/damage flows).
+  locationId: z.string().optional().nullable(),
 });
 
 // Bulk per-piece status change for tracked items (used by adjust dialog + subcodes tab batch).

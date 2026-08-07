@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth-config";
+import { roleForEmail } from "@/lib/roles";
 import { z } from "zod/v4";
 
 const loginSchema = z.object({
@@ -15,26 +16,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid email" }, { status: 400 });
   }
 
-  const { email } = parsed.data;
+  const email = parsed.data.email.trim().toLowerCase();
 
-  const user = await prisma.user.findUnique({
-    where: { email, isActive: true },
-    select: { id: true, email: true, name: true, role: true },
-  });
-
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 401 });
+  // The env allowlists are the gate — not the users table. A row that isn't in any
+  // list can't sign in, and a listed email that has no row yet gets one created
+  // (every movement record needs a user to point at).
+  const role = roleForEmail(email);
+  if (!role) {
+    return NextResponse.json({ error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน ติดต่อผู้ดูแลระบบ" }, { status: 403 });
   }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing && !existing.isActive) {
+    return NextResponse.json({ error: "บัญชีนี้ถูกปิดใช้งาน" }, { status: 403 });
+  }
+
+  const user =
+    existing ??
+    (await prisma.user.create({ data: { email, name: email.split("@")[0] } }));
 
   const token = await signToken({
     userId: user.id,
     email: user.email,
     name: user.name,
-    role: user.role,
+    role,
   });
 
   const response = NextResponse.json({
-    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    user: { id: user.id, email: user.email, name: user.name, role },
   });
 
   response.cookies.set(COOKIE_NAME, token, {

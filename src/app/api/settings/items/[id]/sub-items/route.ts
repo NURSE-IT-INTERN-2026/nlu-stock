@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireStaff, json, notFound, error, parseBody } from "@/lib/api-utils";
+import { requireSuperAdmin, requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { subItemCreateSchema, subItemBatchCreateSchema } from "@/lib/validators";
 import { DEFAULT_LOCATION_ID } from "@/lib/default-location";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireStaff(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;

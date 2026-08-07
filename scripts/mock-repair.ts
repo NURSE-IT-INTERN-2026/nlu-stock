@@ -8,8 +8,8 @@ const REASONS = ["จอแตก", "สายชาร์จขาด", "เค
 const N = 6; // จำนวนชิ้นที่จะจำลองส่งซ่อม
 
 async function main() {
-  const staff = await p.user.findFirst({ where: { role: "STAFF" } });
-  if (!staff) throw new Error("no staff user — reseed first");
+  const staff = await p.user.findFirst();
+  if (!staff) throw new Error("no user — reseed first");
 
   // เลือก sub ที่ AVAILABLE จาก tracked item (KRU) แบบสุ่ม กระจายหลาย item
   const subs = await p.$queryRaw<{ id: string; itemId: string; subCode: string; code: string; name: string }[]>`

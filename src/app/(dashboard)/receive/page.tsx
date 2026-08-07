@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
 import { motion } from "motion/react";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { cn } from "@/lib/utils";
 import {
   searchDispenseItems,
@@ -29,6 +29,7 @@ const uid = () =>
 import { AddItemModal } from "@/components/shared/add-item-modal";
 import { ReturnPanel } from "@/components/receive/return-panel";
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
+import { InUsePanel } from "@/components/receive/in-use-panel";
 import { usePageHeader } from "@/components/layout/page-header-context";
 
 interface SearchItem {
@@ -147,7 +148,7 @@ function ReceiveShell() {
         {tab === "receive" ? (
           <ReceiveContent />
         ) : tab === "in_use" ? (
-          <SubItemStatusPanel status="IN_USE" actionLabel="รับเข้า" emptyText="ไม่มีรายการที่อยู่ระหว่างนำไปใช้งาน" />
+          <InUsePanel />
         ) : tab === "return" ? (
           <ReturnPanel initialChip={initialDueChip} />
         ) : (
@@ -343,7 +344,7 @@ function ReceiveContent() {
       >
         {/* Thumbnail */}
         <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted">
-          <img src={thumb ?? pic(item.code, 200)} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
+          <ItemThumb src={thumb} alt={item.name} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-base leading-snug text-foreground">{item.name}</p>

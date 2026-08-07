@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, error, parseBody } from "@/lib/api-utils";
+import { requireAdmin, json, error, parseBody } from "@/lib/api-utils";
 import { embedItem } from "@/lib/gemini";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
@@ -98,9 +98,8 @@ async function cutComponent(
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return error("Instructors cannot assemble kits", 403);
 
   const { data, error: parseError } = await parseBody(assembleSchema)(request);
   if (parseError) return parseError;
@@ -140,15 +139,13 @@ export async function POST(request: NextRequest) {
         compItems.push(await collectComponent(tx, c, assembleQty));
       }
 
-      // 4. สร้าง kit Item (borrowable — นักศึกษายืม)
+      // 4. สร้าง kit Item (นักศึกษายืม — loanability comes from the pieces' status, not a flag)
       const kitItem = await tx.item.create({
         data: {
           code: kitCode,
           name,
           categoryId: kitCategory.id,
           issueUnitId,
-          borrowable: true,
-          borrowLimit: assembleQty,
           setSize: 1,
           totalQty: 0,
           availableQty: 0,

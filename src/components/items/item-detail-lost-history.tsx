@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CalendarDays, User2, Undo2, X, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getItemHistory, recoverLoss } from "@/lib/api";
+import { getItemHistory, recoverStock } from "@/lib/api";
 import { toast } from "sonner";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
@@ -23,7 +23,6 @@ interface LostEvent {
   id: string;
   type: string;
   date: string;
-  description: string;
   user: string;
   details: {
     source?: "PIECE" | "ADJUSTMENT";
@@ -70,7 +69,7 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
     if (!recoverTarget) return;
     setRecovering(true);
     try {
-      await recoverLoss(itemId, { source: recoverTarget.details?.source ?? "PIECE", recordId: recoverTarget.id, note: recoverNote.trim() || undefined });
+      await recoverStock(itemId, { source: recoverTarget.details?.source ?? "PIECE", recordId: recoverTarget.id, note: recoverNote.trim() || undefined });
       toast.success("เรียกคืนแล้ว");
       closeRecover();
       refetch();

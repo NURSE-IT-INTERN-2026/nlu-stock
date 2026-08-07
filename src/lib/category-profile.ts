@@ -63,7 +63,6 @@ export function sanitizeItemByProfile(
   }
   if (!profile.setTracking) {
     data.setSize = 1;
-    data.borrowable = false;
   }
   if (profile.dispenseType !== "CONSUMABLE") {
     delete data.storageRequirements;

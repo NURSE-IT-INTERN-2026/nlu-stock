@@ -1,25 +1,24 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
+import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { bulkSubItemStatusSchema } from "@/lib/validators";
 import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
-import { closeOpenLoan } from "@/lib/returns";
+import { closeOpenLoan, returnLocationUpdate } from "@/lib/returns";
 import { NextRequest } from "next/server";
 
 // Bulk per-piece status change for tracked items (adjust dialog). One atomic transaction,
 // one recompute at the end. Audit = ItemStatusLog per subItem.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id } = await params;
   const { data, error: parseError } = await parseBody(bulkSubItemStatusSchema)(request);
   if (parseError) return parseError;
   if (!data) return error("No data");
 
-  const item = await prisma.item.findUnique({ where: { id }, select: { id: true, trackIndividually: true } });
+  const item = await prisma.item.findUnique({ where: { id }, select: { id: true, trackIndividually: true, locationId: true } });
   if (!item) return notFound("Item not found");
   if (!item.trackIndividually) return error("รายการนี้ไม่ได้นับรายชิ้น ใช้การปรับสต็อกแทน");
 
@@ -31,8 +30,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // All-or-nothing: a batch where some pieces can't legally reach the target is refused
   // whole, naming the offenders — half-applying it would leave staff guessing what landed.
-  const isAdmin = auth.user.role === "ADMIN";
-  const blocked = subs.filter((s) => s.status !== data.newStatus && !canTransition(s.status, data.newStatus, { isAdmin }));
+  const isSuperAdmin = auth.user.role === "SUPERADMIN";
+  const blocked = subs.filter((s) => s.status !== data.newStatus && !canTransition(s.status, data.newStatus, { isSuperAdmin }));
   if (blocked.length > 0) {
     return error(
       `เปลี่ยนเป็น "${STATUS_LABELS[data.newStatus]}" ไม่ได้ ${blocked.length} ชิ้น — ` +
@@ -43,7 +42,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const counts = await prisma.$transaction(async (tx) => {
     for (const sub of subs) {
       if (sub.status === data.newStatus) continue; // no-op, skip logging
-      await tx.subItem.update({ where: { id: sub.id }, data: { status: data.newStatus } });
+      await tx.subItem.update({
+        where: { id: sub.id },
+        // No destination picker in the bulk dialog — a stationed piece pulled out of IN_USE
+        // here goes back to its spec's location rather than keeping the room it sat in.
+        data: {
+          status: data.newStatus,
+          ...returnLocationUpdate({
+            previousStatus: sub.status,
+            newStatus: data.newStatus,
+            itemLocationId: item.locationId,
+          }),
+        },
+      });
       await tx.itemStatusLog.create({
         data: {
           itemId: id,
@@ -60,6 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         subItemId: sub.id,
         previousStatus: sub.status,
         newStatus: data.newStatus,
+        userId: auth.user.userId,
       });
     }
 

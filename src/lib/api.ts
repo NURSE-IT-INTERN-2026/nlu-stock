@@ -353,6 +353,20 @@ export function searchItemsAI(params: { q: string; limit?: number }) {
   }>(`/api/items/search-ai?${qs}`);
 }
 
+export interface CourseOption {
+  code: string;
+  name: string | null;
+}
+
+/** `stale` = the CMU upstream was unreachable and this is the last-known-good list. */
+export function getCourses() {
+  return request<{ courses: CourseOption[]; stale: boolean; syncedAt: string | null }>("/api/courses");
+}
+
+export function getCourseName(code: string) {
+  return request<CourseOption & { stale: boolean }>(`/api/courses/${encodeURIComponent(code)}`);
+}
+
 export function createDispense(data: Record<string, unknown>) {
   return request<{ count: number }>("/api/dispense", {
     method: "POST",
@@ -582,6 +596,43 @@ export function getSubItemsByStatus(status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED
   return request<{ subItems: SubItemByStatus[] }>(`/api/sub-items?status=${status}`);
 }
 
+/** One open นำไปใช้งาน record. Covers both kinds: `subItem` is null for COUNT stock. */
+export interface InUseRecord {
+  id: string;
+  quantity: number;
+  resolvedQty: number;
+  dispensedAt: string;
+  notes: string | null;
+  location: { id: string; building: string; floor: string; room: string; detail: string | null } | null;
+  staff: { name: string };
+  subItem: { id: string; subCode: string; name: string | null; serialNumber: string | null } | null;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    imageUrl: string | null;
+    trackIndividually: boolean;
+    locationId: string | null;
+    issueUnit: { name: string };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+    _count: { subItems: number };
+  };
+}
+
+export function getInUseRecords() {
+  return request<{ records: InUseRecord[] }>("/api/dispense/in-use");
+}
+
+export function returnInUseRecord(
+  recordId: string,
+  body: { destLocationId: string; quantity?: number; note?: string | null },
+) {
+  return request<{ success: boolean; quantity: number; moved: boolean }>(
+    `/api/dispense/in-use/${recordId}/return`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
 export function updateItem(itemId: string, data: Record<string, unknown>) {
   return request<unknown>(`/api/items/${itemId}`, {
     method: "PATCH",
@@ -594,8 +645,12 @@ export function getItemHistory(itemId: string, params?: string) {
   return request<{ events: unknown[] }>(`/api/items/${itemId}/history?${qs}`);
 }
 
-export function recoverLoss(itemId: string, data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string }) {
-  return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover-loss`, {
+/** Put stock back: `kind` LOST = เรียกคืนสูญหาย (default), DAMAGED = รับคืนจากซ่อม. */
+export function recoverStock(
+  itemId: string,
+  data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string; kind?: "LOST" | "DAMAGED" },
+) {
+  return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -683,6 +738,14 @@ export function getDashboardDispenseMonthly() {
 
 export function getDashboardProfileSummary() {
   return request<unknown[]>("/api/dashboard/profile-summary");
+}
+
+export function getDashboardAssetStatus() {
+  return request<unknown[]>("/api/dashboard/asset-status");
+}
+
+export function getDashboardMovementMonthly() {
+  return request<unknown[]>("/api/dashboard/movement-monthly");
 }
 
 export function getDashboardRecentDispense() {

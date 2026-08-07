@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
+import { requireSuperAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
 import { itemCreateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 import { Prisma, ItemStatus } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const params = getSearchParams(request);
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { data, error: parseError } = await parseBody(itemCreateSchema)(request);

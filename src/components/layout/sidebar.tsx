@@ -18,15 +18,18 @@ import {
 import { cn } from "@/lib/utils";
 import { motion, LayoutGroup } from "motion/react";
 import type { SessionUser } from "@/types";
+import { canManageStock } from "@/lib/roles";
 
+// stockOnly / superOnly mirror the route rules in src/middleware.ts — the server is
+// what actually enforces them; these just keep dead links out of the menu.
 const navItems = [
-  { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard, hideForChildren: true },
+  { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard },
   { href: "/items", label: "รายการพัสดุ", icon: Package },
   { href: "/dispense", label: "เบิก-ยืมพัสดุ", icon: ShoppingCart },
-  { href: "/receive", label: "รับเข้า-คืนพัสดุ", icon: Truck },
-  { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench },
+  { href: "/receive", label: "รับเข้า-คืนพัสดุ", icon: Truck, stockOnly: true },
+  { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench, stockOnly: true },
   { href: "/reports", label: "รายงาน & สถิติ", icon: BarChart3 },
-  { href: "/settings", label: "ตั้งค่า", icon: Settings, adminOnly: true },
+  { href: "/settings", label: "ตั้งค่า", icon: Settings, superOnly: true },
 ];
 
 interface SidebarProps {
@@ -45,8 +48,8 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
 
   const filteredNav = navItems.filter(
     (item) =>
-      (!item.adminOnly || user.role === "ADMIN") &&
-      (!item.hideForChildren || user.role !== "CHILDREN")
+      (!item.superOnly || user.role === "SUPERADMIN") &&
+      (!item.stockOnly || canManageStock(user.role))
   );
 
   return (

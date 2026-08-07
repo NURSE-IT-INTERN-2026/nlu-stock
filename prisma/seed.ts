@@ -156,10 +156,11 @@ async function main() {
   // ============================================================
   // Users
   // ============================================================
-  const admin = await prisma.user.create({ data: { email: "admin@nlu.ac.th", name: "Admin User", role: "ADMIN" } });
-  await prisma.user.create({ data: { email: "staff@nlu.ac.th", name: "Staff User", role: "STAFF" } });
-  await prisma.user.create({ data: { email: "instructor@nlu.ac.th", name: "Instructor User", role: "INSTRUCTOR" } });
-  await prisma.user.create({ data: { email: "children@nlu.ac.th", name: "Children User", role: "CHILDREN" } });
+  // Roles are not stored here — these emails must appear in the matching
+  // *_EMAILS env list (see .env.example) or they cannot sign in.
+  const admin = await prisma.user.create({ data: { email: "superadmin@nlu.ac.th", name: "Super Admin" } });
+  await prisma.user.create({ data: { email: "admin@nlu.ac.th", name: "Admin User" } });
+  await prisma.user.create({ data: { email: "executive@nlu.ac.th", name: "Executive User" } });
 
   // ============================================================
   // Units — collect unique units from CSVs + ชีต8

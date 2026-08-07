@@ -70,7 +70,6 @@ interface ItemRecord {
   maintenanceCycleMonths: number;
   storageRequirements: string | null;
   setSize: number;
-  borrowable: boolean;
 }
 
 export function ItemsMasterTab() {

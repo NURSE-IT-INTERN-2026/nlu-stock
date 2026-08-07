@@ -1,63 +1,63 @@
 import { getAlertCounts } from "@/lib/alerts";
-import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
-import { MonthlyDispenseWidget } from "@/components/dashboard/monthly-dispense-widget";
-import { ProfileSummaryWidget } from "@/components/dashboard/profile-summary-widget";
-import { DashboardTables } from "@/components/dashboard/dashboard-charts";
+import { prisma } from "@/lib/prisma";
 import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
+import { DashboardKpiGrid } from "@/components/dashboard/dashboard-kpi-grid";
+import { DashboardTabs } from "@/components/dashboard/dashboard-tabs";
 
 export default async function DashboardPage() {
-  const { lowStock, nearExpiry, totalItems, onLoan } = await getAlertCounts();
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const outstandingLoan = { returnedAt: null, OR: [{ loanType: null }, { loanType: "BORROW" as const }] };
+
+  const [
+    counts, totalPieces,
+    receiveThisMonth, dispenseThisMonth,
+    receiveQtyThis, receiveQtyLast, dispenseQtyThis, dispenseQtyLast,
+    itemRepair, subItemRepair,
+    dueTodayReturns, outOfStock,
+  ] = await Promise.all([
+    getAlertCounts(),
+    prisma.item.aggregate({ _sum: { totalQty: true }, where: { isActive: true } }),
+    prisma.receiveRecord.count({ where: { receivedAt: { gte: monthStart } } }),
+    prisma.dispenseRecord.count({ where: { dispensedAt: { gte: monthStart } } }),
+    prisma.receiveRecord.aggregate({ _sum: { quantity: true }, where: { receivedAt: { gte: monthStart } } }),
+    prisma.receiveRecord.aggregate({ _sum: { quantity: true }, where: { receivedAt: { gte: lastMonthStart, lt: monthStart } } }),
+    prisma.dispenseRecord.aggregate({ _sum: { quantity: true }, where: { dispensedAt: { gte: monthStart } } }),
+    prisma.dispenseRecord.aggregate({ _sum: { quantity: true }, where: { dispensedAt: { gte: lastMonthStart, lt: monthStart } } }),
+    prisma.item.count({ where: { isActive: true, trackIndividually: false, status: "UNDER_REPAIR" } }),
+    prisma.subItem.count({ where: { status: "UNDER_REPAIR", item: { isActive: true } } }),
+    prisma.dispenseRecord.count({ where: { ...outstandingLoan, dueAt: { gte: todayStart, lt: todayEnd } } }),
+    prisma.item.count({ where: { isActive: true, availableQty: 0 } }),
+  ]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
       <DashboardGreeting />
 
-      {/* Metric cards — horizontal row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <DashboardMetricCard
-          title="รายการพัสดุในคลังทั้งหมด"
-          value={totalItems}
-          subtitle="รายการ"
-          iconName="Package"
-          color="text-success"
-          href="/items"
-        />
-        <DashboardMetricCard
-          title="คงคลังต่ำกว่าเกณฑ์ขั้นต่ำ"
-          value={lowStock}
-          subtitle={lowStock > 0 ? "รายการ" : undefined}
-          iconName="AlertTriangle"
-          color="text-orange-500"
-          href="/alerts?lowStock=true"
-        />
-        <DashboardMetricCard
-          title="หมดอายุภายใน 30 วัน"
-          value={nearExpiry}
-          subtitle={nearExpiry > 0 ? "รายการ" : undefined}
-          iconName="CalendarClock"
-          color="text-info-500"
-          href="/alerts?nearExpiry=true"
-        />
-        <DashboardMetricCard
-          title="อยู่ระหว่างการยืม ค้างส่งคืน"
-          value={onLoan}
-          subtitle={onLoan > 0 ? "รายการ" : undefined}
-          iconName="Undo2"
-          color="text-danger-500"
-          href="/items?onLoan=true"
-        />
-      </div>
+      <DashboardKpiGrid
+        kpis={{
+          totalItems: counts.totalItems,
+          totalPieces: totalPieces._sum.totalQty ?? 0,
+          receiveThisMonth,
+          receiveQtyThisMonth: receiveQtyThis._sum.quantity ?? 0,
+          receiveQtyLastMonth: receiveQtyLast._sum.quantity ?? 0,
+          dispenseThisMonth,
+          dispenseQtyThisMonth: dispenseQtyThis._sum.quantity ?? 0,
+          dispenseQtyLastMonth: dispenseQtyLast._sum.quantity ?? 0,
+          onLoan: counts.onLoan,
+          overdueReturn: counts.overdueReturn,
+          dueTodayReturns,
+          inRepair: itemRepair + subItemRepair,
+          damagedPending: counts.damagedPending,
+          lowStock: counts.lowStock,
+          outOfStock,
+        }}
+      />
 
-      {/* Monthly dispense + category breakdown */}
-      <div className="grid gap-4 lg:grid-cols-3 items-stretch">
-        <div className="lg:col-span-2">
-          <MonthlyDispenseWidget />
-        </div>
-        <ProfileSummaryWidget />
-      </div>
-
-      {/* Full-width tables */}
-      <DashboardTables />
+      <DashboardTabs />
     </div>
   );
 }

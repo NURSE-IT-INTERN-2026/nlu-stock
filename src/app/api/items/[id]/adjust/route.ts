@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
-import { requireAuth, json, notFound, error, parseBody, forbidden } from "@/lib/api-utils";
+import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { stockAdjustSchema } from "@/lib/validators";
-import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { allocateAcrossLots, holdsTotalQty, recomputeItemCounts } from "@/lib/stock";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 import { ADJUSTMENT_REASON_LABELS } from "@/lib/constants";
@@ -10,9 +10,8 @@ import { NextRequest } from "next/server";
 
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const { id } = await params;
   const { data, error: parseError } = await parseBody(stockAdjustSchema)(request);
@@ -149,6 +148,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const reason = reasonFor(newAvailable - item.availableQty);
 
+    // Damaged stock is parked, not written off — see holdsTotalQty in lib/stock.ts. Dropping
+    // totalQty used to make those units vanish from the item, so "5 รอส่งซ่อม" was a promise
+    // nothing kept. lib/distribution.ts derives the ชำรุด bucket from the open adjustments
+    // and the recover route hands them back.
+    const nextTotal = holdsTotalQty(reason) ? item.totalQty : newTotal;
+
     const adjustment = await tx.stockAdjustment.create({
       data: {
         itemId: id,
@@ -171,7 +176,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       where: { id },
       data: {
         availableQty: newAvailable,
-        totalQty: newTotal,
+        totalQty: nextTotal,
         ...countStamp,
       },
     });

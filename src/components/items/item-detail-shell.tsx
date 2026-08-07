@@ -11,24 +11,27 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon,
   Undo2, Package, Tag, FolderTree, Layers, MapPin, ClipboardList,
   QrCode, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2,
-  RefreshCw, CalendarDays, User2, ShieldAlert, Home, Printer,
+  CalendarDays, User2, ShieldAlert, Home, Printer,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
+import { canManageStock } from "@/lib/roles";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { lotDisplay } from "@/lib/lot-code";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import {
-  STATUS_LABELS, locationLabel, formatSubCode, qrUrl, EVENT_TYPE_LABELS, labelFor,
+  STATUS_LABELS, locationLabel, formatSubCode, qrUrl, labelFor,
   CONDITION_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
   type MaintenanceType, type MaintenanceResult, type ItemStatus,
   USAGE_STATUS_ORDER, STATUS_PILLS,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
 import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
+import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
+import type { OpenDamage } from "@/components/items/recover-damage-dialog";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
@@ -67,6 +70,10 @@ interface ItemData {
   dispenseRecords: unknown[]; receiveRecords: unknown[];
   maintenanceRecords: { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }[];
   statusLogs: unknown[]; adjustments: unknown[];
+  /** Derived server-side (lib/distribution.ts) — where the stock actually is. */
+  distribution?: DistributionRow[];
+  /** Open แจ้งชำรุด bookings awaiting repair (GET /api/items/:id). */
+  openDamage?: OpenDamage[];
   kitComponents: { quantity: number; name: string; componentItem: { code: string; name: string; availableQty: number } | null; unit: { name: string } }[];
 }
 
@@ -127,21 +134,6 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 const TONE_BAR: Record<Tone, string> = { success: "bg-success", primary: "bg-primary", warning: "bg-warning", destructive: "bg-destructive" };
 
-// ── Piece-mode history timeline ──
-type HistType = "DISPENSE" | "STATUS_CHANGE" | "MAINTENANCE";
-const HIST_ICONS: Record<HistType, typeof Package> = { DISPENSE: ShoppingCart, STATUS_CHANGE: RefreshCw, MAINTENANCE: Wrench };
-const HIST_BADGE: Record<HistType, string> = {
-  DISPENSE: "bg-primary/10 text-primary border-primary/20",
-  STATUS_CHANGE: "bg-warning/10 text-warning-700 border-warning/20",
-  MAINTENANCE: "bg-primary/5 text-primary border-primary/15",
-};
-const HIST_CHIPS: { value: HistType | ""; label: string }[] = [
-  { value: "", label: "ทั้งหมด" },
-  { value: "DISPENSE", label: "เบิก" },
-  { value: "STATUS_CHANGE", label: "เปลี่ยนสถานะ" },
-  { value: "MAINTENANCE", label: "บำรุงรักษา" },
-];
-
 function maintTone(nextDate: string | null): Tone {
   if (!nextDate) return "primary";
   const diff = (new Date(nextDate).getTime() - Date.now()) / 86_400_000;
@@ -164,7 +156,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const searchParams = useSearchParams();
   const copy = searchParams.get("copy");
   const { user } = useSession();
-  const canAct = user?.role === "ADMIN" || user?.role === "STAFF";
+  const canAct = canManageStock(user?.role ?? "");
 
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
@@ -187,7 +179,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // Piece-mode only
   const [stationOpen, setStationOpen] = useState(false);
   const [returning, setReturning] = useState<string | null>(null); // subItemId being returned
-  const [histFilter, setHistFilter] = useState<HistType | "">("");
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   // Fetch the item (spec) once per item. Non-tracked → item-mode; tracked → piece/empty.
@@ -236,8 +227,8 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // Switch copy via query (shallow — item not refetched).
   const selectCopy = (subCode: string) => router.replace(`/items/${itemId}?copy=${subCode}`, { scroll: false });
 
-  // Reset tab + filters when switching copy.
-  useEffect(() => { setTab("overview"); setHistFilter(""); }, [mode, itemId, selectedSubCode]);
+  // Reset tab when switching copy (the history tab owns its own filter state).
+  useEffect(() => { setTab("overview"); }, [mode, itemId, selectedSubCode]);
 
   const { setDetail } = usePageHeader();
   useEffect(() => {
@@ -275,20 +266,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
 
   // ── Piece-mode derived (hooks run before early returns) ──
   const activeDispense = useMemo(() => sub?.dispenseRecords.find((d) => d.returnedAt === null) ?? null, [sub]);
-  const historyEvents = useMemo<{ id: string; type: HistType; date: string; description: string; user: string }[]>(() => {
-    if (!sub) return [];
-    const dispense = sub.dispenseRecords.map((d) => ({ id: d.id, type: "DISPENSE" as const, date: d.dispensedAt, description: `เบิกออก${d.returnedAt ? " · คืนแล้ว" : ""}${d.usageNote ? ` · ${d.usageNote}` : ""}`, user: d.staff.name }));
-    const status = sub.statusLogs.map((l) => ({ id: l.id, type: "STATUS_CHANGE" as const, date: l.changedAt, description: `${STATUS_LABELS[l.previousStatus] ?? l.previousStatus} → ${STATUS_LABELS[l.newStatus] ?? l.newStatus}${l.repairVenue && l.newStatus === "UNDER_REPAIR" ? ` · ส่งซ่อม${l.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}` : ""}${l.reason ? ` · ${l.reason}` : ""}`, user: l.changer.name }));
-    const maint = sub.maintenanceRecords.map((r) => ({ id: r.id, type: "MAINTENANCE" as const, date: r.performedAt, description: `${labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType)} · ${labelFor(MAINT_RESULT_LABELS, r.result as MaintenanceResult)}${r.issue ? ` · ${r.issue}` : ""}`, user: r.performer.name }));
-    return [...dispense, ...status, ...maint].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [sub]);
-  const filteredEvents = useMemo(() => (histFilter ? historyEvents.filter((e) => e.type === histFilter) : historyEvents), [historyEvents, histFilter]);
-  // Totals per type — a piece carries its own full log, so counting it here is the DB truth.
-  const histCounts = useMemo(() => {
-    const c: Record<string, number> = { DISPENSE: 0, STATUS_CHANGE: 0, MAINTENANCE: 0 };
-    for (const e of historyEvents) c[e.type] = (c[e.type] ?? 0) + 1;
-    return c;
-  }, [historyEvents]);
 
   if (loading) {
     return (
@@ -315,7 +292,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const stockStatus = item ? (() => {
     const s = item.minThreshold > 0
       // Same wording as the card's chip — one word per state across the page.
-      ? item.availableQty < item.minThreshold ? { color: "bg-warning", label: "เหลือน้อย" } : { color: "bg-success", label: "ปกติ" }
+      ? item.availableQty < item.minThreshold ? { color: "bg-warning", label: "ต่ำกว่าขั้นต่ำ" } : { color: "bg-success", label: "ปกติ" }
       : { color: "bg-success", label: "ปกติ" };
     if (item.availableQty === 0) { s.color = "bg-destructive"; s.label = "หมด"; }
     return s;
@@ -463,50 +440,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                 />
               )}
               {tab === "lost" && <ItemDetailLostHistory itemId={sub.item.id} itemCode={sub.item.code} isMulti={isMulti} onSuccess={fetchSub} />}
-              {tab === "history" && (
-                <section className="rounded-2xl border border-border bg-card overflow-hidden">
-                  <SectionHeader eyebrow="กิจกรรม" title="ประวัติ" />
-                  <p className="px-4 sm:px-5 pt-4 text-sm text-muted-foreground">
-                    เบิกไปแล้ว <span className="font-semibold text-foreground tabular-nums">{histCounts.DISPENSE}</span> ครั้ง
-                    {" · เปลี่ยนสถานะ "}<span className="font-semibold text-foreground tabular-nums">{histCounts.STATUS_CHANGE}</span> ครั้ง
-                    {" · บำรุงรักษา "}<span className="font-semibold text-foreground tabular-nums">{histCounts.MAINTENANCE}</span> ครั้ง
-                  </p>
-                  <div className="px-4 sm:px-5 pt-3 flex items-center gap-2 overflow-x-auto">
-                    <span className="text-sm text-muted-foreground shrink-0">Type:</span>
-                    {HIST_CHIPS.map((chip) => {
-                      const active = histFilter === chip.value;
-                      const n = chip.value ? histCounts[chip.value] ?? 0 : historyEvents.length;
-                      return (
-                        <button key={chip.value} className={cn("px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors", active ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:bg-muted")} onClick={() => setHistFilter(chip.value)}>
-                          {chip.label} {n}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {filteredEvents.length === 0 ? (
-                    <p className="text-center py-10 text-sm text-muted-foreground">ไม่มีรายการในหมวดนี้</p>
-                  ) : (
-                    <ol className="p-4 sm:p-5 space-y-3">
-                      {filteredEvents.map((e) => {
-                        const Icon = HIST_ICONS[e.type] || Package;
-                        return (
-                          <li key={`${e.type}-${e.id}`} className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20">
-                            <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary"><Icon className="size-4" /></div>
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border", HIST_BADGE[e.type])}>{labelFor(EVENT_TYPE_LABELS, e.type)}</span>
-                                <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><CalendarDays className="size-3" />{fmtDT(e.date)}</span>
-                              </div>
-                              <p className="text-sm font-medium">{e.description}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1"><User2 className="size-3" /> by {e.user}</p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </section>
-              )}
+              {tab === "history" && <ItemDetailHistory itemId={sub.item.id} subItemId={sub.id} />}
               {tab === "maintenance" && (
                 <PieceMaintenance sub={sub} canAct={canAct} onRecord={() => setMaintOpen(true)} />
               )}
@@ -599,7 +533,7 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
   return (
     <div className="grid gap-5 sm:gap-6 lg:gap-8 p-4 sm:p-6 grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]">
       <div className="relative w-full md:w-48 lg:w-56 aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-muted shadow-sm">
-        <img src={coverSrc ?? pic(item.code, 640, 480)} alt={item.name} className="size-full object-cover" />
+        <ItemThumb src={coverSrc} alt={item.name} />
         <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
       </div>
       {/* Top-aligned: the stock card is taller than the title, and justify-between used to
@@ -622,7 +556,7 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
           {item.location && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">{locationLabel(item.location)}</span>}
         </div>
       </div>
-      <StockSummary available={item.availableQty} total={item.totalQty} unit={item.issueUnit.name} minThreshold={item.minThreshold} dispenseType={item.category.profile?.dispenseType ?? "COUNT"} />
+      <StockSummary available={item.availableQty} total={item.totalQty} unit={item.issueUnit.name} minThreshold={item.minThreshold} dispenseType={item.category.profile?.dispenseType ?? "COUNT"} distribution={item.distribution} />
     </div>
   );
 }
@@ -640,7 +574,7 @@ function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onRet
     <div className="p-4 sm:p-6">
       <div className="grid gap-5 sm:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]">
         <div className="relative w-full md:w-48 lg:w-56 aspect-square rounded-xl overflow-hidden ring-1 ring-border bg-muted shadow-sm">
-          <img src={cover ?? pic(fullCode, 640, 480)} alt={sub.name ?? fullCode} className="size-full object-cover" />
+          <ItemThumb src={cover} alt={sub.name ?? fullCode} />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
         </div>
         {/* Top-aligned: the stock card is taller than the title, and justify-between used to
@@ -675,31 +609,51 @@ function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onRet
 
 // ── Stock summary (item hero right slot) ──
 // Item-mode (non-tracked) stock card. No status headline at all: a non-tracked item is a
-// *pile*, and a pile holds several states at once (25 พร้อมใช้ + 115 ถูกยืม) — squeezing
+// *pile*, and a pile holds several states at once (25 ว่าง + 115 ไม่อยู่ในคลัง) — squeezing
 // that into one word is always wrong. Only the tracked card names a status, because there
-// the headline describes one piece. Here the number, the bar and the six-row table do it.
+// the headline describes one piece. Here the number, the bar and the two-row table do it.
 // COUNT (วัสดุคงทน ยืม-คืน) gets the table; consumables just deplete, so they get the bar.
-function StockSummary({ available, total, unit, minThreshold, dispenseType }: {
+function StockSummary({ available, total, unit, minThreshold, dispenseType, distribution }: {
   available: number; total: number; unit: string; minThreshold: number; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
+  distribution?: DistributionRow[];
 }) {
   const isCount = dispenseType === "COUNT";
 
   // Low-stock alert only (zero stock gets its own banner).
   const isLow = minThreshold > 0 && available > 0 && available < minThreshold;
   const stockTag = isLow
-    ? { label: "เหลือน้อย", dot: "bg-warning", cls: "bg-warning/10 text-warning-700 border-warning/20" }
+    ? { label: "ต่ำกว่าขั้นต่ำ", dot: "bg-warning", cls: "bg-warning/10 text-warning-700 border-warning/20" }
     : null;
 
-  // Same six rows as the tracked breakdown, so both cards read alike. A non-tracked item
-  // only derives AVAILABLE/ON_LOAN from its quantities — the other four are always 0 here.
-  const derived: Record<string, number> = { AVAILABLE: available, ON_LOAN: Math.max(0, total - available) };
-  const segments = USAGE_STATUS_ORDER.map((key) => ({ key, ...STOCK_STATUS_META[key], count: derived[key] ?? 0 }));
+  // The breakdown is the DistributionTable's own numbers, summed per state — same source,
+  // so the card and the table two screens down cannot disagree about one quantity.
+  // It used to mirror the six-row tracked breakdown by pouring the whole totalQty−availableQty
+  // gap into ถูกยืม and hard-coding the other four to 0. That reads as a fact and was not one:
+  // on NLU-DUR-003 it claimed 89 ถูกยืม when 5 were borrowed and 84 were stationed in rooms.
+  // A pile has no per-piece status to count, but the open records do say where the stock went.
+  const byState = { AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, DAMAGED: 0 };
+  for (const r of distribution ?? []) byState[r.state] += r.qty;
+  // Whatever the records still don't account for. Every named state above is backed by open
+  // rows — available qty, INUSE placements, open loans, open damage adjustments — so this
+  // should be 0. Showing the remainder beats folding it into a state that would then be
+  // overstated, and it is how a drift between totalQty and the ledgers becomes visible.
+  const unaccounted = Math.max(0, total - (byState.AVAILABLE + byState.IN_USE + byState.ON_LOAN + byState.DAMAGED));
+  const segments = [
+    { key: "AVAILABLE", ...STATE_META.AVAILABLE, count: byState.AVAILABLE },
+    { key: "IN_USE", ...STATE_META.IN_USE, count: byState.IN_USE },
+    { key: "ON_LOAN", ...STATE_META.ON_LOAN, count: byState.ON_LOAN },
+    ...(byState.DAMAGED > 0 ? [{ key: "DAMAGED", ...STATE_META.DAMAGED, count: byState.DAMAGED }] : []),
+    ...(unaccounted > 0
+      ? [{ key: "OTHER", label: "ไม่ระบุ", dot: "bg-muted-foreground/40", count: unaccounted }]
+      : []),
+  ];
   const pct = (n: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0);
-  // The reorder marker rides the same bar. It measures stock level against minThreshold —
+  // The จำนวนขั้นต่ำ marker rides the same bar. It measures stock level against minThreshold —
   // a different question from the status split, which is why consumables get a bar too.
-  const showReorder = minThreshold > 0 && total > 0 && minThreshold < total;
-  // Nothing available, but the pieces still exist — they are all out on loan.
-  const outOnLoan = isCount && total > 0;
+  const showMinMarker = minThreshold > 0 && total > 0 && minThreshold < total;
+  // Nothing available, but the pieces still exist somewhere. For ยืม-คืน that is usually a
+  // loan — usually is not always, so the banner reports the count and skips the reason.
+  const stillOut = isCount && total > 0;
 
   return (
     <div className="w-full xl:w-80 rounded-xl bg-gradient-to-br from-muted/50 to-card border border-border p-5 md:col-span-2 xl:col-span-1">
@@ -721,14 +675,15 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType }: {
       </div>
 
       {/* Zero available is the one state a number alone doesn't shout loud enough. For
-          ยืม-คืน it does NOT mean the stock is gone — every piece is out on loan and
-          will come back, so it gets its own wording and a softer tone. */}
+          ยืม-คืน it does NOT mean the stock is gone — the pieces still exist and most of
+          them come back, so it gets its own wording and a softer tone. It says where the
+          stock is not, rather than claiming a loan it cannot verify. */}
       {available === 0 && (
-        outOnLoan ? (
+        stillOut ? (
           <div className={cn("mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm", TONE_CLASS.warning)}>
             <Undo2 className="size-4 shrink-0" />
-            <span className="font-medium">ถูกยืมออกหมด</span>
-            <span className="ml-auto text-xs opacity-80 shrink-0">{total} {unit}</span>
+            <span className="font-medium">ไม่มีของว่าง</span>
+            <span className="ml-auto text-xs opacity-80 shrink-0">{total} {unit} อยู่นอกคลัง</span>
           </div>
         ) : (
           <div className={cn("mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm", TONE_CLASS.destructive)}>
@@ -741,17 +696,17 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType }: {
       <div className="mt-4 relative h-4 rounded-full bg-muted overflow-hidden">
         <div className="flex h-full">
           {isCount
-            ? segments.map((s) => (<div key={s.key} className={cn("h-full", s.bar)} style={{ width: `${pct(s.count)}%` }} title={`${s.label}: ${s.count}`} />))
+            ? segments.map((s) => (<div key={s.key} className={cn("h-full", s.dot)} style={{ width: `${pct(s.count)}%` }} title={`${s.label}: ${s.count}`} />))
             : <div className="h-full bg-success" style={{ width: `${pct(available)}%` }} title={`คงเหลือ ${available}`} />}
         </div>
-        {showReorder && <span className="absolute inset-y-0 w-0.5 bg-destructive" style={{ left: `${pct(minThreshold)}%` }} title={`จุดสั่งซื้อ ${minThreshold} ${unit}`} />}
+        {showMinMarker && <span className="absolute inset-y-0 w-0.5 bg-destructive" style={{ left: `${pct(minThreshold)}%` }} title={`จำนวนขั้นต่ำ ${minThreshold} ${unit}`} />}
       </div>
-      {showReorder && (
-        <div className="mt-1.5 text-[11px] text-muted-foreground">จุดสั่งซื้อ <span className="text-destructive font-medium tabular-nums">{minThreshold} {unit}</span></div>
+      {showMinMarker && (
+        <div className="mt-1.5 text-[11px] text-muted-foreground">จำนวนขั้นต่ำ <span className="text-destructive font-medium tabular-nums">{minThreshold} {unit}</span></div>
       )}
 
-      {/* Two columns: all six stay visible at half the height, so the hero row does not
-          tower over the title column beside it. Unit is in the header line, not per row. */}
+      {/* Two columns, so three or four states stay visible at half the height and the hero
+          row does not tower over the title column beside it. Unit is in the header line. */}
       {isCount && (
         <div className="mt-3 rounded-lg border border-border bg-card grid grid-cols-2">
           {segments.map((s, i) => (
@@ -910,7 +865,7 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
     ...(sub.condition ? [{ icon: ClipboardList, label: "สภาพ", value: CONDITION_LABELS[sub.condition] ?? sub.condition }] : []),
     ...(sub.serialNumber ? [{ icon: Hash, label: "หมายเลขซีเรียล", value: sub.serialNumber, mono: true }] : []),
     { icon: Layers, label: "หน่วยเบิก", value: sub.item.issueUnit.name },
-    { icon: MapPin, label: "สถานที่จัดเก็บ", value: loc ? locationLabel(loc) : "-" },
+    { icon: MapPin, label: sub.status === "IN_USE" ? "สถานที่ที่นำไปใช้งาน" : "สถานที่จัดเก็บ", value: loc ? locationLabel(loc) : "-" },
     { icon: Clock, label: "วันที่สร้าง", value: fmtDay(sub.createdAt) },
   ];
 
@@ -992,8 +947,10 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
 }
 
 // ── Sub-codes tab (table: status + who/where + return) ──
-// StationInRoomDialog folds the room into notes as "ห้องที่ตั้ง: X", so an IN_USE piece
-// reads its room back out of there and falls back to its assigned location.
+// LEGACY READER. StationInRoomDialog used to fold the room into notes as "ห้องที่ตั้ง: X"
+// because locationId could come back null; INUSE now requires a real Location (see
+// validators/dispense.ts) and the dialog no longer writes the note. Kept only so the rows
+// written before that — the ones whose room is a typo like "asad" — still show something.
 const roomFromNotes = (notes: string | null | undefined) => notes?.match(/ห้องที่ตั้ง:\s*([^|]+)/)?.[1].trim() || null;
 
 function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, returning, onSelect, onReturn, onUndoDispose }: {

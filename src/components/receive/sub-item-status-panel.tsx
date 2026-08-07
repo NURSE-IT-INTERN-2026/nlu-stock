@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from "lucide-react";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { getSubItemsByStatus, updateItemStatus, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
@@ -64,17 +64,20 @@ function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | "";
 }
 
 // Generic "receive back" panel for per-unit sub-items in a fixed status
-// (IN_USE = placed in a room, UNDER_REPAIR = sent for repair, DAMAGED = reported
-// damaged, awaiting a send-to-repair decision). Action target varies:
-// IN_USE/UNDER_REPAIR flip → AVAILABLE, DAMAGED flips → UNDER_REPAIR (ส่งซ่อม).
+// (UNDER_REPAIR = sent for repair, DAMAGED = reported damaged, awaiting a
+// send-to-repair decision). UNDER_REPAIR flips → AVAILABLE, DAMAGED → UNDER_REPAIR (ส่งซ่อม).
 // UI mirrors ReturnPanel (search bar + summary count + card style) — no due-date
-// chips here since none of these statuses are loans with a due date.
+// chips here since neither status is a loan with a due date.
+//
+// IN_USE used to be handled here too, which is exactly what hid COUNT stock: this reads
+// the sub_items table, and a non-tracked item has no row there. คืนเข้าคลัง now uses
+// InUsePanel (records, not statuses) so both kinds show up. Don't add IN_USE back.
 export function SubItemStatusPanel({
   status,
   actionLabel,
   emptyText,
 }: {
-  status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED";
+  status: "UNDER_REPAIR" | "DAMAGED";
   actionLabel: string;
   emptyText: string;
 }) {
@@ -162,9 +165,9 @@ export function SubItemStatusPanel({
   );
 }
 
-function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemByStatus; status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
+function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemByStatus; status: "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
   const { user } = useSession();
-  const isAdmin = user?.role === "ADMIN";
+  const isSuperAdmin = user?.role === "SUPERADMIN";
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [maintOpen, setMaintOpen] = useState(false);
@@ -179,7 +182,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
   const isRepair = status === "UNDER_REPAIR";
   const isDamaged = status === "DAMAGED";
-  // DAMAGED → UNDER_REPAIR (ส่งซ่อม); IN_USE/UNDER_REPAIR → AVAILABLE (รับเข้า).
+  // DAMAGED → UNDER_REPAIR (ส่งซ่อม); UNDER_REPAIR → AVAILABLE (รับคืนจากส่งซ่อม).
   const targetStatus = isDamaged ? "UNDER_REPAIR" : "AVAILABLE";
   // Prefer the piece's own location; fall back to the spec's location when unset.
   const loc = row.location ?? row.item.location;
@@ -239,7 +242,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
-              <img src={row.item.imageUrl ?? pic(row.item.code, 176)} alt={row.item.name} loading="lazy" className="size-full object-cover" />
+              <ItemThumb src={row.item.imageUrl} alt={row.item.name} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-sm leading-snug">{row.item.name}</p>
@@ -291,7 +294,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                 <Pencil className="size-3.5" />แก้ข้อมูลส่งซ่อม
               </Button>
             )}
-            {isDamaged && isAdmin && (
+            {isDamaged && isSuperAdmin && (
               <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => setCancelOpen(true)}>
                 <Undo2 className="size-3.5" />ยกเลิกคำขอชำรุด
               </Button>
@@ -446,7 +449,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
       )}
 
       {/* ADMIN-only withdrawal of a ชำรุด report — the only step a role is allowed to undo. */}
-      {isDamaged && isAdmin && (
+      {isDamaged && isSuperAdmin && (
         <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>

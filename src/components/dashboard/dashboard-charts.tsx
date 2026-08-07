@@ -33,7 +33,7 @@ export function DashboardTables() {
   }
 
   return (
-    <div className="animate-fade-in grid gap-3 lg:grid-cols-2">
+    <div className="animate-fade-in grid grid-cols-1 gap-3 lg:grid-cols-2">
       <RecentDispenseTable data={dispenseQuery.data ?? []} />
       <RecentReceiveTable data={receiveQuery.data ?? []} />
     </div>

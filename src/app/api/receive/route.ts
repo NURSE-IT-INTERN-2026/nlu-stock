@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
+import { requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { receiveRequestSchema } from "@/lib/validators";
 import { autoLotNumber, OPENING_LOT_NUMBER } from "@/lib/lot-code";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuth(req);
+  const auth = await requireAdmin(req);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const body = await req.json();
   const parsed = receiveRequestSchema.safeParse(body);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -18,14 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox, ComboboxField, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem, ComboboxEmpty } from "@/components/ui/combobox";
 import { useCart, useCartLineActions, buildCartItem } from "@/components/dispense/cart-context";
 import { EditableQty } from "@/components/dispense/editable-qty";
-import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat, Bookmark, FolderOpen } from "lucide-react";
-import { pic } from "@/lib/image";
+import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat, Bookmark, FolderOpen, AlertTriangle } from "lucide-react";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS, locationLabel, effectiveCode, CONDITION_LABELS } from "@/lib/constants";
-import { createDispense, getDispenseTemplates, getDispenseTemplate, createDispenseTemplate, type TemplateSummary } from "@/lib/api";
+import { createDispense, getDispenseTemplates, getDispenseTemplate, createDispenseTemplate, getCourses, getCourseName, type TemplateSummary, type CourseOption } from "@/lib/api";
 import type { CartItem } from "@/lib/validators/dispense";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -34,6 +35,15 @@ export default function ConfirmDispensePage() {
   const router = useRouter();
   const [usageType, setUsageType] = useState<string>("");
   const [notes, setNotes] = useState("");
+  // ── รายวิชา (COURSE) — codes from the คณะพยาบาล API, names from the CMU registrar ──
+  const [courseCode, setCourseCode] = useState("");
+  const [courseName, setCourseName] = useState<string | null>(null);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  // Set whenever a CMU course API fails. The picker keeps working off cached data either way,
+  // so this is a notice, not an error state — but it has to be visible, because nobody is
+  // watching the server log and the person at this screen is the one who can report it.
+  const [courseApiError, setCourseApiError] = useState<string | null>(null);
   const [recipient, setRecipient] = useState("");
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
@@ -63,6 +73,64 @@ export default function ConfirmDispensePage() {
   useEffect(() => {
     void refreshTemplates();
   }, [refreshTemplates]);
+
+  // Fetched only once "รายวิชา" is actually picked — most dispenses are not for a course,
+  // and this is the one field that reaches outside the building for its options.
+  const needsCourse = usageType === "COURSE";
+  const loadCourses = useCallback(async () => {
+    setCoursesLoading(true);
+    try {
+      const d = await getCourses();
+      setCourses(d.courses);
+      // A stale list means the CMU end failed and this came out of our own copy. Say that
+      // outright rather than only dating it — a quiet date reads as trivia, and the person
+      // looking at it is the only one in a position to report that something is broken.
+      setCourseApiError(
+        d.stale
+          ? `เชื่อมต่อระบบรายวิชาไม่ได้ · กำลังใช้รายชื่อที่บันทึกไว้เมื่อ ${d.syncedAt ? fmtDate(d.syncedAt, TH_DATE) : "ก่อนหน้านี้"} — วิชาที่เพิ่งเปิดใหม่อาจยังไม่มี`
+          : null,
+      );
+    } catch {
+      toast.error("ดึงรายชื่อวิชาไม่สำเร็จ");
+      setCourseApiError("เชื่อมต่อระบบรายวิชาไม่ได้ — แจ้งผู้ดูแลระบบ");
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, []);
+  // Ref, not `courses.length`, so an upstream that legitimately answers with an empty list
+  // doesn't get re-fetched on every render.
+  const coursesRequested = useRef(false);
+  useEffect(() => {
+    if (!needsCourse || coursesRequested.current) return;
+    coursesRequested.current = true;
+    void loadCourses();
+  }, [needsCourse, loadCourses]);
+
+  // `{ value, label }` is the shape Base UI's combobox filters and displays without extra
+  // config, and the label carries the name so typing "พยาบาล" finds the course too, not just
+  // its number. Memoised because the registrar returns a couple of hundred of these.
+  const courseItems = useMemo(
+    () => courses.map((c) => ({ value: c.code, label: c.name ? `${c.code} — ${c.name}` : c.code })),
+    [courses],
+  );
+
+  // The code is what gets stored and grouped on; the name is shown so the user can confirm
+  // they picked the right subject. A registrar outage returns null — the code still submits.
+  const handleCourseChange = (code: string) => {
+    setCourseCode(code);
+    setCourseName(courses.find((c) => c.code === code)?.name ?? null);
+    void getCourseName(code)
+      .then((c) => {
+        setCourseName(c.name);
+        // `stale` here means the registrar itself refused; a course it simply has no bulletin
+        // for comes back with name null and stale false, which is not a fault worth reporting.
+        if (c.stale) setCourseApiError("เชื่อมต่อสำนักทะเบียนไม่ได้ — บันทึกเฉพาะรหัสวิชา ไม่มีชื่อวิชา");
+      })
+      .catch(() => {
+        setCourseName(null);
+        setCourseApiError("เชื่อมต่อสำนักทะเบียนไม่ได้ — บันทึกเฉพาะรหัสวิชา ไม่มีชื่อวิชา");
+      });
+  };
 
   const handleSaveTemplate = async () => {
     const name = templateName.trim();
@@ -221,7 +289,14 @@ export default function ConfirmDispensePage() {
           quantity: i.quantity,
         })),
         usageType: usageType || null,
-        notes: notes.trim() || null,
+        // Only the types that show the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
+        // hides the textarea but leaves its text in state, and posting that would file one
+        // usage type's description under another. Same for the course going the other way.
+        notes: needsActivity ? notes.trim() || null : null,
+        courseCode: needsCourse ? courseCode || null : null,
+        // The course name is snapshotted, not looked up at read time: history has to stay
+        // readable when the registrar is down, and a renamed course must not rewrite it.
+        usageNote: needsCourse ? courseName : null,
         recipient: recipient || null,
         dueAt: dueDate || null,
       });
@@ -240,15 +315,17 @@ export default function ConfirmDispensePage() {
   const durables = items.filter((i) => i.dispenseType !== "CONSUMABLE");
   const hasDurable = durables.length > 0;
 
-  // "ระบุกิจกรรมที่นำไปใช้" โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY).
-  const needsActivity = usageType === "ACTIVITY";
+  // Free-text line โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) กับ อื่นๆ (OTHER).
+  const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
+  const activityLabel = usageType === "OTHER" ? "ระบุการนำไปใช้" : "ระบุกิจกรรมที่นำไปใช้";
 
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).
   const errors = {
     usageType: usageType ? null : "เลือกการใช้งาน",
     recipient: recipient.trim() ? null : "ระบุผู้รับ",
     ...(hasDurable ? { dueDate: dueDate ? null : "เลือกกำหนดคืน" } : {}),
-    ...(needsActivity ? { notes: notes.trim() ? null : "ระบุกิจกรรมที่นำไปใช้" } : {}),
+    ...(needsActivity ? { notes: notes.trim() ? null : activityLabel } : {}),
+    ...(needsCourse ? { courseCode: courseCode ? null : "เลือกรายวิชา" } : {}),
   } as Record<string, string | null>;
   const canConfirm = Object.values(errors).every((v) => !v);
 
@@ -353,7 +430,7 @@ export default function ConfirmDispensePage() {
                           </div>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{item.categoryName}</span>
+                          <span className="inline-flex max-w-full items-center truncate rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{item.categoryName}</span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {item.dispenseType === "CONSUMABLE" ? (
@@ -504,7 +581,7 @@ export default function ConfirmDispensePage() {
               <div className="space-y-1.5">
                 <Label htmlFor="usageType" id="usageType-label" className="text-xs text-muted-foreground" required>ใช้ใน</Label>
                 <Select value={usageType} onValueChange={(v) => v !== null && setUsageType(v)}>
-                  <SelectTrigger id="usageType" aria-labelledby="usageType-label" aria-required="true" aria-invalid={showErrors && !!errors.usageType} aria-describedby={showErrors && errors.usageType ? "usageType-error" : undefined} className="text-sm">
+                  <SelectTrigger id="usageType" aria-labelledby="usageType-label" aria-required="true" aria-invalid={showErrors && !!errors.usageType} aria-describedby={showErrors && errors.usageType ? "usageType-error" : undefined} className="w-full text-sm">
                     <SelectValue placeholder="เลือกการใช้งาน">{USAGE_TYPE_OPTIONS.find((o) => o.value === usageType)?.label ?? "เลือกการใช้งาน"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -516,9 +593,61 @@ export default function ConfirmDispensePage() {
                 {showErrors && errors.usageType && <FieldError id="usageType-error">{errors.usageType}</FieldError>}
               </div>
 
+              {needsCourse && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="courseCode" id="courseCode-label" className="text-xs text-muted-foreground" required>รายวิชา</Label>
+                  {/* Typed filtering rather than a plain Select: the registrar hands back a
+                      couple of hundred courses, and scrolling that as a flat list to find one
+                      six-digit code is not something anyone should have to do. */}
+                  <Combobox
+                    items={courseItems}
+                    value={courseItems.find((i) => i.value === courseCode) ?? null}
+                    onValueChange={(item) => handleCourseChange(item?.value ?? "")}
+                    disabled={coursesLoading || courses.length === 0}
+                  >
+                    <ComboboxField>
+                      <ComboboxInput
+                        id="courseCode"
+                        aria-labelledby="courseCode-label"
+                        aria-required="true"
+                        aria-invalid={showErrors && !!errors.courseCode}
+                        aria-describedby={showErrors && errors.courseCode ? "courseCode-error" : "courseCode-source"}
+                        placeholder={coursesLoading ? "กำลังโหลดรายวิชา..." : "พิมพ์รหัสหรือชื่อวิชา"}
+                      />
+                    </ComboboxField>
+                    <ComboboxContent>
+                      <ComboboxEmpty>ไม่พบรายวิชาที่ค้นหา</ComboboxEmpty>
+                      <ComboboxList>
+                        {(item: { value: string; label: string }) => (
+                          <ComboboxItem key={item.value} value={item}>{item.label}</ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  {/* The input shows "รหัส — ชื่อ" once picked, so this only earns its place
+                      when the registrar had no title and the input is a bare code. */}
+                  {courseCode && courseName && !courses.find((c) => c.code === courseCode)?.name && (
+                    <p className="text-xs text-foreground">{courseName}</p>
+                  )}
+                  {/* Warning, not an error: the dispense still goes through. role="status"
+                      rather than "alert" for the same reason — it should be announced, not
+                      interrupt. Muted styling would bury it next to the source caption. */}
+                  {courseApiError && (
+                    <p role="status" className="flex items-start gap-1.5 text-xs text-warning-700 dark:text-warning-200">
+                      <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                      <span>{courseApiError}</span>
+                    </p>
+                  )}
+                  <p id="courseCode-source" className="text-xs text-muted-foreground">
+                    * รายชื่อวิชาจากสำนักทะเบียน มหาวิทยาลัยเชียงใหม่
+                  </p>
+                  {showErrors && errors.courseCode && <FieldError id="courseCode-error">{errors.courseCode}</FieldError>}
+                </div>
+              )}
+
               {needsActivity && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="notes" className="text-xs text-muted-foreground" required>ระบุกิจกรรมที่นำไปใช้</Label>
+                  <Label htmlFor="notes" className="text-xs text-muted-foreground" required>{activityLabel}</Label>
                   <Textarea
                     id="notes"
                     aria-invalid={showErrors && !!errors.notes}
@@ -558,7 +687,7 @@ export default function ConfirmDispensePage() {
                     describedBy={showErrors && errors.dueDate ? "dueDate-error" : undefined}
                     value={dueDate}
                     onChange={setDueDate}
-                    className="h-9 text-sm"
+                    className="h-8 text-sm"
                   />
                   {showErrors && errors.dueDate && <FieldError id="dueDate-error">{errors.dueDate}</FieldError>}
                 </div>
@@ -750,7 +879,7 @@ function CartQtyStepper({ item }: { item: CartItem }) {
 function CartThumb({ item }: { item: CartItem }) {
   return (
     <div className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
-      <img src={item.imageUrl ?? pic(item.itemCode, 128)} alt={item.itemName} loading="lazy" className="size-full object-cover" />
+      <ItemThumb src={item.imageUrl} alt={item.itemName} />
     </div>
   );
 }
