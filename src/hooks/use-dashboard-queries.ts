@@ -7,6 +7,11 @@ import {
   getDashboardTopDispense,
   getDashboardUsageBySubject,
   getDashboardDispenseMonthly,
+  getDashboardRepairStatus,
+  getDashboardRepairInProgress,
+  getDashboardOverdueReturn,
+  getDashboardLowStock,
+  getDashboardMaintenanceFollowup,
 } from "@/lib/api";
 import {
   DispenseRecordArraySchema,
@@ -14,6 +19,11 @@ import {
   TopDispenseDataArraySchema,
   UsageByTypeDataArraySchema,
   MonthlyDispenseDataArraySchema,
+  RepairStatusDataSchema,
+  RepairInProgressArraySchema,
+  OverdueReturnArraySchema,
+  LowStockArraySchema,
+  MaintenanceFollowupArraySchema,
 } from "@/lib/dashboard-types";
 
 function validate<T>(schema: import("zod").ZodSchema<T>, data: unknown): T {
@@ -56,6 +66,46 @@ export function useDispenseMonthly() {
   const nonce = useDashboardRefreshNonce();
   return useAsync(
     async () => validate(MonthlyDispenseDataArraySchema, await getDashboardDispenseMonthly()),
+    [nonce],
+  );
+}
+
+export function useRepairStatus() {
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(RepairStatusDataSchema, await getDashboardRepairStatus()),
+    [nonce],
+  );
+}
+
+export function useRepairInProgress() {
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(RepairInProgressArraySchema, await getDashboardRepairInProgress()),
+    [nonce],
+  );
+}
+
+export function useOverdueReturn() {
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(OverdueReturnArraySchema, await getDashboardOverdueReturn()),
+    [nonce],
+  );
+}
+
+export function useLowStock() {
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(LowStockArraySchema, await getDashboardLowStock()),
+    [nonce],
+  );
+}
+
+export function useMaintenanceFollowup() {
+  const nonce = useDashboardRefreshNonce();
+  return useAsync(
+    async () => validate(MaintenanceFollowupArraySchema, await getDashboardMaintenanceFollowup()),
     [nonce],
   );
 }

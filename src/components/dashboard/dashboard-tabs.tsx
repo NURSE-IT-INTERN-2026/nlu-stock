@@ -12,7 +12,16 @@ import { UsageBySubjectChart } from "./usage-by-subject-chart";
 import { AssetStatusChart } from "./asset-status-chart";
 import { MovementChart } from "./movement-chart";
 import { ComingSoon } from "./coming-soon";
-import { useTopDispense, useUsageBySubject } from "@/hooks/use-dashboard-queries";
+import { RepairStatusWidget } from "./repair-status-widget";
+import { RepairInProgressList } from "./repair-inprogress-list";
+import { OverdueReturnList } from "./overdue-return-list";
+import { LowStockList } from "./low-stock-list";
+import { MaintenanceFollowupList } from "./maintenance-followup-list";
+import {
+  useTopDispense, useUsageBySubject,
+  useRepairStatus, useRepairInProgress, useOverdueReturn,
+  useLowStock, useMaintenanceFollowup,
+} from "@/hooks/use-dashboard-queries";
 
 function ChartError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
@@ -35,6 +44,41 @@ function UsageBySubjectWidget() {
   if (isLoading) return <Skeleton className="h-[320px] w-full rounded-xl" />;
   if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
   return <UsageBySubjectChart data={data ?? []} />;
+}
+
+function RepairStatusWidgetContainer() {
+  const { data, isLoading, error, refetch } = useRepairStatus();
+  if (isLoading) return <Skeleton className="h-[240px] w-full rounded-xl" />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <RepairStatusWidget data={data ?? { damaged: 0, underRepair: 0 }} />;
+}
+
+function RepairInProgressWidget() {
+  const { data, isLoading, error, refetch } = useRepairInProgress();
+  if (isLoading) return <Skeleton className="h-[240px] w-full rounded-xl" />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <RepairInProgressList data={data ?? []} />;
+}
+
+function OverdueReturnWidget() {
+  const { data, isLoading, error, refetch } = useOverdueReturn();
+  if (isLoading) return <Skeleton className="h-[240px] w-full rounded-xl" />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <OverdueReturnList data={data ?? []} />;
+}
+
+function LowStockWidget() {
+  const { data, isLoading, error, refetch } = useLowStock();
+  if (isLoading) return <Skeleton className="h-[240px] w-full rounded-xl" />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <LowStockList data={data ?? []} />;
+}
+
+function MaintenanceFollowupWidget() {
+  const { data, isLoading, error, refetch } = useMaintenanceFollowup();
+  if (isLoading) return <Skeleton className="h-[240px] w-full rounded-xl" />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <MaintenanceFollowupList data={data ?? []} />;
 }
 
 export function DashboardTabs() {
@@ -72,18 +116,18 @@ export function DashboardTabs() {
       <TabsContent value="assets" className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <AssetStatusChart />
-          <ComingSoon title="สถานะงานบำรุงรักษา" subtitle="รอส่งซ่อม / กำลังซ่อม / เสร็จ" minHeight={240} />
+          <RepairStatusWidgetContainer />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ComingSoon title="งานซ่อมที่กำลังดำเนินการ" />
-          <ComingSoon title="คืนเกินกำหนด" />
+          <RepairInProgressWidget />
+          <OverdueReturnWidget />
         </div>
       </TabsContent>
 
       <TabsContent value="actions" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <ComingSoon title="รายการใกล้หมด / หมดสต็อก" note="ดูรายการเต็มได้ที่หน้าแจ้งเตือน" />
-        <ComingSoon title="คืนเกินกำหนด" note="ดูรายการเต็มได้ที่หน้าแจ้งเตือน" />
-        <ComingSoon title="งานซ่อมที่ต้องติดตาม" note="ดูรายการเต็มได้ที่หน้าแจ้งเตือน" />
+        <LowStockWidget />
+        <OverdueReturnWidget />
+        <MaintenanceFollowupWidget />
       </TabsContent>
     </Tabs>
   );
