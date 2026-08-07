@@ -45,18 +45,12 @@ export const UsageByTypeDataSchema = z.object({
   totalQuantity: z.number(),
 });
 
-export const MonthlyDispenseDataSchema = z.object({
-  month: z.string(),
-  total: z.number(),
-});
-
 // ── Array schemas (used by use-dashboard-queries for runtime response validation) ──
 
 export const DispenseRecordArraySchema = z.array(DispenseRecordSchema);
 export const ReceiveRecordArraySchema = z.array(ReceiveRecordSchema);
 export const TopDispenseDataArraySchema = z.array(TopDispenseDataSchema);
 export const UsageByTypeDataArraySchema = z.array(UsageByTypeDataSchema);
-export const MonthlyDispenseDataArraySchema = z.array(MonthlyDispenseDataSchema);
 
 // ── Derived types ──
 
@@ -64,4 +58,3 @@ export type DispenseRecord = z.infer<typeof DispenseRecordSchema>;
 export type ReceiveRecord = z.infer<typeof ReceiveRecordSchema>;
 export type TopDispenseData = z.infer<typeof TopDispenseDataSchema>;
 export type UsageByTypeData = z.infer<typeof UsageByTypeDataSchema>;
-export type MonthlyDispenseData = z.infer<typeof MonthlyDispenseDataSchema>;

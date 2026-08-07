@@ -5,6 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { ItemCondition } from "@/generated/prisma/enums";
 import { isItemTracked } from "@/lib/category-profile";
 import { DEFAULT_LOCATION_ID } from "@/lib/default-location";
+import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
 
 interface ImportRow {
   [key: string]: string;
@@ -47,6 +48,8 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
   const categories = await prisma.categoryType.findMany({ include: { profile: true } });
   const locations = await prisma.location.findMany();
   const units = await prisma.unit.findMany();
+  // One baseline for the whole file so a long import doesn't stagger due dates across rows.
+  const now = new Date();
 
   const validRows: { index: number; data: Prisma.ItemCreateInput }[] = [];
 
@@ -111,6 +114,12 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         vendorPhone: row.vendorPhone || null,
         warrantyMonths: parseOptionalInt(row.warrantyMonths) ?? 0,
         description: row.description || null,
+        // Same rule as the two create paths (POST /api/settings/items, quick-create):
+        // first count is due one cycle out, not immediately. Without this every imported
+        // row lands with nextCountDate null, which lib/alerts.ts counts as ถึงรอบตรวจนับ —
+        // one bulk import would open an alert against the entire catalogue on day one.
+        // No countCycleMonths column in the templates, so the profile default applies.
+        nextCountDate: nextCountFrom(now, countCycleFor(category.profile.dispenseType)),
       },
     });
   }
