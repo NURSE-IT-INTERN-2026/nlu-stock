@@ -11,7 +11,6 @@ import { TopDispenseChart } from "./top-dispense-chart";
 import { UsageBySubjectChart } from "./usage-by-subject-chart";
 import { AssetStatusChart } from "./asset-status-chart";
 import { MovementChart } from "./movement-chart";
-import { ComingSoon } from "./coming-soon";
 import { RepairStatusWidget } from "./repair-status-widget";
 import { RepairInProgressList } from "./repair-inprogress-list";
 import { OverdueReturnList } from "./overdue-return-list";
@@ -106,10 +105,6 @@ export function DashboardTabs() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <TopDispenseWidget />
           <UsageBySubjectWidget />
-        </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ComingSoon title="แผนกที่เบิกมากที่สุด" subtitle="เดือนนี้" note="ยังไม่มีข้อมูลแผนก/หน่วยงานผู้เบิกในระบบ" />
-          <ComingSoon title="สัดส่วนผู้ขาย" subtitle="รับเข้าเดือนนี้" note="ยังไม่มีข้อมูลผู้ขายในระบบรับเข้า" />
         </div>
       </TabsContent>
 
