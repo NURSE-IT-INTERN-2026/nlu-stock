@@ -8,7 +8,16 @@ import { AssetStatusChart } from "./asset-status-chart";
 import { MovementChart } from "./movement-chart";
 import { TopDispenseChart } from "./top-dispense-chart";
 import { UsageBySubjectChart } from "./usage-by-subject-chart";
-import { useTopDispense, useUsageBySubject } from "@/hooks/use-dashboard-queries";
+import { RepairStatusWidget } from "./repair-status-widget";
+import { RepairInProgressList } from "./repair-inprogress-list";
+import { OverdueReturnList } from "./overdue-return-list";
+import { LowStockList } from "./low-stock-list";
+import { MaintenanceFollowupList } from "./maintenance-followup-list";
+import {
+  useTopDispense, useUsageBySubject,
+  useRepairStatus, useRepairInProgress, useOverdueReturn,
+  useLowStock, useMaintenanceFollowup,
+} from "@/hooks/use-dashboard-queries";
 
 function ChartError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
@@ -31,6 +40,47 @@ function UsageBySubjectWidget() {
   if (isLoading) return <Skeleton className="h-[320px] w-full rounded-xl" />;
   if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
   return <UsageBySubjectChart data={data ?? []} />;
+}
+
+// The list widgets are all the same shape — one fetch, one card — so they share a skeleton
+// height rather than each inventing its own.
+function ListSkeleton() {
+  return <Skeleton className="h-[240px] w-full rounded-xl" />;
+}
+
+function RepairStatusPanel() {
+  const { data, isLoading, error, refetch } = useRepairStatus();
+  if (isLoading) return <ListSkeleton />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <RepairStatusWidget data={data ?? { damaged: 0, underRepair: 0 }} />;
+}
+
+function RepairInProgressPanel() {
+  const { data, isLoading, error, refetch } = useRepairInProgress();
+  if (isLoading) return <ListSkeleton />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <RepairInProgressList data={data ?? []} />;
+}
+
+function OverdueReturnPanel() {
+  const { data, isLoading, error, refetch } = useOverdueReturn();
+  if (isLoading) return <ListSkeleton />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <OverdueReturnList data={data ?? []} />;
+}
+
+function LowStockPanel() {
+  const { data, isLoading, error, refetch } = useLowStock();
+  if (isLoading) return <ListSkeleton />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <LowStockList data={data ?? []} />;
+}
+
+function MaintenanceFollowupPanel() {
+  const { data, isLoading, error, refetch } = useMaintenanceFollowup();
+  if (isLoading) return <ListSkeleton />;
+  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
+  return <MaintenanceFollowupList data={data ?? []} />;
 }
 
 function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
@@ -57,6 +107,22 @@ export function DashboardBody() {
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
         <ProfileSummaryWidget />
         <AssetStatusChart />
+      </div>
+
+      {/* The alert bar above counts these; this is the same work with the rows attached, so
+          nobody has to leave the page to see which items it means. Each list renders once —
+          overdue returns belong to this section, not also to the repair one. */}
+      <SectionHeading title="ต้องดำเนินการ" subtitle="รายการที่รอคนจัดการ" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <LowStockPanel />
+        <OverdueReturnPanel />
+        <MaintenanceFollowupPanel />
+      </div>
+
+      <SectionHeading title="ครุภัณฑ์ & ซ่อม" subtitle="คิวรอส่งซ่อมและงานที่กำลังซ่อม" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <RepairStatusPanel />
+        <RepairInProgressPanel />
       </div>
 
       <SectionHeading title="การเคลื่อนไหว" subtitle="รับเข้า เบิกออก และการใช้งาน" />
