@@ -4,7 +4,7 @@ import React, { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2,
-  QrCode, Package, Layers,
+  QrCode, Package, Layers, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,7 @@ interface ItemRecord {
   isActive: boolean;
   totalQty: number;
   availableQty: number;
+  statusCounts?: Partial<Record<ItemStatus, number>>;
   _count: { subItems: number; dispenseRecords: number; receiveRecords: number };
   model: string | null;
   purchaseDate: string | null;
@@ -69,7 +70,6 @@ interface ItemRecord {
   maintenanceCycleMonths: number;
   storageRequirements: string | null;
   setSize: number;
-  borrowable: boolean;
 }
 
 export function ItemsMasterTab() {
@@ -86,6 +86,7 @@ export function ItemsMasterTab() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [printOpen, setPrintOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ItemRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // derive profiles from categories (each carries its profile) — mirrors /items page.
   const profiles = useMemo<ProfileOption[]>(() => {
@@ -141,15 +142,33 @@ export function ItemsMasterTab() {
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
+    setIsDeleting(true);
     try {
       await deleteSettingsItem(deleteTarget.id);
-      toast.success("ปิดใช้งานพัสดุแล้ว");
+      toast.success("ลบรายการและตัดจำหน่ายสต็อกแล้ว");
       refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
-    setDeleteTarget(null);
   }
+
+  // Delete-dialog derived state. statusCounts only exists for tracked items (GET attaches it);
+  // non-tracked show a single คงเหลือ figure instead of the per-status breakdown.
+  const sc = deleteTarget?.statusCounts ?? {};
+  const delOnLoan = sc["ON_LOAN"] ?? 0;
+  const delInUse = sc["IN_USE"] ?? 0;
+  const delBlocked = !!deleteTarget?.trackIndividually && delOnLoan + delInUse > 0;
+  const delBreakdown = [
+    { label: "พร้อมใช้งาน", n: sc["AVAILABLE"] ?? 0 },
+    { label: "ยืมอยู่", n: delOnLoan },
+    { label: "ซ่อมอยู่", n: (sc["DAMAGED"] ?? 0) + (sc["UNDER_REPAIR"] ?? 0) },
+    { label: "ใช้งาน", n: delInUse, danger: true },
+  ];
+  // Total = the four on-the-books statuses only; LOST/DISPOSED pieces are already off the books.
+  const delTotal = delBreakdown.reduce((s, b) => s + b.n, 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -408,14 +427,56 @@ export function ItemsMasterTab() {
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>ปิดใช้งานพัสดุ</AlertDialogTitle>
+            <AlertDialogTitle>ยืนยันการลบรายการ</AlertDialogTitle>
             <AlertDialogDescription>
-              ต้องการปิดใช้งาน &ldquo;{deleteTarget?.name}&rdquo; ({deleteTarget?.code}) ใช่หรือไม่? พัสดุจะหายไปจากระบบ แต่ยังเก็บประวัติทั้งหมดไว้
+              คุณต้องการลบรายการ &ldquo;{deleteTarget?.name}&rdquo; ({deleteTarget?.code}) ใช่หรือไม่?
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="flex gap-2 border-l-2 border-destructive/50 pl-3 text-xs leading-relaxed text-destructive">
+            <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+            <span>
+              คำเตือน: หากลบแล้ว จะไม่สามารถนำ Code นี้กลับมาใช้งานได้อีก และจำนวนพัสดุคงเหลือในคลังของรายการนี้ จะถูกตัดจำหน่ายออกทั้งหมดโดยอัตโนมัติ
+            </span>
+          </div>
+
+          <div className="rounded-lg border px-3 py-2.5 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">
+                {deleteTarget?.trackIndividually ? "จำนวนในคลังทั้งหมด" : "จำนวนคงเหลือ"}
+              </span>
+              <span className="font-semibold tabular-nums">
+                {deleteTarget?.trackIndividually ? delTotal : deleteTarget?.availableQty}{" "}
+                {deleteTarget?.issueUnit?.name}
+              </span>
+            </div>
+            {deleteTarget?.trackIndividually && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+                {delBreakdown.map((b) => (
+                  <span key={b.label} className={b.danger && b.n > 0 ? "text-destructive" : undefined}>
+                    {b.label}{" "}
+                    <span className={`font-medium tabular-nums ${b.n > 0 && !b.danger ? "text-foreground" : ""}`}>{b.n}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {delBlocked && (
+            <p className="text-sm text-destructive">
+              มีพัสดุกำลังยืม/ใช้งานอยู่ {delOnLoan + delInUse} ชิ้น กรุณารับคืนก่อนลบ
+            </p>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>ปิดใช้งาน</AlertDialogAction>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={delBlocked || isDeleting}
+              onClick={handleConfirmDelete}
+            >
+              {isDeleting ? "กำลังลบ…" : "ลบ"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

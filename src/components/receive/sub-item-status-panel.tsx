@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,12 +21,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from "lucide-react";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { getSubItemsByStatus, updateItemStatus, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
 import { useSession } from "@/components/layout/auth-guard";
+
+const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+const fmtDay = (iso: string) => fmtDate(iso, TH_DATE);
+// "23 ก.ค. 2569 · 7 วัน" — the card row and the receive dialog show the same line.
+const sentAtLabel = (iso: string) => `${fmtDay(iso)} · ${daysSince(iso) === 0 ? "วันนี้" : `${daysSince(iso)} วัน`}`;
+
+// [badge label, badge classes, bare label for label:value lists]
+const VENUE_BADGE = {
+  EXTERNAL: ["ส่งซ่อมภายนอก", "bg-purple-500/10 text-purple-700", "ภายนอก"],
+  INTERNAL: ["ส่งซ่อมภายใน", "bg-sky-500/10 text-sky-700", "ภายใน"],
+  NONE: ["ไม่ระบุที่ซ่อม", "bg-muted text-muted-foreground", "ไม่ระบุ"],
+} as const;
 
 // ภายใน / ภายนอก toggle — shared by send-to-repair and the edit-repair-details dialog.
 function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | ""; onChange: (v: "INTERNAL" | "EXTERNAL") => void }) {
@@ -51,17 +64,20 @@ function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | "";
 }
 
 // Generic "receive back" panel for per-unit sub-items in a fixed status
-// (IN_USE = placed in a room, UNDER_REPAIR = sent for repair, DAMAGED = reported
-// damaged, awaiting a send-to-repair decision). Action target varies:
-// IN_USE/UNDER_REPAIR flip → AVAILABLE, DAMAGED flips → UNDER_REPAIR (ส่งซ่อม).
+// (UNDER_REPAIR = sent for repair, DAMAGED = reported damaged, awaiting a
+// send-to-repair decision). UNDER_REPAIR flips → AVAILABLE, DAMAGED → UNDER_REPAIR (ส่งซ่อม).
 // UI mirrors ReturnPanel (search bar + summary count + card style) — no due-date
-// chips here since none of these statuses are loans with a due date.
+// chips here since neither status is a loan with a due date.
+//
+// IN_USE used to be handled here too, which is exactly what hid COUNT stock: this reads
+// the sub_items table, and a non-tracked item has no row there. คืนเข้าคลัง now uses
+// InUsePanel (records, not statuses) so both kinds show up. Don't add IN_USE back.
 export function SubItemStatusPanel({
   status,
   actionLabel,
   emptyText,
 }: {
-  status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED";
+  status: "UNDER_REPAIR" | "DAMAGED";
   actionLabel: string;
   emptyText: string;
 }) {
@@ -149,9 +165,9 @@ export function SubItemStatusPanel({
   );
 }
 
-function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemByStatus; status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
+function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemByStatus; status: "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
   const { user } = useSession();
-  const isAdmin = user?.role === "ADMIN";
+  const isSuperAdmin = user?.role === "SUPERADMIN";
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [maintOpen, setMaintOpen] = useState(false);
@@ -159,11 +175,14 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   const [cancelOpen, setCancelOpen] = useState(false);
   const [note, setNote] = useState("");
   const [repairNote, setRepairNote] = useState("");
+  // อาการที่ชำรุด as it stands for this trip — editable, because the first report is often
+  // written before anyone has looked at the piece properly.
+  const [damage, setDamage] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
   const isRepair = status === "UNDER_REPAIR";
   const isDamaged = status === "DAMAGED";
-  // DAMAGED → UNDER_REPAIR (ส่งซ่อม); IN_USE/UNDER_REPAIR → AVAILABLE (รับเข้า).
+  // DAMAGED → UNDER_REPAIR (ส่งซ่อม); UNDER_REPAIR → AVAILABLE (รับคืนจากส่งซ่อม).
   const targetStatus = isDamaged ? "UNDER_REPAIR" : "AVAILABLE";
   // Prefer the piece's own location; fall back to the spec's location when unset.
   const loc = row.location ?? row.item.location;
@@ -171,6 +190,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   const reset = () => {
     setNote("");
     setRepairNote("");
+    setDamage("");
     setPhotoUrl(null);
     setVenue("");
   };
@@ -196,6 +216,9 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
       imageUrl: isDamaged ? (photoUrl ?? undefined) : undefined,
       repairVenue: isDamaged && venue ? venue : undefined,
       repairNote: isDamaged ? repairNote.trim() : undefined,
+      // The ส่งซ่อม note IS the symptom this trip is about — stamp it on the row so later
+      // edits have something to correct instead of reading it back out of `reason`.
+      damageNote: isDamaged ? note.trim() : undefined,
     });
 
   // Still ส่งซ่อม, only the repair details change (ซ่อมภายในไม่ได้ → ส่งภายนอกต่อ). Writes a
@@ -206,6 +229,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
       notes: `แก้ข้อมูลการส่งซ่อม${repairNote.trim() ? ` · ${repairNote.trim()}` : ""}`,
       repairVenue: venue || undefined,
       repairNote: repairNote.trim() || undefined,
+      damageNote: damage.trim() || undefined,
     }, "แก้ข้อมูลการส่งซ่อมแล้ว");
 
   // ADMIN only — the piece turned out not to be broken, so the ชำรุด report is withdrawn.
@@ -218,34 +242,59 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
-              <img src={row.item.imageUrl ?? pic(row.item.code, 176)} alt={row.item.name} loading="lazy" className="size-full object-cover" />
+              <ItemThumb src={row.item.imageUrl} alt={row.item.name} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-sm leading-snug">{row.item.name}</p>
               <p className="text-xs text-muted-foreground font-mono">{effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}</p>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1">
-                {isRepair && row.repairVenue && (
-                  <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + (row.repairVenue === "EXTERNAL" ? "bg-purple-500/10 text-purple-700" : "bg-sky-500/10 text-sky-700")}>
-                    {row.repairVenue === "EXTERNAL" ? "ส่งซ่อมภายนอก" : "ส่งซ่อมภายใน"}
+              {/* Repair tab trades location/ชำรุด for the repair trip itself — venue, detail,
+                  and how long it's been out. Older logs have no venue/repairNote, so the
+                  ชำรุด reason stands in as the detail. */}
+              {isRepair ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + VENUE_BADGE[row.repairVenue ?? "NONE"][1]}>
+                    {VENUE_BADGE[row.repairVenue ?? "NONE"][0]}
                   </span>
-                )}
-                {loc && (
-                  <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(loc)}</span>
-                )}
-                {row.damageNote && <span>ชำรุด: <span className="text-foreground">{row.damageNote}</span></span>}
-                {row.repairNote && <span>ส่งซ่อม: <span className="text-foreground">{row.repairNote}</span></span>}
-                {row.notes && <span>หมายเหตุ: <span className="text-foreground">{row.notes}</span></span>}
-              </div>
+                  {(row.repairNote ?? row.damageNote) && <span className="text-foreground">{row.repairNote ?? row.damageNote}</span>}
+                  {row.repairSentAt && (
+                    <>
+                      <span className="text-border">│</span>
+                      <span>ส่งซ่อม {sentAtLabel(row.repairSentAt)}</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  {loc && (
+                    <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(loc)}</span>
+                  )}
+                  {row.damageNote && <span>ชำรุด: <span className="text-foreground">{row.damageNote}</span></span>}
+                  {row.notes && <span>หมายเหตุ: <span className="text-foreground">{row.notes}</span></span>}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
             {/* Secondary action on the repair/damage cards — shown left of the primary button. */}
             {isRepair && (
-              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => setEditRepairOpen(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 w-full sm:w-auto"
+                disabled={saving}
+                // Editing, not re-entering: start from what's on record so a small correction
+                // doesn't mean retyping the venue and the whole note.
+                onClick={() => {
+                  setVenue(row.repairVenue ?? "");
+                  setRepairNote(row.repairNote ?? "");
+                  setDamage(row.damageNote ?? "");
+                  setEditRepairOpen(true);
+                }}
+              >
                 <Pencil className="size-3.5" />แก้ข้อมูลส่งซ่อม
               </Button>
             )}
-            {isDamaged && isAdmin && (
+            {isDamaged && isSuperAdmin && (
               <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => setCancelOpen(true)}>
                 <Undo2 className="size-3.5" />ยกเลิกคำขอชำรุด
               </Button>
@@ -271,7 +320,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
               <AlertDialogTitle>ยืนยันการ{actionLabel}</AlertDialogTitle>
               <AlertDialogDescription>
                 {isDamaged ? (
-                  <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
+                  <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
                 ) : (
                   <>บันทึก <span className="font-medium text-foreground">{row.item.name}</span> ({effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}) เป็น &ldquo;พร้อมใช้งาน&rdquo; ทันที — รายการนี้จะเข้าประวัติ ไม่สามารถแก้ไขย้อนหลังได้</>
                 )}
@@ -296,7 +345,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground" required>
-                    รายละเอียด/สถานที่ส่งซ่อม
+                    รายละเอียดการส่งซ่อม
                   </Label>
                   <Textarea
                     value={repairNote}
@@ -307,7 +356,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground" required>ประเภทการซ่อม</Label>
+                  <Label className="text-xs text-muted-foreground" required>ส่งซ่อมที่</Label>
                   <VenuePicker value={venue} onChange={setVenue} />
                 </div>
                 <div className="space-y-1.5">
@@ -333,6 +382,14 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
           itemLabel={row.item.name}
           subItemId={row.id}
           subItemLabel={effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}
+          maintenanceCycleMonths={row.item.maintenanceCycleMonths}
+          fromRepair
+          repairInfo={{
+            damage: row.damageNote,
+            venue: VENUE_BADGE[row.repairVenue ?? "NONE"][2],
+            note: row.repairNote,
+            sentAt: row.repairSentAt && sentAtLabel(row.repairSentAt),
+          }}
           onSuccess={onResolved}
         />
       )}
@@ -349,12 +406,31 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
             </AlertDialogHeader>
             <div className="w-full space-y-3 text-left">
               <div className="-mx-4"><Separator /></div>
+              {/* When the trip started is a fact, not an edit — the rest of the card is. */}
+              <dl className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm">
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-muted-foreground">วันที่ส่งซ่อม:</dt>
+                  <dd className="min-w-0 text-foreground">{(row.repairSentAt && sentAtLabel(row.repairSentAt)) || "—"}</dd>
+                </div>
+              </dl>
+              {/* Editable: the first ชำรุด report is usually written before anyone opened the
+                  piece up, so the symptom is the thing that most often turns out wrong. */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" required>อาการที่ชำรุด</Label>
+                <Textarea
+                  value={damage}
+                  onChange={(e) => setDamage(e.target.value)}
+                  placeholder="เช่น จอไม่ติด กดปุ่มแล้วไม่ตอบสนอง…"
+                  rows={2}
+                  className="bg-card"
+                />
+              </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground" required>ประเภทการซ่อม</Label>
+                <Label className="text-xs text-muted-foreground" required>ส่งซ่อมที่</Label>
                 <VenuePicker value={venue} onChange={setVenue} />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground" required>รายละเอียด/สถานที่ส่งซ่อม</Label>
+                <Label className="text-xs text-muted-foreground" required>รายละเอียดการส่งซ่อม</Label>
                 <Textarea
                   value={repairNote}
                   onChange={(e) => setRepairNote(e.target.value)}
@@ -366,14 +442,14 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
             </div>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={reset}>ยกเลิก</AlertDialogCancel>
-              <AlertDialogAction disabled={!venue || !repairNote.trim()} onClick={() => { setEditRepairOpen(false); editRepair(); }}>บันทึก</AlertDialogAction>
+              <AlertDialogAction disabled={!venue || !repairNote.trim() || !damage.trim()} onClick={() => { setEditRepairOpen(false); editRepair(); }}>บันทึก</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
 
       {/* ADMIN-only withdrawal of a ชำรุด report — the only step a role is allowed to undo. */}
-      {isDamaged && isAdmin && (
+      {isDamaged && isSuperAdmin && (
         <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>

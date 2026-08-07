@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, forbidden, handleError } from "@/lib/api-utils";
+import { requireAuth, requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn } from "@/lib/returns";
 
@@ -33,16 +33,18 @@ const ITEM_INCLUDE = {
 // Lists loans for the รับคืน tab grouped client-side by loanGroupId (one card per borrow event).
 // 2-step: find loanGroupIds with an open BORROW record, then fetch ALL records in those groups
 // (including already-returned ones) so the UI can show "ค้าง X/Y". Legacy null-loanGroupId
-// records are returned singly (Y = X). Consumables + INUSE (ตั้งใช้ในห้อง) are filtered out.
-// Keep every open loan EXCEPT per-unit (trackIndividually) INUSE — those return via
-// คืนเข้าพัสดุ (status route), not here. COUNT-type INUSE still returns numerically through
-// this screen, so it must stay visible. null loanType = legacy BORROW.
-// (Avoid NOT:{AND:[INUSE,tracked]} — Prisma over-filters it to 6 instead of 20; explicit OR is correct.)
-const NOT_TRACKED_INUSE = {
+// records are returned singly (Y = X). Consumables + INUSE (ตั้งใช้ในห้อง) are filtered out —
+// BORROWABLE must be on BOTH queries: a cart mixing วัสดุสิ้นเปลือง with a durable shares one
+// loanGroupId, and a consumable line never gets returnedAt, so without it the card counts a
+// permanently-open row as ค้าง and never clears.
+// This screen is for stock somebody owes back. นำไปใช้งาน (INUSE) owes nothing — it is
+// stationed in a room indefinitely and comes back through คืนเข้าคลัง, so no INUSE row of
+// any kind belongs here. null loanType = legacy BORROW.
+// (Explicit OR, never NOT/`not:` — those compile to NULL-unsafe SQL that drops the legacy rows.)
+const BORROWED_ONLY = {
   OR: [
     { loanType: null },
     { loanType: "BORROW" as const },
-    { AND: [{ loanType: "INUSE" as const }, { item: { trackIndividually: false } }] },
   ],
 } satisfies Prisma.DispenseRecordWhereInput;
 export async function GET() {
@@ -50,16 +52,16 @@ export async function GET() {
   if (auth.denied) return auth.denied;
 
   const open = await prisma.dispenseRecord.findMany({
-    where: { returnedAt: null, item: BORROWABLE, ...NOT_TRACKED_INUSE },
+    where: { returnedAt: null, item: BORROWABLE, ...BORROWED_ONLY },
     select: { loanGroupId: true },
   });
   const groupIds = [...new Set(open.map((r) => r.loanGroupId).filter(Boolean) as string[])];
 
   const [grouped, legacy] = await Promise.all([
     groupIds.length
-      ? prisma.dispenseRecord.findMany({ where: { loanGroupId: { in: groupIds }, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } })
+      ? prisma.dispenseRecord.findMany({ where: { loanGroupId: { in: groupIds }, item: BORROWABLE, ...BORROWED_ONLY }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } })
       : Promise.resolve([]),
-    prisma.dispenseRecord.findMany({ where: { returnedAt: null, loanGroupId: null, item: BORROWABLE, ...NOT_TRACKED_INUSE }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } }),
+    prisma.dispenseRecord.findMany({ where: { returnedAt: null, loanGroupId: null, item: BORROWABLE, ...BORROWED_ONLY }, include: ITEM_INCLUDE, orderBy: { dispensedAt: "desc" } }),
   ]);
 
   return NextResponse.json({ records: [...grouped, ...legacy] });
@@ -69,9 +71,8 @@ export async function GET() {
 // DAMAGED → SubItem ชำรุด, queued on แจ้งชำรุด until someone sends it for repair.
 // Count-based loans use the single /api/items/[id]/return (numeric).
 export async function POST(req: NextRequest) {
-  const auth = await requireAuth(req);
+  const auth = await requireAdmin(req);
   if (auth.denied) return auth.denied;
-  if (auth.user.role === "INSTRUCTOR") return forbidden();
 
   const body = await req.json();
   const rawEntries = Array.isArray(body?.entries) ? body.entries : [];

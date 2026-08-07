@@ -353,11 +353,88 @@ export function searchItemsAI(params: { q: string; limit?: number }) {
   }>(`/api/items/search-ai?${qs}`);
 }
 
+export interface CourseOption {
+  code: string;
+  name: string | null;
+}
+
+/** `stale` = the CMU upstream was unreachable and this is the last-known-good list. */
+export function getCourses() {
+  return request<{ courses: CourseOption[]; stale: boolean; syncedAt: string | null }>("/api/courses");
+}
+
+export function getCourseName(code: string) {
+  return request<CourseOption & { stale: boolean }>(`/api/courses/${encodeURIComponent(code)}`);
+}
+
 export function createDispense(data: Record<string, unknown>) {
   return request<{ count: number }>("/api/dispense", {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+// ─── Dispense templates (shared, reusable cart sets) ───
+
+export interface TemplateSummary {
+  id: string;
+  name: string;
+  updatedAt: string;
+  createdByName: string;
+  lineCount: number;
+}
+
+// A loaded line's item — same fields buildCartItem needs.
+export interface TemplateLineItem {
+  id: string;
+  code: string;
+  name: string;
+  imageUrl: string | null;
+  isActive: boolean;
+  availableQty: number;
+  trackIndividually: boolean;
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+  issueUnit: { name: string };
+  lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
+  subItems: { id: string; subCode: string; condition: string | null }[];
+  location: { building: string; floor: string; room: string; detail: string | null } | null;
+}
+
+export interface TemplateDetail {
+  id: string;
+  name: string;
+  lines: { id: string; quantity: number; unavailable: boolean; item: TemplateLineItem }[];
+}
+
+export interface TemplateLineInput {
+  itemId: string;
+  quantity: number;
+}
+
+export function getDispenseTemplates() {
+  return request<{ templates: TemplateSummary[] }>("/api/dispense-templates");
+}
+
+export function getDispenseTemplate(id: string) {
+  return request<TemplateDetail>(`/api/dispense-templates/${id}`);
+}
+
+export function createDispenseTemplate(data: { name: string; lines: TemplateLineInput[] }) {
+  return request<{ id: string }>("/api/dispense-templates", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateDispenseTemplate(id: string, data: { name?: string; lines?: TemplateLineInput[] }) {
+  return request<{ ok: true }>(`/api/dispense-templates/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteDispenseTemplate(id: string) {
+  return request<{ ok: true }>(`/api/dispense-templates/${id}`, { method: "DELETE" });
 }
 
 // ─── Kit assembly ───
@@ -412,7 +489,7 @@ export function adjustStock(
 
 export function updateItemStatus(
   itemId: string,
-  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null },
+  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null; damageNote?: string | null },
 ) {
   return request<unknown>(`/api/items/${itemId}/status`, {
     method: "POST",
@@ -499,6 +576,8 @@ export interface SubItemByStatus {
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   damageNote: string | null;
   repairNote: string | null;
+  // When the piece entered its current UNDER_REPAIR trip — not the last edit to the repair info.
+  repairSentAt: string | null;
   location: { building: string; floor: string; room: string; detail: string | null } | null;
   item: {
     id: string;
@@ -508,12 +587,50 @@ export interface SubItemByStatus {
     issueUnit: { name: string };
     category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
+    maintenanceCycleMonths: number;
     _count: { subItems: number };
   };
 }
 
 export function getSubItemsByStatus(status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED") {
   return request<{ subItems: SubItemByStatus[] }>(`/api/sub-items?status=${status}`);
+}
+
+/** One open นำไปใช้งาน record. Covers both kinds: `subItem` is null for COUNT stock. */
+export interface InUseRecord {
+  id: string;
+  quantity: number;
+  resolvedQty: number;
+  dispensedAt: string;
+  notes: string | null;
+  location: { id: string; building: string; floor: string; room: string; detail: string | null } | null;
+  staff: { name: string };
+  subItem: { id: string; subCode: string; name: string | null; serialNumber: string | null } | null;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    imageUrl: string | null;
+    trackIndividually: boolean;
+    locationId: string | null;
+    issueUnit: { name: string };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+    _count: { subItems: number };
+  };
+}
+
+export function getInUseRecords() {
+  return request<{ records: InUseRecord[] }>("/api/dispense/in-use");
+}
+
+export function returnInUseRecord(
+  recordId: string,
+  body: { destLocationId: string; quantity?: number; note?: string | null },
+) {
+  return request<{ success: boolean; quantity: number; moved: boolean }>(
+    `/api/dispense/in-use/${recordId}/return`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
 }
 
 export function updateItem(itemId: string, data: Record<string, unknown>) {
@@ -528,8 +645,12 @@ export function getItemHistory(itemId: string, params?: string) {
   return request<{ events: unknown[] }>(`/api/items/${itemId}/history?${qs}`);
 }
 
-export function recoverLoss(itemId: string, data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string }) {
-  return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover-loss`, {
+/** Put stock back: `kind` LOST = เรียกคืนสูญหาย (default), DAMAGED = รับคืนจากซ่อม. */
+export function recoverStock(
+  itemId: string,
+  data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string; kind?: "LOST" | "DAMAGED" },
+) {
+  return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -617,6 +738,14 @@ export function getDashboardDispenseMonthly() {
 
 export function getDashboardProfileSummary() {
   return request<unknown[]>("/api/dashboard/profile-summary");
+}
+
+export function getDashboardAssetStatus() {
+  return request<unknown[]>("/api/dashboard/asset-status");
+}
+
+export function getDashboardMovementMonthly() {
+  return request<unknown[]>("/api/dashboard/movement-monthly");
 }
 
 export function getDashboardRecentDispense() {

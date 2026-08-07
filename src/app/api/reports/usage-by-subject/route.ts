@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
-import { USAGE_TYPE_LABELS } from "@/lib/constants";
+import { groupUsageBySubject } from "@/lib/usage-by-subject";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -23,27 +23,17 @@ export async function GET(request: NextRequest) {
     where.item = { categoryId };
   }
 
-  const groups = await prisma.dispenseRecord.groupBy({
-    by: ["usageType"],
-    where: { ...where, usageType: { not: null } },
-    _sum: { quantity: true },
-    orderBy: { _sum: { quantity: "desc" } },
-  });
+  const data = await groupUsageBySubject(where);
 
   const noTypeCount = await prisma.dispenseRecord.aggregate({
     _sum: { quantity: true },
     where: { ...where, usageType: null },
   });
 
-  const data = groups.map((g) => ({
-    usageType: g.usageType,
-    label: USAGE_TYPE_LABELS[g.usageType ?? ""] ?? g.usageType ?? "Unknown",
-    totalQuantity: g._sum.quantity ?? 0,
-  }));
-
   if ((noTypeCount._sum.quantity ?? 0) > 0) {
     data.push({
       usageType: null,
+      courseCode: null,
       label: "ไม่ระบุ",
       totalQuantity: noTypeCount._sum.quantity ?? 0,
     });

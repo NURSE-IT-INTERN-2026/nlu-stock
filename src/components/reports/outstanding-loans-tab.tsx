@@ -6,7 +6,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { ExportButtons } from "./export-buttons";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
 import { ChevronDown } from "lucide-react";
@@ -65,6 +65,12 @@ const columns: Column<Row>[] = [
   { key: "staffName", header: "Staff" },
 ];
 
+// Fetch-everything, group, then page the groups client-side — deliberately NOT the
+// server-side grouping that api/reports/dispense-history does. Both tabs render the same
+// loan card and both must never split one, but the sets differ: this one is only the loans
+// still open, which is bounded by how much stock is out at once, while ประวัติการเบิก is the
+// whole ledger and grows forever. Paging groups in memory is the smaller thing that works
+// here; move to the server version if "ยังไม่คืน" ever stops being a short list.
 function groupRecords(records: Row[]): LoanGroup[] {
   const map = new Map<string, LoanGroup>();
   for (const r of records) {
@@ -88,7 +94,7 @@ function LoanGroups({ groups }: { groups: LoanGroup[] }) {
           <details key={g.key} className="group rounded-lg border bg-card overflow-hidden">
             <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm list-none [&::-webkit-details-marker]:hidden hover:bg-muted/50">
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-              <span className="font-medium">{fmtDate(new Date(head.dispensedAt), "dd MMM yyyy HH:mm")}</span>
+              <span className="font-medium">{fmtDate(new Date(head.dispensedAt), TH_DATETIME)}</span>
               {alert ? (
                 <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", alert.cls)}>
                   {alert.label}

@@ -1,8 +1,9 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, getJwtSecret } from "./auth-config";
+import type { Role } from "./roles";
 
-export async function signToken(payload: { userId: string; email: string; name: string; role: string }) {
+export async function signToken(payload: { userId: string; email: string; name: string; role: Role }) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("24h")
@@ -13,7 +14,7 @@ export async function signToken(payload: { userId: string; email: string; name: 
 export async function verifyToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, getJwtSecret());
-    return payload as { userId: string; email: string; name: string; role: string };
+    return payload as { userId: string; email: string; name: string; role: Role };
   } catch {
     return null;
   }

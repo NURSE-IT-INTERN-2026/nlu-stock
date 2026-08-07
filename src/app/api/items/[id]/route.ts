@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, notFound, error, forbidden, parseBody } from "@/lib/api-utils";
+import { canManageStock } from "@/lib/roles";
 import { locationLabel } from "@/lib/constants";
+import { getItemDistribution } from "@/lib/distribution";
 import { z } from "zod";
 import { NextRequest } from "next/server";
 
@@ -64,7 +66,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!item) return notFound("Item not found");
 
-  return json(item);
+  // Derived, not stored — see lib/distribution.ts. Folded into this response rather than
+  // given its own endpoint so the detail page can't render a location breakdown that
+  // disagrees with the counts printed beside it.
+  const distribution = await getItemDistribution(item.id);
+
+  // The individual แจ้งชำรุด bookings behind the ชำรุด row above, still awaiting repair.
+  // รับคืนจากซ่อม resolves one booking at a time (it stamps recoveredAt on the row), so the
+  // dialog needs the rows, not just the total — same reason the return screen lists loans.
+  const openDamage = (
+    await prisma.stockAdjustment.findMany({
+      where: { itemId: item.id, reason: "DAMAGED_PENDING_REPAIR", recoveredAt: null },
+      select: { id: true, previousQty: true, newQty: true, notes: true, adjustedAt: true, adjuster: { select: { name: true } } },
+      orderBy: { adjustedAt: "desc" },
+    })
+  ).map((r) => ({ id: r.id, qty: r.previousQty - r.newQty, notes: r.notes, adjustedAt: r.adjustedAt, by: r.adjuster.name }));
+
+  return json({ ...item, distribution, openDamage });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -77,8 +95,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!data) return error("No data");
   const { imageUrl, images, locationId } = data;
 
-  // #1 location move is privileged — gate to ADMIN/STAFF (matches UI canMove).
-  if (locationId !== undefined && auth.user.role !== "ADMIN" && auth.user.role !== "STAFF") {
+  // #1 location move is privileged — stock roles only (matches UI canMove).
+  if (locationId !== undefined && !canManageStock(auth.user.role)) {
     return forbidden();
   }
 

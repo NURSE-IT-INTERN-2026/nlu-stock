@@ -13,18 +13,28 @@ test("login (Admin quick button) → dashboard", async ({ page }) => {
 
 test("login form (typed email) → dashboard", async ({ page }) => {
   await page.goto("/login");
-  await page.getByPlaceholder("email@example.com").fill("staff@nlu.ac.th");
+  await page.getByPlaceholder("email@example.com").fill("admin@nlu.ac.th");
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("instructor role is blocked from admin APIs", async ({ request }) => {
-  // instructor login → 403 on a write endpoint
+test("an email on no allowlist cannot sign in", async ({ request }) => {
   const login = await request.post("/api/auth/login", {
-    data: { email: "instructor@nlu.ac.th", password: "" },
+    data: { email: "nobody@nlu.ac.th" },
+  });
+  expect(login.status()).toBe(403);
+});
+
+test("executive may เบิก but not touch stock", async ({ request }) => {
+  const login = await request.post("/api/auth/login", {
+    data: { email: "executive@nlu.ac.th" },
   });
   expect(login.status()).toBe(200);
-  // same request context carries the session cookie from the login response
+  // same request context carries the session cookie from the login response.
+  // เบิก passes the guard (400 = validation, not 403).
   const dispense = await request.post("/api/dispense", { data: { items: [] } });
-  expect([403, 400]).toContain(dispense.status()); // 403 forbidden (not 401)
+  expect(dispense.status()).toBe(400);
+  // รับคืน and รับเข้า are stock work — refused outright.
+  expect((await request.post("/api/returns", { data: {} })).status()).toBe(403);
+  expect((await request.post("/api/receive", { data: {} })).status()).toBe(403);
 });

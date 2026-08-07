@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
+  DIALOG_SHELL,
+  DIALOG_BODY,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -9,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -21,7 +24,8 @@ import { Loader2, Search, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/shared/file-upload";
 import { createMaintenance, searchDispenseItems } from "@/lib/api";
-import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS } from "@/lib/constants";
+import { MAINT_RESULT_LABELS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -31,6 +35,12 @@ interface Props {
   subItemId?: string;
   subItemLabel?: string;
   maintenanceCycleMonths?: number;
+  // Opened from the ชำรุด → ส่งซ่อม → รับคืน flow: the job is corrective by definition and
+  // doesn't start a maintenance cycle, so both pickers are dropped.
+  fromRepair?: boolean;
+  // Display-ready lines from the ชำรุด/ส่งซ่อม logs — shown read-only in place of the
+  // ปัญหา/อาการ input, since the staff receiving the piece shouldn't retype what was reported.
+  repairInfo?: { damage: string | null; venue: string | null; note: string | null; sentAt: string | null };
   onSuccess: () => void;
 }
 
@@ -41,7 +51,7 @@ interface SearchItem {
   category: { name: string; category: string };
 }
 
-export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, maintenanceCycleMonths, onSuccess }: Props) {
+export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, maintenanceCycleMonths, fromRepair, repairInfo, onSuccess }: Props) {
   // ── Item selection ──
   const hasDefaultItem = !!itemId;
   const [selectedItemId, setSelectedItemId] = useState<string | null>(itemId ?? null);
@@ -51,10 +61,14 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // ── Form fields ──
-  const [type, setType] = useState<"PREVENTIVE" | "CORRECTIVE">("PREVENTIVE");
+  // ประเภท is derived, never picked. A CORRECTIVE job only exists as the tail of the
+  // ชำรุด → ส่งซ่อม → รับคืน flow, which is the `fromRepair` caller and the only place that
+  // collects the venue, the damage note and the status trail the record needs to be complete.
+  // Letting staff pick ซ่อมแซม here produced half-records (no venue, no logs) that landed in
+  // the same table cost-by-venue reporting reads.
+  const type: "PREVENTIVE" | "CORRECTIVE" = fromRepair ? "CORRECTIVE" : "PREVENTIVE";
   const [result, setResult] = useState<"AVAILABLE" | "DISPOSED">("AVAILABLE");
   const [performedAt, setPerformedAt] = useState(new Date().toISOString().split("T")[0]);
-  const [issue, setIssue] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
   // null = follow the auto-calculated date; a string = staff typed their own.
@@ -92,19 +106,19 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
     return () => clearTimeout(searchTimer.current);
   }, [searchQuery, doSearch, hasDefaultItem]);
 
-  // ── Auto-calculate next maintenance date ──
-  // Only a finished job (result AVAILABLE) starts the next cycle. Still under
-  // repair or written off → no appointment, otherwise the piece silently drops
-  // off the overdue list / gets scheduled after it's already disposed.
+  // ── Next maintenance date ──
+  // Preview only. The server owns the rule (lib/maintenance scheduleNextMaintenance) and
+  // applies it whenever this field is omitted; what's mirrored here must match it, and is
+  // sent back only when staff picked their own date. `cycle` is 0 when the caller doesn't
+  // pass maintenanceCycleMonths — then the preview is blank and the server fills it in.
   const cycle = maintenanceCycleMonths ?? 0;
-  const schedulesNext = result === "AVAILABLE";
   const autoNext = (() => {
     if (cycle <= 0 || !performedAt) return "";
     const d = new Date(performedAt);
     d.setMonth(d.getMonth() + cycle);
     return d.toISOString().split("T")[0];
   })();
-  const nextMaintenanceAt = schedulesNext ? (nextOverride ?? autoNext) : "";
+  const nextMaintenanceAt = nextOverride ?? autoNext;
 
   const handleSubmit = async () => {
     const targetId = selectedItemId;
@@ -118,10 +132,13 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
         type,
         result,
         performedAt,
-        issue: issue || null,
+        // The reported symptom lives on the ชำรุด log — carry it over; a PREVENTIVE round has none.
+        issue: (fromRepair ? repairInfo?.damage : null) || null,
         description: description || null,
         cost: cost ? parseFloat(cost) : null,
-        nextMaintenanceAt: nextMaintenanceAt || null,
+        // Override only — omitted means "server, apply the rule". Sending the previewed
+        // value would fork the rule into the client again.
+        nextMaintenanceAt: nextOverride || undefined,
         attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
         subItemId: subItemId ?? undefined,
       });
@@ -136,10 +153,8 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   };
 
   const resetAndClose = () => {
-    setType("PREVENTIVE");
     setResult("AVAILABLE");
     setPerformedAt(new Date().toISOString().split("T")[0]);
-    setIssue("");
     setDescription("");
     setCost("");
     setNextOverride(null);
@@ -161,7 +176,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
           ฟอร์มบันทึกการบำรุงรักษาพัสดุ
         </DialogDescription>
 
-        <div className="flex max-h-[85vh] flex-col overflow-hidden">
+        <div className={DIALOG_SHELL}>
           {/* ── Header ── */}
           <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
@@ -169,8 +184,11 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                 <Wrench className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-base font-semibold text-foreground">บันทึกการบำรุงรักษา</p>
-                <p className="text-xs text-muted-foreground">บำรุงรักษาหรือซ่อมแซมพัสดุ</p>
+                <p className="text-base font-semibold text-foreground">
+                  {fromRepair ? "บันทึกการบำรุงรักษาหรือซ่อมแซมพัสดุ" : "บันทึกการบำรุงรักษา"}
+                </p>
+                {/* Says where repairs go now that ซ่อมแซม is no longer pickable here. */}
+                {!fromRepair && <p className="text-xs text-muted-foreground">ตรวจบำรุงตามรอบ · งานซ่อมให้แจ้งชำรุดแล้วส่งซ่อม</p>}
               </div>
             </div>
             <button
@@ -183,7 +201,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
           </div>
 
           {/* ── Body ── */}
-          <div className="flex-1 overflow-y-auto bg-secondary/40 px-4 sm:px-6 py-6 space-y-5">
+          <div className={cn(DIALOG_BODY, "bg-secondary/40 px-4 sm:px-6 py-6 space-y-5")}>
             {/* ── Item selector ── */}
             {hasDefaultItem ? (
               <div className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm space-y-1">
@@ -249,21 +267,12 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* ผลการตรวจ exists only on the repair path. บำรุงรักษา is care for a piece that
+                still works — its outcome is always พร้อมใช้งาน, so there is nothing to pick.
+                ตัดจำหน่าย has exactly two doors: สูญหาย, and ซ่อมไม่ได้ — this one. */}
+            {fromRepair && (
               <div className="space-y-2">
-                <Label>ประเภท</Label>
-                <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
-                  <SelectTrigger className="bg-card w-full">
-                    <span className="text-foreground">{MAINT_TYPE_LABELS[type]}</span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PREVENTIVE">{MAINT_TYPE_LABELS.PREVENTIVE}</SelectItem>
-                    <SelectItem value="CORRECTIVE">{MAINT_TYPE_LABELS.CORRECTIVE}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>ผลการตรวจ</Label>
+                <Label>ผลการซ่อม</Label>
                 <Select value={result} onValueChange={(v) => setResult(v as typeof result)}>
                   <SelectTrigger className="bg-card w-full">
                     <span className="text-foreground">{MAINT_RESULT_LABELS[result]}</span>
@@ -276,32 +285,40 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                   </SelectContent>
                 </Select>
               </div>
-            </div>
+            )}
 
             <div className="space-y-2">
-              <Label>วันที่ดำเนินการ</Label>
-              <Input
-                type="date"
+              <Label>{fromRepair ? "วันที่รับคืนจากการซ่อม" : "วันที่ดำเนินการ"}</Label>
+              <DatePicker
                 value={performedAt}
-                onChange={(e) => setPerformedAt(e.target.value)}
-                className="bg-card"
+                onChange={setPerformedAt}
+                className="h-9 bg-card"
               />
             </div>
 
-            {type === "CORRECTIVE" && (
+            {fromRepair && (
               <div className="space-y-2">
                 <Label>ปัญหา/อาการ</Label>
-                <Input
-                  value={issue}
-                  onChange={(e) => setIssue(e.target.value)}
-                  placeholder="เสียอะไร?"
-                  className="bg-card"
-                />
+                <dl className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm space-y-1.5">
+                  {([
+                    ["อาการที่ชำรุด", repairInfo?.damage],
+                    ["ส่งซ่อมที่", repairInfo?.venue],
+                    ["รายละเอียด", repairInfo?.note],
+                    ["วันที่ส่งซ่อม", repairInfo?.sentAt],
+                    // ส่งซ่อมที่ sits above รายละเอียด: where it went is the fact staff scan for,
+                    // the free-text note under it can run long.
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="flex gap-2">
+                      <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                      <dd className="min-w-0 text-foreground">{value || "—"}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label>รายละเอียดงานที่ทำ</Label>
+              <Label>{fromRepair ? "ข้อมูลการดำเนินการซ่อมแซม" : "รายละเอียดงานที่ทำ"}</Label>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -311,9 +328,9 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className={cn("grid grid-cols-1 gap-3", !fromRepair && "sm:grid-cols-2")}>
               <div className="space-y-2">
-                <Label>ค่าใช้จ่าย (฿)</Label>
+                <Label>{fromRepair ? "ค่าใช้จ่ายในการซ่อมแซมครั้งนี้ (฿)" : "ค่าใช้จ่ายในการบำรุงรักษา (฿)"}</Label>
                 <Input
                   type="number"
                   min={0}
@@ -323,25 +340,26 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                   className="bg-card"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>นัดครั้งถัดไป</Label>
-                <Input
-                  type="date"
-                  value={nextMaintenanceAt}
-                  onChange={(e) => setNextOverride(e.target.value)}
-                  disabled={!schedulesNext}
-                  className="bg-card"
-                />
-                {schedulesNext
-                  ? cycle > 0 && nextMaintenanceAt && (
-                      <span className="text-[11px] text-muted-foreground">คำนวณอัตโนมัติ: +{cycle} เดือน</span>
-                    )
-                  : (
-                      <span className="text-[11px] text-muted-foreground">
-                        {result === "DISPOSED" ? "ตัดจำหน่ายแล้ว — ไม่นัดรอบถัดไป" : "ยังซ่อมไม่เสร็จ — ยังอยู่ในรายการเลยรอบ"}
-                      </span>
-                    )}
-              </div>
+              {/* รอบครั้งถัดไป belongs to บำรุงรักษา only. A repair is not a maintenance round:
+                  it must not move the cadence, so the field is gone from รับคืนจากส่งซ่อม and
+                  the server leaves the existing due date untouched (lib/maintenance
+                  nextDateAfterJob). A piece that had no due date at all still gets its first
+                  one there, otherwise it would drop off the schedule for good. */}
+              {!fromRepair && (
+                <div className="space-y-2">
+                  <Label>รอบครั้งถัดไป</Label>
+                  <DatePicker
+                    value={nextMaintenanceAt}
+                    onChange={setNextOverride}
+                    className="h-9 bg-card"
+                  />
+                  {nextMaintenanceAt && cycle > 0 ? (
+                    <span className="text-[11px] text-muted-foreground">คำนวณอัตโนมัติ: +{cycle} เดือน</span>
+                  ) : !nextMaintenanceAt ? (
+                    <span className="text-[11px] text-muted-foreground">คำนวณอัตโนมัติจากรอบบำรุงของพัสดุ</span>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

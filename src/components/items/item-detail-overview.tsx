@@ -1,25 +1,29 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
 import {
   Package, QrCode, ArrowDownToLine, Home,
   Flag, Undo2, Pencil,
-  Hash, Tag, Layers, MapPin, ClipboardList, FolderTree,
-  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2,
+  Hash, Tag, Layers, ClipboardList, FolderTree,
+  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2, Wrench,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { countCycleFor } from "@/lib/stock-count";
-import { formatSubCode, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
+import { formatSubCode, qrUrl, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
+import { canManageStock } from "@/lib/roles";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { ActionTile } from "@/components/items/action-tile";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { returnItem } from "@/lib/api";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
+import { DistributionTable, distributionTotal, type DistributionRow } from "@/components/items/distribution-table";
+import { RecoverDamageDialog, type OpenDamage } from "@/components/items/recover-damage-dialog";
 
 interface SubItemRecord {
   id: string;
@@ -55,6 +59,10 @@ interface ItemData {
   lastCountDate: string | null;
   nextCountDate: string | null;
   images: string[];
+  /** Derived server-side (lib/distribution.ts) — where the stock actually is. */
+  distribution?: DistributionRow[];
+  /** Open แจ้งชำรุด bookings awaiting repair — the rows behind the ชำรุด figure. */
+  openDamage?: OpenDamage[];
 }
 
 interface Props {
@@ -68,8 +76,10 @@ interface Props {
 }
 
 export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onReportStatus, onEdit, onRefresh }: Props) {
-  const canAct = userRole === "ADMIN" || userRole === "STAFF";
+  const canAct = canManageStock(userRole);
   const [stationOpen, setStationOpen] = useState(false);
+  const [recoverOpen, setRecoverOpen] = useState(false);
+  const openDamage = item.openDamage ?? [];
   // COUNT durable (non-tracked, non-consumable = DUR) → eligible for "นำไปใช้งาน".
   const isCountDurable = !item.trackIndividually && (item.category.profile?.dispenseType ?? "COUNT") !== "CONSUMABLE";
 
@@ -96,7 +106,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   );
 
   useEffect(() => {
-    QRCode.toDataURL(item.code, { width: 128, margin: 1 }).then(setQrDataUrl);
+    QRCode.toDataURL(qrUrl(item.code), { width: 128, margin: 1 }).then(setQrDataUrl);
   }, [item.code]);
 
   // ── Handlers ──
@@ -119,16 +129,14 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   // Blank cycle = the profile default (3 months for consumables, 12 otherwise).
   const countCycle = countCycleFor(item.category.profile?.dispenseType ?? "COUNT", item.countCycleMonths);
 
-  const locationStr = item.location
-    ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
-    : "-";
-
+  // สถานที่จัดเก็บ used to be a row here. One line can only name the item's registered
+  // room, which is wrong the moment any of the stock is stationed elsewhere — replaced by
+  // DistributionTable below, which lists every place the stock actually is.
   const detailRows: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; mono?: boolean }[] = [
     { icon: Hash, label: "รหัส", value: item.code, mono: true },
     { icon: Tag, label: "ประเภท", value: item.category.profile?.name ?? item.category.name },
     { icon: FolderTree, label: "หมวดหมู่", value: item.category.name },
     { icon: Layers, label: "หน่วยเบิก", value: item.issueUnit.name },
-    { icon: MapPin, label: "ที่ตั้ง", value: locationStr },
     ...(item.storageRequirements
       ? [{ icon: ClipboardList, label: "การเก็บรักษา", value: item.storageRequirements }]
       : []),
@@ -137,7 +145,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       icon: CalendarClock,
       label: "ตรวจนับครั้งถัดไป",
       value: item.nextCountDate
-        ? new Date(item.nextCountDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })
+        ? fmtDate(item.nextCountDate, TH_DATE)
         : "ยังไม่เคยตรวจนับ",
     },
     ...(item.trackIndividually && item.subItems.length === 1 && item.subItems[0].serialNumber
@@ -178,10 +186,20 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-5 items-start">
-        {/* ── Details ── */}
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <SectionHeader eyebrow="ข้อมูลพัสดุ" title="รายละเอียด" />
-          <div className="divide-y divide-border">
+        {/* Left column reads as one thought, top down: what this thing is, then where it is.
+            Actions stay on the right, unmoved. The location table lived full-width above this
+            section before — at 976px its สถานที่ column stretched to 734px for names needing
+            ~180px, so the eye had to cross ~550px of nothing to pair a room with its count.
+            Here it gets ~270px: snug, and long room names still fit without truncating.
+            Below lg the grid collapses to DOM order, so on a phone this reads
+            ข้อมูลพัสดุ → ตำแหน่ง → จัดการ. That reordering is deliberate: the stretch problem
+            doesn't exist at 375px, and confirming which item you scanned before reading where
+            it sits is the right order on a phone too. */}
+        <div className="space-y-5 min-w-0">
+          {/* ── Details ── */}
+          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+            <SectionHeader title="ข้อมูลพัสดุ" />
+            <div className="divide-y divide-border">
             {detailRows.map((d, i) => {
               const Icon = d.icon;
               return (
@@ -202,13 +220,34 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                 </div>
               );
             })}
+            </div>
+          </div>
+
+          {/* ── Where the stock is ── */}
+          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+            <SectionHeader
+              title="ตำแหน่งปัจจุบันของพัสดุ"
+              // Summed from the rows, never from totalQty, so the headline can't disagree
+              // with the table under it (they differ by design for consumables, whose
+              // dispensed stock is used up rather than sitting somewhere).
+              right={
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  ทั้งหมด{" "}
+                  <span className="font-medium text-foreground tabular-nums">
+                    {distributionTotal(item.distribution ?? []).toLocaleString("th-TH")}
+                  </span>{" "}
+                  {item.issueUnit.name}
+                </span>
+              }
+            />
+            <DistributionTable rows={item.distribution ?? []} unit={item.issueUnit.name} />
           </div>
         </div>
 
         {/* ── Manage (staff) or QR (viewer) ── */}
         {canAct ? (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <SectionHeader eyebrow="การจัดการ" title="จัดการสต็อก" />
+            <SectionHeader title="จัดการพัสดุ" />
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {isCountDurable && (
                 <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={() => setStationOpen(true)} disabled={item.availableQty <= 0} />
@@ -251,6 +290,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                 </DropdownMenu>
               ) : (
                 <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              )}
+              {openDamage.length > 0 && (
+                <ActionTile icon={Wrench} label="รับคืนจากซ่อม" tone="default" onClick={() => setRecoverOpen(true)} />
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (
                 <ActionTile icon={CheckCircle2} label="กลับพร้อมใช้งาน" tone="default" onClick={() => onReportStatus("AVAILABLE")} />
@@ -311,6 +353,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       {isCountDurable && (
         <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={item.id} itemCode={item.code} itemName={item.name} availableQty={item.availableQty} issueUnit={item.issueUnit.name} onSuccess={onRefresh} />
       )}
+      <RecoverDamageDialog open={recoverOpen} onOpenChange={setRecoverOpen} itemId={item.id} unit={item.issueUnit.name} rows={openDamage} onSuccess={onRefresh} />
     </div>
   );
 }

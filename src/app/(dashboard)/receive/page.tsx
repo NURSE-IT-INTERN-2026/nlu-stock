@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,9 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
 import { motion } from "motion/react";
-import { pic } from "@/lib/image";
+import { ItemThumb } from "@/components/shared/item-thumb";
 import { cn } from "@/lib/utils";
-import { autoLotNumber } from "@/lib/lot-code";
 import {
   searchDispenseItems,
   createReceive,
@@ -29,6 +29,7 @@ const uid = () =>
 import { AddItemModal } from "@/components/shared/add-item-modal";
 import { ReturnPanel } from "@/components/receive/return-panel";
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
+import { InUsePanel } from "@/components/receive/in-use-panel";
 import { usePageHeader } from "@/components/layout/page-header-context";
 
 interface SearchItem {
@@ -73,17 +74,6 @@ function detectNextStart(subs: { subCode: string }[]): { start: number; width: n
 
 function genCodes(start: number, qty: number, width: number): string[] {
   return Array.from({ length: Math.max(0, qty) }, (_, i) => `C${String(start + i).padStart(width, "0")}`);
-}
-
-// Inline lot warning: is the typed lot an existing lot for this item, and does the
-// entered expiry line up? Returns null when no existing lot matches.
-function lotMatchInfo(row: Pick<ReceiveRow, "lotNumber" | "expiryDate" | "existingLots">) {
-  const match = row.existingLots.find((l) => l.lotNumber === row.lotNumber.trim());
-  if (!match) return null;
-  const exp = match.expiryDate;
-  if (!row.expiryDate) return { text: `⚠️ ล็อตนี้มีอยู่แล้ว${exp ? ` (หมดอายุ ${exp})` : ""} — ใส่วันที่ให้ตรงถ้า lot เดิม`, cls: "text-amber-600" };
-  if (row.expiryDate === exp) return { text: "✓ ตรง lot เดิม — จะรวมยอด", cls: "text-green-600" };
-  return { text: "✕ วันหมดอายุไม่ตรง lot เดิม — บันทึกไม่ผ่าน", cls: "text-red-600" };
 }
 
 export default function ReceivePage() {
@@ -158,11 +148,11 @@ function ReceiveShell() {
         {tab === "receive" ? (
           <ReceiveContent />
         ) : tab === "in_use" ? (
-          <SubItemStatusPanel status="IN_USE" actionLabel="รับเข้า" emptyText="ไม่มีรายการที่อยู่ระหว่างนำไปใช้งาน" />
+          <InUsePanel />
         ) : tab === "return" ? (
           <ReturnPanel initialChip={initialDueChip} />
         ) : (
-          <SubItemStatusPanel status="UNDER_REPAIR" actionLabel="รับซ่อม" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
+          <SubItemStatusPanel status="UNDER_REPAIR" actionLabel="รับคืนจากส่งซ่อม" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
         )}
       </div>
     </div>
@@ -307,7 +297,8 @@ function ReceiveContent() {
         items: rows.map((r) => ({
           itemId: r.item.id,
           quantity: r.quantity,
-          lotNumber: r.item.category.profile.dispenseType === "CONSUMABLE" ? r.lotNumber || null : null,
+          // Lot number is no longer collected — batches are keyed by import date (auto RCV code).
+          lotNumber: null,
           expiryDate: r.expiryDate || null,
           unitCost: r.unitCost ? Number(r.unitCost) : null,
           subCodes: r.item.trackIndividually ? genCodes(r.subStart, r.quantity, r.subWidth) : null,
@@ -353,7 +344,7 @@ function ReceiveContent() {
       >
         {/* Thumbnail */}
         <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted">
-          <img src={thumb ?? pic(item.code, 200)} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
+          <ItemThumb src={thumb} alt={item.name} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-base leading-snug text-foreground">{item.name}</p>
@@ -503,37 +494,14 @@ function ReceiveContent() {
                     </div>
 
                     {isConsumable && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Lot Number</Label>
-                          <Input
-                            placeholder="เว้นว่างได้ — ไม่ต้องระบุล็อต"
-                            value={row.lotNumber}
-                            onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
-                            className="text-gray-900 h-8 text-sm"
-                          />
-                          {row.lotNumber.trim() ? (
-                            (() => {
-                              const m = lotMatchInfo(row);
-                              return m ? <p className={`text-[11px] font-medium ${m.cls}`}>{m.text}</p> : null;
-                            })()
-                          ) : row.expiryDate || row.existingLots.length > 0 ? (
-                            // A lot only gets created when something needs one: an expiry date
-                            // to hold, or an item that already tracks lots (see api/receive).
-                            <p className="text-[11px] text-muted-foreground font-mono break-all">
-                              จะสร้าง: {autoLotNumber(new Date())}
-                            </p>
-                          ) : (
-                            <p className="text-[11px] text-muted-foreground">ไม่ระบุล็อต — เข้าคลังรวม</p>
-                          )}
-                        </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">วันหมดอายุ</Label>
-                          <Input
-                            type="date"
+                          <DatePicker
                             value={row.expiryDate}
-                            onChange={(e) => updateRow(row.id, { expiryDate: e.target.value })}
-                            className="text-gray-900 h-8 text-sm"
+                            onChange={(v) => updateRow(row.id, { expiryDate: v })}
+                            placeholder="ไม่ระบุ"
+                            className="h-8"
                           />
                         </div>
                         <div className="space-y-1">

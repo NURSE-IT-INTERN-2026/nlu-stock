@@ -58,6 +58,9 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  // Expiry alert = expires within 30 days OR already past expiry (no lower bound), and still
+  // holds stock. Expired lots surface too so the UI can flag them "หมดอายุ".
+  const expiryAlert = { expiryDate: { lte: in30Days }, remainingQty: { gt: 0 } };
 
   const lowStock = params.get("lowStock");
   if (lowStock === "true") {
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
   const nearExpiry = params.get("nearExpiry");
   if (nearExpiry === "true") {
     where.lots = {
-      some: { expiryDate: { gte: now, lte: in30Days } },
+      some: expiryAlert,
     };
   }
 
@@ -98,7 +101,7 @@ export async function GET(request: NextRequest) {
     `).map((r) => r.id);
     where.OR = [
       { id: { in: lowStockIds } },
-      { lots: { some: { expiryDate: { gte: now, lte: in30Days } } } },
+      { lots: { some: expiryAlert } },
       { nextMaintenanceDate: { lt: now } },
       { nextCountDate: null },
       { nextCountDate: { lt: now } },
@@ -131,7 +134,7 @@ export async function GET(request: NextRequest) {
     _count: { select: { subItems: true } },
     subItems: statusList.length > 0 ? matchedSubSelect : { select: { status: true } },
     lots: {
-      where: { expiryDate: { gte: now, lte: in30Days } },
+      where: expiryAlert,
       orderBy: { expiryDate: "asc" },
       take: 1,
     },
@@ -148,8 +151,12 @@ export async function GET(request: NextRequest) {
     if (isCountDue(item.nextCountDate, now)) types.push("dueCount");
 
     // statusCounts: พร้อมใช้งาน / ถูกใช้งาน (ยืม+ใช้งาน) / ไม่พร้อมใช้งาน (ชำรุด+ส่งซ่อม+บำรุงรักษา).
-    // Tracked → count sub-items per group. Non-tracked → derive from qty.
-    let statusCounts: { available: number; inUse: number; unavailable: number };
+    // Tracked only — the split is real there because every piece carries its own status.
+    // Non-tracked items have no per-piece status to count: Item holds one availableQty/totalQty
+    // pair plus a single status flag, so the third bucket used to be hard-coded 0 and the
+    // whole totalQty−availableQty gap was labelled "ยืม" even when the stock was damaged or
+    // eaten by a kit assembly. Null now; the table falls back to available/total.
+    let statusCounts: { available: number; inUse: number; unavailable: number } | null = null;
     if (item.trackIndividually) {
       const c = { available: 0, inUse: 0, unavailable: 0 };
       for (const s of item.subItems) {
@@ -158,12 +165,6 @@ export async function GET(request: NextRequest) {
         else if (s.status === ItemStatus.DAMAGED || s.status === ItemStatus.UNDER_REPAIR || s.status === ItemStatus.PENDING_MAINTENANCE) c.unavailable++;
       }
       statusCounts = c;
-    } else {
-      statusCounts = {
-        available: item.availableQty,
-        inUse: Math.max(0, item.totalQty - item.availableQty),
-        unavailable: 0,
-      };
     }
 
     // Cast: subItems carries the full select only when a status filter is on — which is

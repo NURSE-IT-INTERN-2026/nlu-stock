@@ -8,10 +8,12 @@ product
 Asset and inventory management system for a Thai nursing education institute.
 
 ## Users
-- **ADMIN**: manages items master, categories, units, locations, users; full access
-- **STAFF**: receives stock in, approves dispense requests, manages day-to-day
-- **INSTRUCTOR**: requests item dispense for teaching/lab sessions; read-only on most views
-- **CHILDREN** (นักศึกษา / student): browse-only — search and view items + reports; no dashboard, no dispense/receive
+Roles are NOT stored in the database — they come from env allowlists of emails
+(`src/lib/roles.ts`). An email on no list cannot sign in at all.
+
+- **SUPERADMIN** (ผู้ดูแลระบบ): everything, plus ตั้งค่า — items master, categories, units, locations, users, borrow limits
+- **ADMIN** (ผู้ดูแล): all stock work — รับเข้า, รับคืน, แจ้งชำรุด, ปรับยอด, บำรุงรักษา, เบิก/ยืม, รายงาน. No ตั้งค่า
+- **EXECUTIVE** (ผู้บริหาร): เบิก/ยืม and reports only. Every other write is refused
 
 ## Primary tasks (by frequency)
 1. Receive items into stock (stock-in)

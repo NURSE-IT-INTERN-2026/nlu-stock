@@ -4,7 +4,8 @@ import { useState } from "react";
 import { MapPin, Printer, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { DIALOG_SHELL_FIT, DIALOG_BODY, Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { QrPrintDialog } from "@/components/shared/qr-print-dialog";
 import { LocationCascadePicker, type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
 import { updateItem } from "@/lib/api";
@@ -62,8 +63,9 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
       <DialogContent className="sm:max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl" showCloseButton={false}>
         <DialogTitle className="sr-only">ย้ายที่ตั้ง</DialogTitle>
 
+       <div className={DIALOG_SHELL_FIT}>
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
+        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-4">
           <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <MapPin className="size-4" />
           </div>
@@ -75,7 +77,7 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
 
         {done ? (
           /* ── Success ── */
-          <div className="flex flex-col items-center gap-3 bg-secondary/40 px-6 py-8 text-center">
+          <div className={cn(DIALOG_BODY, "flex flex-col items-center justify-center gap-3 bg-secondary/40 px-6 py-8 text-center")}>
             <div className="flex size-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
               <Check className="size-5" />
             </div>
@@ -89,7 +91,7 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
           </div>
         ) : (
           /* ── Cascade picker ── */
-          <div className="bg-secondary/40 px-6 py-5">
+          <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-5")}>
             <LocationCascadePicker
               initialLocationId={currentLocationId ?? null}
               onChange={setRef}
@@ -98,7 +100,7 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
         )}
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-4">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-card px-6 py-4">
           {done ? (
             <Button size="sm" onClick={() => onOpenChange(false)}>เสร็จสิ้น</Button>
           ) : (
@@ -110,6 +112,7 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
             </>
           )}
         </div>
+       </div>
       </DialogContent>
 
       <QrPrintDialog open={qrOpen} onClose={() => setQrOpen(false)} items={effectiveItems.map(({ code, name }) => ({ code, name }))} />

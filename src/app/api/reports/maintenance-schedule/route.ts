@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
             name: true,
             model: true,
             maintenanceCycleMonths: true,
-            category: { select: { name: true } },
+            category: { select: { id: true, name: true, profileId: true } },
             location: { select: { building: true, floor: true, room: true, detail: true } },
             _count: { select: { subItems: true } },
           },
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
         ...locFilter,
       },
       include: {
-        category: { select: { name: true } },
+        category: { select: { id: true, name: true, profileId: true } },
         location: { select: { building: true, floor: true, room: true, detail: true } },
       },
     }),
@@ -82,6 +82,14 @@ export async function GET(request: NextRequest) {
     name: string;
     model: string;
     categoryName: string;
+    // Ids + raw location parts so a client can drive the shared items filter bar off these rows.
+    categoryId: string;
+    profileId: string;
+    building: string;
+    floor: string;
+    room: string;
+    detail: string;
+    status: string;
     location: string;
     lastMaintenanceDate: string;
     nextMaintenanceDate: string;
@@ -101,6 +109,13 @@ export async function GET(request: NextRequest) {
       name: s.item.name,
       model: s.item.model ?? "",
       categoryName: s.item.category.name,
+      categoryId: s.item.category.id,
+      profileId: s.item.category.profileId,
+      building: s.item.location?.building ?? "",
+      floor: s.item.location?.floor ?? "",
+      room: s.item.location?.room ?? "",
+      detail: s.item.location?.detail ?? "",
+      status: s.status,
       location: locationLabel(s.item.location),
       lastMaintenanceDate: s.lastMaintenanceDate?.toISOString() ?? "",
       nextMaintenanceDate: next.toISOString(),
@@ -121,6 +136,13 @@ export async function GET(request: NextRequest) {
       name: i.name,
       model: i.model ?? "",
       categoryName: i.category.name,
+      categoryId: i.category.id,
+      profileId: i.category.profileId,
+      building: i.location?.building ?? "",
+      floor: i.location?.floor ?? "",
+      room: i.location?.room ?? "",
+      detail: i.location?.detail ?? "",
+      status: i.status,
       location: locationLabel(i.location),
       lastMaintenanceDate: i.lastMaintenanceDate?.toISOString() ?? "",
       nextMaintenanceDate: next.toISOString(),

@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  DIALOG_SHELL,
+  DIALOG_BODY,
   Dialog, DialogContent, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -24,7 +27,7 @@ interface SubItemOption {
 }
 
 const STATUS_ACTION_META: Record<string, { title: string; desc: string; submit: string; placeholder: string }> = {
-  AVAILABLE: { title: "กลับพร้อมใช้งาน", desc: "ล้างสถานะชำรุด/ส่งซ่อม กลับมาใช้งานได้", submit: "ยืนยันพร้อมใช้งาน", placeholder: "เช่น ซ่อมเสร็จแล้ว..." },
+  AVAILABLE: { title: "กลับพร้อมใช้งาน", desc: "ล้างสถานะชำรุด/ส่งซ่อม/ตัดจำหน่าย กลับมาใช้งานได้", submit: "ยืนยันพร้อมใช้งาน", placeholder: "เช่น ซ่อมเสร็จแล้ว..." },
   DAMAGED: { title: "แจ้งชำรุด", desc: "เปลี่ยนสถานะพัสดุเป็นชำรุด", submit: "แจ้งชำรุด", placeholder: "อธิบายรายละเอียดการชำรุด..." },
   LOST: { title: "แจ้งสูญหาย", desc: "บันทึกพัสดุสูญหาย", submit: "ยืนยันสูญหาย", placeholder: "อธิบายสาเหตุการสูญหาย..." },
   DISPOSED: { title: "ตัดจำหน่าย", desc: "ตัดพัสดุนี้ออกจากระบบ", submit: "ยืนยันตัดจำหน่าย", placeholder: "เหตุผลในการตัดจำหน่าย..." },
@@ -107,7 +110,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
         <DialogTitle className="sr-only">{meta.title}</DialogTitle>
         <DialogDescription className="sr-only">{meta.desc}</DialogDescription>
 
-        <div className="flex max-h-[85vh] flex-col overflow-hidden">
+        <div className={DIALOG_SHELL}>
           {/* ── Header ── */}
           <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
             <div className="flex items-center gap-3">
@@ -131,7 +134,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
           </div>
 
           {/* ── Body ── */}
-          <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6 space-y-5">
+          <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6 space-y-5")}>
             {trackIndividually && (
               <div className="space-y-2">
                 <Label>ชิ้นย่อย{!lockedSub && <span className="text-destructive"> *</span>}</Label>
@@ -186,7 +189,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-6 py-4">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
             <Button
-              variant="destructive"
+              variant={status === "AVAILABLE" ? "default" : "destructive"}
               onClick={handleSave}
               disabled={saving || (trackIndividually && !subItemId) || (notesRequired && !notes.trim())}
               className="gap-1.5"

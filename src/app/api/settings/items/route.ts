@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
+import { requireSuperAdmin, json, error, parseBody, getSearchParams, paginate } from "@/lib/api-utils";
 import { itemCreateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 import { Prisma, ItemStatus } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const params = getSearchParams(request);
@@ -90,11 +90,31 @@ export async function GET(request: NextRequest) {
     prisma.item.count({ where }),
   ]);
 
-  return json({ items, page, perPage, total });
+  // Per-status sub-item counts for tracked items — the delete dialog shows a breakdown
+  // (พร้อมใช้งาน/ยืมอยู่/ซ่อมอยู่/ใช้งาน) and blocks when pieces are out. One groupBy for the page.
+  const trackedIds = items.filter((i) => i.trackIndividually).map((i) => i.id);
+  const groups = trackedIds.length
+    ? await prisma.subItem.groupBy({
+        by: ["itemId", "status"],
+        where: { itemId: { in: trackedIds } },
+        _count: { _all: true },
+      })
+    : [];
+  const countsByItem = new Map<string, Partial<Record<ItemStatus, number>>>();
+  for (const g of groups) {
+    const entry = countsByItem.get(g.itemId) ?? {};
+    entry[g.status] = g._count._all;
+    countsByItem.set(g.itemId, entry);
+  }
+  const itemsWithCounts = items.map((i) =>
+    i.trackIndividually ? { ...i, statusCounts: countsByItem.get(i.id) ?? {} } : i,
+  );
+
+  return json({ items: itemsWithCounts, page, perPage, total });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireSuperAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { data, error: parseError } = await parseBody(itemCreateSchema)(request);

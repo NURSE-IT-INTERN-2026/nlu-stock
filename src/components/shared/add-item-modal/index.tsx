@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  DIALOG_BODY,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -415,7 +416,7 @@ export function AddItemModal({
 
   function renderBody() {
     return (
-      <div className="flex-1 overflow-y-auto bg-secondary/40 px-6 py-6">
+      <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
         {state.step === "details" && (
           <StepItemDetails
             name={state.form.name}

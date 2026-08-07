@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CalendarDays, User2, Undo2, X, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getItemHistory, recoverLoss } from "@/lib/api";
+import { getItemHistory, recoverStock } from "@/lib/api";
 import { toast } from "sonner";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
@@ -22,7 +23,6 @@ interface LostEvent {
   id: string;
   type: string;
   date: string;
-  description: string;
   user: string;
   details: {
     source?: "PIECE" | "ADJUSTMENT";
@@ -39,8 +39,7 @@ const SOURCE_META: Record<string, { label: string; cls: string }> = {
   ADJUSTMENT: { label: "ปรับสต็อก", cls: "bg-muted text-foreground border-border" },
 };
 
-const fmtDate = (s: string) =>
-  new Date(s).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtDT = (s: string) => fmtDate(s, TH_DATETIME);
 
 export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: { itemId: string; itemCode: string; isMulti: boolean; onSuccess?: () => void }) {
   const isMobile = useIsMobile();
@@ -70,7 +69,7 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
     if (!recoverTarget) return;
     setRecovering(true);
     try {
-      await recoverLoss(itemId, { source: recoverTarget.details?.source ?? "PIECE", recordId: recoverTarget.id, note: recoverNote.trim() || undefined });
+      await recoverStock(itemId, { source: recoverTarget.details?.source ?? "PIECE", recordId: recoverTarget.id, note: recoverNote.trim() || undefined });
       toast.success("เรียกคืนแล้ว");
       closeRecover();
       refetch();
@@ -119,7 +118,7 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <Badge variant="outline" className={cn("text-[10px]", meta.cls)}>{meta.label}</Badge>
                   <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                    <CalendarDays className="size-3" />{fmtDate(e.date)}
+                    <CalendarDays className="size-3" />{fmtDT(e.date)}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2">
@@ -159,7 +158,7 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
               const meta = SOURCE_META[r.src] ?? SOURCE_META.PIECE;
               return (
                 <TableRow key={e.id}>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDate(e.date)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDT(e.date)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2 min-w-0">
                       <Badge variant="outline" className={cn("shrink-0 text-[10px]", meta.cls)}>{meta.label}</Badge>
@@ -216,7 +215,7 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
                     {r.code && <span className="font-mono text-sm font-medium truncate">{r.code}</span>}
                   </div>
                   <div className="text-sm">จำนวนที่เรียกคืน <span className="font-semibold">{r.qty}</span></div>
-                  <div className="text-xs text-muted-foreground">{fmtDate(recoverTarget.date)}</div>
+                  <div className="text-xs text-muted-foreground">{fmtDT(recoverTarget.date)}</div>
                 </div>
               );
             })()}
