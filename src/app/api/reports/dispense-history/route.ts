@@ -18,7 +18,20 @@ import type { UsageType } from "@/generated/prisma/enums";
  * row belonging to them. `total` is therefore a count of loan events, which is what the tab's
  * pager and footer count. Rows with no loanGroupId (consumable draws, legacy borrows) are
  * their own group of one, so they page alongside without special-casing.
+ *
+ * `loanStatus=open|overdue` narrows the same page to loans still owed back — this is what the
+ * separate ยืมค้าง tab used to be, folded in here so the two cannot disagree about which loans
+ * are outstanding. `summary` is always computed over the unfiltered set so the counters keep
+ * reading the same whichever status is selected.
  */
+
+// รายการที่มีคนต้องเอามาคืน. นำไปใช้งาน (INUSE) ไม่มีกำหนดคืนและไม่มีใครต้องตาม — มันกลับเข้าคลัง
+// ทางคืนเข้าคลัง. loanType null = ของเก่าก่อนมีคอลัมน์นี้ ถือเป็น BORROW.
+const OWED_BACK: Prisma.DispenseRecordWhereInput = {
+  returnedAt: null,
+  item: { category: { profile: { dispenseType: { in: ["COUNT", "ITEM"] } } } },
+  OR: [{ loanType: null }, { loanType: "BORROW" }],
+};
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -32,6 +45,7 @@ export async function GET(request: NextRequest) {
     const itemId = params.get("itemId") || undefined;
     const staffId = params.get("staffId") || undefined;
     const usageType = params.get("usageType") || undefined;
+    const loanStatus = params.get("loanStatus") || undefined; // "open" | "overdue"
 
     const where: Prisma.DispenseRecordWhereInput = {};
     if (dateFrom || dateTo) {
@@ -55,6 +69,37 @@ export async function GET(request: NextRequest) {
     if (usageType) conds.push(Prisma.sql`"usageType"::text = ${usageType}`);
     const whereSql = conds.length > 0 ? Prisma.sql`WHERE ${Prisma.join(conds, " AND ")}` : Prisma.empty;
 
+    // Step 0 — the loans still owed back inside the same filters. Bounded by how much stock is
+    // out at once, so pulling the whole set is cheap; it feeds both the summary counters and,
+    // when loanStatus is set, the list of keys the page is allowed to show.
+    const owed = await prisma.dispenseRecord.findMany({
+      where: { AND: [where, OWED_BACK] },
+      select: { id: true, loanGroupId: true, quantity: true, resolvedQty: true, dueAt: true },
+    });
+
+    const now = new Date();
+    const openKeys = new Set<string>();
+    const overdueKeys = new Set<string>();
+    let overdueUnits = 0;
+    for (const r of owed) {
+      const key = r.loanGroupId ?? r.id;
+      openKeys.add(key);
+      if (r.dueAt && r.dueAt < now) {
+        overdueKeys.add(key);
+        overdueUnits += r.quantity - r.resolvedQty;
+      }
+    }
+
+    const restrictKeys =
+      loanStatus === "overdue" ? [...overdueKeys] :
+      loanStatus === "open" ? [...openKeys] :
+      null;
+
+    // ANY('{}') matches nothing, which is the right answer for "ยังไม่คืน" with none outstanding.
+    const pageWhereSql = restrictKeys === null
+      ? whereSql
+      : Prisma.sql`${conds.length > 0 ? Prisma.sql`WHERE ${Prisma.join(conds, " AND ")} AND` : Prisma.sql`WHERE`} COALESCE("loanGroupId", id) = ANY(${restrictKeys})`;
+
     // Step 1 — the page of loan events. Ordered by when the event happened, with the key as
     // a tiebreaker: rows of one dispense share a timestamp to the millisecond, so without it
     // Postgres is free to order ties differently per query and a row could appear on two
@@ -63,7 +108,7 @@ export async function GET(request: NextRequest) {
       prisma.$queryRaw<{ key: string }[]>`
         SELECT COALESCE("loanGroupId", id) AS key, MAX("dispensedAt") AS at
         FROM dispense_records
-        ${whereSql}
+        ${pageWhereSql}
         GROUP BY COALESCE("loanGroupId", id)
         ORDER BY at DESC, key DESC
         LIMIT ${take} OFFSET ${skip}
@@ -79,7 +124,10 @@ export async function GET(request: NextRequest) {
     ]);
 
     const keys = keyRows.map((r) => r.key);
-    const total = Number(totalRows[0]?.count ?? 0);
+    // The count query stays unrestricted (it is the summary's "การเบิกในช่วงนี้"); when a
+    // loanStatus narrows the list, the restricted key list already IS the exact total.
+    const totalAll = Number(totalRows[0]?.count ?? 0);
+    const total = restrictKeys === null ? totalAll : restrictKeys.length;
 
     // Step 2 — every row of those events. The key is loanGroupId when set and the row's own
     // id when not, so matching it takes both arms.
@@ -106,6 +154,7 @@ export async function GET(request: NextRequest) {
       usageTypeLabel: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
       lotNumber: r.lot?.lotNumber ?? "—",
       dispensedAt: r.dispensedAt.toISOString(),
+      dueAt: r.dueAt?.toISOString() ?? null,
       notes: r.notes ?? "",
       returnedAt: r.returnedAt?.toISOString() ?? null,
       returnCondition: r.returnCondition,
@@ -117,7 +166,18 @@ export async function GET(request: NextRequest) {
     }));
 
     // total counts loan events, so the tab must not label it "records" — see the footer.
-    return json({ records: data, page, perPage, total });
+    return json({
+      records: data,
+      page,
+      perPage,
+      total,
+      summary: {
+        events: totalAll,
+        openEvents: openKeys.size,
+        overdueEvents: overdueKeys.size,
+        overdueUnits,
+      },
+    });
   } catch (err) {
     console.error("dispense-history error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

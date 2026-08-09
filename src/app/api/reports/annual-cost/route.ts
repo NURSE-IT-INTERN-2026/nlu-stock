@@ -2,6 +2,20 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 
+/**
+ * ค่าใช้จ่ายรายปี — ปีปฏิทิน (ม.ค.–ธ.ค.); the client labels it พ.ศ.
+ *
+ * Purchases come from two places because the schema records them in two places:
+ *   ครุภัณฑ์ / วัสดุคงทน → Item.purchasePrice, dated by Item.purchaseDate
+ *   วัสดุสิ้นเปลือง       → Lot.unitCost × Lot.receivedQty, dated by Lot.receivedDate
+ * This route used to read only the first, so every baht spent on consumables was missing
+ * from the year's spend — and consumables are the only thing the รับเข้า screen currently
+ * collects a price for.
+ *
+ * Known limitation: Item carries ONE purchasePrice and ONE purchaseDate, so a durable bought
+ * in several batches counts only against the year of that single date. Fixing it needs a
+ * per-receipt price on durables, not a change here.
+ */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -20,13 +34,19 @@ export async function GET(request: NextRequest) {
   };
   if (categoryId) itemWhere.categoryId = categoryId;
 
+  const lotWhere: Record<string, unknown> = {
+    receivedDate: { gte: startOfYear, lte: endOfYear },
+    unitCost: { not: null },
+    item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
+  };
+
   const maintWhere: Record<string, unknown> = {
     performedAt: { gte: startOfYear, lte: endOfYear },
     cost: { not: null },
   };
   if (categoryId) maintWhere.item = { categoryId };
 
-  const [purchases, repairs] = await Promise.all([
+  const [items, lots, repairs] = await Promise.all([
     prisma.item.findMany({
       where: itemWhere,
       select: {
@@ -39,6 +59,18 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { purchaseDate: "desc" },
     }),
+    prisma.lot.findMany({
+      where: lotWhere,
+      select: {
+        id: true,
+        lotNumber: true,
+        receivedQty: true,
+        unitCost: true,
+        receivedDate: true,
+        item: { select: { code: true, name: true, category: { select: { name: true } } } },
+      },
+      orderBy: { receivedDate: "desc" },
+    }),
     prisma.maintenanceRecord.findMany({
       where: maintWhere,
       include: {
@@ -49,14 +81,32 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  const purchaseData = purchases.map((p) => ({
-    id: p.id,
-    code: p.code,
-    name: p.name,
-    purchasePrice: p.purchasePrice ?? 0,
-    purchaseDate: p.purchaseDate!.toISOString(),
-    categoryName: p.category.name,
-  }));
+  // Both purchase sources land in one list with a `kind` column — the reader wants "ซื้ออะไร
+  // ไปบ้างปีนี้", not two tables they have to add up themselves.
+  const purchaseData = [
+    ...items.map((p) => ({
+      id: p.id,
+      kind: "DURABLE" as const,
+      code: p.code,
+      name: p.name,
+      categoryName: p.category.name,
+      detail: "",
+      quantity: 1,
+      amount: p.purchasePrice ?? 0,
+      date: p.purchaseDate!.toISOString(),
+    })),
+    ...lots.map((l) => ({
+      id: l.id,
+      kind: "CONSUMABLE" as const,
+      code: l.item.code,
+      name: l.item.name,
+      categoryName: l.item.category.name,
+      detail: l.lotNumber,
+      quantity: l.receivedQty,
+      amount: l.receivedQty * (l.unitCost ?? 0),
+      date: l.receivedDate.toISOString(),
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
 
   const repairData = repairs.map((r) => ({
     id: r.id,
@@ -69,14 +119,14 @@ export async function GET(request: NextRequest) {
     performer: r.performer.name,
   }));
 
-  const totalPurchase = purchaseData.reduce((s, p) => s + p.purchasePrice, 0);
+  const totalPurchase = purchaseData.reduce((s, p) => s + p.amount, 0);
   const totalRepair = repairData.reduce((s, r) => s + r.cost, 0);
 
   // Group by category for chart
   const categoryMap = new Map<string, { totalPurchase: number; totalRepair: number }>();
   for (const p of purchaseData) {
     const entry = categoryMap.get(p.categoryName) ?? { totalPurchase: 0, totalRepair: 0 };
-    entry.totalPurchase += p.purchasePrice;
+    entry.totalPurchase += p.amount;
     categoryMap.set(p.categoryName, entry);
   }
   for (const r of repairData) {
@@ -91,10 +141,19 @@ export async function GET(request: NextRequest) {
   }));
 
   return json({
+    year,
     purchases: purchaseData,
     repairs: repairData,
     totalPurchase,
     totalRepair,
     byCategory,
+    summary: {
+      totalPurchase,
+      totalRepair,
+      durablePurchase: purchaseData.filter((p) => p.kind === "DURABLE").reduce((s, p) => s + p.amount, 0),
+      consumablePurchase: purchaseData.filter((p) => p.kind === "CONSUMABLE").reduce((s, p) => s + p.amount, 0),
+      purchaseCount: purchaseData.length,
+      repairCount: repairData.length,
+    },
   });
 }

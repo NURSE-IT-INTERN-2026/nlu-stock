@@ -1,24 +1,30 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart } from "./charts/annual-cost-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
+import { useAsync } from "@/hooks/use-async";
 import { MAINT_TYPE_LABELS, labelFor, type MaintenanceType } from "@/lib/constants";
 
 const filterConfig: FilterConfig = { year: true, categories: true };
 
 interface PurchaseRow {
   id: string;
+  kind: "DURABLE" | "CONSUMABLE";
   code: string;
   name: string;
-  purchasePrice: number;
-  purchaseDate: string;
   categoryName: string;
+  detail: string;
+  quantity: number;
+  amount: number;
+  date: string;
 }
 
 interface RepairRow {
@@ -32,75 +38,67 @@ interface RepairRow {
   performer: string;
 }
 
+interface Summary {
+  totalPurchase: number;
+  totalRepair: number;
+  durablePurchase: number;
+  consumablePurchase: number;
+  purchaseCount: number;
+  repairCount: number;
+}
+
+interface Result {
+  year: number;
+  purchases: PurchaseRow[];
+  repairs: RepairRow[];
+  byCategory: { categoryName: string; totalPurchase: number; totalRepair: number }[];
+  summary: Summary;
+}
+
+const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
 const purchaseColumns: Column<PurchaseRow>[] = [
-  { key: "code", header: "Code" },
-  { key: "name", header: "Item" },
-  { key: "categoryName", header: "Category" },
+  { key: "date", header: "วันที่", render: (r) => fmtDate(new Date(r.date), TH_DATE) },
   {
-    key: "purchasePrice",
-    header: "Price",
-    render: (r) => `฿${r.purchasePrice.toLocaleString()}`,
+    key: "kind",
+    header: "ประเภท",
+    render: (r) => (
+      <Badge variant="outline">{r.kind === "DURABLE" ? "ครุภัณฑ์ / คงทน" : "วัสดุสิ้นเปลือง"}</Badge>
+    ),
   },
-  {
-    key: "purchaseDate",
-    header: "Date",
-    render: (r) => fmtDate(new Date(r.purchaseDate), TH_DATE),
-  },
+  { key: "code", header: "รหัสพัสดุ" },
+  { key: "name", header: "รายการพัสดุ" },
+  { key: "categoryName", header: "หมวดหมู่" },
+  { key: "detail", header: "ล็อต", render: (r) => r.detail || "—" },
+  { key: "quantity", header: "จำนวน", className: "text-right" },
+  { key: "amount", header: "เป็นเงิน", className: "text-right", render: (r) => baht(r.amount) },
 ];
 
 const repairColumns: Column<RepairRow>[] = [
-  { key: "itemCode", header: "Code" },
-  { key: "itemName", header: "Item" },
-  { key: "type", header: "Type", render: (r) => labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType) },
-  {
-    key: "cost",
-    header: "Cost",
-    render: (r) => `฿${r.cost.toLocaleString()}`,
-  },
-  {
-    key: "performedAt",
-    header: "Date",
-    render: (r) => fmtDate(new Date(r.performedAt), TH_DATE),
-  },
-  { key: "performer", header: "By" },
+  { key: "performedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.performedAt), TH_DATE) },
+  { key: "itemCode", header: "รหัสพัสดุ" },
+  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "type", header: "ประเภท", render: (r) => labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType) },
+  { key: "cost", header: "ค่าใช้จ่าย", className: "text-right", render: (r) => baht(r.cost) },
+  { key: "performer", header: "ผู้ดำเนินการ" },
 ];
 
 export function AnnualCostTab() {
-  const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
-  const [repairs, setRepairs] = useState<RepairRow[]>([]);
-  const [byCategory, setByCategory] = useState<{ categoryName: string; totalPurchase: number; totalRepair: number }[]>([]);
-  const [totalPurchase, setTotalPurchase] = useState(0);
-  const [totalRepair, setTotalRepair] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterValues>({});
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetcher = useCallback(async () => {
     const params: Record<string, string> = {};
     if (filters.year) params.year = filters.year;
     if (filters.categoryId) params.categoryId = filters.categoryId;
-    const json = (await getReport("annual-cost", params)) as {
-      purchases: PurchaseRow[];
-      repairs: RepairRow[];
-      byCategory: { categoryName: string; totalPurchase: number; totalRepair: number }[];
-      totalPurchase: number;
-      totalRepair: number;
-    };
-    setPurchases(json.purchases);
-    setRepairs(json.repairs);
-    setByCategory(json.byCategory);
-    setTotalPurchase(json.totalPurchase);
-    setTotalRepair(json.totalRepair);
-    setLoading(false);
+    return (await getReport("annual-cost", params)) as Result;
   }, [filters]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const { data: result, isFetching: loading } = useAsync(fetcher, [fetcher]);
 
-  if (loading) {
-    return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
-  }
+  const purchases = result?.purchases ?? [];
+  const repairs = result?.repairs ?? [];
+  const summary = result?.summary ?? null;
+  const buddhistYear = (result?.year ?? new Date().getFullYear()) + 543;
 
   return (
     <div className="space-y-4">
@@ -111,38 +109,59 @@ export function AnnualCostTab() {
         actions={<ExportButtons reportType="annual-cost" filters={filters} />}
       />
 
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Purchase</p>
-            <p className="text-2xl font-bold">฿{totalPurchase.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Repair</p>
-            <p className="text-2xl font-bold">฿{totalRepair.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {summary && (
+        <ReportSummary
+          stats={[
+            {
+              label: "ค่าจัดซื้อ",
+              value: baht(summary.totalPurchase),
+              // Both halves are named because the two come from different fields and only one
+              // of them (consumables, via Lot.unitCost) is currently collected at รับเข้า.
+              hint: `ครุภัณฑ์/คงทน ${baht(summary.durablePurchase)} · สิ้นเปลือง ${baht(summary.consumablePurchase)}`,
+            },
+            {
+              label: "ค่าซ่อมบำรุง",
+              value: baht(summary.totalRepair),
+              hint: `จาก ${summary.repairCount.toLocaleString()} รายการซ่อม`,
+            },
+            {
+              label: `รวมปี พ.ศ. ${buddhistYear}`,
+              value: baht(summary.totalPurchase + summary.totalRepair),
+              hint: "นับเฉพาะรายการที่ระบุราคาไว้",
+            },
+          ]}
+        />
+      )}
 
-      <AnnualCostChart data={byCategory} />
+      <AnnualCostChart data={result?.byCategory ?? []} />
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Purchases</CardTitle>
+          <CardTitle className="text-base font-semibold">รายการจัดซื้อ</CardTitle>
         </CardHeader>
         <CardContent>
-          <ReportDataTable columns={purchaseColumns} data={purchases} pageSize={10} emptyMessage="No purchase records" />
+          <ReportDataTable
+            columns={purchaseColumns}
+            data={purchases}
+            loading={loading}
+            pageSize={10}
+            emptyMessage="ไม่มีรายการจัดซื้อที่ระบุราคาในปีนี้"
+          />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Repairs</CardTitle>
+          <CardTitle className="text-base font-semibold">รายการซ่อมบำรุง</CardTitle>
         </CardHeader>
         <CardContent>
-          <ReportDataTable columns={repairColumns} data={repairs} pageSize={10} emptyMessage="No repair records" />
+          <ReportDataTable
+            columns={repairColumns}
+            data={repairs}
+            loading={loading}
+            pageSize={10}
+            emptyMessage="ไม่มีรายการซ่อมที่ระบุค่าใช้จ่ายในปีนี้"
+          />
         </CardContent>
       </Card>
     </div>

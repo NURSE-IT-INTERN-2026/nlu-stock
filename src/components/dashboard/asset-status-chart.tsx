@@ -81,8 +81,7 @@ export function AssetStatusChart() {
                     outerRadius={82}
                     paddingAngle={2}
                     stroke="none"
-                    animationDuration={400}
-                    animationEasing="ease-out"
+                    isAnimationActive={false}
                   >
                     {pie.map((r) => (
                       <Cell key={r.status} fill={r.color} />

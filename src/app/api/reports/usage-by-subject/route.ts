@@ -25,19 +25,34 @@ export async function GET(request: NextRequest) {
 
   const data = await groupUsageBySubject(where);
 
-  const noTypeCount = await prisma.dispenseRecord.aggregate({
-    _sum: { quantity: true },
-    where: { ...where, usageType: null },
-  });
+  // เบิกที่ไม่ได้ระบุการใช้งาน — ต้องอยู่ในรายงานด้วย ไม่งั้นยอดรวมไม่เท่ากับจำนวนที่เบิกจริง
+  // และไม่มีใครเห็นว่ามีของหายไปจากสถิติเท่าไร.
+  const [noTypeAgg, noTypeItems] = await Promise.all([
+    prisma.dispenseRecord.aggregate({
+      _sum: { quantity: true },
+      _count: { _all: true },
+      where: { ...where, usageType: null },
+    }),
+    prisma.dispenseRecord.groupBy({ by: ["itemId"], where: { ...where, usageType: null } }),
+  ]);
 
-  if ((noTypeCount._sum.quantity ?? 0) > 0) {
+  if (noTypeAgg._count._all > 0) {
     data.push({
       usageType: null,
       courseCode: null,
       label: "ไม่ระบุ",
-      totalQuantity: noTypeCount._sum.quantity ?? 0,
+      totalQuantity: noTypeAgg._sum.quantity ?? 0,
+      records: noTypeAgg._count._all,
+      itemCount: noTypeItems.length,
     });
   }
 
-  return json(data);
+  const summary = {
+    subjects: data.filter((r) => r.usageType !== null).length,
+    records: data.reduce((s, r) => s + r.records, 0),
+    units: data.reduce((s, r) => s + r.totalQuantity, 0),
+    unspecifiedRecords: noTypeAgg._count._all,
+  };
+
+  return json({ rows: data, summary });
 }

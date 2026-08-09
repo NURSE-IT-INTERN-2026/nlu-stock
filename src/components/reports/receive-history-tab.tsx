@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useState, useCallback, type ReactNode } from "react";
-import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
+import {
+  ReportFilters, defaultDateFilters, periodLabel,
+  type FilterValues, type FilterConfig,
+} from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { motion } from "motion/react";
@@ -18,11 +22,13 @@ import { usePagedList } from "@/hooks/use-paged-list";
 
 type SubTab = "receive" | "in_use" | "return" | "repair";
 
+// ชื่อเดียวกับ tabs ใน /receive เป๊ะ. เดิมหน้านี้เรียกสิ่งเดียวกันว่า "รับซ่อม" ขณะที่หน้าทำงาน
+// เรียก "รับคืนจากส่งซ่อม" — คนละความหมายในหัวคนอ่าน ทั้งที่เป็นแถวชุดเดียวกัน.
 const SUB_TABS: { value: SubTab; label: string; icon: typeof ArrowDownToLine }[] = [
-  { value: "receive", label: "รับเข้าพัสดุ", icon: ArrowDownToLine },
-  { value: "in_use", label: "คืนเข้าพัสดุ", icon: PackageCheck },
-  { value: "return", label: "รับคืน", icon: Undo2 },
-  { value: "repair", label: "รับซ่อม", icon: Wrench },
+  { value: "receive", label: "นำเข้าคลัง", icon: ArrowDownToLine },
+  { value: "in_use", label: "คืนเข้าคลัง", icon: PackageCheck },
+  { value: "return", label: "รับคืนจากใบยืม", icon: Undo2 },
+  { value: "repair", label: "รับคืนจากส่งซ่อม", icon: Wrench },
 ];
 
 function StatusPill({ status }: { status: ItemStatus }) {
@@ -71,17 +77,17 @@ export function ReceiveHistoryTab() {
       {sub === "receive" ? (
         <ReceiveLogTable leading={subTabsEl} />
       ) : sub === "in_use" ? (
-        <StatusLogTable from="IN_USE" to="AVAILABLE" leading={subTabsEl} />
+        <StatusLogTable from="IN_USE" to="AVAILABLE" leading={subTabsEl} noun="คืนเข้าคลัง" />
       ) : sub === "return" ? (
-        <StatusLogTable from="ON_LOAN" leading={subTabsEl} />
+        <StatusLogTable from="ON_LOAN" leading={subTabsEl} noun="รับคืนจากใบยืม" />
       ) : (
-        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" leading={subTabsEl} />
+        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" leading={subTabsEl} noun="รับคืนจากส่งซ่อม" />
       )}
     </div>
   );
 }
 
-// ── Generic report table: filter + data + pagination, shared by all sub-tabs ──
+// ── Generic report table: filter + summary + data + pagination, shared by all sub-tabs ──
 interface ReportTableProps<T extends { id: string }> {
   path: string;
   columns: Column<T>[];
@@ -90,6 +96,9 @@ interface ReportTableProps<T extends { id: string }> {
   exportFilters?: FilterValues; // extra params merged into export URL (from/to)
   extraParams?: Record<string, string | undefined>; // extra fetch params (from/to)
   leading?: ReactNode;
+  /** summary numbers → cards; runs on whatever shape the route returns */
+  statsFor: (s: Record<string, number>, values: FilterValues) => SummaryStat[];
+  emptyMessage: string;
 }
 
 function ReportTable<T extends { id: string }>({
@@ -100,9 +109,12 @@ function ReportTable<T extends { id: string }>({
   exportFilters,
   extraParams,
   leading,
+  statsFor,
+  emptyMessage,
 }: ReportTableProps<T>) {
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<FilterValues>({});
+  const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
+  const [summary, setSummary] = useState<Record<string, number> | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   const fetchPage = useCallback(async (p: number) => {
@@ -119,7 +131,10 @@ function ReportTable<T extends { id: string }>({
         if (v) params[k] = v;
       }
     }
-    const json = (await getReport(path, params)) as { records: T[]; total: number };
+    const json = (await getReport(path, params)) as {
+      records: T[]; total: number; summary: Record<string, number>;
+    };
+    setSummary(json.summary);
     return { items: json.records, total: json.total };
   }, [filters, perPage, path, extraParams]);
 
@@ -136,11 +151,13 @@ function ReportTable<T extends { id: string }>({
         actions={<ExportButtons reportType={exportType} filters={{ ...filters, ...exportFilters }} />}
         leading={leading}
       />
+      {summary && <ReportSummary stats={statsFor(summary, filters)} />}
       <ReportDataTable
         columns={columns}
         data={data}
         loading={loading}
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
+        emptyMessage={emptyMessage}
       />
       {isMobile ? (
         data.length > 0 && (
@@ -156,7 +173,7 @@ function ReportTable<T extends { id: string }>({
       ) : (
         <>
           <p className="text-xs text-muted-foreground py-1">
-            Page {page} of {totalPages} ({total} records)
+            หน้า {page} จาก {totalPages} ({total} รายการ)
           </p>
           <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
         </>
@@ -167,7 +184,7 @@ function ReportTable<T extends { id: string }>({
 
 const COMMON_FILTERS: FilterConfig = { dateRange: true, staff: true, categories: true };
 
-// ── รับเข้าพัสดุ: ReceiveRecord ──
+// ── นำเข้าคลัง: ReceiveRecord ──
 interface ReceiveRow {
   id: string;
   itemCode: string;
@@ -181,21 +198,35 @@ interface ReceiveRow {
 }
 
 const receiveColumns: Column<ReceiveRow>[] = [
-  { key: "receivedAt", header: "Date", render: (r) => fmtDate(new Date(r.receivedAt), TH_DATETIME) },
-  { key: "itemCode", header: "Code" },
-  { key: "itemName", header: "Item" },
-  { key: "category", header: "Category" },
-  { key: "lotNumber", header: "Lot" },
-  { key: "quantity", header: "Qty" },
-  { key: "expiryDate", header: "Expiry", render: (r) => (r.expiryDate ? fmtDate(new Date(r.expiryDate), TH_DATE) : "—") },
-  { key: "receiverName", header: "Receiver" },
+  { key: "receivedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.receivedAt), TH_DATETIME) },
+  { key: "itemCode", header: "รหัสพัสดุ" },
+  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "category", header: "หมวดหมู่" },
+  { key: "lotNumber", header: "ล็อต" },
+  { key: "quantity", header: "จำนวน" },
+  { key: "expiryDate", header: "วันหมดอายุ", render: (r) => (r.expiryDate ? fmtDate(new Date(r.expiryDate), TH_DATE) : "—") },
+  { key: "receiverName", header: "ผู้รับเข้า" },
 ];
 
 function ReceiveLogTable({ leading }: { leading?: ReactNode }) {
-  return <ReportTable<ReceiveRow> path="receive-history" columns={receiveColumns} filterConfig={COMMON_FILTERS} exportType="receive-history" leading={leading} />;
+  return (
+    <ReportTable<ReceiveRow>
+      path="receive-history"
+      columns={receiveColumns}
+      filterConfig={COMMON_FILTERS}
+      exportType="receive-history"
+      leading={leading}
+      emptyMessage="ไม่มีการนำเข้าคลังในช่วงนี้"
+      statsFor={(s, v) => [
+        { label: "ครั้งที่นำเข้า", value: s.records.toLocaleString(), hint: periodLabel(v) },
+        { label: "จำนวนหน่วยรวม", value: s.units.toLocaleString(), hint: "รวมทุกล็อตในช่วงนี้" },
+        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง" },
+      ]}
+    />
+  );
 }
 
-// ── คืนเข้า / รับคืน / รับซ่อม: ItemStatusLog ──
+// ── คืนเข้าคลัง / รับคืนจากใบยืม / รับคืนจากส่งซ่อม: ItemStatusLog ──
 interface StatusRow {
   id: string;
   itemCode: string;
@@ -210,19 +241,19 @@ interface StatusRow {
 }
 
 const statusColumns: Column<StatusRow>[] = [
-  { key: "changedAt", header: "Date", render: (r) => fmtDate(new Date(r.changedAt), TH_DATETIME) },
-  { key: "itemCode", header: "Code" },
-  { key: "itemName", header: "Item" },
-  { key: "subCode", header: "Sub-code", render: (r) => r.subCode ?? "—" },
-  { key: "previousStatus", header: "From", render: (r) => <StatusPill status={r.previousStatus} /> },
-  { key: "newStatus", header: "To", render: (r) => <StatusPill status={r.newStatus} /> },
-  { key: "reason", header: "Reason" },
-  { key: "changerName", header: "Changer" },
+  { key: "changedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.changedAt), TH_DATETIME) },
+  { key: "itemCode", header: "รหัสพัสดุ" },
+  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "subCode", header: "รหัสชิ้น", render: (r) => r.subCode ?? "—" },
+  { key: "previousStatus", header: "จากสถานะ", render: (r) => <StatusPill status={r.previousStatus} /> },
+  { key: "newStatus", header: "เป็นสถานะ", render: (r) => <StatusPill status={r.newStatus} /> },
+  { key: "reason", header: "เหตุผล" },
+  { key: "changerName", header: "ผู้บันทึก" },
 ];
 
-function StatusLogTable({ from, to, leading }: { from: string; to?: string; leading?: ReactNode }) {
+function StatusLogTable({ from, to, leading, noun }: { from: string; to?: string; leading?: ReactNode; noun: string }) {
   // Memoized so identity is stable across re-renders — otherwise ReportTable's
-  // fetchData (useCallback deps on extraParams) would change every render,
+  // fetchPage (useCallback deps on extraParams) would change every render,
   // re-triggering its effect and refetching in an unbounded loop.
   const extraParams = useMemo(() => ({ from, to }), [from, to]);
   const exportFilters = useMemo(() => ({ from, to }), [from, to]);
@@ -235,6 +266,11 @@ function StatusLogTable({ from, to, leading }: { from: string; to?: string; lead
       extraParams={extraParams}
       exportFilters={exportFilters}
       leading={leading}
+      emptyMessage={`ไม่มีการ${noun}ในช่วงนี้`}
+      statsFor={(s, v) => [
+        { label: `ครั้งที่${noun}`, value: s.records.toLocaleString(), hint: periodLabel(v) },
+        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง" },
+      ]}
     />
   );
 }

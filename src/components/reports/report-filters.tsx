@@ -16,6 +16,7 @@ import {
   Building2, Monitor, BookOpen, Puzzle, type LucideIcon,
 } from "lucide-react";
 import { USAGE_TYPE_LABELS } from "@/lib/constants";
+import { fmtDate, TH_DATE } from "@/lib/format";
 import {
   getPublicCategories, getPublicLocations, getUsers, getProfiles,
 } from "@/lib/api";
@@ -35,6 +36,7 @@ export interface FilterValues {
   staffId?: string;
   usageType?: string;
   status?: string;
+  loanStatus?: string; // ออกจากคลัง: "open" | "overdue" (export only — the tab drives it via `status`)
   year?: string;
   maintenanceType?: string;
   from?: string; // status-log previousStatus (export only — not rendered)
@@ -51,6 +53,23 @@ export interface FilterConfig {
   statusOptions?: { value: string; label: string }[];
   year?: boolean;
   maintenanceType?: boolean;
+}
+
+// ponytail: ทุก tab ที่เป็น ledger เปิดมาที่ 90 วันล่าสุด ไม่ใช่ทั้งชีวิตของระบบ — กด "ล้างตัวกรอง"
+// แล้วได้ทั้งหมด. อยู่ที่เดียวเพื่อไม่ให้แต่ละ tab ตั้งช่วงเริ่มต้นไม่เท่ากันแล้วตัวเลขเทียบกันไม่ได้.
+export const DEFAULT_RANGE_DAYS = 90;
+
+export function defaultDateFilters(): FilterValues {
+  const from = new Date(Date.now() - DEFAULT_RANGE_DAYS * 86_400_000);
+  return { dateFrom: fmtDate(from, "yyyy-MM-dd") };
+}
+
+/** "ตั้งแต่ 11 พ.ค. 2569" / "ทุกช่วงเวลา" — สำหรับบรรทัดใต้ตัวเลขในแถบสรุป */
+export function periodLabel(values: FilterValues): string {
+  if (!values.dateFrom && !values.dateTo) return "ทุกช่วงเวลา";
+  const from = values.dateFrom ? `ตั้งแต่ ${fmtDate(new Date(values.dateFrom), TH_DATE)}` : "";
+  const to = values.dateTo ? `ถึง ${fmtDate(new Date(values.dateTo), TH_DATE)}` : "";
+  return [from, to].filter(Boolean).join(" ");
 }
 
 interface ReportFiltersProps {
@@ -259,15 +278,18 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
         )}
 
         {config.year && (
+          // The value stays CE because that is what the dates in the database are; only the
+          // label is พ.ศ. Showing ค.ศ. here was the one place in the app that did — every
+          // date beside it renders through TH_DATE as พ.ศ.
           <FilterSelect
             icon={CalendarRange}
             value={values.year ?? String(currentYear)}
             placeholder="ปี"
-            selectedLabel={values.year}
+            selectedLabel={`พ.ศ. ${Number(values.year ?? currentYear) + 543}`}
             onValueChange={(v) => onChange({ ...values, year: String(v) })}
           >
             {years.map((y) => (
-              <SelectItem key={y} value={y}>{y}</SelectItem>
+              <SelectItem key={y} value={y}>{`พ.ศ. ${Number(y) + 543}`}</SelectItem>
             ))}
           </FilterSelect>
         )}

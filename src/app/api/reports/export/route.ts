@@ -1,43 +1,51 @@
 import { NextRequest } from "next/server";
+import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
-import { USAGE_TYPE_LABELS, STATUS_LABELS, effectiveCode } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode } from "@/lib/constants";
 import { groupUsageBySubject } from "@/lib/usage-by-subject";
 
 // ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
-function toCsv(data: Record<string, unknown>[], filename: string): Response {
-  if (data.length === 0) {
-    return new Response("", {
-      headers: {
-        "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="${filename}.csv"`,
-      },
-    });
-  }
+//
+// CSV was dropped: it wrote UTF-8 without a BOM, so every Thai name opened as mojibake in
+// Excel on Windows — the one place these files actually get opened. xlsx carries its encoding
+// inside the file and needs no such ceremony.
 
-  const headers = Object.keys(data[0]);
-  const csvRows = [
-    headers.join(","),
-    ...data.map((row) =>
-      headers
-        .map((h) => {
-          const val = row[h];
-          const str = val === null || val === undefined ? "" : String(val);
-          return `"${str.replace(/"/g, '""')}"`;
-        })
-        .join(","),
-    ),
-  ];
+// pdfkit's built-in Helvetica is WinAnsi and has no Thai glyphs at all, so every ชื่อพัสดุ,
+// ชื่อคน and เหตุผล came out blank. Sarabun is the same face the UI uses. Read once per
+// lambda; `new URL(..., import.meta.url)` is what makes Next trace the files into the bundle.
+const SARABUN = readFileSync(new URL("./Sarabun-Regular.ttf", import.meta.url));
+const SARABUN_BOLD = readFileSync(new URL("./Sarabun-Bold.ttf", import.meta.url));
 
-  return new Response(csvRows.join("\n"), {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}.csv"`,
-    },
+/** Column widths measured in the real font instead of guessed from character count. Thai runs
+ *  far narrower per character than the old `len * 10` assumed, and a header like "ประเภทซ่อม"
+ *  is 10 characters of which four are zero-width marks — the guess reserved a column twice the
+ *  width it needed while clipping "รายการพัสดุ" values that were genuinely long.
+ *  ponytail: samples the first 200 rows, not all of them. */
+function measureColumns(data: Record<string, unknown>[]) {
+  if (data.length === 0) return [];
+  const m = new PDFDocument({ autoFirstPage: false });
+  m.registerFont("th", SARABUN);
+  m.registerFont("th-bold", SARABUN_BOLD);
+  const sample = data.slice(0, 200);
+
+  return Object.keys(data[0]).map((key) => {
+    const headerW = m.font("th-bold").fontSize(9).widthOfString(key);
+    let bodyW = 0;
+    m.font("th").fontSize(8);
+    for (const row of sample) {
+      const v = row[key];
+      if (v === null || v === undefined) continue;
+      const w = m.widthOfString(String(v));
+      if (w > bodyW) bodyW = w;
+    }
+    // +12 padding, floored at 50 so a column of "—" is still readable, capped at 220 so one
+    // long เหตุผล cannot push the page out to a metre wide.
+    return { key, header: key, width: Math.min(220, Math.max(50, Math.ceil(Math.max(headerW, bodyW)) + 12)) };
   });
 }
 
@@ -57,13 +65,12 @@ function toXlsx(data: Record<string, unknown>[], filename: string, sheetName = "
 }
 
 async function toPdf(
-  columns: { key: string; header: string; width: number }[],
   data: Record<string, unknown>[],
   filename: string,
   title: string,
 ): Promise<Response> {
-  const colWidths = columns.map((c) => c.width);
-  const totalWidth = colWidths.reduce((a, b) => a + b, 0);
+  const columns = measureColumns(data);
+  const totalWidth = columns.reduce((a, c) => a + c.width, 0);
   const pageWidth = Math.max(totalWidth + 40, 595);
   const margin = 20;
 
@@ -82,7 +89,10 @@ async function toPdf(
     const headerHeight = 26;
     let y = margin;
 
-    doc.fontSize(16).font("Helvetica-Bold").text(title, margin, y, {
+    doc.registerFont("th", SARABUN);
+    doc.registerFont("th-bold", SARABUN_BOLD);
+
+    doc.fontSize(16).font("th-bold").text(title, margin, y, {
       width: pageWidth - margin * 2,
       align: "center",
     });
@@ -93,7 +103,7 @@ async function toPdf(
         .fill("#f0f0f0")
         .stroke();
       let x = margin + 4;
-      doc.fontSize(9).font("Helvetica-Bold").fillColor("#333");
+      doc.fontSize(9).font("th-bold").fillColor("#333");
       for (const col of columns) {
         doc.text(col.header, x, y + 6, { width: col.width - 8, lineBreak: false });
         x += col.width;
@@ -110,7 +120,7 @@ async function toPdf(
         drawHeader();
       }
       let x = margin + 4;
-      doc.fontSize(8).font("Helvetica").fillColor("#555");
+      doc.fontSize(8).font("th").fillColor("#555");
       for (const col of columns) {
         const val = row[col.key];
         const str = val === null || val === undefined ? "" : String(val);
@@ -132,7 +142,6 @@ async function toPdf(
 }
 
 type ReportType =
-  | "stock-summary"
   | "stock-balance"
   | "dispense-history"
   | "outstanding-loans"
@@ -145,7 +154,6 @@ type ReportType =
   | "maintenance-history";
 
 const REPORT_TYPES: ReportType[] = [
-  "stock-summary",
   "stock-balance",
   "dispense-history",
   "outstanding-loans",
@@ -158,34 +166,23 @@ const REPORT_TYPES: ReportType[] = [
   "maintenance-history",
 ];
 
+// หัวเรื่องบนไฟล์ PDF — เดิมเป็น type.toUpperCase() ("DISPENSE HISTORY") ซึ่งไม่ตรงกับชื่อ tab
+// ที่คนกดปุ่มเห็นอยู่ตรงหน้า.
+const REPORT_TITLES: Record<ReportType, string> = {
+  "stock-balance": "มูลค่าคงคลัง",
+  "dispense-history": "ออกจากคลัง",
+  "outstanding-loans": "รายการค้างคืน",
+  "receive-history": "เข้าคลัง — นำเข้าคลัง",
+  "status-log": "เข้าคลัง — คืนเข้าคลัง",
+  "usage-by-subject": "สถิติการใช้งาน",
+  "annual-cost": "ค่าใช้จ่ายรายปี",
+  "damaged-assets": "ชำรุด & ส่งซ่อม",
+  "maintenance-schedule": "ตารางบำรุงรักษา",
+  "maintenance-history": "ประวัติบำรุงรักษา",
+};
+
 async function fetchReportData(type: ReportType, params: URLSearchParams) {
   switch (type) {
-    case "stock-summary": {
-      const where: Record<string, unknown> = { isActive: true };
-      const categoryId = params.get("categoryId");
-      const profileId = params.get("profileId");
-      if (categoryId) where.categoryId = categoryId;
-      else if (profileId) where.category = { profileId };
-
-      const groups = await prisma.item.groupBy({
-        by: ["categoryId"],
-        where,
-        _sum: { totalQty: true, availableQty: true },
-        _count: true,
-      });
-      const categories = await prisma.categoryType.findMany({
-        where: { id: { in: groups.map((g) => g.categoryId) } },
-        select: { id: true, name: true },
-      });
-      const catMap = new Map(categories.map((c) => [c.id, c.name]));
-      return groups.map((g) => ({
-        Category: catMap.get(g.categoryId) ?? "Unknown",
-        "Total Items": g._count,
-        "Total Qty": g._sum.totalQty ?? 0,
-        "Available Qty": g._sum.availableQty ?? 0,
-      }));
-    }
-
     case "stock-balance": {
       const where: Record<string, unknown> = { isActive: true };
       const categoryId = params.get("categoryId");
@@ -263,16 +260,16 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           : r.returnCondition === "DAMAGED" ? "คืน-ชำรุด"
           : r.returnCondition === "LOST" ? "คืน-สูญหาย"
           : r.returnedAt ? "คืนแล้ว"
-          : "Dispensed";
+          : "เบิกแล้ว";
         return {
-          Date: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
-          "Item Code": r.item.code,
-          "Item Name": r.item.name,
-          Quantity: r.quantity,
-          Staff: r.staff.name,
-          Usage: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
-          "Return Condition": cond,
-          Notes: r.notes ?? "",
+          วันที่: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
+          รหัสพัสดุ: r.item.code,
+          รายการพัสดุ: r.item.name,
+          จำนวน: r.quantity,
+          ผู้เบิก: r.staff.name,
+          การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
+          สถานะ: cond,
+          หมายเหตุ: r.notes ?? "",
         };
       });
     }
@@ -317,7 +314,14 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         else map.set(key, [r]);
       }
 
-      return [...map.values()].map((recs) => {
+      // The ออกจากคลัง tab sends whichever status it is showing. Without this the sheet
+      // exported under "เกินกำหนดคืน" quietly contained every open loan instead.
+      const loanStatus = params.get("loanStatus");
+      const groups = loanStatus === "overdue"
+        ? [...map.values()].filter((recs) => recs.some((r) => r.dueAt && r.dueAt < new Date()))
+        : [...map.values()];
+
+      return groups.map((recs) => {
         const head = recs[0];
         const outstanding = recs.reduce((s, r) => s + (r.quantity - r.resolvedQty), 0);
         const due = head.dueAt ? fmtDate(head.dueAt, "yyyy-MM-dd") : "";
@@ -327,9 +331,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             ? "เกินกำหนด"
             : "ใกล้ครบกำหนด";
         return {
-          Date: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
+          วันที่: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
           ผู้ยืม: head.recipient ?? "",
-          Staff: head.staff.name,
+          ผู้เบิก: head.staff.name,
           รายการ: recs.length,
           ค้างคืน: outstanding,
           ครบกำหนด: due,
@@ -365,15 +369,15 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       return records.map((r) => ({
-        Date: fmtDate(r.receivedAt, "yyyy-MM-dd HH:mm"),
-        "Item Code": r.item.code,
-        "Item Name": r.item.name,
-        Category: r.item.category?.name ?? "—",
-        Lot: r.lot?.lotNumber ?? "—",
-        Quantity: r.quantity,
-        "Expiry Date": r.lot?.expiryDate ? fmtDate(r.lot.expiryDate, "yyyy-MM-dd") : "",
-        Receiver: r.receiver.name,
-        Notes: r.notes ?? "",
+        วันที่: fmtDate(r.receivedAt, "yyyy-MM-dd HH:mm"),
+        รหัสพัสดุ: r.item.code,
+        รายการพัสดุ: r.item.name,
+        หมวดหมู่: r.item.category?.name ?? "—",
+        ล็อต: r.lot?.lotNumber ?? "—",
+        จำนวน: r.quantity,
+        วันหมดอายุ: r.lot?.expiryDate ? fmtDate(r.lot.expiryDate, "yyyy-MM-dd") : "",
+        ผู้รับเข้า: r.receiver.name,
+        หมายเหตุ: r.notes ?? "",
       }));
     }
 
@@ -408,15 +412,15 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       return records.map((r) => ({
-        Date: fmtDate(r.changedAt, "yyyy-MM-dd HH:mm"),
-        "Item Code": r.item.code,
-        "Item Name": r.item.name,
-        Category: r.item.category?.name ?? "—",
+        วันที่: fmtDate(r.changedAt, "yyyy-MM-dd HH:mm"),
+        รหัสพัสดุ: r.item.code,
+        รายการพัสดุ: r.item.name,
+        หมวดหมู่: r.item.category?.name ?? "—",
         "Sub-code": r.subItem?.subCode ?? "",
-        From: STATUS_LABELS[r.previousStatus] ?? r.previousStatus,
-        To: STATUS_LABELS[r.newStatus] ?? r.newStatus,
-        Reason: r.reason ?? "",
-        Changer: r.changer.name,
+        จากสถานะ: STATUS_LABELS[r.previousStatus] ?? r.previousStatus,
+        เป็นสถานะ: STATUS_LABELS[r.newStatus] ?? r.newStatus,
+        เหตุผล: r.reason ?? "",
+        ผู้บันทึก: r.changer.name,
       }));
     }
 
@@ -436,12 +440,14 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const rows = await groupUsageBySubject(where);
 
       return rows.map((r) => ({
-        "Usage Type": USAGE_TYPE_LABELS[r.usageType ?? ""] ?? r.usageType ?? "Unknown",
+        ประเภทการใช้งาน: USAGE_TYPE_LABELS[r.usageType ?? ""] ?? r.usageType ?? "ไม่ระบุ",
         // Kept as its own column so a spreadsheet can pivot on the code, not just read it
         // out of the combined label.
-        "Course Code": r.courseCode ?? "",
-        Subject: r.label,
-        "Total Quantity": r.totalQuantity,
+        รหัสวิชา: r.courseCode ?? "",
+        "วิชา / กิจกรรม": r.label,
+        จำนวนครั้ง: r.records,
+        จำนวนหน่วย: r.totalQuantity,
+        ชนิดพัสดุ: r.itemCount,
       }));
     }
 
@@ -463,6 +469,21 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         take: 10000,
       });
 
+      // Mirrors api/reports/annual-cost: consumables are bought as lots and priced on the lot,
+      // so leaving them out here made the sheet disagree with the screen it was exported from.
+      const lots = await prisma.lot.findMany({
+        where: {
+          receivedDate: { gte: startOfYear, lte: endOfYear },
+          unitCost: { not: null },
+          item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
+        },
+        select: {
+          lotNumber: true, receivedQty: true, unitCost: true, receivedDate: true,
+          item: { select: { code: true, name: true, category: { select: { name: true } } } },
+        },
+        take: 10000,
+      });
+
       const maintWhere: Record<string, unknown> = {
         performedAt: { gte: startOfYear, lte: endOfYear },
         cost: { not: null },
@@ -471,31 +492,47 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
 
       const repairs = await prisma.maintenanceRecord.findMany({
         where: maintWhere,
-        include: { item: { select: { code: true, name: true } }, performer: { select: { name: true } } },
+        include: { item: { select: { code: true, name: true, category: { select: { name: true } } } }, performer: { select: { name: true } } },
         take: 10000,
       });
 
       const purchaseRows = purchases.map((p) => ({
-        Type: "Purchase",
-        Code: p.code,
-        Name: p.name,
-        Category: p.category.name,
-        Cost: p.purchasePrice ?? 0,
-        Date: fmtDate(p.purchaseDate!, "yyyy-MM-dd"),
-        By: "",
+        ประเภท: "จัดซื้อ — ครุภัณฑ์/คงทน",
+        รหัสพัสดุ: p.code,
+        รายการพัสดุ: p.name,
+        หมวดหมู่: p.category.name,
+        ล็อต: "",
+        จำนวน: 1,
+        เป็นเงิน: p.purchasePrice ?? 0,
+        วันที่: fmtDate(p.purchaseDate!, "yyyy-MM-dd"),
+        ผู้ดำเนินการ: "",
+      }));
+
+      const lotRows = lots.map((l) => ({
+        ประเภท: "จัดซื้อ — วัสดุสิ้นเปลือง",
+        รหัสพัสดุ: l.item.code,
+        รายการพัสดุ: l.item.name,
+        หมวดหมู่: l.item.category.name,
+        ล็อต: l.lotNumber,
+        จำนวน: l.receivedQty,
+        เป็นเงิน: l.receivedQty * (l.unitCost ?? 0),
+        วันที่: fmtDate(l.receivedDate, "yyyy-MM-dd"),
+        ผู้ดำเนินการ: "",
       }));
 
       const repairRows = repairs.map((r) => ({
-        Type: "Repair",
-        Code: r.item.code,
-        Name: r.item.name,
-        Category: "",
-        Cost: r.cost ?? 0,
-        Date: fmtDate(r.performedAt, "yyyy-MM-dd"),
-        By: r.performer.name,
+        ประเภท: "ซ่อมบำรุง",
+        รหัสพัสดุ: r.item.code,
+        รายการพัสดุ: r.item.name,
+        หมวดหมู่: r.item.category.name,
+        ล็อต: "",
+        จำนวน: 1,
+        เป็นเงิน: r.cost ?? 0,
+        วันที่: fmtDate(r.performedAt, "yyyy-MM-dd"),
+        ผู้ดำเนินการ: r.performer.name,
       }));
 
-      return [...purchaseRows, ...repairRows];
+      return [...purchaseRows, ...lotRows, ...repairRows].sort((a, b) => b.วันที่.localeCompare(a.วันที่));
     }
 
     case "damaged-assets": {
@@ -519,20 +556,26 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
 
       return items.flatMap((i) => {
         const base = {
-          Name: i.name,
-          Category: i.category.name,
-          Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
+          รายการพัสดุ: i.name,
+          หมวดหมู่: i.category.name,
+          สถานที่: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
         };
         if (i.subItems.length > 0) {
           return i.subItems.map((s) => ({
-            Code: effectiveCode(i.code, s.subCode, i._count.subItems),
-            Name: base.Name,
-            Status: s.status,
-            Category: base.Category,
-            Location: base.Location,
+            รหัสพัสดุ: effectiveCode(i.code, s.subCode, i._count.subItems),
+            รายการพัสดุ: base.รายการพัสดุ,
+            สถานะ: STATUS_LABELS[s.status] ?? s.status,
+            หมวดหมู่: base.หมวดหมู่,
+            สถานที่: base.สถานที่,
           }));
         }
-        return [{ Code: i.code, Name: base.Name, Status: i.status, Category: base.Category, Location: base.Location }];
+        return [{
+          รหัสพัสดุ: i.code,
+          รายการพัสดุ: base.รายการพัสดุ,
+          สถานะ: STATUS_LABELS[i.status] ?? i.status,
+          หมวดหมู่: base.หมวดหมู่,
+          สถานที่: base.สถานที่,
+        }];
       });
     }
 
@@ -561,13 +604,13 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       return items.map((i) => ({
-        Code: i.code,
-        Name: i.name,
-        Category: i.category.name,
-        Location: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
-        "Next Maintenance": i.nextMaintenanceDate ? fmtDate(i.nextMaintenanceDate, "yyyy-MM-dd") : "",
-        "Cycle (months)": i.maintenanceCycleMonths,
-        "Last Maintenance": i.lastMaintenanceDate ? fmtDate(i.lastMaintenanceDate, "yyyy-MM-dd") : "",
+        รหัสพัสดุ: i.code,
+        รายการพัสดุ: i.name,
+        หมวดหมู่: i.category.name,
+        สถานที่: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
+        กำหนดบำรุงครั้งถัดไป: i.nextMaintenanceDate ? fmtDate(i.nextMaintenanceDate, "yyyy-MM-dd") : "",
+        "รอบ (เดือน)": i.maintenanceCycleMonths,
+        บำรุงครั้งล่าสุด: i.lastMaintenanceDate ? fmtDate(i.lastMaintenanceDate, "yyyy-MM-dd") : "",
       }));
     }
 
@@ -597,26 +640,17 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
 
       return records.map((r) => ({
-        Date: fmtDate(r.performedAt, "yyyy-MM-dd"),
-        "Item Code": r.item.code,
-        "Item Name": r.item.name,
-        Type: r.type,
-        Result: r.result,
-        Issue: r.issue ?? "",
-        Cost: r.cost ?? 0,
-        Performer: r.performer.name,
+        วันที่: fmtDate(r.performedAt, "yyyy-MM-dd"),
+        รหัสพัสดุ: r.item.code,
+        รายการพัสดุ: r.item.name,
+        ประเภท: labelFor(MAINT_TYPE_LABELS, r.type),
+        ผลการดำเนินการ: labelFor(MAINT_RESULT_LABELS, r.result),
+        "อาการ / สิ่งที่ทำ": r.issue ?? "",
+        ค่าใช้จ่าย: r.cost ?? 0,
+        ผู้ดำเนินการ: r.performer.name,
       }));
     }
   }
-}
-
-function getColumns(data: Record<string, unknown>[]): { key: string; header: string; width: number }[] {
-  if (data.length === 0) return [];
-  return Object.keys(data[0]).map((key) => ({
-    key,
-    header: key,
-    width: Math.max(80, key.length * 10 + 20),
-  }));
 }
 
 export async function GET(request: NextRequest) {
@@ -625,19 +659,18 @@ export async function GET(request: NextRequest) {
 
   const params = getSearchParams(request);
   const type = params.get("type") as ReportType | null;
-  const format = params.get("format") as "csv" | "xlsx" | "pdf" | null;
+  const format = params.get("format") as "xlsx" | "pdf" | null;
 
   if (!type || !REPORT_TYPES.includes(type)) {
     return json({ error: "Invalid report type" }, 400);
   }
-  if (!format || !["csv", "xlsx", "pdf"].includes(format)) {
+  if (!format || !["xlsx", "pdf"].includes(format)) {
     return json({ error: "Invalid format" }, 400);
   }
 
   const data = await fetchReportData(type, params);
   const filename = `${type}-${new Date().toISOString().slice(0, 10)}`;
 
-  if (format === "csv") return toCsv(data, filename);
   if (format === "xlsx") return toXlsx(data, filename, type);
-  return await toPdf(getColumns(data), data, filename, type.replace(/-/g, " ").toUpperCase());
+  return await toPdf(data, filename, REPORT_TITLES[type]);
 }

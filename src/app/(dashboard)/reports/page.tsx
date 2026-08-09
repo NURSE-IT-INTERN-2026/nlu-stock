@@ -4,13 +4,11 @@ import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import {
-  Package, ShoppingCart, BookOpen, Wallet,
-  Wrench, History, ArrowDownToLine, Boxes, CalendarClock,
+  ShoppingCart, BookOpen, Wallet,
+  Wrench, History, ArrowDownToLine, Boxes,
 } from "lucide-react";
-import { StockSummaryTab } from "@/components/reports/stock-summary-tab";
 import { StockBalanceTab } from "@/components/reports/stock-balance-tab";
-import { DispenseHistoryTab } from "@/components/reports/dispense-history-tab";
-import { OutstandingLoansTab } from "@/components/reports/outstanding-loans-tab";
+import { StockOutTab } from "@/components/reports/stock-out-tab";
 import { ReceiveHistoryTab } from "@/components/reports/receive-history-tab";
 import { UsageBySubjectTab } from "@/components/reports/usage-by-subject-tab";
 import { AnnualCostTab } from "@/components/reports/annual-cost-tab";
@@ -18,16 +16,16 @@ import { DamagedAssetsTab } from "@/components/reports/damaged-assets-tab";
 import { MaintenanceHistoryTab } from "@/components/reports/maintenance-history-tab";
 import { usePageHeader } from "@/components/layout/page-header-context";
 
+// เรียงตาม tab ที่มีข้อมูลจริงก่อน — ออกจากคลังคือสิ่งที่เกิดขึ้นทุกวัน ส่วนมูลค่า/ค่าใช้จ่าย
+// รอให้มีคนกรอกราคาก่อนถึงจะมีอะไรให้อ่าน. `hint` คือประโยคเดียวที่บอกว่า tab นี้ตอบคำถามอะไร.
 const TABS = [
-  { value: "stock-summary", label: "สรุปสต็อก", icon: Package, component: StockSummaryTab },
-  { value: "stock-balance", label: "มูลค่าคงเหลือรายพัสดุ", icon: Boxes, component: StockBalanceTab },
-  { value: "dispense-history", label: "รายการเบิก", icon: ShoppingCart, component: DispenseHistoryTab },
-  { value: "outstanding-loans", label: "รายการยืมค้าง", icon: CalendarClock, component: OutstandingLoansTab },
-  { value: "receive-history", label: "ประวัติรับเข้า", icon: ArrowDownToLine, component: ReceiveHistoryTab },
-  { value: "usage-by-subject", label: "สถิติการใช้งาน", icon: BookOpen, component: UsageBySubjectTab },
-  { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", icon: Wallet, component: AnnualCostTab },
-  { value: "damaged-assets", label: "ครุภัณฑ์ชำรุด", icon: Wrench, component: DamagedAssetsTab },
-  { value: "maintenance-history", label: "ประวัติบำรุงรักษา", icon: History, component: MaintenanceHistoryTab },
+  { value: "dispense-history", label: "ออกจากคลัง", hint: "ของที่จ่ายออกไปแล้ว ใครเอาไป คืนหรือยัง", icon: ShoppingCart, component: StockOutTab },
+  { value: "receive-history", label: "เข้าคลัง", hint: "ของที่รับเข้าและคืนกลับเข้าคลัง", icon: ArrowDownToLine, component: ReceiveHistoryTab },
+  { value: "usage-by-subject", label: "สถิติการใช้งาน", hint: "เบิกไปใช้กับวิชาหรือกิจกรรมไหน", icon: BookOpen, component: UsageBySubjectTab },
+  { value: "damaged-assets", label: "ชำรุด & ส่งซ่อม", hint: "ตอนนี้อะไรพังอยู่ พังเพราะอะไร ซ่อมที่ไหน", icon: Wrench, component: DamagedAssetsTab },
+  { value: "maintenance-history", label: "ประวัติบำรุงรักษา", hint: "รอบตรวจเช็คและซ่อมที่ทำไปแล้ว", icon: History, component: MaintenanceHistoryTab },
+  { value: "stock-balance", label: "มูลค่าคงคลัง", hint: "ของที่เหลืออยู่ คิดเป็นเงินเท่าไร แยกตามหมวด", icon: Boxes, component: StockBalanceTab },
+  { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", hint: "ซื้อและซ่อมไปเท่าไรในปีนั้น", icon: Wallet, component: AnnualCostTab },
 ] as const;
 
 export default function ReportsPage() {
@@ -45,7 +43,7 @@ function ReportsContent() {
   const tabParam = searchParams.get("tab");
   const validTabs: string[] = TABS.map((t) => t.value);
   const [activeTab, setActiveTab] = useState(
-    tabParam && validTabs.includes(tabParam) ? tabParam : "stock-summary",
+    tabParam && validTabs.includes(tabParam) ? tabParam : TABS[0].value,
   );
   const { setDetail } = usePageHeader();
 
@@ -58,7 +56,8 @@ function ReportsContent() {
   };
 
   // Reflect the active tab in the header breadcrumb ("รายงาน & สถิติ › <tab>").
-  const activeTabLabel = TABS.find((t) => t.value === activeTab)?.label ?? "สรุปสต็อก";
+  const active = TABS.find((t) => t.value === activeTab) ?? TABS[0];
+  const activeTabLabel = active.label;
   useEffect(() => {
     setDetail(activeTabLabel);
     return () => setDetail(null);
@@ -96,6 +95,10 @@ function ReportsContent() {
           })}
         </nav>
       </div>
+
+      {/* One line saying what this tab answers — the tab labels alone never told anyone
+          whether "ชำรุด" meant what is broken now or what was repaired last year. */}
+      <p className="-mt-2 mb-4 text-xs text-muted-foreground sm:-mt-3 sm:mb-5">{active.hint}</p>
 
       {/* Content area */}
       <div>

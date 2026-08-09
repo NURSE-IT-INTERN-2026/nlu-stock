@@ -46,7 +46,7 @@ export function ReportDataTable<T extends Record<string, any>>({
     return (
       <Card className="pb-0">
         <div className="p-8 text-center text-sm text-muted-foreground">
-          Loading...
+          กำลังโหลด…
         </div>
       </Card>
     );

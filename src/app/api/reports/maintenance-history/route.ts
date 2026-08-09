@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   if (type) where.type = type;
   if (itemId) where.itemId = itemId;
 
-  const [records, total] = await Promise.all([
+  const [records, total, byType, costAgg] = await Promise.all([
     prisma.maintenanceRecord.findMany({
       where,
       include: {
@@ -37,6 +37,10 @@ export async function GET(request: NextRequest) {
       take,
     }),
     prisma.maintenanceRecord.count({ where }),
+    // ตรวจบำรุงตามรอบ กับ ซ่อมเมื่อพัง เป็นคนละเรื่องกันในสายตาคนอ่านรายงาน — สัดส่วนของสองอย่างนี้
+    // คือสิ่งที่บอกว่าคลังกำลังดูแลเชิงป้องกันหรือกำลังตามแก้ปัญหา.
+    prisma.maintenanceRecord.groupBy({ by: ["type"], where, _count: true }),
+    prisma.maintenanceRecord.aggregate({ _sum: { cost: true }, _count: { cost: true }, where }),
   ]);
 
   const data = records.map((r) => ({
@@ -58,5 +62,18 @@ export async function GET(request: NextRequest) {
     performedAt: r.performedAt.toISOString(),
   }));
 
-  return json({ records: data, page, perPage, total });
+  return json({
+    records: data,
+    page,
+    perPage,
+    total,
+    summary: {
+      preventive: byType.find((g) => g.type === "PREVENTIVE")?._count ?? 0,
+      corrective: byType.find((g) => g.type === "CORRECTIVE")?._count ?? 0,
+      totalCost: costAgg._sum.cost ?? 0,
+      // How many of the records actually carry a cost — without it the total reads as the
+      // spend on all repairs when it is the spend on the ones somebody priced.
+      costedRecords: costAgg._count.cost,
+    },
+  });
 }
