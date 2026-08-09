@@ -32,8 +32,8 @@ export function StockSummaryTab() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterValues>({});
 
-  const topQuery = useTopDispense(filters.categoryId, filters.profileId);
-  const usageQuery = useUsageBySubject(filters.categoryId, filters.profileId);
+  const topQuery = useTopDispense({ categoryId: filters.categoryId, profileId: filters.profileId });
+  const usageQuery = useUsageBySubject({ categoryId: filters.categoryId, profileId: filters.profileId });
 
   const fetchData = useCallback(async () => {
     setLoading(true);

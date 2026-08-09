@@ -1,101 +1,54 @@
 "use client";
 
 import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
+import { useDashboardScope, scopeKey } from "@/hooks/use-dashboard-scope";
 import {
   getDashboardRecentDispense,
   getDashboardRecentReceive,
   getDashboardTopDispense,
   getDashboardUsageBySubject,
   getDashboardRepairStatus,
-  getDashboardRepairInProgress,
-  getDashboardOverdueReturn,
-  getDashboardLowStock,
-  getDashboardMaintenanceFollowup,
 } from "@/lib/api";
+import type { DashboardScope } from "@/lib/dashboard-scope";
 import {
   DispenseRecordArraySchema,
   ReceiveRecordArraySchema,
   TopDispenseDataArraySchema,
   UsageByTypeDataArraySchema,
   RepairStatusDataSchema,
-  RepairInProgressArraySchema,
-  OverdueReturnArraySchema,
-  LowStockArraySchema,
-  MaintenanceFollowupArraySchema,
 } from "@/lib/dashboard-types";
 
-function validate<T>(schema: import("zod").ZodSchema<T>, data: unknown): T {
-  return schema.parse(data);
+// Every dashboard fetch is (scope + refresh nonce) → validated rows, so one helper covers
+// all of them: the hooks below only pick a fetcher and a schema.
+// `override` is for callers outside the dashboard tabs — /reports drives the same two
+// charts from its own filter bar, where there is no tab and so no scope context.
+function useScopedQuery<T>(
+  fetcher: (scope: DashboardScope) => Promise<unknown>,
+  schema: import("zod").ZodSchema<T>,
+  override?: DashboardScope,
+) {
+  const nonce = useDashboardRefreshNonce();
+  const ctx = useDashboardScope();
+  const scope = override ?? ctx;
+  return useAsync(async () => schema.parse(await fetcher(scope)), [nonce, scopeKey(scope)]);
 }
 
 export function useRecentDispense() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(DispenseRecordArraySchema, await getDashboardRecentDispense()),
-    [nonce],
-  );
+  return useScopedQuery(getDashboardRecentDispense, DispenseRecordArraySchema);
 }
 
 export function useRecentReceive() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(ReceiveRecordArraySchema, await getDashboardRecentReceive()),
-    [nonce],
-  );
+  return useScopedQuery(getDashboardRecentReceive, ReceiveRecordArraySchema);
 }
 
-export function useTopDispense(categoryId?: string, profileId?: string) {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(TopDispenseDataArraySchema, await getDashboardTopDispense(categoryId, profileId)),
-    [nonce, categoryId ?? "all", profileId ?? "all"],
-  );
+export function useTopDispense(scope?: DashboardScope) {
+  return useScopedQuery(getDashboardTopDispense, TopDispenseDataArraySchema, scope);
 }
 
-export function useUsageBySubject(categoryId?: string, profileId?: string) {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(UsageByTypeDataArraySchema, await getDashboardUsageBySubject(categoryId, profileId)),
-    [nonce, categoryId ?? "all", profileId ?? "all"],
-  );
+export function useUsageBySubject(scope?: DashboardScope) {
+  return useScopedQuery(getDashboardUsageBySubject, UsageByTypeDataArraySchema, scope);
 }
 
 export function useRepairStatus() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(RepairStatusDataSchema, await getDashboardRepairStatus()),
-    [nonce],
-  );
-}
-
-export function useRepairInProgress() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(RepairInProgressArraySchema, await getDashboardRepairInProgress()),
-    [nonce],
-  );
-}
-
-export function useOverdueReturn() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(OverdueReturnArraySchema, await getDashboardOverdueReturn()),
-    [nonce],
-  );
-}
-
-export function useLowStock() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(LowStockArraySchema, await getDashboardLowStock()),
-    [nonce],
-  );
-}
-
-export function useMaintenanceFollowup() {
-  const nonce = useDashboardRefreshNonce();
-  return useAsync(
-    async () => validate(MaintenanceFollowupArraySchema, await getDashboardMaintenanceFollowup()),
-    [nonce],
-  );
+  return useScopedQuery(getDashboardRepairStatus, RepairStatusDataSchema);
 }
