@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getAlertCounts } from "@/lib/alerts";
 import { getSessionUser } from "@/lib/auth";
 import { canManageStock } from "@/lib/roles";
@@ -6,6 +8,7 @@ import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 import { DashboardAlertBar } from "@/components/dashboard/dashboard-alert-bar";
 import { DashboardKpiGrid } from "@/components/dashboard/dashboard-kpi-grid";
 import { DashboardBody } from "@/components/dashboard/dashboard-body";
+import { monthlyFlow, sparkStart } from "@/lib/dashboard-kpis";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -13,22 +16,24 @@ export default async function DashboardPage() {
   // so their KPI cards must point at the read-only report that shows the same rows.
   const canManage = canManageStock(user?.role ?? "");
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const since = sparkStart(now);
 
-  const [
-    counts,
-    receiveThisMonth, dispenseThisMonth,
-    receiveQtyThis, receiveQtyLast, dispenseQtyThis, dispenseQtyLast,
-  ] = await Promise.all([
+  // One query per table instead of three aggregates each: monthlyFlow derives the headline
+  // count, this/last month quantity and the whole sparkline from the same rows.
+  const [counts, receiveRows, dispenseRows] = await Promise.all([
     getAlertCounts(),
-    prisma.receiveRecord.count({ where: { receivedAt: { gte: monthStart } } }),
-    prisma.dispenseRecord.count({ where: { dispensedAt: { gte: monthStart } } }),
-    prisma.receiveRecord.aggregate({ _sum: { quantity: true }, where: { receivedAt: { gte: monthStart } } }),
-    prisma.receiveRecord.aggregate({ _sum: { quantity: true }, where: { receivedAt: { gte: lastMonthStart, lt: monthStart } } }),
-    prisma.dispenseRecord.aggregate({ _sum: { quantity: true }, where: { dispensedAt: { gte: monthStart } } }),
-    prisma.dispenseRecord.aggregate({ _sum: { quantity: true }, where: { dispensedAt: { gte: lastMonthStart, lt: monthStart } } }),
+    prisma.receiveRecord.findMany({
+      where: { receivedAt: { gte: since } },
+      select: { receivedAt: true, quantity: true },
+    }),
+    prisma.dispenseRecord.findMany({
+      where: { dispensedAt: { gte: since } },
+      select: { dispensedAt: true, quantity: true },
+    }),
   ]);
+
+  const received = monthlyFlow(receiveRows.map((r) => ({ at: r.receivedAt, quantity: r.quantity })), now);
+  const dispensed = monthlyFlow(dispenseRows.map((r) => ({ at: r.dispensedAt, quantity: r.quantity })), now);
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
@@ -38,17 +43,23 @@ export default async function DashboardPage() {
 
       <DashboardKpiGrid
         kpis={{
-          receiveThisMonth,
-          receiveQtyThisMonth: receiveQtyThis._sum.quantity ?? 0,
-          receiveQtyLastMonth: receiveQtyLast._sum.quantity ?? 0,
-          dispenseThisMonth,
-          dispenseQtyThisMonth: dispenseQtyThis._sum.quantity ?? 0,
-          dispenseQtyLastMonth: dispenseQtyLast._sum.quantity ?? 0,
+          receiveThisMonth: received.thisMonthCount,
+          receiveQtyThisMonth: received.thisMonthQty,
+          receiveQtyLastMonth: received.lastMonthQty,
+          receiveSpark: received.spark,
+          dispenseThisMonth: dispensed.thisMonthCount,
+          dispenseQtyThisMonth: dispensed.thisMonthQty,
+          dispenseQtyLastMonth: dispensed.lastMonthQty,
+          dispenseSpark: dispensed.spark,
         }}
         canManage={canManage}
       />
 
-      <DashboardBody />
+      {/* DashboardBody reads the active tab from the URL (useSearchParams), which needs a
+          boundary here or the whole route opts out of prerendering. */}
+      <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}>
+        <DashboardBody />
+      </Suspense>
     </div>
   );
 }
