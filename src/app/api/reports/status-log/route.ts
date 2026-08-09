@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     if (categoryId) where.item = { categoryId };
     if (staffId) where.changedBy = staffId;
 
-    const [records, total] = await Promise.all([
+    const [records, total, byItem] = await Promise.all([
       prisma.itemStatusLog.findMany({
         where,
         include: {
@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
         take,
       }),
       prisma.itemStatusLog.count({ where }),
+      // Over the whole filtered set, not the page — see receive-history.
+      prisma.itemStatusLog.groupBy({ by: ["itemId"], where }),
     ]);
 
     const data = records.map((r) => ({
@@ -57,7 +59,13 @@ export async function GET(request: NextRequest) {
       changedAt: r.changedAt.toISOString(),
     }));
 
-    return json({ records: data, page, perPage, total });
+    return json({
+      records: data,
+      page,
+      perPage,
+      total,
+      summary: { records: total, items: byItem.length },
+    });
   } catch (err) {
     console.error("status-log error:", err);
     return NextResponse.json({ error: "โหลดสถานะไม่สำเร็จ" }, { status: 500 });

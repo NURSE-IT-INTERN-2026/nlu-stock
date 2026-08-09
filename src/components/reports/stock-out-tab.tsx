@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
+import { ReportFilters, defaultDateFilters, periodLabel, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -14,10 +15,17 @@ import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 
+// เบิก, ยืม และยืมค้าง เป็นแถวชุดเดียวกันใน dispense_records ต่างกันแค่ยังคืนหรือยัง — เคยแยกเป็น
+// สอง tab ที่ยิงคนละ route แล้ววาดการ์ดหน้าตาเดียวกัน. ตอนนี้เป็น tab เดียว มีตัวกรองสถานะแทน
+// เพราะสอง tab ที่ตอบคำถามเดียวกันได้คนละคำตอบ คือสิ่งที่ทำให้ไม่มีใครเชื่อรายงาน.
 const filterConfig: FilterConfig = {
   dateRange: true,
   staff: true,
   usageTypes: true,
+  statusOptions: [
+    { value: "open", label: "ยังไม่คืน" },
+    { value: "overdue", label: "เกินกำหนดคืน" },
+  ],
 };
 
 interface Row {
@@ -30,12 +38,20 @@ interface Row {
   usageTypeLabel: string;
   lotNumber: string;
   dispensedAt: string;
+  dueAt: string | null;
   returnedAt: string | null;
   returnCondition: "AVAILABLE" | "DAMAGED" | "LOST" | null;
   notes: string;
   loanGroupId: string | null;
   recipient: string | null;
   isLoanable: boolean;
+}
+
+interface Summary {
+  events: number;
+  openEvents: number;
+  overdueEvents: number;
+  overdueUnits: number;
 }
 
 interface LoanGroup {
@@ -61,22 +77,22 @@ function StatusBadge({ r }: { r: Row }) {
 const columns: Column<Row>[] = [
   {
     key: "dispensedAt",
-    header: "Date",
+    header: "วันที่",
     render: (r) => fmtDate(new Date(r.dispensedAt), TH_DATETIME),
   },
-  { key: "itemCode", header: "Code" },
-  { key: "itemName", header: "Item" },
-  { key: "quantity", header: "Qty" },
-  { key: "staffName", header: "Staff" },
-  { key: "usageTypeLabel", header: "Usage" },
-  { key: "returnedAt", header: "Status", render: (r) => <StatusBadge r={r} /> },
+  { key: "itemCode", header: "รหัสพัสดุ" },
+  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "quantity", header: "จำนวน" },
+  { key: "staffName", header: "ผู้เบิก" },
+  { key: "usageTypeLabel", header: "การใช้งาน" },
+  { key: "returnedAt", header: "สถานะ", render: (r) => <StatusBadge r={r} /> },
 ];
 
-// Grouping stays on the client, but the page it runs over is now a page of whole loan
-// events (api/reports/dispense-history pages by group, not by row), so a card can no longer
-// be built from half a loan and report half its totals as the whole.
-// Only borrowable (COUNT/ITEM) records group into a loan card with due/return
-// status — CONSUMABLE dispenses never come back, so they list flat instead.
+// Grouping stays on the client, but the page it runs over is a page of whole loan events
+// (the route pages by group, not by row), so a card can no longer be built from half a loan
+// and report half its totals as the whole.
+// Only borrowable (COUNT/ITEM) records group into a loan card with due/return status —
+// CONSUMABLE dispenses never come back, so they list flat instead.
 function groupRecords(records: Row[]): LoanGroup[] {
   const map = new Map<string, LoanGroup>();
   for (const r of records) {
@@ -97,6 +113,16 @@ function loanStatus(g: LoanGroup): { label: string; cls: string } {
   return { label: "ยังไม่คืน", cls: "bg-slate-100 text-slate-700 border-slate-200" };
 }
 
+// กำหนดคืน — เกินกำหนด / ใกล้ครบ (≤3 วัน). เดิมอยู่แต่ใน tab ยืมค้าง ทำให้การ์ดใบเดียวกัน
+// บอกว่าเลยกำหนดใน tab หนึ่งแต่เงียบในอีก tab หนึ่ง.
+function dueAlert(dueAt: string | null, resolved: boolean): { label: string; cls: string } | null {
+  if (!dueAt || resolved) return null;
+  const days = (new Date(dueAt).getTime() - Date.now()) / 86_400_000;
+  if (days < 0) return { label: "เกินกำหนดคืน", cls: "bg-red-100 text-red-800 border-red-200" };
+  if (days <= 3) return { label: "ใกล้ครบกำหนด", cls: "bg-amber-100 text-amber-800 border-amber-200" };
+  return null;
+}
+
 function LoanGroups({ groups }: { groups: LoanGroup[] }) {
   return (
     <div className="space-y-2">
@@ -104,17 +130,31 @@ function LoanGroups({ groups }: { groups: LoanGroup[] }) {
         const head = g.records[0];
         const itemCount = g.records.length;
         const totalQty = g.records.reduce((s, r) => s + r.quantity, 0);
+        const outstanding = g.records.reduce((s, r) => s + (r.quantity - r.resolvedQty), 0);
         const status = loanStatus(g);
+        const alert = dueAlert(head.dueAt, outstanding === 0);
         return (
           <details key={g.key} className="group rounded-lg border bg-card overflow-hidden">
             <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm list-none [&::-webkit-details-marker]:hidden hover:bg-muted/50">
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
               <span className="font-medium">{fmtDate(new Date(head.dispensedAt), TH_DATETIME)}</span>
-              <span className={cn("ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", status.cls)}>
-                {status.label}
+              <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                {alert && (
+                  <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", alert.cls)}>
+                    {alert.label}
+                  </span>
+                )}
+                {/* "เกินกำหนดคืน" already says it is not back; the plain "ยังไม่คืน" beside it
+                    is the same fact twice. คืนบางส่วน n/m still earns its place. */}
+                {!(alert && status.label === "ยังไม่คืน") && (
+                  <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", status.cls)}>
+                    {status.label}
+                  </span>
+                )}
               </span>
               <span className="w-full text-xs text-muted-foreground break-words">
                 {head.recipient ?? "ไม่ระบุผู้ยืม"} · {head.staffName} · {itemCount} รายการ · {totalQty} หน่วย
+                {head.dueAt && ` · ครบกำหนด ${fmtDate(new Date(head.dueAt), TH_DATE)}`}
               </span>
             </summary>
             <div className="border-t">
@@ -127,9 +167,10 @@ function LoanGroups({ groups }: { groups: LoanGroup[] }) {
   );
 }
 
-export function DispenseHistoryTab() {
+export function StockOutTab() {
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<FilterValues>({});
+  const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   const fetchPage = useCallback(async (p: number) => {
@@ -141,7 +182,11 @@ export function DispenseHistoryTab() {
     if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.staffId) params.staffId = filters.staffId;
     if (filters.usageType) params.usageType = filters.usageType;
-    const json = (await getReport("dispense-history", params)) as { records: Row[]; total: number };
+    if (filters.status) params.loanStatus = filters.status;
+    const json = (await getReport("dispense-history", params)) as {
+      records: Row[]; total: number; summary: Summary;
+    };
+    setSummary(json.summary);
     return { items: json.records, total: json.total };
   }, [filters, perPage]);
 
@@ -164,12 +209,49 @@ export function DispenseHistoryTab() {
         config={filterConfig}
         values={filters}
         onChange={setFilters}
-        actions={<ExportButtons reportType="dispense-history" filters={filters} />}
+        actions={
+          // ยังไม่คืน/เกินกำหนด ออกเป็นชีทสรุปรายใบยืม (ผู้ยืม · ค้างคืน · ครบกำหนด) ไม่ใช่รายบรรทัด
+          // — คนที่กด export ตอนกรองค้างคืนอยู่ ต้องการใบตามของ ไม่ใช่ ledger.
+          <ExportButtons
+            reportType={filters.status ? "outstanding-loans" : "dispense-history"}
+            filters={{ ...filters, loanStatus: filters.status }}
+          />
+        }
       />
+
+      {summary && (
+        <ReportSummary
+          stats={[
+            {
+              label: "การเบิก-ยืมในช่วงนี้",
+              value: summary.events.toLocaleString(),
+              hint: `${periodLabel(filters)} · นับเป็นครั้ง ไม่ใช่รายบรรทัด`,
+            },
+            {
+              label: "ยังไม่คืน",
+              value: summary.openEvents.toLocaleString(),
+              hint: "เฉพาะรายการยืม — ตั้งใช้ในห้องไม่นับ",
+              tone: summary.openEvents > 0 ? "warning" : "default",
+            },
+            {
+              label: "เกินกำหนดคืน",
+              value: summary.overdueEvents.toLocaleString(),
+              hint: `ค้าง ${summary.overdueUnits.toLocaleString()} หน่วย`,
+              tone: summary.overdueEvents > 0 ? "danger" : "default",
+            },
+          ]}
+        />
+      )}
+
       {loading ? (
         <ReportDataTable columns={columns} data={[]} loading pageSize={perPage} />
       ) : groups.length === 0 && flatRows.length === 0 ? (
-        <ReportDataTable columns={columns} data={[]} pageSize={perPage} />
+        <ReportDataTable
+          columns={columns}
+          data={[]}
+          pageSize={perPage}
+          emptyMessage={filters.status ? "ไม่มีรายการค้างคืนในช่วงนี้" : "ไม่มีการเบิกในช่วงนี้"}
+        />
       ) : (
         <div className="space-y-4">
           {groups.length > 0 && <LoanGroups groups={groups} />}
@@ -178,6 +260,7 @@ export function DispenseHistoryTab() {
           )}
         </div>
       )}
+
       {isMobile ? (
         data.length > 0 && (
           <Pagination
@@ -192,7 +275,7 @@ export function DispenseHistoryTab() {
       ) : (
         <>
           <p className="text-xs text-muted-foreground py-1">
-            หน้า {page} จาก {totalPages} ({total} ครั้งการเบิก)
+            หน้า {page} จาก {totalPages} ({total} ครั้ง)
           </p>
           <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
         </>

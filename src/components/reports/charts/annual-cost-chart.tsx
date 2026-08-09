@@ -38,15 +38,15 @@ export function AnnualCostChart({ data }: AnnualCostChartProps) {
   const totalRepair = data.reduce((s, d) => s + d.totalRepair, 0);
 
   const pieData = [
-    { name: "Purchase", value: totalPurchase },
-    { name: "Repair", value: totalRepair },
+    { name: "ค่าจัดซื้อ", value: totalPurchase },
+    { name: "ค่าซ่อมบำรุง", value: totalRepair },
   ].filter((d) => d.value > 0);
 
   if (pieData.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Cost Breakdown</CardTitle>
+          <CardTitle className="text-base font-semibold">สัดส่วนค่าใช้จ่าย</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground text-center py-8">No cost data</p>
@@ -58,7 +58,7 @@ export function AnnualCostChart({ data }: AnnualCostChartProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Cost Breakdown</CardTitle>
+        <CardTitle className="text-base font-semibold">สัดส่วนค่าใช้จ่าย</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer height={260}>
@@ -66,8 +66,7 @@ export function AnnualCostChart({ data }: AnnualCostChartProps) {
             <PieChart width={width} height={height}>
               <Pie
                 data={pieData}
-                animationDuration={400}
-                animationEasing="ease-out"
+                isAnimationActive={false}
                 cx="50%"
                 cy="50%"
                 innerRadius={50}

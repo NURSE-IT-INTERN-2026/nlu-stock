@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     if (categoryId) where.item = { categoryId };
     if (staffId) where.receivedBy = staffId;
 
-    const [records, total] = await Promise.all([
+    const [records, total, qty, byItem] = await Promise.all([
       prisma.receiveRecord.findMany({
         where,
         include: {
@@ -38,6 +38,10 @@ export async function GET(request: NextRequest) {
         take,
       }),
       prisma.receiveRecord.count({ where }),
+      // Summary is over the whole filtered set, not the page — a counter that changes when you
+      // turn the page is worse than no counter.
+      prisma.receiveRecord.aggregate({ _sum: { quantity: true }, where }),
+      prisma.receiveRecord.groupBy({ by: ["itemId"], where }),
     ]);
 
     const data = records.map((r) => ({
@@ -53,7 +57,13 @@ export async function GET(request: NextRequest) {
       notes: r.notes ?? "",
     }));
 
-    return json({ records: data, page, perPage, total });
+    return json({
+      records: data,
+      page,
+      perPage,
+      total,
+      summary: { records: total, units: qty._sum.quantity ?? 0, items: byItem.length },
+    });
   } catch (err) {
     console.error("receive-history error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

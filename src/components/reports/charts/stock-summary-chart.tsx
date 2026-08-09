@@ -37,7 +37,7 @@ export function StockSummaryChart({ data }: StockSummaryChartProps) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">สต๊อกแยกตามหมวดหมู่</CardTitle>
+          <CardTitle className="text-base font-semibold">ยอดคงเหลือรายหมวด</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground text-center py-8">ไม่มีข้อมูล</p>
@@ -49,7 +49,7 @@ export function StockSummaryChart({ data }: StockSummaryChartProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Stock by Category</CardTitle>
+        <CardTitle className="text-base font-semibold">ยอดคงเหลือรายหมวด</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer height={280}>
@@ -59,8 +59,8 @@ export function StockSummaryChart({ data }: StockSummaryChartProps) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="totalQty" name="Total" fill={color1} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
-              <Bar dataKey="availableQty" name="Available" fill={color2} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+              <Bar dataKey="totalQty" name="ทั้งหมด" fill={color1} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="availableQty" name="พร้อมใช้" fill={color2} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           )}
         </ChartContainer>

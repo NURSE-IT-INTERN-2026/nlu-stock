@@ -121,8 +121,8 @@ export function MovementChart() {
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} width={44} />
                 <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)" }} />
-                <Area type="monotone" dataKey="in" name="รับเข้า" stroke={inColor} strokeWidth={2} fill="url(#movIn)" animationDuration={400} animationEasing="ease-out" />
-                <Area type="monotone" dataKey="out" name="เบิกออก" stroke={outColor} strokeWidth={2} fill="url(#movOut)" animationDuration={400} animationEasing="ease-out" />
+                <Area type="monotone" dataKey="in" name="รับเข้า" stroke={inColor} strokeWidth={2} fill="url(#movIn)" isAnimationActive={false} />
+                <Area type="monotone" dataKey="out" name="เบิกออก" stroke={outColor} strokeWidth={2} fill="url(#movOut)" isAnimationActive={false} />
               </AreaChart>
             )}
           </ChartContainer>

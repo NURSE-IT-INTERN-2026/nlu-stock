@@ -15,6 +15,10 @@ import {
 export interface AsyncState<T> {
   data: T | undefined;
   isLoading: boolean;
+  /** True for EVERY in-flight fetch, including refetches that already have data.
+   *  Report tabs need this: `isLoading` keeps the previous filter's numbers on screen under
+   *  the new filter's heading, which on a report reads as an answer rather than a stale view. */
+  isFetching: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -60,6 +64,7 @@ export function useAsync<T>(
   return {
     data,
     isLoading: data === undefined && fetching,
+    isFetching: fetching,
     error,
     refetch,
   };

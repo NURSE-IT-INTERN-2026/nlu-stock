@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { FileSpreadsheet, FileText, FileDown } from "lucide-react";
+import { FileSpreadsheet, FileDown } from "lucide-react";
 import type { FilterValues } from "./report-filters";
 
 interface ExportButtonsProps {
@@ -20,15 +20,8 @@ export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
 
   return (
     <div className="flex w-full gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1"
-        onClick={() => window.open(`${baseUrl}&format=csv`, "_blank")}
-      >
-        <FileText className="h-3.5 w-3.5" />
-        CSV
-      </Button>
+      {/* CSV ถูกตัดออก — เขียน UTF-8 โดยไม่มี BOM ทำให้ชื่อไทยเพี้ยนทุกไฟล์เมื่อเปิดใน Excel
+          บน Windows ซึ่งเป็นที่เดียวที่ไฟล์พวกนี้ถูกเปิดจริง. xlsx เก็บ encoding ในตัวไฟล์. */}
       <Button
         variant="outline"
         size="sm"

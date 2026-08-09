@@ -25,14 +25,30 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
   );
 }
 
-export function UsageBySubjectChart({ data }: { data: UsageByTypeData[] }) {
+// title/hint are overridable because /reports shows this chart over whatever range the user
+// filtered to — the dashboard's fixed "เดือนนี้" was a lie there.
+// On the dashboard this sits in a flex column with a definite height, so `min-h + flex-1` and
+// ChartContainer's height:100% resolve. In /reports it sits in a plain stack where 100% of an
+// only-min-height parent computes to 0 and the chart rendered blank — `height` gives those
+// callers a definite box instead.
+export function UsageBySubjectChart({
+  data,
+  title = "สัดส่วนการใช้งานเดือนนี้",
+  hint = "วัตถุประสงค์ของการเบิก",
+  height,
+}: {
+  data: UsageByTypeData[];
+  title?: string;
+  hint?: string;
+  height?: number;
+}) {
   // ponytail: one fill, not a colour per bar. The categories are already named on the axis,
   // so a second encoding would carry no information.
   const fillColor = useThemeColor("--chart-2");
   const chartData = data.map((d) => ({ name: d.label, totalQuantity: d.totalQuantity }));
 
   return (
-    <Panel title="สัดส่วนการใช้งานเดือนนี้" hint="วัตถุประสงค์ของการเบิก">
+    <Panel title={title} hint={hint}>
       {chartData.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
           <span className="grid size-12 place-items-center rounded-full bg-secondary">
@@ -45,7 +61,8 @@ export function UsageBySubjectChart({ data }: { data: UsageByTypeData[] }) {
         </div>
       ) : (
         <div
-          className="min-h-[240px] flex-1"
+          className={height ? undefined : "min-h-[240px] flex-1"}
+          style={height ? { height } : undefined}
           role="img"
           aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}
         >
@@ -55,7 +72,7 @@ export function UsageBySubjectChart({ data }: { data: UsageByTypeData[] }) {
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} width={44} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--secondary)" }} />
-                <Bar dataKey="totalQuantity" fill={fillColor} radius={[6, 6, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+                <Bar dataKey="totalQuantity" fill={fillColor} radius={[6, 6, 0, 0]} isAnimationActive={false} />
               </BarChart>
             )}
           </ChartContainer>

@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
+import {
+  ReportFilters, defaultDateFilters, periodLabel,
+  type FilterValues, type FilterConfig,
+} from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
 import { fmtDate, TH_DATE } from "@/lib/format";
@@ -31,37 +35,46 @@ interface Row {
   performedAt: string;
 }
 
+interface Summary {
+  preventive: number;
+  corrective: number;
+  totalCost: number;
+  costedRecords: number;
+}
+
 const columns: Column<Row>[] = [
   {
     key: "performedAt",
-    header: "Date",
+    header: "วันที่",
     render: (r) => fmtDate(new Date(r.performedAt), TH_DATE),
   },
-  { key: "itemCode", header: "Code", render: (r) => effectiveCode(r.itemCode, r.subCode, r.subCount) },
-  { key: "itemName", header: "Item" },
+  { key: "itemCode", header: "รหัสพัสดุ", render: (r) => effectiveCode(r.itemCode, r.subCode, r.subCount) },
+  { key: "itemName", header: "รายการพัสดุ" },
   {
     key: "type",
-    header: "Type",
+    header: "ประเภท",
     render: (r) => <Badge variant="outline">{labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType)}</Badge>,
   },
   {
     key: "result",
-    header: "Result",
+    header: "ผลการดำเนินการ",
     render: (r) => <Badge variant="secondary">{labelFor(MAINT_RESULT_LABELS, r.result as MaintenanceResult)}</Badge>,
   },
-  { key: "issue", header: "Issue" },
+  { key: "issue", header: "อาการ / สิ่งที่ทำ", render: (r) => r.issue || "—" },
   {
     key: "cost",
-    header: "Cost",
+    header: "ค่าใช้จ่าย",
+    className: "text-right",
     render: (r) => (r.cost > 0 ? `฿${r.cost.toLocaleString()}` : "—"),
   },
-  { key: "repairVenue", header: "ประเภทซ่อม", render: (r) => (r.repairVenue ? (r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—") },
-  { key: "performer", header: "By" },
+  { key: "repairVenue", header: "ส่งซ่อมที่", render: (r) => (r.repairVenue ? (r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—") },
+  { key: "performer", header: "ผู้ดำเนินการ" },
 ];
 
 export function MaintenanceHistoryTab() {
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<FilterValues>({});
+  const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   const fetchPage = useCallback(async (p: number) => {
@@ -72,7 +85,10 @@ export function MaintenanceHistoryTab() {
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.maintenanceType) params.maintenanceType = filters.maintenanceType;
-    const json = (await getReport("maintenance-history", params)) as { records: Row[]; total: number };
+    const json = (await getReport("maintenance-history", params)) as {
+      records: Row[]; total: number; summary: Summary;
+    };
+    setSummary(json.summary);
     return { items: json.records, total: json.total };
   }, [filters, perPage]);
 
@@ -88,6 +104,28 @@ export function MaintenanceHistoryTab() {
         onChange={setFilters}
         actions={<ExportButtons reportType="maintenance-history" filters={filters} />}
       />
+      {summary && (
+        <ReportSummary
+          stats={[
+            {
+              label: "ตรวจบำรุงตามรอบ",
+              value: summary.preventive.toLocaleString(),
+              hint: `${periodLabel(filters)} · เช็ค/ทำความสะอาดตามกำหนด`,
+            },
+            {
+              label: "ซ่อมเมื่อชำรุด",
+              value: summary.corrective.toLocaleString(),
+              hint: "ซ่อมหลังของพัง",
+              tone: summary.corrective > summary.preventive ? "warning" : "default",
+            },
+            {
+              label: "ค่าใช้จ่ายรวม",
+              value: `฿${summary.totalCost.toLocaleString()}`,
+              hint: `จาก ${summary.costedRecords.toLocaleString()} จาก ${total.toLocaleString()} รายการที่ระบุค่าใช้จ่าย`,
+            },
+          ]}
+        />
+      )}
       <ReportDataTable
         columns={columns}
         data={data}
@@ -108,7 +146,7 @@ export function MaintenanceHistoryTab() {
       ) : (
         <>
           <p className="text-xs text-muted-foreground py-1">
-            Page {page} of {totalPages} ({total} records)
+            หน้า {page} จาก {totalPages} ({total} รายการ)
           </p>
           <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
         </>

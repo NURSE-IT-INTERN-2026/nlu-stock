@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     };
   }
 
-  const [items, total] = await Promise.all([
+  const [items, total, flatByStatus, subsByStatus] = await Promise.all([
     prisma.item.findMany({
       where,
       include: {
@@ -67,7 +67,25 @@ export async function GET(request: NextRequest) {
       take,
     }),
     prisma.item.count({ where }),
+    // Summary counts PIECES, which is what "ตอนนี้อะไรพังอยู่" means to whoever has to chase
+    // them; the pager below counts items. A tracked item with 27 damaged copies is one row in
+    // the pager and 27 here, so the two numbers are labelled differently on purpose.
+    prisma.item.groupBy({
+      by: ["status"],
+      where: { ...where, subItems: { none: { status: { in: statuses } } } },
+      _count: true,
+    }),
+    prisma.subItem.groupBy({
+      by: ["status"],
+      where: { status: { in: statuses }, item: where },
+      _count: true,
+    }),
   ]);
+
+  const byStatus: Record<string, number> = {};
+  for (const g of [...flatByStatus, ...subsByStatus]) {
+    byStatus[g.status] = (byStatus[g.status] ?? 0) + g._count;
+  }
 
   // Tracked items report per piece (which copy is damaged/lost); non-tracked stay one row.
   // Pagination still counts items, so a page can carry a few more rows than perPage.
@@ -105,5 +123,15 @@ export async function GET(request: NextRequest) {
     }];
   });
 
-  return json({ items: data, page, perPage, total });
+  return json({
+    items: data,
+    page,
+    perPage,
+    total,
+    summary: {
+      damaged: byStatus.DAMAGED ?? 0,
+      underRepair: byStatus.UNDER_REPAIR ?? 0,
+      writtenOff: (byStatus.DISPOSED ?? 0) + (byStatus.LOST ?? 0),
+    },
+  });
 }
