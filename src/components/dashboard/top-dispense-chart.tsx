@@ -1,108 +1,56 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-} from "recharts";
 import { BarChart3 } from "lucide-react";
-import { useThemeColor } from "@/lib/resolve-color";
 import type { TopDispenseData } from "@/lib/dashboard-types";
-import { ChartContainer } from "./chart-container";
+import { Panel } from "./primitives";
 
-interface TopDispenseChartProps {
-  data: TopDispenseData[];
-}
-
-function TopDispenseEmpty() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center border-t border-dashed border-muted-foreground/20 bg-muted/30">
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary">
-        <BarChart3 className="w-5 h-5 text-muted-foreground" />
-      </div>
-      <div className="text-center mt-3">
-        <p className="text-[13px] font-medium text-foreground">
-          ยังไม่มีการเบิกเดือนนี้
-        </p>
-        <p className="text-[12px] text-muted-foreground mt-0.5">
-          ข้อมูลจะแสดงเมื่อมีการเบิกครั้งแรก
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ThaiTick(props: any) {
-  const { x, y, payload } = props;
-  const maxLen = 18;
-  const label = payload.value.length > maxLen
-    ? payload.value.slice(0, maxLen - 1) + "…"
-    : payload.value;
-  return (
-    <text
-      x={x}
-      y={y}
-      dy={4}
-      textAnchor="end"
-      fill="var(--color-muted-foreground)"
-      fontSize={12}
-    >
-      {label}
-    </text>
-  );
-}
-
-interface ChartTooltipProps {
-  active?: boolean;
-  payload?: Array<{ value: number; payload: { name: string } }>;
-}
-
-function ChartTooltip({ active, payload }: ChartTooltipProps) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0];
-  return (
-    <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{d.payload.name}</p>
-      <p className="text-muted-foreground">
-        จำนวน: <span className="font-semibold text-foreground">{d.value.toLocaleString("th-TH")}</span> ชิ้น
-      </p>
-    </div>
-  );
-}
-
-export function TopDispenseChart({ data }: TopDispenseChartProps) {
-  const fillColor = useThemeColor("--chart-1");
-
-  const chartData = data.map((d) => ({
-    name: d.name,
-    totalQuantity: d.totalQuantity,
-  }));
+// ponytail: a ranked list, not a recharts BarChart. A horizontal bar chart spent 140px of
+// YAxis on Thai names it still had to truncate at 18 chars, and needed ChartContainer +
+// a custom tick renderer to do it. The same ranking in plain divs truncates at the real
+// column width, keeps the full name in the title attribute, and drops the chart entirely.
+export function TopDispenseChart({ data }: { data: TopDispenseData[] }) {
+  const max = Math.max(...data.map((d) => d.totalQuantity), 1);
 
   return (
-    <Card className="flex flex-col md:h-full overflow-hidden pb-0 pt-0 gap-0">
-      <CardHeader className="py-3 shrink-0">
-        <CardTitle className="text-xs font-semibold text-foreground whitespace-nowrap font-sans">
-          รายการเบิกมากที่สุดเดือนนี้
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col !p-0 min-h-0 [&>div]:flex-1">
-        {chartData.length === 0 ? (
-          <TopDispenseEmpty />
-        ) : (
-          <div className="flex-1 min-h-[260px]" role="img" aria-label={`รายการเบิกมากที่สุด: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
-            <ChartContainer>
-              {({ width, height }) => (
-                <BarChart data={chartData} width={width} height={height} layout="vertical" margin={{ top: 5, right: 24, bottom: 5, left: 4 }}>
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis type="category" dataKey="name" width={140} tick={<ThaiTick />} tickLine={false} interval={0} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="totalQuantity" fill={fillColor} radius={[0, 4, 4, 0]} animationDuration={400} animationEasing="ease-out" />
-                </BarChart>
-              )}
-            </ChartContainer>
+    <Panel title="รายการเบิกมากที่สุดเดือนนี้" hint="เรียงตามจำนวนชิ้นที่ถูกเบิก">
+      {data.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
+          <span className="grid size-12 place-items-center rounded-full bg-secondary">
+            <BarChart3 className="size-5 text-muted-foreground" />
+          </span>
+          <div className="text-center">
+            <p className="text-[13px] font-medium text-foreground">ยังไม่มีการเบิกเดือนนี้</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">ข้อมูลจะแสดงเมื่อมีการเบิกครั้งแรก</p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ) : (
+        // justify-start, not justify-between: the panel stretches to its taller neighbour, and
+        // spreading a short list (this warehouse has months with one entry) across that height
+        // leaves a single bar floating mid-card.
+        <ol className="flex flex-1 flex-col gap-3.5">
+          {data.map((d, i) => (
+            <li key={d.id}>
+              <div className="mb-1.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded bg-secondary text-[10px] font-bold tabular-nums text-muted-foreground">
+                  {i + 1}
+                </span>
+                <span className="truncate text-sm" title={`${d.code} ${d.name}`}>
+                  {d.name}
+                </span>
+                <span className="shrink-0 text-sm font-bold tabular-nums">
+                  {d.totalQuantity.toLocaleString("th-TH")}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="bar-grow h-full rounded-full bg-danger-500"
+                  style={{ width: `${(d.totalQuantity / max) * 100}%`, animationDelay: `${i * 80}ms` }}
+                />
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Panel>
   );
 }

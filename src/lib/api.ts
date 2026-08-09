@@ -3,6 +3,8 @@
  * Replaces scattered `fetch("/api/...")` calls with typed, centralized functions.
  */
 
+import { scopeQuery, type DashboardScope } from "@/lib/dashboard-scope";
+
 // ─── Error class ───
 
 export class ApiError extends Error {
@@ -736,56 +738,34 @@ export function getDashboardProfileSummary() {
   return request<unknown[]>("/api/dashboard/profile-summary");
 }
 
-export function getDashboardAssetStatus() {
-  return request<unknown[]>("/api/dashboard/asset-status");
+// Every widget below is scoped by the dashboard tab (DispenseType) plus its optional
+// ประเภท/หมวดย่อย filter — see lib/dashboard-scope.ts. Omitted scope = whole warehouse.
+export function getDashboardAssetStatus(scope?: DashboardScope) {
+  return request<unknown[]>(`/api/dashboard/asset-status${scopeQuery(scope)}`);
 }
 
-export function getDashboardMovementMonthly() {
-  return request<unknown[]>("/api/dashboard/movement-monthly");
+export function getDashboardMovementMonthly(scope?: DashboardScope) {
+  return request<unknown[]>(`/api/dashboard/movement-monthly${scopeQuery(scope)}`);
 }
 
-export function getDashboardRecentDispense() {
-  return request<unknown[]>("/api/dashboard/recent-dispense");
+export function getDashboardRecentDispense(scope?: DashboardScope) {
+  return request<unknown[]>(`/api/dashboard/recent-dispense${scopeQuery(scope)}`);
 }
 
-export function getDashboardRecentReceive() {
-  return request<unknown[]>("/api/dashboard/recent-receive");
+export function getDashboardRecentReceive(scope?: DashboardScope) {
+  return request<unknown[]>(`/api/dashboard/recent-receive${scopeQuery(scope)}`);
 }
 
-export function getDashboardTopDispense(categoryId?: string, profileId?: string) {
-  const qs = new URLSearchParams();
-  if (categoryId) qs.set("categoryId", categoryId);
-  if (profileId) qs.set("profileId", profileId);
-  const q = qs.toString();
-  return request<unknown[]>(`/api/dashboard/top-dispense${q ? `?${q}` : ""}`);
+export function getDashboardTopDispense(scope?: DashboardScope) {
+  return request<unknown[]>(`/api/dashboard/top-dispense${scopeQuery(scope)}`);
 }
 
-export function getDashboardUsageBySubject(categoryId?: string, profileId?: string) {
-  const qs = new URLSearchParams();
-  if (categoryId) qs.set("categoryId", categoryId);
-  if (profileId) qs.set("profileId", profileId);
-  const q = qs.toString();
-  return request<unknown[]>(`/api/dashboard/usage-by-subject${q ? `?${q}` : ""}`);
+export function getDashboardUsageBySubject(scope?: DashboardScope) {
+  return request<unknown[]>(`/api/dashboard/usage-by-subject${scopeQuery(scope)}`);
 }
 
-export function getDashboardRepairStatus() {
-  return request<unknown>("/api/dashboard/repair-status");
-}
-
-export function getDashboardRepairInProgress() {
-  return request<unknown[]>("/api/dashboard/repair-inprogress");
-}
-
-export function getDashboardOverdueReturn() {
-  return request<unknown[]>("/api/dashboard/overdue-return");
-}
-
-export function getDashboardLowStock() {
-  return request<unknown[]>("/api/dashboard/low-stock");
-}
-
-export function getDashboardMaintenanceFollowup() {
-  return request<unknown[]>("/api/dashboard/maintenance-followup");
+export function getDashboardRepairStatus(scope?: DashboardScope) {
+  return request<unknown>(`/api/dashboard/repair-status${scopeQuery(scope)}`);
 }
 
 // ─── Reports ───

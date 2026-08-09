@@ -1,0 +1,144 @@
+"use client";
+
+import { useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { FLOW, SectionTitle, type FlowTone } from "./primitives";
+import { cn } from "@/lib/utils";
+
+export interface MoveRow {
+  id: string;
+  itemId: string;
+  date: string;
+  name: string;
+  code: string;
+  /** Free-form third fact — ประเภทการใช้งาน on เบิก, empty on รับเข้า. */
+  kind?: string;
+  qty: number;
+  who: string;
+}
+
+/**
+ * เบิกล่าสุด and รับเข้าล่าสุด were two ~100-line files differing in one column and a
+ * heading. One table now serves both: the caller maps its records to MoveRow.
+ *
+ * Two layouts, because a four-column table does not survive a phone. Below sm the rows
+ * stack (name over a date · who · kind line) instead of scrolling sideways; from sm up it
+ * is a dense fixed table.
+ */
+export function MoveTable({
+  title,
+  rows,
+  tone,
+  whoLabel,
+  emptyText = "ไม่มีรายการ",
+}: {
+  title: string;
+  rows: MoveRow[];
+  tone: FlowTone;
+  whoLabel: string;
+  emptyText?: string;
+}) {
+  const router = useRouter();
+  const [page, setPage] = useState(1);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  const sliced = rows.slice((page - 1) * PAGE_SIZE.DASHBOARD, page * PAGE_SIZE.DASHBOARD);
+  const qtyCls = cn("font-bold tabular-nums", FLOW[tone].text);
+
+  const handlePageChange = useCallback((p: number) => {
+    setPage(p);
+    bodyRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
+
+  const go = useCallback((itemId: string) => router.push(`/items/${itemId}`), [router]);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent, itemId: string) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        go(itemId);
+      }
+    },
+    [go],
+  );
+
+  return (
+    <section className="animate-rise flex h-full flex-col overflow-hidden rounded-2xl border bg-card shadow-lg shadow-black/[0.04]">
+      <div className="border-b bg-secondary/40 px-4 py-3">
+        <SectionTitle title={title} />
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">{emptyText}</p>
+      ) : (
+        <div ref={bodyRef} className="flex flex-1 flex-col">
+          {/* mobile: stacked rows, no horizontal scroll */}
+          <ul className="divide-y sm:hidden">
+            {sliced.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => go(r.itemId)}
+                  className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-2.5 text-left transition-colors active:bg-secondary/40"
+                  aria-label={`${r.code} ${r.name}, ${r.qty} ชิ้น`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{r.name}</span>
+                    <span className="mt-0.5 block truncate text-[11px] tabular-nums text-muted-foreground">
+                      {[r.date, r.who, r.kind].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <span className={cn("shrink-0 text-sm", qtyCls)}>{r.qty}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* desktop: dense fixed table */}
+          <div className="hidden flex-1 sm:block">
+            <table className="w-full table-fixed text-left">
+              <thead className="bg-secondary/25 text-[11px] font-bold text-muted-foreground">
+                <tr>
+                  <th className="w-[104px] px-4 py-2">วันที่</th>
+                  <th className="px-4 py-2">รายการ</th>
+                  <th className="w-[64px] px-3 py-2 text-right">จำนวน</th>
+                  <th className="w-[112px] px-4 py-2">{whoLabel}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y text-sm">
+                {sliced.map((r) => (
+                  <tr
+                    key={r.id}
+                    tabIndex={0}
+                    onClick={() => go(r.itemId)}
+                    onKeyDown={(e) => onKeyDown(e, r.itemId)}
+                    aria-label={`${r.code} ${r.name}, ${r.qty} ชิ้น`}
+                    className="cursor-pointer transition-colors hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  >
+                    <td className="px-4 py-2 text-[11px] whitespace-nowrap tabular-nums text-muted-foreground">
+                      {r.date}
+                    </td>
+                    <td className="px-4 py-2">
+                      <p className="truncate font-medium">{r.name}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {[r.code, r.kind].filter(Boolean).join(" · ")}
+                      </p>
+                    </td>
+                    <td className={cn("px-3 py-2 text-right", qtyCls)}>{r.qty}</td>
+                    <td className="truncate px-4 py-2 text-xs text-muted-foreground">{r.who}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-auto border-t bg-secondary/25 px-2">
+            <Pagination page={page} total={rows.length} pageSize={PAGE_SIZE.DASHBOARD} onChange={handlePageChange} />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

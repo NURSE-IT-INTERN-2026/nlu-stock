@@ -1,35 +1,11 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 import { PieChart } from "lucide-react";
 import { useThemeColor } from "@/lib/resolve-color";
 import type { UsageByTypeData } from "@/lib/dashboard-types";
 import { ChartContainer } from "./chart-container";
-
-interface UsageBySubjectChartProps {
-  data: UsageByTypeData[];
-}
-
-function UsageByTypeEmpty() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center border-t border-dashed border-muted-foreground/20 bg-muted/30">
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary">
-        <PieChart className="w-5 h-5 text-muted-foreground" />
-      </div>
-      <div className="text-center mt-3">
-        <p className="text-[13px] font-medium text-foreground">
-          ยังไม่มีข้อมูลการใช้งาน
-        </p>
-        <p className="text-[12px] text-muted-foreground mt-0.5">
-          กราฟจะแสดงสัดส่วนเมื่อมีการเบิก
-        </p>
-      </div>
-    </div>
-  );
-}
+import { Panel } from "./primitives";
 
 interface ChartTooltipProps {
   active?: boolean;
@@ -49,39 +25,42 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
   );
 }
 
-export function UsageBySubjectChart({ data }: UsageBySubjectChartProps) {
+export function UsageBySubjectChart({ data }: { data: UsageByTypeData[] }) {
+  // ponytail: one fill, not a colour per bar. The categories are already named on the axis,
+  // so a second encoding would carry no information.
   const fillColor = useThemeColor("--chart-2");
-
-  const chartData = data.map((d) => ({
-    name: d.label,
-    totalQuantity: d.totalQuantity,
-  }));
+  const chartData = data.map((d) => ({ name: d.label, totalQuantity: d.totalQuantity }));
 
   return (
-    <Card className="flex flex-col md:h-full overflow-hidden pb-0 pt-0 gap-0">
-      <CardHeader className="py-3 shrink-0">
-        <CardTitle className="text-xs font-semibold text-foreground whitespace-nowrap font-sans">
-          สัดส่วนการใช้งานเดือนนี้
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col !p-0 min-h-0 [&>div]:flex-1">
-        {chartData.length === 0 ? (
-          <UsageByTypeEmpty />
-        ) : (
-          <div className="flex-1 min-h-[260px]" role="img" aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}>
-            <ChartContainer>
-              {({ width, height }) => (
-                <BarChart data={chartData} width={width} height={height} margin={{ top: 5, right: 24, bottom: 5, left: 16 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="totalQuantity" fill={fillColor} radius={[4, 4, 0, 0]} animationDuration={400} animationEasing="ease-out" />
-                </BarChart>
-              )}
-            </ChartContainer>
+    <Panel title="สัดส่วนการใช้งานเดือนนี้" hint="วัตถุประสงค์ของการเบิก">
+      {chartData.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
+          <span className="grid size-12 place-items-center rounded-full bg-secondary">
+            <PieChart className="size-5 text-muted-foreground" />
+          </span>
+          <div className="text-center">
+            <p className="text-[13px] font-medium text-foreground">ยังไม่มีข้อมูลการใช้งาน</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">กราฟจะแสดงสัดส่วนเมื่อมีการเบิก</p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ) : (
+        <div
+          className="min-h-[240px] flex-1"
+          role="img"
+          aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}
+        >
+          <ChartContainer>
+            {({ width, height }) => (
+              <BarChart data={chartData} width={width} height={height} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} width={44} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--secondary)" }} />
+                <Bar dataKey="totalQuantity" fill={fillColor} radius={[6, 6, 0, 0]} animationDuration={400} animationEasing="ease-out" />
+              </BarChart>
+            )}
+          </ChartContainer>
+        </div>
+      )}
+    </Panel>
   );
 }
