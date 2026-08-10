@@ -274,23 +274,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               ) : (
                 <ActionTile icon={Package} label="ปรับสต็อก" tone="default" onClick={onAdjust} />
               )}
-              {isCountDurable ? (
-                // DUR: damage is usually partial (ตัดจำนวน) but the whole lot can also be
-                // pulled from service — that one sets Item.status, which recompute now keeps.
-                <DropdownMenu>
-                  <DropdownMenuTrigger render={<ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" />} />
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={onReportDamage}>
-                      <Package className="size-4" />ตัดจำนวนที่ชำรุด
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onReportStatus("DAMAGED")}>
-                      <Flag className="size-4" />ทั้งรายการชำรุด
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
-              )}
+              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
               {openDamage.length > 0 && (
                 <ActionTile icon={Wrench} label="รับคืนจากซ่อม" tone="default" onClick={() => setRecoverOpen(true)} />
               )}
