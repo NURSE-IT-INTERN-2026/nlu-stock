@@ -19,7 +19,7 @@ import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { parseScannedCode, STATUS_LABELS } from "@/lib/constants";
 import { isManualHold } from "@/lib/status-utils";
 import type { ItemStatus } from "@/generated/prisma/enums";
-import { useCart, buildCartItem } from "@/components/dispense/cart-context";
+import { useCart, buildCartItem, toDispenseableItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/shared/pagination";
 import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
@@ -113,25 +113,7 @@ function DispenseContent() {
 
   const handleAdd = (item: SearchItem): boolean => {
     const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
-    const result = buildCartItem(
-      {
-        id: item.id,
-        code: item.code,
-        name: item.name,
-        imageUrl: item.imageUrl,
-        categoryName: item.category.name,
-        dispenseType: item.category.profile.dispenseType,
-        trackIndividually: item.trackIndividually,
-        issueUnit: item.issueUnit.name,
-        availableQty: item.availableQty,
-        location: item.location
-          ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
-          : null,
-        lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
-        subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode, condition: s.condition })),
-      },
-      usedSubIds,
-    );
+    const result = buildCartItem(toDispenseableItem(item), usedSubIds);
     if (!result.ok) {
       toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
       return false;

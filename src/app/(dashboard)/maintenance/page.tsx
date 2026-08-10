@@ -228,8 +228,8 @@ export default function MaintenancePage() {
           <div className="overflow-hidden rounded-2xl border bg-card">
             <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
               <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow className="sticky top-0 z-10 border-b border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                <TableHeader sticky>
+                  <TableRow>
                     <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>
                     <TableHead className="px-2">ชื่อ</TableHead>
                     <TableHead className="w-40 px-2">สถานะ</TableHead>
@@ -259,7 +259,6 @@ export default function MaintenancePage() {
                     return (
                       <TableRow
                         key={row.id}
-                        className="h-9 [&>td]:py-1"
                       >
                         {/* รหัส → ลิงก์ไปหน้าพัสดุ. ชื่อ → ปุ่มบันทึกบำรุง (target แค่ชื่อ ไม่ทั้งแถว) */}
                         <TableCell className="font-mono text-xs px-2">

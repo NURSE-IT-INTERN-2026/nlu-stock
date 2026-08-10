@@ -404,15 +404,15 @@ export default function ConfirmDispensePage() {
             {/* Desktop ≥md — shadcn Table (table-fixed → sticky header works, columns auto-align) */}
             <div className="hidden md:block rounded-lg border border-border bg-card overflow-x-auto">
               <Table className="table-fixed">
-                <TableHeader>
+                <TableHeader sticky>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-16 sticky top-0 z-10 rounded-tl-lg bg-card" />
-                    <TableHead className="min-w-0 sticky top-0 z-10 bg-card text-xs font-medium text-muted-foreground">รายการ</TableHead>
-                    <TableHead className="w-[120px] sticky top-0 z-10 bg-card text-xs font-medium text-muted-foreground">ประเภท</TableHead>
-                    <TableHead className="w-[90px] sticky top-0 z-10 bg-card text-xs font-medium text-muted-foreground">สถานะ</TableHead>
-                    <TableHead className="w-[240px] sticky top-0 z-10 bg-card text-right text-xs font-medium text-muted-foreground">{group === "durable" ? "ชิ้น" : ""}</TableHead>
-                    <TableHead className="w-[150px] sticky top-0 z-10 bg-card text-right text-xs font-medium text-muted-foreground">จำนวน</TableHead>
-                    <TableHead className="w-14 sticky top-0 z-10 rounded-tr-lg bg-card" />
+                    <TableHead className="w-16 rounded-tl-lg" />
+                    <TableHead className="min-w-0">รายการ</TableHead>
+                    <TableHead className="w-[120px]">ประเภท</TableHead>
+                    <TableHead className="w-[90px]">สถานะ</TableHead>
+                    <TableHead className="w-[240px] text-right">{group === "durable" ? "ชิ้น" : ""}</TableHead>
+                    <TableHead className="w-[150px] text-right">จำนวน</TableHead>
+                    <TableHead className="w-14 rounded-tr-lg" />
                   </TableRow>
                 </TableHeader>
                 <TableBody className="[&_td]:py-4">

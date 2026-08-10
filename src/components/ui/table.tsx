@@ -22,11 +22,22 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   )
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+function TableHeader({
+  className,
+  sticky,
+  ...props
+}: React.ComponentProps<"thead"> & { sticky?: boolean }) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        "[&_tr]:border-b",
+        // Sticks the row, not the thead — thead sticky is still uneven across browsers.
+        // Needs its own background or body rows show through while scrolling.
+        sticky &&
+          "[&>tr]:sticky [&>tr]:top-0 [&>tr]:z-10 [&>tr]:bg-card [&>tr]:shadow-[0_1px_3px_rgba(0,0,0,0.08)]",
+        className
+      )}
       {...props}
     />
   )
@@ -73,7 +84,9 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        // Datagrid density: 32px header, 36px rows. Height on th/td, never on tr —
+        // a height on the row would drag the header row up to the body row's height too.
+        "h-8 px-2 py-0 text-left align-middle text-xs font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -86,7 +99,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        "h-9 px-2 py-1 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useCallback, type ReactNode } from "react";
+import { useMemo, useState, useCallback } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   ReportFilters, defaultDateFilters, periodLabel,
   type FilterValues, type FilterConfig,
@@ -9,8 +10,7 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
-import { motion } from "motion/react";
-import { ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
 import { STATUS_LABELS, STATUS_PILLS, type ItemStatus } from "@/lib/constants";
@@ -24,12 +24,16 @@ type SubTab = "receive" | "in_use" | "return" | "repair";
 
 // ชื่อเดียวกับ tabs ใน /receive เป๊ะ. เดิมหน้านี้เรียกสิ่งเดียวกันว่า "รับซ่อม" ขณะที่หน้าทำงาน
 // เรียก "รับคืนจากส่งซ่อม" — คนละความหมายในหัวคนอ่าน ทั้งที่เป็นแถวชุดเดียวกัน.
-const SUB_TABS: { value: SubTab; label: string; icon: typeof ArrowDownToLine }[] = [
-  { value: "receive", label: "นำเข้าคลัง", icon: ArrowDownToLine },
-  { value: "in_use", label: "คืนเข้าคลัง", icon: PackageCheck },
-  { value: "return", label: "รับคืนจากใบยืม", icon: Undo2 },
-  { value: "repair", label: "รับคืนจากส่งซ่อม", icon: Wrench },
+const SUB_TABS: { value: SubTab; label: string }[] = [
+  { value: "receive", label: "นำเข้าคลัง" },
+  { value: "in_use", label: "คืนเข้าคลัง" },
+  { value: "return", label: "รับคืนจากใบยืม" },
+  { value: "repair", label: "รับคืนจากส่งซ่อม" },
 ];
+
+function parseSubTab(value: string | null): SubTab {
+  return SUB_TABS.some((t) => t.value === value) ? (value as SubTab) : "receive";
+}
 
 function StatusPill({ status }: { status: ItemStatus }) {
   return (
@@ -40,48 +44,42 @@ function StatusPill({ status }: { status: ItemStatus }) {
 }
 
 export function ReceiveHistoryTab() {
-  const [sub, setSub] = useState<SubTab>("receive");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  // ?sub= อยู่ใน URL เหมือน ?tab= และ ?kind= — refresh หรือส่งลิงก์ให้คนอื่นแล้วยังอยู่ segment เดิม.
+  // ชื่อ param แยกจาก ?kind= ของออกจากคลัง เพราะทั้งสอง tab ถูก mount พร้อมกัน (หน้า reports
+  // ซ่อนด้วย CSS ไม่ได้ unmount) — param ชื่อเดียวกันจะแย่งกันเขียน.
+  const sub = parseSubTab(searchParams.get("sub"));
 
-  // Segmented control — lives inside each sub-tab's filter bar via `leading`.
-  const subTabsEl = (
-    <div className="inline-flex w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-1 sm:w-auto">
-      {SUB_TABS.map(({ value, label, icon: Icon }) => {
-        const isActive = sub === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setSub(value)}
-            className={cn(
-              "relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {isActive && (
-              <motion.span
-                layoutId="receive-history-subtab"
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                className="absolute inset-0 rounded-md bg-background shadow-sm"
-              />
-            )}
-            <Icon className="relative h-4 w-4 shrink-0" />
-            <span className="relative">{label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+  const selectSub = (next: SubTab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sub", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
+  // Segment picker sits above the filter card, same as ออกจากคลัง — it chooses WHICH ledger is
+  // on screen, so it is not one of that ledger's filters and does not belong inside their box.
   return (
     <div className="space-y-4">
+      <Tabs value={sub} onValueChange={(v) => selectSub(v as SubTab)}>
+        <TabsList className="w-full min-w-0 sm:w-auto">
+          {SUB_TABS.map(({ value, label }) => (
+            <TabsTrigger key={value} value={value} className="min-w-0 px-3.5">
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       {sub === "receive" ? (
-        <ReceiveLogTable leading={subTabsEl} />
+        <ReceiveLogTable />
       ) : sub === "in_use" ? (
-        <StatusLogTable from="IN_USE" to="AVAILABLE" leading={subTabsEl} noun="คืนเข้าคลัง" />
+        <StatusLogTable from="IN_USE" to="AVAILABLE" noun="คืนเข้าคลัง" />
       ) : sub === "return" ? (
-        <StatusLogTable from="ON_LOAN" leading={subTabsEl} noun="รับคืนจากใบยืม" />
+        <StatusLogTable from="ON_LOAN" noun="รับคืนจากใบยืม" />
       ) : (
-        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" leading={subTabsEl} noun="รับคืนจากส่งซ่อม" />
+        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" noun="รับคืนจากส่งซ่อม" />
       )}
     </div>
   );
@@ -95,7 +93,6 @@ interface ReportTableProps<T extends { id: string }> {
   exportType: string;
   exportFilters?: FilterValues; // extra params merged into export URL (from/to)
   extraParams?: Record<string, string | undefined>; // extra fetch params (from/to)
-  leading?: ReactNode;
   /** summary numbers → cards; runs on whatever shape the route returns */
   statsFor: (s: Record<string, number>, values: FilterValues) => SummaryStat[];
   emptyMessage: string;
@@ -108,7 +105,6 @@ function ReportTable<T extends { id: string }>({
   exportType,
   exportFilters,
   extraParams,
-  leading,
   statsFor,
   emptyMessage,
 }: ReportTableProps<T>) {
@@ -149,7 +145,6 @@ function ReportTable<T extends { id: string }>({
         values={filters}
         onChange={setFilters}
         actions={<ExportButtons reportType={exportType} filters={{ ...filters, ...exportFilters }} />}
-        leading={leading}
       />
       {summary && <ReportSummary stats={statsFor(summary, filters)} />}
       <ReportDataTable
@@ -208,14 +203,13 @@ const receiveColumns: Column<ReceiveRow>[] = [
   { key: "receiverName", header: "ผู้รับเข้า" },
 ];
 
-function ReceiveLogTable({ leading }: { leading?: ReactNode }) {
+function ReceiveLogTable() {
   return (
     <ReportTable<ReceiveRow>
       path="receive-history"
       columns={receiveColumns}
       filterConfig={COMMON_FILTERS}
       exportType="receive-history"
-      leading={leading}
       emptyMessage="ไม่มีการนำเข้าคลังในช่วงนี้"
       statsFor={(s, v) => [
         { label: "ครั้งที่นำเข้า", value: s.records.toLocaleString(), hint: periodLabel(v) },
@@ -251,7 +245,7 @@ const statusColumns: Column<StatusRow>[] = [
   { key: "changerName", header: "ผู้บันทึก" },
 ];
 
-function StatusLogTable({ from, to, leading, noun }: { from: string; to?: string; leading?: ReactNode; noun: string }) {
+function StatusLogTable({ from, to, noun }: { from: string; to?: string; noun: string }) {
   // Memoized so identity is stable across re-renders — otherwise ReportTable's
   // fetchPage (useCallback deps on extraParams) would change every render,
   // re-triggering its effect and refetching in an unbounded loop.
@@ -265,7 +259,6 @@ function StatusLogTable({ from, to, leading, noun }: { from: string; to?: string
       exportType="status-log"
       extraParams={extraParams}
       exportFilters={exportFilters}
-      leading={leading}
       emptyMessage={`ไม่มีการ${noun}ในช่วงนี้`}
       statsFor={(s, v) => [
         { label: `ครั้งที่${noun}`, value: s.records.toLocaleString(), hint: periodLabel(v) },
