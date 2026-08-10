@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   },
   // Dev only: allow LAN hosts (e.g. testing from a phone/other machine) to reach
   // HMR + dev resources. No effect in production.
-  allowedDevOrigins: ["10.124.129.83"],
+  allowedDevOrigins: ["10.124.129.83", "*.ngrok-free.dev"],
   // pdfkit resolves its AFM font data via __dirname; Turbopack rewrites that to
   // /ROOT so Helvetica.afm goes missing (PDF export 500s). Keep it external so
   // Node resolves the real node_modules path.

@@ -26,6 +26,16 @@ export function isLoanEdge(log: { previousStatus: ItemStatus; newStatus: ItemSta
 }
 
 /**
+ * Whether an item's ประวัติ should drop this status log as a duplicate.
+ * A loan edge that ends on DISPOSED is kept: ยกเลิกชุด retires a KIT set and hands its pieces
+ * back, closing each one's นำไปใช้งาน record, and those ReturnRecords only say the pieces came
+ * home — nothing else in the history would explain the set copy itself leaving.
+ */
+export function isDuplicateOfLoanRow(log: { previousStatus: ItemStatus; newStatus: ItemStatus }): boolean {
+  return isLoanEdge(log) && log.newStatus !== ItemStatus.DISPOSED;
+}
+
+/**
  * The รับคืน row for one act of returning stock. Every path that closes a loan writes one,
  * which is what lets the history hide the ON_LOAN → X status log as a duplicate: the return
  * row is guaranteed to be there instead.

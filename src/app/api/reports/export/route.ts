@@ -6,7 +6,11 @@ import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
-import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode } from "@/lib/constants";
+import type { UsageType } from "@/generated/prisma/enums";
+import { Prisma } from "@/generated/prisma/client";
+import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, locationLabel } from "@/lib/constants";
+import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
+import { kindWhere } from "@/lib/dispense-kind-where";
 import { groupUsageBySubject } from "@/lib/usage-by-subject";
 
 // ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
@@ -227,8 +231,12 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       });
     }
 
+    // One sheet per ชนิดการออกจากคลัง, matching the segment on screen column for column —
+    // an export of เบิกใช้ used to carry a สถานะ column reading "เบิกแล้ว" on every row
+    // forever, and one of นำไปใช้งาน never said which room the stock went to.
     case "dispense-history": {
-      const where: Record<string, unknown> = {};
+      const kind = parseDispenseKind(params.get("kind"));
+      const where: Prisma.DispenseRecordWhereInput = { ...kindWhere(kind) };
       const dateFrom = params.get("dateFrom");
       const dateTo = params.get("dateTo");
       if (dateFrom || dateTo) {
@@ -242,32 +250,62 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const staffId = params.get("staffId");
       if (staffId) where.staffId = staffId;
       const usageType = params.get("usageType");
-      if (usageType) where.usageType = usageType;
+      if (usageType) where.usageType = usageType as UsageType;
+      // Mirrors the ผู้รับ search box on the tab. Missing here, an Excel exported under a
+      // recipient filter would quietly hold every row on screen plus the ones filtered out.
+      const recipient = params.get("recipient")?.trim();
+      if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
+      // นำไปใช้งาน + "ยังอยู่ข้างนอก" — the only loanStatus this case honours; ยืม + ค้างคืน
+      // goes to outstanding-loans instead (see the tab's exportType).
+      if (params.get("loanStatus")) where.returnedAt = null;
 
       const records = await prisma.dispenseRecord.findMany({
         where,
         include: {
           item: { select: { code: true, name: true } },
           staff: { select: { name: true } },
+          location: { select: { building: true, floor: true, room: true, detail: true } },
         },
         orderBy: { dispensedAt: "desc" },
         take: 10000,
       });
 
       return records.map((r) => {
+        const head = {
+          วันที่: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
+          รหัสพัสดุ: r.item.code,
+          รายการพัสดุ: r.item.name,
+          จำนวน: r.quantity,
+        };
+        if (kind === "consume") {
+          return {
+            ...head,
+            ผู้เบิก: r.staff.name,
+            การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
+            หมายเหตุ: r.notes ?? "",
+          };
+        }
+        if (kind === "inuse") {
+          return {
+            ...head,
+            สถานที่: r.location ? locationLabel(r.location) : "ไม่ระบุที่ตั้ง",
+            ผู้เบิก: r.staff.name,
+            สถานะ: r.returnedAt ? "กลับเข้าคลังแล้ว" : "อยู่ที่ห้อง",
+            หมายเหตุ: r.notes ?? "",
+          };
+        }
         const cond =
           r.returnCondition === "AVAILABLE" ? "คืน-ปกติ"
           : r.returnCondition === "DAMAGED" ? "คืน-ชำรุด"
           : r.returnCondition === "LOST" ? "คืน-สูญหาย"
           : r.returnedAt ? "คืนแล้ว"
-          : "เบิกแล้ว";
+          : "ยังไม่คืน";
         return {
-          วันที่: fmtDate(r.dispensedAt, "yyyy-MM-dd HH:mm"),
-          รหัสพัสดุ: r.item.code,
-          รายการพัสดุ: r.item.name,
-          จำนวน: r.quantity,
+          ...head,
+          ผู้ยืม: r.recipient ?? "",
           ผู้เบิก: r.staff.name,
           การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
+          ครบกำหนด: r.dueAt ? fmtDate(r.dueAt, "yyyy-MM-dd") : "",
           สถานะ: cond,
           หมายเหตุ: r.notes ?? "",
         };
@@ -295,6 +333,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       }
       const staffId = params.get("staffId");
       if (staffId) where.staffId = staffId;
+      // Same ผู้ยืม search as the tab — see the note on the dispense-history case.
+      const recipient = params.get("recipient")?.trim();
+      if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
 
       const records = await prisma.dispenseRecord.findMany({
         where,
@@ -669,8 +710,13 @@ export async function GET(request: NextRequest) {
   }
 
   const data = await fetchReportData(type, params);
-  const filename = `${type}-${new Date().toISOString().slice(0, 10)}`;
+  // ออกจากคลัง ships three different sheets under one type, so the kind has to reach the
+  // filename and the PDF heading — otherwise all three download as the same name and read
+  // as the same report.
+  const kind = type === "dispense-history" ? parseDispenseKind(params.get("kind")) : null;
+  const filename = `${type}${kind ? `-${kind}` : ""}-${new Date().toISOString().slice(0, 10)}`;
+  const title = REPORT_TITLES[type] + (kind ? ` — ${DISPENSE_KIND_LABELS[kind]}` : "");
 
   if (format === "xlsx") return toXlsx(data, filename, type);
-  return await toPdf(data, filename, REPORT_TITLES[type]);
+  return await toPdf(data, filename, title);
 }
