@@ -43,12 +43,13 @@ import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialo
 import { EditItemDialog } from "@/components/shared/edit-item-dialog";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 import { ActionTile } from "@/components/items/action-tile";
+import { KitSetsPanel } from "@/components/items/kit-sets-panel";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // ── Types ──
 
-interface CategoryType { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null }
+interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
 interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null }
@@ -190,7 +191,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
         const it = (await getItem(itemId)) as ItemData;
         if (cancelled) return;
         setItem(it);
-        if (!it.trackIndividually) setMode("item");
+        // A KIT recipe always renders in item-mode, even though it is tracked: its copies are
+        // assembled sets managed as a group in the ชุดประกอบ tab, not spec pages of their own.
+        if (!it.trackIndividually || it.category.profile?.code === "KIT") setMode("item");
         else if (it.subItems.length === 0) setMode("empty");
         else setMode("piece");
       } catch { if (!cancelled) setItem(null); }
@@ -227,8 +230,11 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // Switch copy via query (shallow — item not refetched).
   const selectCopy = (subCode: string) => router.replace(`/items/${itemId}?copy=${subCode}`, { scroll: false });
 
-  // Reset tab when switching copy (the history tab owns its own filter state).
-  useEffect(() => { setTab("overview"); }, [mode, itemId, selectedSubCode]);
+  // Reset tab when switching copy (the history tab owns its own filter state). A KIT recipe
+  // opens on ชุดประกอบ — the sets and the recipe are the page, ข้อมูลทั่วไป is the footnote.
+  useEffect(() => {
+    setTab(item?.category.profile?.code === "KIT" ? "kit" : "overview");
+  }, [mode, itemId, selectedSubCode, item?.category.profile?.code]);
 
   const { setDetail } = usePageHeader();
   useEffect(() => {
@@ -289,7 +295,10 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   if (mode === "piece" && !sub) return <NotFound label="ไม่พบพัสดุย่อย" onBack={() => router.push("/items")} />;
 
   // ── Item-mode derived ──
+  const isKit = item?.category.profile?.code === "KIT";
   const stockStatus = item ? (() => {
+    // A recipe nobody has built yet is not "หมด" — there was never any stock to run out of.
+    if (isKit && item.totalQty === 0) return { color: "bg-muted-foreground", label: "ยังไม่เคยประกอบ" };
     const s = item.minThreshold > 0
       // Same wording as the card's chip — one word per state across the page.
       ? item.availableQty < item.minThreshold ? { color: "bg-warning", label: "ต่ำกว่าขั้นต่ำ" } : { color: "bg-success", label: "ปกติ" }
@@ -318,7 +327,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     // Consumables are used up, never repaired. Everything else can be, so it gets the
     // tab — and a repair record forces it open regardless, so history is never hidden.
     { key: "maintenance", label: "การซ่อมบำรุง", icon: Wrench, show: item.category.profile?.dispenseType !== "CONSUMABLE" || item.maintenanceRecords.length > 0 },
-    { key: "kit", label: `ชุดประกอบ${item.kitComponents?.length ? ` (${item.kitComponents.length})` : ""}`, icon: Boxes, show: !!(item.kitComponents?.length) },
+    { key: "kit", label: `ชุดประกอบ${item.kitComponents?.length ? ` (${item.kitComponents.length})` : ""}`, icon: Boxes, show: isKit || !!(item.kitComponents?.length) },
   ].filter((t) => t.show !== false) : [];
   const pieceTabs = sub ? [
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info },
@@ -409,7 +418,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
               {tab === "maintenance" && (
                 <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} showAssetInfo={!!item.category.profile?.assetTracking} onRecordMaintenance={() => setMaintOpen(true)} />
               )}
-              {tab === "kit" && item.kitComponents.length > 0 && <KitComponentsTab components={item.kitComponents} />}
+              {tab === "kit" && (isKit
+                ? <KitSetsPanel itemId={item.id} canAct={!!canAct} onChanged={fetchItem} />
+                : item.kitComponents.length > 0 && <KitComponentsTab components={item.kitComponents} />)}
             </>
           )}
 
@@ -556,7 +567,7 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
           {item.location && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">{locationLabel(item.location)}</span>}
         </div>
       </div>
-      <StockSummary available={item.availableQty} total={item.totalQty} unit={item.issueUnit.name} minThreshold={item.minThreshold} dispenseType={item.category.profile?.dispenseType ?? "COUNT"} distribution={item.distribution} />
+      <StockSummary available={item.availableQty} total={item.totalQty} unit={item.issueUnit.name} minThreshold={item.minThreshold} dispenseType={item.category.profile?.dispenseType ?? "COUNT"} distribution={item.distribution} isKit={item.category.profile?.code === "KIT"} />
     </div>
   );
 }
@@ -609,15 +620,18 @@ function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onRet
 
 // ── Stock summary (item hero right slot) ──
 // Item-mode (non-tracked) stock card. No status headline at all: a non-tracked item is a
-// *pile*, and a pile holds several states at once (25 ว่าง + 115 ไม่อยู่ในคลัง) — squeezing
+// *pile*, and a pile holds several states at once (25 พร้อมใช้งาน + 115 ไม่อยู่ในคลัง) — squeezing
 // that into one word is always wrong. Only the tracked card names a status, because there
 // the headline describes one piece. Here the number, the bar and the two-row table do it.
 // COUNT (วัสดุคงทน ยืม-คืน) gets the table; consumables just deplete, so they get the bar.
-function StockSummary({ available, total, unit, minThreshold, dispenseType, distribution }: {
+function StockSummary({ available, total, unit, minThreshold, dispenseType, distribution, isKit }: {
   available: number; total: number; unit: string; minThreshold: number; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   distribution?: DistributionRow[];
+  /** A KIT recipe with no sets built has never held stock — 0 here is not "หมด". */
+  isKit?: boolean;
 }) {
   const isCount = dispenseType === "COUNT";
+  const neverBuilt = !!isKit && total === 0;
 
   // Low-stock alert only (zero stock gets its own banner).
   const isLow = minThreshold > 0 && available > 0 && available < minThreshold;
@@ -671,7 +685,8 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
           <span className="text-5xl sm:text-6xl font-semibold leading-none tabular-nums">{available}</span>
           <span className="text-sm text-muted-foreground truncate">/ {total} {unit}</span>
         </div>
-        <span className="text-xs text-muted-foreground shrink-0 pb-1">คงเหลือ {Math.round(pct(available))}%</span>
+        {/* 0 จาก 0 ไม่ใช่ 0% — a percentage of nothing is a number the card should not print. */}
+        {total > 0 && <span className="text-xs text-muted-foreground shrink-0 pb-1">คงเหลือ {Math.round(pct(available))}%</span>}
       </div>
 
       {/* Zero available is the one state a number alone doesn't shout loud enough. For
@@ -679,10 +694,17 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
           them come back, so it gets its own wording and a softer tone. It says where the
           stock is not, rather than claiming a loan it cannot verify. */}
       {available === 0 && (
-        stillOut ? (
+        neverBuilt ? (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <Boxes className="size-4 shrink-0" />
+            {/* No hint text beside it — the card is 320px wide and the ชุดประกอบ tab, which
+                is where sets get built, is already the open tab right below. */}
+            <span className="font-medium">ยังไม่เคยประกอบชุด</span>
+          </div>
+        ) : stillOut ? (
           <div className={cn("mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm", TONE_CLASS.warning)}>
             <Undo2 className="size-4 shrink-0" />
-            <span className="font-medium">ไม่มีของว่าง</span>
+            <span className="font-medium">ไม่มีของพร้อมใช้งาน</span>
             <span className="ml-auto text-xs opacity-80 shrink-0">{total} {unit} อยู่นอกคลัง</span>
           </div>
         ) : (
@@ -963,7 +985,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/40 [&>th]:h-9 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+            <TableRow className="bg-muted/40">
               <TableHead className="w-40 px-3">รหัส</TableHead>
               <TableHead className="w-36 px-3">สถานะ</TableHead>
               <TableHead className="px-3">รายละเอียด</TableHead>
@@ -981,7 +1003,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
               const where = room ?? (loc ? locationLabel(loc) : null);
               return (
                 <TableRow key={s.id} onClick={() => onSelect(s.subCode)}
-                  className={cn("cursor-pointer [&>td]:py-2.5", isCurrent && "bg-primary/10 hover:bg-primary/15")}>
+                  className={cn("cursor-pointer", isCurrent && "bg-primary/10 hover:bg-primary/15")}>
                   <TableCell className={cn("font-mono text-sm px-3 relative", isCurrent && "font-semibold text-primary before:absolute before:left-0 before:inset-y-0 before:w-1 before:bg-primary")}>
                     {formatSubCode(itemCode, s.subCode)}
                     {isCurrent && <span className="ml-2 align-middle inline-flex items-center px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-sans font-semibold tracking-wide">กำลังดู</span>}
@@ -1104,7 +1126,7 @@ function KitComponentsTab({ components }: { components: ItemData["kitComponents"
       <div className="rounded-xl border overflow-hidden bg-card">
         <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="bg-muted/40 [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+            <TableRow className="bg-muted/40">
               <TableHead className="w-28 md:w-32 px-2">รหัส</TableHead>
               <TableHead className="px-2">ชื่อ</TableHead>
               <TableHead className="w-28 md:w-32 px-2">คงเหลือ</TableHead>
@@ -1113,7 +1135,7 @@ function KitComponentsTab({ components }: { components: ItemData["kitComponents"
           </TableHeader>
           <TableBody>
             {components.map((c, i) => (
-              <TableRow key={i} className="h-9 [&>td]:py-1">
+              <TableRow key={i}>
                 <TableCell className="font-mono text-xs text-muted-foreground px-2"><span className="block truncate">{c.componentItem?.code ?? "—"}</span></TableCell>
                 <TableCell className="font-medium px-2"><span className="truncate min-w-0">{c.componentItem?.name ?? c.name}</span></TableCell>
                 <TableCell className="text-muted-foreground px-2">{c.componentItem ? <span className={cn(c.componentItem.availableQty < c.quantity && "text-destructive font-medium")}>{c.componentItem.availableQty}</span> : "—"}</TableCell>

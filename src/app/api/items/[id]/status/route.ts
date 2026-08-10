@@ -5,6 +5,7 @@ import { recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { closeOpenLoan, returnLocationUpdate } from "@/lib/returns";
+import { kitSetLabelOf } from "@/lib/kits";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
@@ -24,6 +25,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const subItem = await prisma.subItem.findUnique({ where: { id: data.subItemId } });
     if (!subItem || subItem.itemId !== id) return notFound("Sub-item not found");
 
+    // A piece inside an assembled KIT set may be reported broken from right here — this is
+    // the ONE damage path in the app, and a set is no longer taken apart to reach the pieces
+    // in it. Saying so leaves the set physically short of that piece, which is fine: it breaks
+    // during use, and a set that has been used is already รอตรวจ and cannot be lent.
+    // Leaving the set is handled below (inKitSubItemId cleared, INUSE record closed by
+    // closeOpenLoan); a piece that stays put keeps its link.
+    const leavingKitSet = !!subItem.inKitSubItemId && data.newStatus !== ItemStatus.IN_USE;
+
     // UNDER_REPAIR → UNDER_REPAIR is a real edit (แก้ข้อมูลส่งซ่อม: ภายใน → ภายนอก) that
     // appends a log row, so it must survive the same-status short-circuit below.
     const isRepairEdit =
@@ -37,10 +46,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      const setLabel = leavingKitSet ? await kitSetLabelOf(tx, data.subItemId!) : null;
       const updated = await tx.subItem.update({
         where: { id: data.subItemId! },
         data: {
           status: data.newStatus,
+          ...(leavingKitSet ? { inKitSubItemId: null } : {}),
           ...returnLocationUpdate({
             previousStatus: subItem.status,
             newStatus: data.newStatus,
@@ -50,13 +61,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
 
+      const baseReason = data.notes || `เปลี่ยนสถานะเป็น ${STATUS_LABELS[data.newStatus] ?? data.newStatus}`;
       await tx.itemStatusLog.create({
         data: {
           itemId: id,
           subItemId: data.subItemId,
+          // The set is named on the log row rather than left to be inferred: once
+          // inKitSubItemId is cleared, this line is the only record the piece was ever in it.
+          kitSubItemId: subItem.inKitSubItemId ?? undefined,
           previousStatus: subItem.status,
           newStatus: data.newStatus,
-          reason: data.notes || `เปลี่ยนสถานะเป็น ${STATUS_LABELS[data.newStatus] ?? data.newStatus}`,
+          reason: setLabel ? `${baseReason} — ออกจากชุด ${setLabel}` : baseReason,
           changedBy: auth.user.userId,
           imageUrl: data.imageUrl,
           repairVenue: data.repairVenue ?? undefined,

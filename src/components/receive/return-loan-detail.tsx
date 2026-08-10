@@ -28,6 +28,7 @@ import {
   returnLoanEntries, returnItem, uploadFile,
   type OpenBorrow, type ReturnCondition,
 } from "@/lib/api";
+import { KitSetContentsPicker } from "@/components/items/kit-sets-panel";
 import { effectiveCode } from "@/lib/constants";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
@@ -67,6 +68,11 @@ function dueAlert(dueAt: string | null): { text: string; cls: string } | null {
   if (days < 0) return { text: "เกินกำหนด", cls: "bg-red-700 text-white hover:bg-red-700" };
   if (days <= 3) return { text: "ใกล้ครบกำหนด", cls: "bg-amber-600 text-white hover:bg-amber-600" };
   return null;
+}
+
+/** A borrowed KIT set: returning it unpacks it, so the row asks about contents, not condition. */
+function isKitRecord(r: OpenBorrow) {
+  return r.item.category.profile.code === "KIT";
 }
 
 function outstandingOf(r: OpenBorrow) {
@@ -180,7 +186,7 @@ export function ReturnLoanDetail({
   // and any damaged/lost count-return needs ≥1 overall photo.
   const missingEvidence =
     group.records.some(
-      (r) => r.subItem && selected.has(r.id) && cond(r.id) !== "AVAILABLE" && (rowPhotos[r.id]?.length ?? 0) === 0,
+      (r) => r.subItem && !isKitRecord(r) && selected.has(r.id) && cond(r.id) !== "AVAILABLE" && (rowPhotos[r.id]?.length ?? 0) === 0,
     ) || (countNeedsEvidence && proofs.length === 0);
   const canSave = !saving && !uploading && !missingEvidence && (hasTrackedAction || countActions.length > 0);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -208,7 +214,9 @@ export function ReturnLoanDetail({
         .map((r) => ({
           dispenseRecordId: r.id,
           subItemId: r.subItem!.id,
-          status: cond(r.id),
+          // A KIT set is handed back whole and ปกติ — the rule for borrowing one. The server
+          // ignores this for kits, but sending the real value keeps the payload honest.
+          status: isKitRecord(r) ? ("AVAILABLE" as ReturnCondition) : cond(r.id),
           note: rowNotes[r.id]?.trim() || undefined,
           photos: rowPhotos[r.id]?.length ? rowPhotos[r.id] : undefined,
         }));
@@ -552,12 +560,17 @@ function TrackedRows({
                   {r.subItem!.name && <p className="text-sm truncate">{r.subItem!.name}</p>}
                   <span className="font-mono text-xs text-muted-foreground truncate">{effectiveCode(code, r.subItem!.subCode, r.item._count.subItems)}</span>
                 </div>
-                {isSel && (
+                {isSel && !isKitRecord(r) && (
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded border", COND_CHIP[c].active)}>{condLabel}</span>
                 )}
                 <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isSel && "rotate-180")} />
               </button>
-              {isSel && (
+              {isSel && isKitRecord(r) && (
+                <div className="px-3 pb-3 pt-3 border-t border-border/60">
+                  <KitSetContentsPicker subItemId={r.subItem!.id} />
+                </div>
+              )}
+              {isSel && !isKitRecord(r) && (
                 <div className="px-3 pb-3 pt-3 space-y-2 border-t border-border/60">
                   <div className="flex flex-wrap gap-1.5">
                     {CONDITION_OPTIONS.map((o) => (
