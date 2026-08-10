@@ -141,6 +141,42 @@ export type AddToCartResult =
   | { ok: true; cartItem: CartItem }
   | { ok: false; reason: "no-sub" | "no-stock" };
 
+/** The row shape /api/dispense/items returns, as far as the cart cares. */
+export interface DispenseSearchItem {
+  id: string;
+  code: string;
+  name: string;
+  imageUrl: string | null;
+  availableQty: number;
+  trackIndividually: boolean;
+  issueUnit: { name: string };
+  category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+  lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
+  subItems: { id: string; subCode: string; condition: string | null }[];
+  location: { building: string; floor: string; room: string; detail: string | null } | null;
+}
+
+/** Flatten a search row into the shape buildCartItem wants. Shared so every screen that fills
+ *  the cart — the เบิก grid, ชุดประกอบ — starts from the same lots and the same location. */
+export function toDispenseableItem(item: DispenseSearchItem): DispenseableItem {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    imageUrl: item.imageUrl,
+    categoryName: item.category.name,
+    dispenseType: item.category.profile.dispenseType,
+    trackIndividually: item.trackIndividually,
+    issueUnit: item.issueUnit.name,
+    availableQty: item.availableQty,
+    location: item.location
+      ? { building: item.location.building, floor: item.location.floor, room: item.location.room, detail: item.location.detail }
+      : null,
+    lots: item.lots.map((l) => ({ id: l.id, lotNumber: l.lotNumber, expiryDate: l.expiryDate, remainingQty: l.remainingQty })),
+    subItems: item.subItems.map((s) => ({ id: s.id, subCode: s.subCode, condition: s.condition })),
+  };
+}
+
 /**
  * Build a cart line with smart defaults — same logic the dispense grid uses:
  *  - consumable with lots → FIFO lot (API returns lots sorted by expiry ASC)

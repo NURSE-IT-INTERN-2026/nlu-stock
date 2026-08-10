@@ -2,6 +2,7 @@
 
 import { MapPin, User2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { STATUS_LABELS } from "@/lib/constants";
 import { fmtDate, TH_DAY } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -22,18 +23,26 @@ export interface DistributionRow {
  * Dot + plain text, not a filled badge. A bordered pill outweighs the plain text of the
  * place name beside it, which puts the loudest thing in the row on the secondary column and
  * leaves the eye unsure what to read first. The dot keeps the colour cue — you can still
- * find the ว่าง rows at a glance — at a fraction of the weight.
+ * find the พร้อมใช้งาน rows at a glance — at a fraction of the weight.
  *
  * Exported because the สต็อกคงเหลือ card directly above renders the same three numbers,
  * summed instead of per-row — it imports this rather than keeping a parallel copy, so the
  * card and the table cannot drift into calling one quantity two different things.
+ *
+ * Words come from STATUS_LABELS, never from a literal here: every state below is an
+ * ItemStatus the rest of the app already names, and this file used to call AVAILABLE "ว่าง"
+ * while the tracked card two divs up called the same DB value "พร้อมใช้งาน". Only the dot
+ * stays local — STATUS_COLORS is hex for charts and STATUS_PILLS is a full pill, neither is
+ * a bg-* dot class.
  */
 export const STATE_META: Record<DistributionRow["state"], { label: string; dot: string }> = {
-  AVAILABLE: { label: "ว่าง", dot: "bg-success" },
-  IN_USE: { label: "ใช้งานอยู่", dot: "bg-chart-3" },
-  ON_LOAN: { label: "ถูกยืม", dot: "bg-primary" },
+  AVAILABLE: { label: STATUS_LABELS.AVAILABLE, dot: "bg-success" },
+  // Not only ItemStatus.IN_USE: for tracked items this bucket is "everything that isn't
+  // AVAILABLE or ON_LOAN" (lib/distribution.ts), so ส่งซ่อม/บำรุงรักษา pieces land here too.
+  IN_USE: { label: STATUS_LABELS.IN_USE, dot: "bg-chart-3" },
+  ON_LOAN: { label: STATUS_LABELS.ON_LOAN, dot: "bg-primary" },
   // Sitting in the storeroom but unusable — the reason the สถานะ column has to exist.
-  DAMAGED: { label: "ชำรุด", dot: "bg-warning" },
+  DAMAGED: { label: STATUS_LABELS.DAMAGED, dot: "bg-warning" },
 };
 
 export const distributionTotal = (rows: DistributionRow[]) => rows.reduce((sum, r) => sum + r.qty, 0);
@@ -63,7 +72,7 @@ export function DistributionTable({ rows, unit }: { rows: DistributionRow[]; uni
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/40 [&>th]:h-9 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+          <TableRow className="bg-muted/40">
             <TableHead className="px-3">สถานที่</TableHead>
             {/* สถานะ qualifies the place; จำนวน closes the row on the right edge, where a
                 column of numbers is easiest to compare down the page. */}

@@ -16,7 +16,7 @@ import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
  * ordinary row — staff decide for themselves which room is the real home by looking at the
  * numbers, so the table has no reason to bless one of them.
  *
- * Stock away from its registered location counts as ใช้งานอยู่, not ว่าง: a chair standing
+ * Stock away from its registered location counts as ถูกใช้งาน, not พร้อมใช้งาน: a chair standing
  * in a classroom is not something the next person can walk into the storeroom and draw.
  * Moving it back is an explicit act (คืนเข้าคลัง), which is exactly what makes it visible.
  */
@@ -134,7 +134,7 @@ async function trackedRows(itemId: string, homeLabel: string): Promise<Distribut
     if (GONE.has(s.status) || s.status === ItemStatus.ON_LOAN) continue;
     const label = s.location ? locationLabel(s.location) : homeLabel;
     // A piece in for repair still sits somewhere, but it is not stock anyone can use —
-    // group it with ใช้งานอยู่ rather than inflating the ว่าง count for that room.
+    // group it with ถูกใช้งาน rather than inflating the พร้อมใช้งาน count for that room.
     const state = s.status === ItemStatus.AVAILABLE ? "AVAILABLE" : "IN_USE";
     const key = `${label}|${state}`;
     const row = buckets.get(key);

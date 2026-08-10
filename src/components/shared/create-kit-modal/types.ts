@@ -1,4 +1,4 @@
-export type WizardStep = "kit-details" | "components" | "assemble";
+export type WizardStep = "kit-details" | "components" | "summary";
 
 export interface ComponentRow {
   componentItemId: string;
@@ -19,5 +19,5 @@ export interface KitFormState {
 export interface CreateKitModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (kit: { kitItemId: string; kitCode: string; assembledQty: number }) => void;
+  onCreated: (kit: { kitItemId: string; kitCode: string }) => void;
 }
