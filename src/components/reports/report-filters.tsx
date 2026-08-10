@@ -10,10 +10,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Layers, MapPin, Users, Activity, ListChecks,
   CalendarRange, Wrench, X, Boxes, Package, Beaker, Hammer,
-  Building2, Monitor, BookOpen, Puzzle, type LucideIcon,
+  Building2, Monitor, BookOpen, Puzzle, Search, type LucideIcon,
 } from "lucide-react";
 import { USAGE_TYPE_LABELS } from "@/lib/constants";
 import { fmtDate, TH_DATE } from "@/lib/format";
@@ -34,9 +35,11 @@ export interface FilterValues {
   categoryId?: string;
   locationId?: string;
   staffId?: string;
+  recipient?: string; // ออกจากคลัง: free-text ผู้รับ, contains-match (no id to select — it is typed at the cart)
   usageType?: string;
   status?: string;
   loanStatus?: string; // ออกจากคลัง: "open" | "overdue" (export only — the tab drives it via `status`)
+  kind?: string; // ออกจากคลัง: consume | borrow | inuse (export only — the segment drives it)
   year?: string;
   maintenanceType?: string;
   from?: string; // status-log previousStatus (export only — not rendered)
@@ -49,6 +52,8 @@ export interface FilterConfig {
   categories?: boolean;
   locations?: boolean;
   staff?: boolean;
+  /** Free-text ผู้รับ box. Placeholder differs per kind — ยืม borrows to a person, นำไปใช้งาน to a room. */
+  recipientSearch?: string;
   usageTypes?: boolean;
   statusOptions?: { value: string; label: string }[];
   year?: boolean;
@@ -77,7 +82,6 @@ interface ReportFiltersProps {
   values: FilterValues;
   onChange: (values: FilterValues) => void;
   actions?: ReactNode;
-  leading?: ReactNode;
 }
 
 interface Option {
@@ -121,7 +125,51 @@ function FilterSelect({
   );
 }
 
-export function ReportFilters({ config, values, onChange, actions, leading }: ReportFiltersProps) {
+/**
+ * ผู้รับ is typed free-hand at the cart, so it gets a search box rather than a select.
+ * Debounced: the tab refetches on every filter change and a keystroke-per-request would put
+ * one page-load of the whole ledger behind each letter.
+ */
+function FilterSearch({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  onCommit: (v: string) => void;
+}) {
+  const [text, setText] = useState(value);
+
+  // Re-sync when the value changes from outside (ล้างตัวกรอง, switching segment). Done during
+  // render, not in an effect: an effect would paint the stale text for a frame first.
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    setText(value);
+  }
+
+  useEffect(() => {
+    if (text === value) return;
+    const t = setTimeout(() => onCommit(text), 300);
+    return () => clearTimeout(t);
+  }, [text, value, onCommit]);
+
+  return (
+    <div className="relative w-full sm:w-[190px]">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="h-9 rounded-lg border-border bg-background pl-8 text-sm"
+      />
+    </div>
+  );
+}
+
+export function ReportFilters({ config, values, onChange, actions }: ReportFiltersProps) {
   const [categories, setCategories] = useState<CategoryLite[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [staff, setStaff] = useState<Option[]>([]);
@@ -149,7 +197,7 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
 
   const activeCount = [
     values.dateFrom, values.dateTo, values.profileId, values.categoryId,
-    values.locationId, values.staffId, values.usageType, values.status,
+    values.locationId, values.staffId, values.recipient, values.usageType, values.status,
     values.maintenanceType,
     values.year && values.year !== String(currentYear) ? values.year : undefined,
   ].filter(Boolean).length;
@@ -163,7 +211,6 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
   return (
     <div data-testid="report-filters" className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
-        {leading}
         {config.dateRange && (
           <div className="flex w-full items-center gap-1.5 sm:w-auto">
             <DatePicker
@@ -242,6 +289,14 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
               <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
             ))}
           </FilterSelect>
+        )}
+
+        {config.recipientSearch && (
+          <FilterSearch
+            value={values.recipient ?? ""}
+            placeholder={config.recipientSearch}
+            onCommit={(v) => onChange({ ...values, recipient: v.trim() || undefined })}
+          />
         )}
 
         {config.usageTypes && (

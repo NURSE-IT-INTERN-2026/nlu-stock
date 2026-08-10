@@ -19,7 +19,7 @@ import { usePageHeader } from "@/components/layout/page-header-context";
 // เรียงตาม tab ที่มีข้อมูลจริงก่อน — ออกจากคลังคือสิ่งที่เกิดขึ้นทุกวัน ส่วนมูลค่า/ค่าใช้จ่าย
 // รอให้มีคนกรอกราคาก่อนถึงจะมีอะไรให้อ่าน. `hint` คือประโยคเดียวที่บอกว่า tab นี้ตอบคำถามอะไร.
 const TABS = [
-  { value: "dispense-history", label: "ออกจากคลัง", hint: "ของที่จ่ายออกไปแล้ว ใครเอาไป คืนหรือยัง", icon: ShoppingCart, component: StockOutTab },
+  { value: "dispense-history", label: "ออกจากคลัง", hint: "ของที่จ่ายออกไปแล้ว — เลือกดูทีละชนิด: เบิกใช้ / ยืม / นำไปใช้งาน", icon: ShoppingCart, component: StockOutTab },
   { value: "receive-history", label: "เข้าคลัง", hint: "ของที่รับเข้าและคืนกลับเข้าคลัง", icon: ArrowDownToLine, component: ReceiveHistoryTab },
   { value: "usage-by-subject", label: "สถิติการใช้งาน", hint: "เบิกไปใช้กับวิชาหรือกิจกรรมไหน", icon: BookOpen, component: UsageBySubjectTab },
   { value: "damaged-assets", label: "ชำรุด & ส่งซ่อม", hint: "ตอนนี้อะไรพังอยู่ พังเพราะอะไร ซ่อมที่ไหน", icon: Wrench, component: DamagedAssetsTab },

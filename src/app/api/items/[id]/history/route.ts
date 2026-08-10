@@ -4,7 +4,8 @@ import {
   ADJUSTMENT_REASON_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
   USAGE_TYPE_LABELS, RETURN_CONDITION_LABELS, type TimelineEventType,
 } from "@/lib/constants";
-import { isLoanEdge } from "@/lib/returns";
+import { isDuplicateOfLoanRow } from "@/lib/returns";
+import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 
 // A history row as the table renders it: what happened, how much stock moved (signed,
@@ -30,6 +31,18 @@ type TimelineEvent = {
 
 const joinNotes = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
 
+// ยืม/นำไปใช้งาน rows say what left the store but not whether it is still out — the same row
+// reads identically whether the 5 pieces came back in July or are three weeks overdue. The
+// numbers are already on the DispenseRecord (quantity vs resolvedQty, dueAt), so this is the
+// one thing the row was missing.
+const loanStatus = (r: { quantity: number; resolvedQty: number; dueAt: Date | null }, unit: string) => {
+  const owed = r.quantity - r.resolvedQty;
+  if (owed <= 0) return "คืนครบแล้ว";
+  const due = r.dueAt ? ` · กำหนดคืน ${fmtDate(r.dueAt, TH_DATE)}` : "";
+  const late = r.dueAt && r.dueAt < new Date() ? "เกินกำหนด · " : "";
+  return `${late}ค้าง ${owed} ${unit}${due}`;
+};
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -40,13 +53,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     select: {
       id: true,
       issueUnit: { select: { name: true } },
-      category: { select: { profile: { select: { dispenseType: true } } } },
+      category: { select: { profile: { select: { code: true, dispenseType: true } } } },
     },
   });
   if (!item) return notFound("Item not found");
 
   const unit = item.issueUnit.name;
   const isConsumable = item.category.profile?.dispenseType === "CONSUMABLE";
+  const isKit = item.category.profile?.code === "KIT";
 
   const searchParams = getSearchParams(request);
   const { page, perPage, skip, take } = paginate(searchParams);
@@ -99,13 +113,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               ? r.notes.trim()
               : (r.usageType ? USAGE_TYPE_LABELS[r.usageType] : null) ?? "นำออกจากคลัง",
             detail: joinNotes(
+              // Leads the line: on a ยืม row "ค้าง 5 ชิ้น" is the thing worth scanning, and
+              // a consumable never comes back so it gets no status at all.
+              isConsumable ? null : loanStatus(r, unit),
               r.usageNote,
               r.recipient ? `ผู้รับ ${r.recipient}` : null,
               place ? `ห้องที่ตั้ง ${place}` : null,
               r.usageType === "OTHER" ? null : r.notes,
             ),
             user: r.staff.name,
-            details: { quantity: r.quantity, usageType: r.usageType, returnedAt: r.returnedAt, loanType: r.loanType },
+            details: {
+              quantity: r.quantity, usageType: r.usageType, returnedAt: r.returnedAt, loanType: r.loanType,
+              resolvedQty: r.resolvedQty, dueAt: r.dueAt,
+            },
           });
         }
       })
@@ -202,19 +222,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { changedAt: "desc" },
     }).then((records) => {
       for (const r of records) {
-        // Loan transitions belong to the เบิก/รับคืน rows, both ways — see isLoanEdge.
-        if (!lost && isLoanEdge(r)) continue;
+        // Loan transitions belong to the เบิก/รับคืน rows, both ways — see isDuplicateOfLoanRow.
+        if (!lost && isDuplicateOfLoanRow(r)) continue;
+        // A birth certificate, not a transition: ประกอบชุด logs AVAILABLE → AVAILABLE because
+        // the set did not exist a moment earlier. "พร้อมใช้งาน → พร้อมใช้งาน" describes
+        // nothing, so the reason — which names the set — becomes the headline.
+        const sameStatus = r.previousStatus === r.newStatus;
+        // A kit set is retired by ยกเลิกชุด, which hands its durables back. DISPOSED is the
+        // right row in the database and the wrong word on the screen: nothing was written off.
+        const to = isKit && r.newStatus === "DISPOSED" ? "ยกเลิกชุด" : (STATUS_LABELS[r.newStatus] ?? r.newStatus);
         events.push({
           id: r.id,
           type: "STATUS_CHANGE",
           date: r.changedAt,
           delta: null,
           qty: null,
-          note: `${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABELS[r.newStatus] ?? r.newStatus}`,
+          note: sameStatus
+            ? (r.reason ?? STATUS_LABELS[r.newStatus] ?? r.newStatus)
+            : `${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${to}`,
           detail: joinNotes(
             r.repairVenue && r.newStatus === "UNDER_REPAIR" ? `ส่งซ่อม${r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}` : null,
             r.damageNote,
-            r.reason,
+            // The headline already is the reason in that case — printing it twice is noise.
+            sameStatus ? null : r.reason,
           ),
           user: r.changer.name,
           details: lost

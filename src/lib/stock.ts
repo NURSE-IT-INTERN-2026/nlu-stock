@@ -156,8 +156,11 @@ export async function recomputeItemCounts(
   }
 
   // Tracked: one query for all sub-item statuses, then derive counts + status in JS.
-  const subs = await tx.subItem.findMany({ where: { itemId }, select: { status: true } });
-  const availableQty = subs.filter((s) => s.status === ItemStatus.AVAILABLE).length;
+  const subs = await tx.subItem.findMany({ where: { itemId }, select: { status: true, needsCheck: true } });
+  // needsCheck is a KIT set waiting for someone to confirm its contents — it is on the shelf
+  // but cannot be lent, so counting it as พร้อมใช้ would make the number disagree with the
+  // ยืม button. Every other kind of sub-item holds false forever, so this narrows nothing else.
+  const availableQty = subs.filter((s) => s.status === ItemStatus.AVAILABLE && !s.needsCheck).length;
   const totalQty = subs.filter((s) => s.status !== ItemStatus.DISPOSED).length;
   const status = deriveStatusFromSubItems(subs.map((s) => s.status));
 

@@ -12,6 +12,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { cn } from "@/lib/utils";
 
 export interface Column<T> {
   key: string;
@@ -26,6 +27,8 @@ interface ReportDataTableProps<T> {
   loading?: boolean;
   pageSize?: number;
   emptyMessage?: string;
+  /** Optional — makes each row a button opening a detail view. Desktop + mobile alike. */
+  onRowClick?: (row: T) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,12 +38,34 @@ export function ReportDataTable<T extends Record<string, any>>({
   loading,
   pageSize = PAGE_SIZE.DEFAULT,
   emptyMessage = "ไม่พบข้อมูล",
+  onRowClick,
 }: ReportDataTableProps<T>) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
   const currentPage = Math.min(page, totalPages);
 
   const paged = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Rows open a detail view, so they have to answer the keyboard too — a click handler on a
+  // <tr>/<div> is invisible to Tab and Enter on its own.
+  const rowProps = (row: T) =>
+    onRowClick
+      ? {
+          role: "button" as const,
+          tabIndex: 0,
+          onClick: () => onRowClick(row),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onRowClick(row);
+            }
+          },
+        }
+      : {};
+  // select-none: on touch, a tap that drifts a pixel selects the row's text instead of opening it.
+  const rowCls = onRowClick
+    ? "cursor-pointer select-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+    : "";
 
   if (loading) {
     return (
@@ -68,7 +93,7 @@ export function ReportDataTable<T extends Record<string, any>>({
       <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+            <TableRow>
               {columns.map((col) => (
                 <TableHead key={col.key} className={`px-2 ${col.className ?? ""}`}>
                   {col.header}
@@ -78,7 +103,7 @@ export function ReportDataTable<T extends Record<string, any>>({
           </TableHeader>
           <TableBody>
             {paged.map((row, i) => (
-              <TableRow key={i} className="h-9 [&>td]:py-1">
+              <TableRow key={i} className={cn(rowCls)} {...rowProps(row)}>
                 {columns.map((col) => (
                   <TableCell key={col.key} className={`px-2 ${col.className ?? ""}`}>
                     {col.render
@@ -95,7 +120,7 @@ export function ReportDataTable<T extends Record<string, any>>({
       {/* Mobile: stacked label→value cards (no horizontal scroll) */}
       <div className="divide-y divide-border md:hidden">
         {paged.map((row, i) => (
-          <div key={i} className="space-y-1 px-4 py-2.5">
+          <div key={i} className={cn("space-y-1 px-4 py-2.5", rowCls)} {...rowProps(row)}>
             {columns.map((col) => {
               const value = col.render ? col.render(row) : (row[col.key] as React.ReactNode) ?? "—";
               return (

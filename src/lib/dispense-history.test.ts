@@ -2,7 +2,7 @@
 // Two rules meet here, and both fail silently rather than loudly when broken: a duplicated
 // row just looks like sloppy data, and a swallowed row looks like the event never happened.
 import assert from "node:assert";
-import { isLoanEdge, returnLocationUpdate } from "@/lib/returns";
+import { isDuplicateOfLoanRow, isLoanEdge, returnLocationUpdate } from "@/lib/returns";
 import { dispenseRequestSchema } from "@/lib/validators/dispense";
 import type { ItemStatus } from "@/generated/prisma/enums";
 
@@ -25,6 +25,12 @@ assert.equal(isLoanEdge({ previousStatus: "UNDER_REPAIR", newStatus: "AVAILABLE"
 assert.equal(isLoanEdge({ previousStatus: "AVAILABLE", newStatus: "LOST" }), false, "แจ้งสูญหายต้องขึ้นประวัติ");
 assert.equal(isLoanEdge({ previousStatus: "LOST", newStatus: "AVAILABLE" }), false, "เรียกคืนของหายต้องขึ้นประวัติ");
 assert.equal(isLoanEdge({ previousStatus: "AVAILABLE", newStatus: "DISPOSED" }), false, "ตัดจำหน่ายต้องขึ้นประวัติ");
+
+// ── Returning a KIT set retires it. The รับคืน row says the set came back and nothing more,
+// so the DISPOSED log is the only line saying the copy is gone — it survives the filter. ──
+assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "DISPOSED" }), false, "ชิ้นที่ออกจากชุดต้องขึ้นประวัติ");
+assert.equal(isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "DISPOSED" }), false, "ยกเลิกชุดต้องขึ้นประวัติ");
+assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "AVAILABLE" }), true, "คืนปกติยังซ้ำกับแถวรับคืน");
 
 // ── กิจกรรม / อื่นๆ never file without the free-text line ──
 // The label alone is not an answer; the text under it is the whole reason those two exist.

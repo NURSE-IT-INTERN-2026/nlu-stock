@@ -100,8 +100,9 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         issueUnit: { connect: { id: issueUnit.id } },
         minThreshold: parseInt(row.minThreshold) || 0,
         location: location ? { connect: { id: location.id } } : undefined,
-        // Stock: count/consumable types (DUR/CON/KIT) take qty from the row;
-        // item-types (KRU/ELE/BAT) stay 0 — sub-items import reconciles them.
+        // Stock: count/consumable types (DUR/CON) take qty from the row;
+        // item-types (KRU/ELE/BAT/KIT) stay 0 — sub-items import reconciles them,
+        // and a KIT row is a recipe whose sets only exist once someone assembles them.
         totalQty: trackIndividually ? 0 : qty,
         availableQty: trackIndividually ? 0 : qty,
         setSize: parseOptionalInt(row.setSize) ?? 1,

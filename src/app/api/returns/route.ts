@@ -21,7 +21,7 @@ const ITEM_INCLUDE = {
       name: true,
       imageUrl: true,
       issueUnit: { select: { name: true } },
-      category: { select: { name: true, profile: { select: { dispenseType: true } } } },
+      category: { select: { name: true, profile: { select: { code: true, dispenseType: true } } } },
       location: { select: { building: true, floor: true, room: true, detail: true } },
       _count: { select: { subItems: true } },
     },
@@ -83,7 +83,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No entries" }, { status: 400 });
   }
 
-  type Entry = { dispenseRecordId: string; subItemId: string; status: ReturnCondition; note?: string; photos?: string[] };
+  type Entry = {
+    dispenseRecordId: string;
+    subItemId: string;
+    status: ReturnCondition;
+    note?: string;
+    photos?: string[];
+  };
   const entries: Entry[] = [];
   for (const e of rawEntries) {
     if (!e?.dispenseRecordId || !e?.subItemId) {
@@ -114,6 +120,10 @@ export async function POST(req: NextRequest) {
         const rowNote = [overallNote, e.note].filter(Boolean).join(" · ") || null;
         // Per-entry evidence (when damaged/lost) stamps this dispense record.
         const entryProofs = [...(proofUrls ?? []), ...(e.photos ?? [])];
+
+        // A KIT set has no branch here on purpose: a set comes back as a set, the box is not
+        // opened at the counter, and its contents are untouched. It returns exactly like any
+        // other tracked piece — and lands รอตรวจ, which api/dispense stamped on the way out.
 
         // A damaged return lands on ชำรุด and stops there. It does NOT jump to ส่งซ่อม:
         // sending for repair is a separate decision that has to capture ภายใน/ภายนอก and

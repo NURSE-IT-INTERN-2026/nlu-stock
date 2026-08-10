@@ -2,11 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 import { NextRequest, NextResponse } from "next/server";
-import { USAGE_TYPE_LABELS } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, locationLabel } from "@/lib/constants";
+import { parseDispenseKind } from "@/lib/dispense-kind";
+import { kindWhere, kindSql } from "@/lib/dispense-kind-where";
 import type { UsageType } from "@/generated/prisma/enums";
 
 /**
- * ประวัติการเบิก — paginated by LOAN EVENT, not by row.
+ * ประวัติการออกจากคลัง — paginated by LOAN EVENT, not by row.
  *
  * One borrow is several DispenseRecord rows sharing a loanGroupId, and the tab renders them
  * as a single card with "คืนบางส่วน 6/13" summed across the rows. Paging raw rows split those
@@ -21,17 +23,13 @@ import type { UsageType } from "@/generated/prisma/enums";
  *
  * `loanStatus=open|overdue` narrows the same page to loans still owed back — this is what the
  * separate ยืมค้าง tab used to be, folded in here so the two cannot disagree about which loans
- * are outstanding. `summary` is always computed over the unfiltered set so the counters keep
- * reading the same whichever status is selected.
+ * are outstanding. `summary` is computed over the whole kind, ignoring loanStatus, so the
+ * counters keep reading the same whichever status is selected.
+ *
+ * `kind=consume|borrow|inuse` (default consume) picks WHICH of the three events this is a
+ * report of — see lib/dispense-kind. Every query below is filtered by it, including the raw
+ * one, because a page counted over one set and fetched over another reads as missing rows.
  */
-
-// รายการที่มีคนต้องเอามาคืน. นำไปใช้งาน (INUSE) ไม่มีกำหนดคืนและไม่มีใครต้องตาม — มันกลับเข้าคลัง
-// ทางคืนเข้าคลัง. loanType null = ของเก่าก่อนมีคอลัมน์นี้ ถือเป็น BORROW.
-const OWED_BACK: Prisma.DispenseRecordWhereInput = {
-  returnedAt: null,
-  item: { category: { profile: { dispenseType: { in: ["COUNT", "ITEM"] } } } },
-  OR: [{ loanType: null }, { loanType: "BORROW" }],
-};
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -46,8 +44,12 @@ export async function GET(request: NextRequest) {
     const staffId = params.get("staffId") || undefined;
     const usageType = params.get("usageType") || undefined;
     const loanStatus = params.get("loanStatus") || undefined; // "open" | "overdue"
+    // ผู้รับ is free text typed at the cart, so this is a contains-match, not an id. Trimmed
+    // because a stray space makes an otherwise-matching search return nothing.
+    const recipient = params.get("recipient")?.trim() || undefined;
+    const kind = parseDispenseKind(params.get("kind"));
 
-    const where: Prisma.DispenseRecordWhereInput = {};
+    const where: Prisma.DispenseRecordWhereInput = { ...kindWhere(kind) };
     if (dateFrom || dateTo) {
       where.dispensedAt = {
         ...(dateFrom && { gte: new Date(dateFrom) }),
@@ -57,33 +59,43 @@ export async function GET(request: NextRequest) {
     if (itemId) where.itemId = itemId;
     if (staffId) where.staffId = staffId;
     if (usageType) where.usageType = usageType as UsageType;
+    if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
 
     // Same filters as the Prisma `where` above, for the raw grouping query. Kept adjacent so
     // the two cannot drift: a filter added to one and not the other pages over a different
     // set than it fetches, which reads as rows silently vanishing.
-    const conds: Prisma.Sql[] = [];
+    const conds: Prisma.Sql[] = [kindSql(kind)];
     if (dateFrom) conds.push(Prisma.sql`"dispensedAt" >= ${new Date(dateFrom)}`);
     if (dateTo) conds.push(Prisma.sql`"dispensedAt" <= ${new Date(dateTo + "T23:59:59")}`);
     if (itemId) conds.push(Prisma.sql`"itemId" = ${itemId}`);
     if (staffId) conds.push(Prisma.sql`"staffId" = ${staffId}`);
     if (usageType) conds.push(Prisma.sql`"usageType"::text = ${usageType}`);
-    const whereSql = conds.length > 0 ? Prisma.sql`WHERE ${Prisma.join(conds, " AND ")}` : Prisma.empty;
+    if (recipient) conds.push(Prisma.sql`"recipient" ILIKE ${`%${recipient}%`}`);
+    // kindSql always contributes one, so conds is never empty.
+    const whereSql = Prisma.sql`WHERE ${Prisma.join(conds, " AND ")}`;
 
-    // Step 0 — the loans still owed back inside the same filters. Bounded by how much stock is
-    // out at once, so pulling the whole set is cheap; it feeds both the summary counters and,
-    // when loanStatus is set, the list of keys the page is allowed to show.
-    const owed = await prisma.dispenseRecord.findMany({
-      where: { AND: [where, OWED_BACK] },
+    // Step 0 — what is still out, inside the same filters: unreturned loans for borrow,
+    // stock still sitting in a room for inuse. Bounded by how much stock is out at once, so
+    // pulling the whole set is cheap; it feeds both the summary counters and, when
+    // loanStatus is set, the list of keys the page is allowed to show.
+    //
+    // Skipped for เบิกใช้: a consumable's returnedAt stays null forever, so "still out" would
+    // match every row ever written and mean nothing. Its summary counts units instead.
+    const owed = kind === "consume" ? [] : await prisma.dispenseRecord.findMany({
+      where: { ...where, returnedAt: null },
       select: { id: true, loanGroupId: true, quantity: true, resolvedQty: true, dueAt: true },
     });
 
     const now = new Date();
     const openKeys = new Set<string>();
     const overdueKeys = new Set<string>();
+    let openUnits = 0;
     let overdueUnits = 0;
     for (const r of owed) {
       const key = r.loanGroupId ?? r.id;
       openKeys.add(key);
+      openUnits += r.quantity - r.resolvedQty;
+      // นำไปใช้งาน has no dueAt by construction, so overdue stays 0 there on its own.
       if (r.dueAt && r.dueAt < now) {
         overdueKeys.add(key);
         overdueUnits += r.quantity - r.resolvedQty;
@@ -98,13 +110,13 @@ export async function GET(request: NextRequest) {
     // ANY('{}') matches nothing, which is the right answer for "ยังไม่คืน" with none outstanding.
     const pageWhereSql = restrictKeys === null
       ? whereSql
-      : Prisma.sql`${conds.length > 0 ? Prisma.sql`WHERE ${Prisma.join(conds, " AND ")} AND` : Prisma.sql`WHERE`} COALESCE("loanGroupId", id) = ANY(${restrictKeys})`;
+      : Prisma.sql`${whereSql} AND COALESCE("loanGroupId", id) = ANY(${restrictKeys})`;
 
     // Step 1 — the page of loan events. Ordered by when the event happened, with the key as
     // a tiebreaker: rows of one dispense share a timestamp to the millisecond, so without it
     // Postgres is free to order ties differently per query and a row could appear on two
     // pages or none.
-    const [keyRows, totalRows] = await Promise.all([
+    const [keyRows, totalRows, unitsAgg] = await Promise.all([
       prisma.$queryRaw<{ key: string }[]>`
         SELECT COALESCE("loanGroupId", id) AS key, MAX("dispensedAt") AS at
         FROM dispense_records
@@ -121,6 +133,8 @@ export async function GET(request: NextRequest) {
           GROUP BY COALESCE("loanGroupId", id)
         ) g
       `,
+      // หน่วยที่จ่ายออก — the number เบิกใช้ is actually about. Counted over rows, not events.
+      prisma.dispenseRecord.aggregate({ _sum: { quantity: true }, where }),
     ]);
 
     const keys = keyRows.map((r) => r.key);
@@ -131,15 +145,18 @@ export async function GET(request: NextRequest) {
 
     // Step 2 — every row of those events. The key is loanGroupId when set and the row's own
     // id when not, so matching it takes both arms.
+    //
+    // AND, not a spread: `where` carries the kind's own OR (loanType null|BORROW) and a
+    // second OR key would overwrite it, quietly widening the page back to every kind.
     const records = keys.length === 0 ? [] : await prisma.dispenseRecord.findMany({
       where: {
-        ...where,
-        OR: [{ loanGroupId: { in: keys } }, { loanGroupId: null, id: { in: keys } }],
+        AND: [where, { OR: [{ loanGroupId: { in: keys } }, { loanGroupId: null, id: { in: keys } }] }],
       },
       include: {
-        item: { select: { code: true, name: true, category: { select: { profile: { select: { dispenseType: true } } } } } },
+        item: { select: { code: true, name: true } },
         staff: { select: { name: true } },
         lot: { select: { lotNumber: true } },
+        location: { select: { building: true, floor: true, room: true, detail: true } },
       },
       orderBy: [{ dispensedAt: "desc" }, { id: "desc" }],
     });
@@ -152,6 +169,10 @@ export async function GET(request: NextRequest) {
       resolvedQty: r.resolvedQty,
       staffName: r.staff.name,
       usageTypeLabel: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
+      // Collected on every เบิก (cart asks for รายวิชา / ระบุกิจกรรม) but never surfaced in a
+      // report until the detail dialog. Event-level fields — the cart posts one per dispense.
+      courseCode: r.courseCode,
+      usageNote: r.usageNote,
       lotNumber: r.lot?.lotNumber ?? "—",
       dispensedAt: r.dispensedAt.toISOString(),
       dueAt: r.dueAt?.toISOString() ?? null,
@@ -160,9 +181,9 @@ export async function GET(request: NextRequest) {
       returnCondition: r.returnCondition,
       loanGroupId: r.loanGroupId,
       recipient: r.recipient ?? null,
-      // เบิกใช้แล้วทิ้ง (CONSUMABLE) never comes back — returnedAt stays null forever, so it
-      // must not render as an unresolved "loan group" alongside real borrows/INUSE.
-      isLoanable: r.item.category.profile?.dispenseType !== "CONSUMABLE",
+      // นำไปใช้งาน only — where the stock was placed. Rows written before the location was
+      // mandatory have none; say so rather than render an empty cell.
+      location: r.location ? locationLabel(r.location) : null,
     }));
 
     // total counts loan events, so the tab must not label it "records" — see the footer.
@@ -173,7 +194,9 @@ export async function GET(request: NextRequest) {
       total,
       summary: {
         events: totalAll,
+        units: unitsAgg._sum.quantity ?? 0,
         openEvents: openKeys.size,
+        openUnits,
         overdueEvents: overdueKeys.size,
         overdueUnits,
       },
