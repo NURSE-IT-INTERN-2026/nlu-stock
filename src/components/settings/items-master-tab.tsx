@@ -203,8 +203,8 @@ export function ItemsMasterTab() {
       <div className="rounded-2xl border bg-card shadow-sm flex flex-col md:overflow-clip">
         <div className="hidden md:block">
         <Table className="table-fixed">
-          <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+          <TableHeader sticky>
+            <TableRow>
               <TableHead className="w-[48px] pl-4">
                 <Checkbox
                   checked={items.length > 0 && items.every((i) => selectedIds.has(i.id))}
@@ -249,7 +249,7 @@ export function ItemsMasterTab() {
             ) : items.map((item) => (
               <React.Fragment key={item.id}>
                 <TableRow
-                  className={`group h-9 [&>td]:py-1 ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                  className={`group ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
                   onClick={(e) => {
                     if (!(e.target as HTMLElement).closest("input[type='checkbox'], button, a")) {
                       if (item.trackIndividually && item._count.subItems > 1) {

@@ -144,12 +144,12 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[170px] text-xs text-muted-foreground">วันที่</TableHead>
-              <TableHead className="text-xs text-muted-foreground">รายการ</TableHead>
-              <TableHead className="w-[80px] text-right text-xs text-muted-foreground">จำนวน</TableHead>
-              <TableHead className="text-xs text-muted-foreground">สาเหตุ/หมายเหตุ</TableHead>
-              <TableHead className="w-[160px] text-xs text-muted-foreground">ผู้บันทึก</TableHead>
-              <TableHead className="w-[120px] text-right text-xs text-muted-foreground">เรียกคืน</TableHead>
+              <TableHead className="w-[170px]">วันที่</TableHead>
+              <TableHead>รายการ</TableHead>
+              <TableHead className="w-[80px] text-right">จำนวน</TableHead>
+              <TableHead>สาเหตุ/หมายเหตุ</TableHead>
+              <TableHead className="w-[160px]">ผู้บันทึก</TableHead>
+              <TableHead className="w-[120px] text-right">เรียกคืน</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
