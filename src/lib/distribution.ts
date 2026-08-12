@@ -25,7 +25,16 @@ export type DistributionRow = {
   kind: "location" | "borrower";
   label: string;
   qty: number;
-  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "DAMAGED";
+  /**
+   * The same five buckets USAGE_STATUS_ORDER renders, so the สต็อกคงเหลือ card and the
+   * สัดส่วนการใช้งาน card cannot disagree about which states exist.
+   *
+   * It used to be four, with ส่งซ่อม folded into ถูกใช้งาน — that made ถูกใช้งาน mean
+   * "not available, reason unstated" and hid the one state staff act on. PENDING_MAINTENANCE
+   * is deliberately NOT here (see USAGE_STATUS_ORDER in lib/constants.ts for the three
+   * checks that proved nothing can set it); it falls back to IN_USE below.
+   */
+  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "UNDER_REPAIR" | "DAMAGED";
   /** Loan rows only — when it went out, so ของค้างนาน is visible at a glance. */
   since?: Date;
   dueAt?: Date | null;
@@ -39,6 +48,20 @@ export type DistributionRow = {
 
 /** Rows a piece/qty in these statuses never contributes: it isn't anywhere anymore. */
 const GONE: ReadonlySet<ItemStatus> = new Set([ItemStatus.DISPOSED, ItemStatus.LOST]);
+
+/**
+ * SubItem.status → row state. Only the statuses that earn their own row are listed; anything
+ * else falls back to ถูกใช้งาน, which is the honest default for "the piece exists, it is
+ * somewhere, it is not on the shelf". That fallback is what keeps the column adding up:
+ * PENDING_MAINTENANCE (unreachable today) and any status added later still contribute their
+ * qty instead of vanishing from a total the card prints as fact.
+ * ON_LOAN is absent on purpose — trackedRows skips those, the borrower rows own them.
+ */
+const SUB_ITEM_STATE: Partial<Record<ItemStatus, DistributionRow["state"]>> = {
+  [ItemStatus.AVAILABLE]: "AVAILABLE",
+  [ItemStatus.UNDER_REPAIR]: "UNDER_REPAIR",
+  [ItemStatus.DAMAGED]: "DAMAGED",
+};
 
 export async function getItemDistribution(itemId: string): Promise<DistributionRow[]> {
   const item = await prisma.item.findUnique({
@@ -133,9 +156,9 @@ async function trackedRows(itemId: string, homeLabel: string): Promise<Distribut
   for (const s of subs) {
     if (GONE.has(s.status) || s.status === ItemStatus.ON_LOAN) continue;
     const label = s.location ? locationLabel(s.location) : homeLabel;
-    // A piece in for repair still sits somewhere, but it is not stock anyone can use —
-    // group it with ถูกใช้งาน rather than inflating the พร้อมใช้งาน count for that room.
-    const state = s.status === ItemStatus.AVAILABLE ? "AVAILABLE" : "IN_USE";
+    // A piece in for repair still sits somewhere, but it is not stock anyone can use — it
+    // gets its own state rather than inflating either พร้อมใช้งาน or ถูกใช้งาน for that room.
+    const state = SUB_ITEM_STATE[s.status] ?? "IN_USE";
     const key = `${label}|${state}`;
     const row = buckets.get(key);
     if (row) row.qty += 1;

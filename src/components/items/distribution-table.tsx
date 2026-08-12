@@ -13,7 +13,7 @@ export interface DistributionRow {
   // Mirrors DistributionRow["state"] in lib/distribution.ts. Kept separate because the
   // server type carries Date and this one sees the JSON-serialised strings — add new
   // states to both.
-  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "DAMAGED";
+  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "UNDER_REPAIR" | "DAMAGED";
   since?: string | null;
   dueAt?: string | null;
   unlocated?: boolean;
@@ -25,9 +25,9 @@ export interface DistributionRow {
  * leaves the eye unsure what to read first. The dot keeps the colour cue — you can still
  * find the พร้อมใช้งาน rows at a glance — at a fraction of the weight.
  *
- * Exported because the สต็อกคงเหลือ card directly above renders the same three numbers,
- * summed instead of per-row — it imports this rather than keeping a parallel copy, so the
- * card and the table cannot drift into calling one quantity two different things.
+ * Exported because the สต็อกคงเหลือ card directly above renders the same numbers, summed
+ * instead of per-row — it imports this rather than keeping a parallel copy, so the card and
+ * the table cannot drift into calling one quantity two different things.
  *
  * Words come from STATUS_LABELS, never from a literal here: every state below is an
  * ItemStatus the rest of the app already names, and this file used to call AVAILABLE "ว่าง"
@@ -37,10 +37,12 @@ export interface DistributionRow {
  */
 export const STATE_META: Record<DistributionRow["state"], { label: string; dot: string }> = {
   AVAILABLE: { label: STATUS_LABELS.AVAILABLE, dot: "bg-success" },
-  // Not only ItemStatus.IN_USE: for tracked items this bucket is "everything that isn't
-  // AVAILABLE or ON_LOAN" (lib/distribution.ts), so ส่งซ่อม/บำรุงรักษา pieces land here too.
+  // Stock that is out doing its job — plus, by fallback, any status without a row of its
+  // own (lib/distribution.ts SUB_ITEM_STATE). ส่งซ่อม used to be folded in here too, which
+  // made this row mean "not available, reason unstated"; it has its own row now.
   IN_USE: { label: STATUS_LABELS.IN_USE, dot: "bg-chart-3" },
   ON_LOAN: { label: STATUS_LABELS.ON_LOAN, dot: "bg-primary" },
+  UNDER_REPAIR: { label: STATUS_LABELS.UNDER_REPAIR, dot: "bg-chart-4" },
   // Sitting in the storeroom but unusable — the reason the สถานะ column has to exist.
   DAMAGED: { label: STATUS_LABELS.DAMAGED, dot: "bg-warning" },
 };

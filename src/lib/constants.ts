@@ -166,9 +166,34 @@ export const STATUS_VARIANTS = {
   PENDING_MAINTENANCE: "secondary",
 } satisfies Record<ItemStatus, "default" | "secondary" | "destructive" | "outline">;
 
-// The six statuses shown in the "สัดส่วนการใช้งาน" breakdown. LOST/DISPOSED are written
-// off — never counted, never rendered. Every one of the six renders even at count 0.
-export const USAGE_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "PENDING_MAINTENANCE", "UNDER_REPAIR", "DAMAGED"] as const;
+/**
+ * The statuses shown in the "สัดส่วนการใช้งาน" / สต็อกคงเหลือ breakdowns, in display order.
+ * Every one of them renders even at count 0 — a missing row reads as "not applicable"
+ * rather than "none", so the reader can tell an empty bucket from a bucket that does not
+ * exist for this item.
+ *
+ * LOST/DISPOSED are absent because they are written off: not counted in the total, not
+ * rendered. They still show in ประวัติสูญหาย and in the รายชิ้น legend below the breakdown.
+ *
+ * PENDING_MAINTENANCE is absent because NOTHING IN THE APP CAN SET IT. Three independent
+ * checks, all done 2026-08-12, all agreeing:
+ *   1. status-utils.ts ALLOWED_TRANSITIONS gives it an empty edge list AND no other status
+ *      names it as a target — the node is unreachable in both directions.
+ *   2. Every reference to it in src/ is a read path (label, colour, pill, this order,
+ *      a counter). There is no write anywhere.
+ *   3. api/items/[id]/maintenance accepts result: "AVAILABLE" | "DISPOSED" only, so even
+ *      the บำรุงรักษา flow cannot produce it.
+ * The service schedule is date-based (Item/SubItem.nextMaintenanceDate), not status-based:
+ * a machine due for its round stays พร้อมใช้งาน and is flagged by the date. So the row was
+ * permanently 0 — not "0 right now" but "0 by construction", which is exactly the kind of
+ * row that teaches staff to stop reading the card.
+ *
+ * To bring it back: give it edges in ALLOWED_TRANSITIONS, add a writer, then add the key
+ * here and to STATE_META + DistributionRow["state"] in distribution-table.tsx and
+ * lib/distribution.ts (SUB_ITEM_STATE). Until then it falls into ถูกใช้งาน, which keeps the
+ * columns adding up instead of silently dropping stock.
+ */
+export const USAGE_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "UNDER_REPAIR", "DAMAGED"] as const;
 
 // Non-tracked items (consumable / COUNT durable) have no per-unit lifecycle status —
 // their stock state derives from available/total. COUNT (ยืม-คืน) has a middle "on loan"

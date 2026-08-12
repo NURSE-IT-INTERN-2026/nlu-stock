@@ -31,7 +31,7 @@ import { canTransition } from "@/lib/status-utils";
 import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
-import type { OpenDamage } from "@/components/items/recover-damage-dialog";
+import type { OpenDamage } from "@/components/items/item-detail-overview";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
@@ -645,18 +645,21 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   // gap into ถูกยืม and hard-coding the other four to 0. That reads as a fact and was not one:
   // on NLU-DUR-003 it claimed 89 ถูกยืม when 5 were borrowed and 84 were stationed in rooms.
   // A pile has no per-piece status to count, but the open records do say where the stock went.
-  const byState = { AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, DAMAGED: 0 };
+  const byState: Record<DistributionRow["state"], number> = {
+    AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, UNDER_REPAIR: 0, DAMAGED: 0,
+  };
   for (const r of distribution ?? []) byState[r.state] += r.qty;
   // Whatever the records still don't account for. Every named state above is backed by open
   // rows — available qty, INUSE placements, open loans, open damage adjustments — so this
   // should be 0. Showing the remainder beats folding it into a state that would then be
   // overstated, and it is how a drift between totalQty and the ledgers becomes visible.
-  const unaccounted = Math.max(0, total - (byState.AVAILABLE + byState.IN_USE + byState.ON_LOAN + byState.DAMAGED));
+  const accounted = Object.values(byState).reduce((a, b) => a + b, 0);
+  const unaccounted = Math.max(0, total - accounted);
+  // All five render, zeros included — a missing row reads as "not applicable" instead of
+  // "none", and these are the same five rows StatusSummary shows for a tracked piece.
+  // Why five and not six: USAGE_STATUS_ORDER in lib/constants.ts, which owns the list.
   const segments = [
-    { key: "AVAILABLE", ...STATE_META.AVAILABLE, count: byState.AVAILABLE },
-    { key: "IN_USE", ...STATE_META.IN_USE, count: byState.IN_USE },
-    { key: "ON_LOAN", ...STATE_META.ON_LOAN, count: byState.ON_LOAN },
-    ...(byState.DAMAGED > 0 ? [{ key: "DAMAGED", ...STATE_META.DAMAGED, count: byState.DAMAGED }] : []),
+    ...USAGE_STATUS_ORDER.map((key) => ({ key, ...STATE_META[key], count: byState[key] })),
     ...(unaccounted > 0
       ? [{ key: "OTHER", label: "ไม่ระบุ", dot: "bg-muted-foreground/40", count: unaccounted }]
       : []),
@@ -727,17 +730,23 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
         <div className="mt-1.5 text-[11px] text-muted-foreground">จำนวนขั้นต่ำ <span className="text-destructive font-medium tabular-nums">{minThreshold} {unit}</span></div>
       )}
 
-      {/* Two columns, so three or four states stay visible at half the height and the hero
-          row does not tower over the title column beside it. Unit is in the header line. */}
+      {/* Two columns, so five or six states stay visible at half the height and the hero
+          row does not tower over the title column beside it. Unit is in the header line.
+          An odd count is the normal case (five states, six only when ไม่ระบุ shows up), so
+          the last cell spans both columns — left as a half cell it hung a divider beside
+          nothing, which reads as a column that failed to load. */}
       {isCount && (
         <div className="mt-3 rounded-lg border border-border bg-card grid grid-cols-2">
-          {segments.map((s, i) => (
-            <div key={s.key} className={cn("flex items-center gap-1.5 px-2.5 py-2 text-xs min-w-0", i % 2 === 0 && "border-r border-border", i > 1 && "border-t border-border")}>
+          {segments.map((s, i) => {
+            const orphan = i === segments.length - 1 && i % 2 === 0;
+            return (
+            <div key={s.key} className={cn("flex items-center gap-1.5 px-2.5 py-2 text-xs min-w-0", orphan && "col-span-2", !orphan && i % 2 === 0 && "border-r border-border", i > 1 && "border-t border-border")}>
               <span className={cn("size-2 rounded-full shrink-0", s.dot)} />
               <span className="text-muted-foreground truncate">{s.label}</span>
               <span className="ml-auto font-semibold tabular-nums">{s.count}</span>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -769,7 +778,8 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
   const total = visible.length;
   const counts: Record<string, number> = {};
   for (const s of visible) counts[s] = (counts[s] ?? 0) + 1;
-  // All six render, zeros included — a missing row reads as "not applicable" instead of "none".
+  // All five render, zeros included — a missing row reads as "not applicable" instead of
+  // "none". Why five: USAGE_STATUS_ORDER in lib/constants.ts, which owns the list.
   const segments = USAGE_STATUS_ORDER.map((key) => ({ key, ...STOCK_STATUS_META[key], count: counts[key] ?? 0 }));
   const statusHidden = HIDDEN.has(status);
   const currentCount = counts[status] ?? 0;
@@ -777,7 +787,11 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
   const all: Record<string, number> = {};
   for (const s of siblingStatuses) all[s] = (all[s] ?? 0) + 1;
   const mixedStatuses = Object.keys(all).length > 1;
-  const listSummary = [...USAGE_STATUS_ORDER, "LOST", "DISPOSED"]
+  // Every ItemStatus, not just the five in the breakdown: this line promises to account for
+  // every piece the list below shows, so it carries the written-off ones and the statuses
+  // the breakdown folds away (PENDING_MAINTENANCE). `.filter` drops whatever has no rows,
+  // so the extra keys cost nothing and a piece can never go uncounted here.
+  const listSummary = [...USAGE_STATUS_ORDER, "PENDING_MAINTENANCE", "LOST", "DISPOSED"]
     .filter((k) => all[k])
     .map((k) => `${STOCK_STATUS_META[k]?.label ?? STATUS_LABELS[k as ItemStatus] ?? k} ${all[k]}`)
     .join(" · ");

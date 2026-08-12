@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError } from "@/lib/api-utils";
-import { recomputeItemCounts } from "@/lib/stock";
+import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { nextDateAfterJob } from "@/lib/maintenance";
 import { closeOpenLoan } from "@/lib/returns";
-import { ItemStatus } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
 
 const maintenanceSchema = z.object({
@@ -22,6 +22,10 @@ const maintenanceSchema = z.object({
   nextMaintenanceAt: z.coerce.date().optional().nullable(),
   attachmentUrls: z.array(z.string()).default([]),
   subItemId: z.string().optional().nullable(),
+  // The แจ้งชำรุด booking this job closes, for non-tracked (qty) stock. Its presence is what
+  // makes this a qty repair: the job hands that exact booking's units back (or writes them
+  // off) instead of flipping a piece's status. Mutually exclusive with subItemId.
+  adjustmentId: z.string().optional().nullable(),
 });
 
 export async function POST(
@@ -37,6 +41,12 @@ export async function POST(
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const data = parsed.data;
+  if (data.adjustmentId && (data.subItemId || data.type !== "CORRECTIVE")) {
+    return NextResponse.json(
+      { error: "adjustmentId ใช้ได้เฉพาะงานซ่อมของพัสดุแบบนับจำนวน" },
+      { status: 400 },
+    );
+  }
 
   try {
     const record = await prisma.$transaction(async (tx) => {
@@ -46,6 +56,10 @@ export async function POST(
       // rather than allowed to shift a cadence the repair isn't supposed to touch.
       // undefined = leave nextMaintenanceDate as it is; null = clear it (written off).
       const isRepair = data.type === "CORRECTIVE";
+      // Closing one ชำรุด booking of a qty item says nothing about the item as a whole —
+      // 3 of 40 chairs came back from the shop. So it never touches the item's schedule
+      // (nextAt stays undefined) and never flips the item's status.
+      const qtyRepair = !!data.adjustmentId;
       const it = await tx.item.findUnique({
         where: { id: itemId },
         select: { maintenanceCycleMonths: true, nextMaintenanceDate: true },
@@ -53,23 +67,26 @@ export async function POST(
       const currentNext = data.subItemId
         ? (await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { nextMaintenanceDate: true } }))?.nextMaintenanceDate ?? null
         : it?.nextMaintenanceDate ?? null;
-      const nextAt =
-        (isRepair ? null : data.nextMaintenanceAt) ??
-        nextDateAfterJob({
-          type: data.type,
-          result: data.result,
-          performedAt: data.performedAt,
-          cycleMonths: it?.maintenanceCycleMonths ?? 12,
-          currentNext,
-        });
+      const nextAt = qtyRepair
+        ? undefined
+        : (isRepair ? null : data.nextMaintenanceAt) ??
+          nextDateAfterJob({
+            type: data.type,
+            result: data.result,
+            performedAt: data.performedAt,
+            cycleMonths: it?.maintenanceCycleMonths ?? 12,
+            currentNext,
+          });
 
       // Denormalize the repair venue (ภายใน/ภายนอก) captured at send-to-repair time onto
       // the maintenance record so cost-by-venue reporting works without a fuzzy join.
       // CORRECTIVE only: this record closes a ส่งซ่อม trip, so the newest UNDER_REPAIR log
       // IS that trip. A PREVENTIVE round has no trip — looking one up would inherit the
       // venue of whatever repair happened last (possibly a year ago) and skew the report.
+      // qtyRepair excluded: a qty ชำรุด booking has no ส่งซ่อม log of its own, so this would
+      // inherit the venue of whatever whole-item repair happened last.
       const venueLog =
-        data.type === "CORRECTIVE"
+        data.type === "CORRECTIVE" && !qtyRepair
           ? await tx.itemStatusLog.findFirst({
               where: { itemId, newStatus: ItemStatus.UNDER_REPAIR, subItemId: data.subItemId ?? null },
               orderBy: { changedAt: "desc" },
@@ -102,7 +119,62 @@ export async function POST(
       const reason =
         data.result === "DISPOSED" ? "ตัดจำหน่ายจากผลการบำรุงรักษา" : "บำรุงรักษาเสร็จสิ้น";
 
-      if (data.subItemId) {
+      if (qtyRepair) {
+        // Qty stock: the job closes one แจ้งชำรุด booking. `recoveredAt` is what takes it off
+        // the ชำรุด bucket (lib/stock damagedQtyOf derives that from the open rows), so it is
+        // stamped for BOTH outcomes — the units stop waiting for a repair either way.
+        const adj = await tx.stockAdjustment.findUnique({ where: { id: data.adjustmentId! } });
+        if (!adj || adj.itemId !== itemId) throw new Error("ไม่พบรายการชำรุด");
+        if (adj.reason !== AdjustmentReason.DAMAGED_PENDING_REPAIR) throw new Error("ไม่ใช่รายการชำรุด");
+        if (adj.recoveredAt) throw new Error("รับคืนแล้ว");
+
+        const qty = adj.previousQty - adj.newQty;
+        const origNotes = adj.notes ?? "";
+        await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
+
+        const before = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { availableQty: true } });
+        if (data.result === "AVAILABLE") {
+          if (adj.lotId) {
+            // Booked against a specific lot — put it back there and let the recompute
+            // re-derive availableQty from SUM(lots); incrementing the item would desync.
+            await tx.lot.update({ where: { id: adj.lotId }, data: { remainingQty: { increment: qty } } });
+          } else {
+            // Item-level damage: land it on a lot when the item has any (otherwise the next
+            // recompute resyncs availableQty from SUM(lots) and eats the recovery).
+            const landed = await allocateAcrossLots(tx, itemId, qty);
+            if (!landed) await tx.item.update({ where: { id: itemId }, data: { availableQty: { increment: qty } } });
+          }
+          await tx.stockAdjustment.create({
+            data: {
+              itemId,
+              delta: qty,
+              previousQty: before.availableQty,
+              newQty: before.availableQty + qty,
+              reason: AdjustmentReason.OTHER,
+              notes: `รับคืนจากซ่อม${origNotes ? ` (${origNotes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
+              adjustedBy: auth.user.userId,
+            },
+          });
+        } else {
+          // ซ่อมไม่ได้: แจ้งชำรุด parked these units in totalQty (lib/stock holdsTotalQty) on the
+          // promise they'd come back. This is where that promise ends — availableQty already
+          // lost them at แจ้งชำรุด time, so only the total drops. The item's own status is left
+          // alone: writing off 3 of 40 does not dispose the item.
+          await tx.item.update({ where: { id: itemId }, data: { totalQty: { decrement: qty } } });
+          await tx.stockAdjustment.create({
+            data: {
+              itemId,
+              delta: 0,
+              previousQty: before.availableQty,
+              newQty: before.availableQty,
+              reason: AdjustmentReason.DISPOSAL,
+              notes: `ตัดจำหน่ายจากผลการซ่อม ${qty}${origNotes ? ` (${origNotes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
+              adjustedBy: auth.user.userId,
+            },
+          });
+        }
+        await recomputeItemCounts(tx, itemId);
+      } else if (data.subItemId) {
         // Tracked copy: the schedule lives on the SubItem, so this copy alone gets
         // re-dated — servicing/disposing one piece never moves its siblings.
         {
