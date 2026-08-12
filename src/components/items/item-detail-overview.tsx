@@ -30,6 +30,8 @@ export interface OpenDamage {
   qty: number;
   notes: string | null;
   adjustedAt: string;
+  /** null = ยังไม่ได้ส่งซ่อม (sits on /alerts); set = อยู่ระหว่างซ่อม (sits on the receive tab). */
+  repairSentAt: string | null;
   by: string;
 }
 
@@ -87,6 +89,8 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   const canAct = canManageStock(userRole);
   const [stationOpen, setStationOpen] = useState(false);
   const openDamage = item.openDamage ?? [];
+  const damagePending = openDamage.filter((d) => !d.repairSentAt).reduce((s, d) => s + d.qty, 0);
+  const damageAtShop = openDamage.filter((d) => d.repairSentAt).reduce((s, d) => s + d.qty, 0);
   // COUNT durable (non-tracked, non-consumable = DUR) → eligible for "นำไปใช้งาน".
   const isCountDurable = !item.trackIndividually && (item.category.profile?.dispenseType ?? "COUNT") !== "CONSUMABLE";
 
@@ -282,18 +286,25 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                 <ActionTile icon={Package} label="ปรับสต็อก" tone="default" onClick={onAdjust} />
               )}
               <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
-              {/* รับคืนจากซ่อม is not a tile here. It closes a repair with a result and a cost
-                  (maintenance record), and that form lives in one place for both kinds of stock
-                  — the รับคืนจากส่งซ่อม tab. A second door here would be a second half-record. */}
-              {openDamage.length > 0 && (
+              {/* Neither ส่งซ่อม nor รับคืน is a tile here — both are steps in one worklist that
+                  has to hold pieces and qty side by side, so they live on their own screens.
+                  This just says which screen the damaged units are sitting on right now. */}
+              {damagePending > 0 && (
+                <a
+                  href="/alerts?damagedPending=true"
+                  className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10 dark:text-danger-400"
+                >
+                  <Flag className="size-4 shrink-0" />
+                  <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าแจ้งเตือน</span>
+                </a>
+              )}
+              {damageAtShop > 0 && (
                 <a
                   href="/receive?tab=repair"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning-700 transition-colors hover:bg-warning/10 dark:text-warning-200"
                 >
                   <Wrench className="size-4 shrink-0" />
-                  <span>
-                    ชำรุดรอซ่อม {openDamage.reduce((s, d) => s + d.qty, 0)} {item.issueUnit.name} — รับคืนที่หน้ารับเข้า-คืนพัสดุ
-                  </span>
+                  <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้ารับเข้า-คืนพัสดุ</span>
                 </a>
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (

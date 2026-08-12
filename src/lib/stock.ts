@@ -206,3 +206,55 @@ export function damagedQtyOf(
 ): number {
   return rows.reduce((sum, r) => (r.recoveredAt ? sum : sum + Math.max(0, r.previousQty - r.newQty)), 0);
 }
+
+/**
+ * Close an open แจ้งชำรุด booking by putting its units back on the shelf.
+ *
+ * Two doors lead here — รับคืนจากส่งซ่อม (repaired) and ยกเลิกคำขอชำรุด (never broken) — and
+ * they must move stock identically, so the arithmetic lives here rather than in either route.
+ * `recoveredAt` is what takes the booking off the ชำรุด bucket (damagedQtyOf above), and it is
+ * stamped inside the same transaction as the qty move so the two can never disagree.
+ *
+ * Caller must have checked the booking is open; `label` heads the audit adjustment row.
+ */
+export async function restoreDamagedQty(
+  tx: TxClient,
+  input: {
+    adj: { id: string; itemId: string; lotId: string | null; previousQty: number; newQty: number; notes: string | null };
+    label: string;
+    note?: string | null;
+    userId: string;
+  },
+): Promise<number> {
+  const { adj, label, note, userId } = input;
+  const qty = adj.previousQty - adj.newQty;
+
+  await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
+
+  const before = await tx.item.findUniqueOrThrow({ where: { id: adj.itemId }, select: { availableQty: true } });
+  if (adj.lotId) {
+    // Booked against a specific lot — put it back there and let the recompute re-derive
+    // availableQty from SUM(lots); incrementing the item directly would desync.
+    await tx.lot.update({ where: { id: adj.lotId }, data: { remainingQty: { increment: qty } } });
+  } else {
+    // Item-level damage: land it on a lot when the item has any (otherwise the next recompute
+    // resyncs availableQty from SUM(lots) and eats the recovery), else straight onto the item.
+    const landed = await allocateAcrossLots(tx, adj.itemId, qty);
+    if (!landed) await tx.item.update({ where: { id: adj.itemId }, data: { availableQty: { increment: qty } } });
+  }
+
+  await tx.stockAdjustment.create({
+    data: {
+      itemId: adj.itemId,
+      delta: qty,
+      previousQty: before.availableQty,
+      newQty: before.availableQty + qty,
+      reason: AdjustmentReason.OTHER,
+      notes: `${label}${adj.notes ? ` (${adj.notes})` : ""}${note ? ` — ${note}` : ""}`,
+      adjustedBy: userId,
+    },
+  });
+
+  await recomputeItemCounts(tx, adj.itemId);
+  return qty;
+}

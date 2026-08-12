@@ -673,13 +673,19 @@ export function getSubItemsByStatus(status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED
   return request<{ subItems: SubItemByStatus[] }>(`/api/sub-items?status=${status}`);
 }
 
-/** One open แจ้งชำรุด booking on non-tracked (qty) stock — the qty half of รับคืนจากส่งซ่อม. */
+/**
+ * One open แจ้งชำรุด booking on non-tracked (qty) stock. Same three stages as a tracked piece:
+ * `repairSentAt` null = ชำรุด รอส่งซ่อม, set = อยู่ระหว่างซ่อม.
+ */
 export interface PendingRepairDamage {
-  /** The StockAdjustment id — what closes the booking (maintenance `adjustmentId`). */
+  /** The StockAdjustment id — what ส่งซ่อม and รับคืน both act on (maintenance `adjustmentId`). */
   id: string;
   qty: number;
   notes: string | null;
   adjustedAt: string;
+  repairSentAt: string | null;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
+  repairNote: string | null;
   by: string;
   item: {
     id: string;
@@ -692,8 +698,22 @@ export interface PendingRepairDamage {
   };
 }
 
-export function getPendingRepairDamage() {
-  return request<{ rows: PendingRepairDamage[] }>("/api/repairs");
+/** stage "damaged" = รอส่งซ่อม (alerts), "repair" = อยู่ระหว่างซ่อม (receive tab). */
+export function getPendingRepairDamage(stage: "damaged" | "repair") {
+  return request<{ rows: PendingRepairDamage[] }>(`/api/repairs?stage=${stage}`);
+}
+
+/** ส่งซ่อม a qty damage booking, or edit the details of a trip already under way. */
+export function sendQtyDamageToRepair(data: {
+  adjustmentId: string;
+  venue: "INTERNAL" | "EXTERNAL";
+  repairNote: string;
+  damageNote?: string;
+}) {
+  return request<{ ok: boolean }>("/api/repairs", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 /** One open นำไปใช้งาน record. Covers both kinds: `subItem` is null for COUNT stock. */

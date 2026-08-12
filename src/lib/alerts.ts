@@ -79,13 +79,18 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       },
       select: { id: true, loanGroupId: true },
     }),
-    // Reported-damaged, not yet sent to repair. Sub-items only, because the chip opens a
-    // panel fed by GET /api/sub-items — a `subItem.findMany`, so a non-tracked item flagged
-    // DAMAGED has no row there to be. Adding those to the badge only promised worklist rows
-    // that cannot appear. They are not lost by this: nothing acts on a non-tracked DAMAGED
-    // flag anywhere today (it moves no quantity and does not block a dispense), so the gap
-    // to close is a write path for damaged qty, not a number on a chip.
-    prisma.subItem.count({ where: { status: "DAMAGED" } }),
+    // Reported-damaged, not yet sent to repair — counted as worklist ROWS, matching what the
+    // chip's panel renders: one per damaged piece, plus one per open qty แจ้งชำรุด booking
+    // still waiting to be sent (repairSentAt null). The qty half used to be left out because
+    // the panel read sub_items only and could not render it; it now reads /api/repairs too,
+    // so the badge and the list agree again. A booking already at the shop is not pending —
+    // it sits on รับคืนจากส่งซ่อม instead.
+    Promise.all([
+      prisma.subItem.count({ where: { status: "DAMAGED" } }),
+      prisma.stockAdjustment.count({
+        where: { reason: "DAMAGED_PENDING_REPAIR", recoveredAt: null, repairSentAt: null },
+      }),
+    ]).then(([a, b]) => a + b),
     // ถึงรอบตรวจนับ — null nextCountDate = never counted, also due.
     prisma.item.count({
       where: { isActive: true, OR: [{ nextCountDate: null }, { nextCountDate: { lt: now } }] },

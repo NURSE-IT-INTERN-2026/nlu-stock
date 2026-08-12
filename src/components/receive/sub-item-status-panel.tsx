@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from "lucide-react";
 import { ItemThumb } from "@/components/shared/item-thumb";
-import { getPendingRepairDamage, getSubItemsByStatus, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
+import { getPendingRepairDamage, getSubItemsByStatus, sendQtyDamageToRepair, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
@@ -73,9 +73,11 @@ function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | "";
 // the sub_items table, and a non-tracked item has no row there. คืนเข้าคลัง now uses
 // InUsePanel (records, not statuses) so both kinds show up. Don't add IN_USE back.
 //
-// UNDER_REPAIR has the same blind spot, so the repair tab pulls a second list: the open
-// แจ้งชำรุด bookings of qty stock (/api/repairs), which have no sub_items row to hold an
-// UNDER_REPAIR status. Both kinds land in one list — one place to answer "อะไรอยู่ที่ร้านซ่อม".
+// The repair lifecycle has the same blind spot, so both panels pull a second list: the open
+// แจ้งชำรุด bookings of qty stock (/api/repairs), which have no sub_items row to hold a
+// DAMAGED/UNDER_REPAIR status. Stage matches the panel — DAMAGED ↔ รอส่งซ่อม,
+// UNDER_REPAIR ↔ ส่งซ่อมแล้ว — so qty walks ชำรุด → ส่งซ่อม → รับคืน like a piece does,
+// and each screen shows both kinds in one list.
 export function SubItemStatusPanel({
   status,
   actionLabel,
@@ -89,15 +91,12 @@ export function SubItemStatusPanel({
   const [qtyRows, setQtyRows] = useState<PendingRepairDamage[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const withQty = status === "UNDER_REPAIR";
+  const stage = status === "UNDER_REPAIR" ? "repair" : "damaged";
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [subs, qty] = await Promise.all([
-        getSubItemsByStatus(status),
-        withQty ? getPendingRepairDamage() : Promise.resolve({ rows: [] }),
-      ]);
+      const [subs, qty] = await Promise.all([getSubItemsByStatus(status), getPendingRepairDamage(stage)]);
       setRows(subs.subItems);
       setQtyRows(qty.rows);
     } catch {
@@ -106,7 +105,7 @@ export function SubItemStatusPanel({
     } finally {
       setLoading(false);
     }
-  }, [status, withQty]);
+  }, [status, stage]);
 
   useEffect(() => {
     load();
@@ -158,7 +157,7 @@ export function SubItemStatusPanel({
   // member holding the repaired thing, so they don't get sorted into separate sections.
   const merged = [
     ...filteredRows.map((r) => ({ key: `s${r.id}`, at: r.repairSentAt ?? "", node: <StatusRow row={r} status={status} actionLabel={actionLabel} onResolved={load} /> })),
-    ...filteredQty.map((r) => ({ key: `q${r.id}`, at: r.adjustedAt, node: <QtyRepairRow row={r} actionLabel={actionLabel} onResolved={load} /> })),
+    ...filteredQty.map((r) => ({ key: `q${r.id}`, at: r.repairSentAt ?? r.adjustedAt, node: <QtyRepairRow row={r} status={status} actionLabel={actionLabel} onResolved={load} /> })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
@@ -189,13 +188,45 @@ export function SubItemStatusPanel({
   );
 }
 
-// The qty counterpart of StatusRow. No venue/แก้ข้อมูลส่งซ่อม here: a qty ชำรุด is booked as a
-// StockAdjustment, which has no ส่งซ่อม step to record a venue on — the booking IS the trip.
-// The receive dialog is the same MaintenanceFormDialog the tracked rows use, so ผล/ค่าใช้จ่าย
-// land in maintenance_records either way; `adjustmentId` tells the server which booking closes.
-function QtyRepairRow({ row, actionLabel, onResolved }: { row: PendingRepairDamage; actionLabel: string; onResolved: () => void }) {
+// The qty counterpart of StatusRow, and it walks the same two steps: ส่งซ่อม on the ชำรุด panel
+// (writes venue/note/sentAt onto the booking — there is no status column to flip), then รับคืน
+// on the repair tab through the same MaintenanceFormDialog the tracked rows use, so ผล and
+// ค่าใช้จ่าย land in maintenance_records either way. `adjustmentId` says which booking closes.
+function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRepairDamage; status: "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
   const [maintOpen, setMaintOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
+  const [repairNote, setRepairNote] = useState("");
+  const [damage, setDamage] = useState("");
+  const isRepair = status === "UNDER_REPAIR";
   const unit = row.item.issueUnit.name;
+  // Editing, not re-entering: start from what's on record.
+  const openSend = () => {
+    setVenue(row.repairVenue ?? "");
+    setRepairNote(row.repairNote ?? "");
+    setDamage(row.notes ?? "");
+    setSendOpen(true);
+  };
+
+  const send = async () => {
+    setSaving(true);
+    try {
+      await sendQtyDamageToRepair({
+        adjustmentId: row.id,
+        venue: venue as "INTERNAL" | "EXTERNAL",
+        repairNote: repairNote.trim(),
+        damageNote: damage.trim() || undefined,
+      });
+      toast.success(isRepair ? "แก้ข้อมูลการส่งซ่อมแล้ว" : "ส่งซ่อมเรียบร้อย");
+      setSendOpen(false);
+      onResolved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Card className="border shadow-none py-2.5">
@@ -213,36 +244,122 @@ function QtyRepairRow({ row, actionLabel, onResolved }: { row: PendingRepairDama
                 </span>
               </p>
               <p className="text-xs text-muted-foreground font-mono">{row.item.code}</p>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
-                {row.item.location && (
-                  <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(row.item.location)}</span>
-                )}
-                {row.notes && <span className="text-foreground">{row.notes}</span>}
-                <span className="text-border">│</span>
-                <span>แจ้งชำรุด {sentAtLabel(row.adjustedAt)} · {row.by}</span>
-              </div>
+              {/* Same split as StatusRow: the repair tab is about the trip, the ชำรุด panel
+                  about where the thing is and what's wrong with it. */}
+              {isRepair ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + VENUE_BADGE[row.repairVenue ?? "NONE"][1]}>
+                    {VENUE_BADGE[row.repairVenue ?? "NONE"][0]}
+                  </span>
+                  {(row.repairNote ?? row.notes) && <span className="text-foreground">{row.repairNote ?? row.notes}</span>}
+                  {row.repairSentAt && (
+                    <>
+                      <span className="text-border">│</span>
+                      <span>ส่งซ่อม {sentAtLabel(row.repairSentAt)}</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  {row.item.location && (
+                    <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(row.item.location)}</span>
+                  )}
+                  {row.notes && <span>ชำรุด: <span className="text-foreground">{row.notes}</span></span>}
+                  <span className="text-border">│</span>
+                  <span>แจ้ง {sentAtLabel(row.adjustedAt)} · {row.by}</span>
+                </div>
+              )}
             </div>
           </div>
-          <Button size="sm" className="h-9 w-full shrink-0 sm:w-auto" onClick={() => setMaintOpen(true)}>
-            <Wrench className="size-3.5" />
-            {actionLabel}
-          </Button>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+            {isRepair && (
+              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={openSend}>
+                <Pencil className="size-3.5" />แก้ข้อมูลส่งซ่อม
+              </Button>
+            )}
+            <Button
+              size="sm"
+              className="h-9 w-full sm:w-auto"
+              disabled={saving}
+              onClick={() => (isRepair ? setMaintOpen(true) : openSend())}
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : isRepair ? <Wrench className="size-3.5" /> : <Send className="size-3.5" />}
+              {actionLabel}
+            </Button>
+          </div>
         </div>
       </CardContent>
 
-      <MaintenanceFormDialog
-        open={maintOpen}
-        onOpenChange={setMaintOpen}
-        itemId={row.item.id}
-        itemLabel={row.item.name}
-        subItemLabel={`${row.qty} ${unit}`}
-        subItemLabelTitle="จำนวน"
-        adjustmentId={row.id}
-        maintenanceCycleMonths={row.item.maintenanceCycleMonths}
-        fromRepair
-        repairInfo={{ damage: row.notes, venue: null, note: null, sentAt: sentAtLabel(row.adjustedAt) }}
-        onSuccess={onResolved}
-      />
+      {/* ส่งซ่อม, and the mid-trip correction of the same fields (ซ่อมภายในไม่ได้ → ส่งภายนอก).
+          One dialog: the second is the first with the values already filled in. */}
+      <AlertDialog open={sendOpen} onOpenChange={setSendOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{isRepair ? "แก้ข้อมูลการส่งซ่อม" : "ยืนยันการส่งซ่อม"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isRepair ? (
+                <><span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ยังอยู่ระหว่างส่งซ่อมเหมือนเดิม — แก้เฉพาะข้อมูลการส่งซ่อม วันที่ส่งซ่อมเดิมไม่เปลี่ยน</>
+              ) : (
+                <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="w-full space-y-3 text-left">
+            <div className="-mx-4"><Separator /></div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground" required>อาการที่ชำรุด</Label>
+              <Textarea
+                value={damage}
+                onChange={(e) => setDamage(e.target.value)}
+                placeholder="เช่น ขาหัก 3 ตัว ล้อแตก…"
+                rows={2}
+                className="bg-card"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground" required>ส่งซ่อมที่</Label>
+              <VenuePicker value={venue} onChange={setVenue} />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground" required>รายละเอียดการส่งซ่อม</Label>
+              <Textarea
+                value={repairNote}
+                onChange={(e) => setRepairNote(e.target.value)}
+                placeholder="เช่น ส่งซ่อมร้าน ABC…"
+                rows={2}
+                className="bg-card"
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction disabled={!venue || !repairNote.trim() || !damage.trim()} onClick={send}>
+              {isRepair ? "บันทึก" : "ยืนยัน"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {isRepair && (
+        <MaintenanceFormDialog
+          open={maintOpen}
+          onOpenChange={setMaintOpen}
+          itemId={row.item.id}
+          itemLabel={row.item.name}
+          subItemLabel={`${row.qty} ${unit}`}
+          subItemLabelTitle="จำนวน"
+          adjustmentId={row.id}
+          maintenanceCycleMonths={row.item.maintenanceCycleMonths}
+          fromRepair
+          repairInfo={{
+            damage: row.notes,
+            venue: VENUE_BADGE[row.repairVenue ?? "NONE"][2],
+            note: row.repairNote,
+            sentAt: row.repairSentAt && sentAtLabel(row.repairSentAt),
+          }}
+          onSuccess={onResolved}
+        />
+      )}
     </Card>
   );
 }

@@ -77,10 +77,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const openDamage = (
     await prisma.stockAdjustment.findMany({
       where: { itemId: item.id, reason: "DAMAGED_PENDING_REPAIR", recoveredAt: null },
-      select: { id: true, previousQty: true, newQty: true, notes: true, adjustedAt: true, adjuster: { select: { name: true } } },
+      select: { id: true, previousQty: true, newQty: true, notes: true, adjustedAt: true, repairSentAt: true, adjuster: { select: { name: true } } },
       orderBy: { adjustedAt: "desc" },
     })
-  ).map((r) => ({ id: r.id, qty: r.previousQty - r.newQty, notes: r.notes, adjustedAt: r.adjustedAt, by: r.adjuster.name }));
+  ).map((r) => ({ id: r.id, qty: r.previousQty - r.newQty, notes: r.notes, adjustedAt: r.adjustedAt, repairSentAt: r.repairSentAt, by: r.adjuster.name }));
 
   return json({ ...item, distribution, openDamage });
 }
