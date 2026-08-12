@@ -673,6 +673,29 @@ export function getSubItemsByStatus(status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED
   return request<{ subItems: SubItemByStatus[] }>(`/api/sub-items?status=${status}`);
 }
 
+/** One open แจ้งชำรุด booking on non-tracked (qty) stock — the qty half of รับคืนจากส่งซ่อม. */
+export interface PendingRepairDamage {
+  /** The StockAdjustment id — what closes the booking (maintenance `adjustmentId`). */
+  id: string;
+  qty: number;
+  notes: string | null;
+  adjustedAt: string;
+  by: string;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    imageUrl: string | null;
+    issueUnit: { name: string };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+    maintenanceCycleMonths: number;
+  };
+}
+
+export function getPendingRepairDamage() {
+  return request<{ rows: PendingRepairDamage[] }>("/api/repairs");
+}
+
 /** One open นำไปใช้งาน record. Covers both kinds: `subItem` is null for COUNT stock. */
 export interface InUseRecord {
   id: string;
@@ -725,7 +748,7 @@ export function getItemHistory(itemId: string, params?: string) {
 /** Put stock back: `kind` LOST = เรียกคืนสูญหาย (default), DAMAGED = รับคืนจากซ่อม. */
 export function recoverStock(
   itemId: string,
-  data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string; kind?: "LOST" | "DAMAGED" },
+  data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string },
 ) {
   return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover`, {
     method: "POST",

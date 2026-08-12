@@ -23,7 +23,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { returnItem } from "@/lib/api";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 import { DistributionTable, distributionTotal, type DistributionRow } from "@/components/items/distribution-table";
-import { RecoverDamageDialog, type OpenDamage } from "@/components/items/recover-damage-dialog";
+
+/** One open แจ้งชำรุด booking — as served by GET /api/items/:id (`openDamage`). */
+export interface OpenDamage {
+  id: string;
+  qty: number;
+  notes: string | null;
+  adjustedAt: string;
+  by: string;
+}
 
 interface SubItemRecord {
   id: string;
@@ -78,7 +86,6 @@ interface Props {
 export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onReportStatus, onEdit, onRefresh }: Props) {
   const canAct = canManageStock(userRole);
   const [stationOpen, setStationOpen] = useState(false);
-  const [recoverOpen, setRecoverOpen] = useState(false);
   const openDamage = item.openDamage ?? [];
   // COUNT durable (non-tracked, non-consumable = DUR) → eligible for "นำไปใช้งาน".
   const isCountDurable = !item.trackIndividually && (item.category.profile?.dispenseType ?? "COUNT") !== "CONSUMABLE";
@@ -275,8 +282,19 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                 <ActionTile icon={Package} label="ปรับสต็อก" tone="default" onClick={onAdjust} />
               )}
               <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              {/* รับคืนจากซ่อม is not a tile here. It closes a repair with a result and a cost
+                  (maintenance record), and that form lives in one place for both kinds of stock
+                  — the รับคืนจากส่งซ่อม tab. A second door here would be a second half-record. */}
               {openDamage.length > 0 && (
-                <ActionTile icon={Wrench} label="รับคืนจากซ่อม" tone="default" onClick={() => setRecoverOpen(true)} />
+                <a
+                  href="/receive?tab=repair"
+                  className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning-700 transition-colors hover:bg-warning/10 dark:text-warning-200"
+                >
+                  <Wrench className="size-4 shrink-0" />
+                  <span>
+                    ชำรุดรอซ่อม {openDamage.reduce((s, d) => s + d.qty, 0)} {item.issueUnit.name} — รับคืนที่หน้ารับเข้า-คืนพัสดุ
+                  </span>
+                </a>
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (
                 <ActionTile icon={CheckCircle2} label="กลับพร้อมใช้งาน" tone="default" onClick={() => onReportStatus("AVAILABLE")} />
@@ -337,7 +355,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       {isCountDurable && (
         <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={item.id} itemCode={item.code} itemName={item.name} availableQty={item.availableQty} issueUnit={item.issueUnit.name} onSuccess={onRefresh} />
       )}
-      <RecoverDamageDialog open={recoverOpen} onOpenChange={setRecoverOpen} itemId={item.id} unit={item.issueUnit.name} rows={openDamage} onSuccess={onRefresh} />
     </div>
   );
 }

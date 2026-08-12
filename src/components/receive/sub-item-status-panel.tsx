@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from "lucide-react";
 import { ItemThumb } from "@/components/shared/item-thumb";
-import { getSubItemsByStatus, updateItemStatus, type SubItemByStatus } from "@/lib/api";
+import { getPendingRepairDamage, getSubItemsByStatus, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
@@ -72,6 +72,10 @@ function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | "";
 // IN_USE used to be handled here too, which is exactly what hid COUNT stock: this reads
 // the sub_items table, and a non-tracked item has no row there. คืนเข้าคลัง now uses
 // InUsePanel (records, not statuses) so both kinds show up. Don't add IN_USE back.
+//
+// UNDER_REPAIR has the same blind spot, so the repair tab pulls a second list: the open
+// แจ้งชำรุด bookings of qty stock (/api/repairs), which have no sub_items row to hold an
+// UNDER_REPAIR status. Both kinds land in one list — one place to answer "อะไรอยู่ที่ร้านซ่อม".
 export function SubItemStatusPanel({
   status,
   actionLabel,
@@ -82,20 +86,27 @@ export function SubItemStatusPanel({
   emptyText: string;
 }) {
   const [rows, setRows] = useState<SubItemByStatus[]>([]);
+  const [qtyRows, setQtyRows] = useState<PendingRepairDamage[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const withQty = status === "UNDER_REPAIR";
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSubItemsByStatus(status);
-      setRows(data.subItems);
+      const [subs, qty] = await Promise.all([
+        getSubItemsByStatus(status),
+        withQty ? getPendingRepairDamage() : Promise.resolve({ rows: [] }),
+      ]);
+      setRows(subs.subItems);
+      setQtyRows(qty.rows);
     } catch {
       setRows([]);
+      setQtyRows([]);
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, withQty]);
 
   useEffect(() => {
     load();
@@ -111,7 +122,7 @@ export function SubItemStatusPanel({
     );
   }
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && qtyRows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
         <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
@@ -134,12 +145,27 @@ export function SubItemStatusPanel({
         );
       })
     : rows;
+  const filteredQty = q
+    ? qtyRows.filter(
+        (r) =>
+          r.item.name.toLowerCase().includes(q) ||
+          r.item.code.toLowerCase().includes(q) ||
+          (r.item.location ? locationLabel(r.item.location).toLowerCase().includes(q) : false),
+      )
+    : qtyRows;
+
+  // One list, newest trip first — a piece and a qty booking are the same job to the staff
+  // member holding the repaired thing, so they don't get sorted into separate sections.
+  const merged = [
+    ...filteredRows.map((r) => ({ key: `s${r.id}`, at: r.repairSentAt ?? "", node: <StatusRow row={r} status={status} actionLabel={actionLabel} onResolved={load} /> })),
+    ...filteredQty.map((r) => ({ key: `q${r.id}`, at: r.adjustedAt, node: <QtyRepairRow row={r} actionLabel={actionLabel} onResolved={load} /> })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
       <CardContent className="flex flex-col flex-1 min-h-0 gap-3">
         <div className="shrink-0 space-y-2 sm:space-y-3">
-          <p className="text-xs text-muted-foreground">{filteredRows.length} รายการ</p>
+          <p className="text-xs text-muted-foreground">{merged.length} รายการ</p>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -152,15 +178,71 @@ export function SubItemStatusPanel({
           <Separator />
         </div>
         <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pb-2">
-          {filteredRows.length === 0 ? (
+          {merged.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-10">ไม่พบ &ldquo;{query}&rdquo;</p>
           ) : (
-            filteredRows.map((r) => (
-              <StatusRow key={r.id} row={r} status={status} actionLabel={actionLabel} onResolved={load} />
-            ))
+            merged.map((m) => <div key={m.key}>{m.node}</div>)
           )}
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+// The qty counterpart of StatusRow. No venue/แก้ข้อมูลส่งซ่อม here: a qty ชำรุด is booked as a
+// StockAdjustment, which has no ส่งซ่อม step to record a venue on — the booking IS the trip.
+// The receive dialog is the same MaintenanceFormDialog the tracked rows use, so ผล/ค่าใช้จ่าย
+// land in maintenance_records either way; `adjustmentId` tells the server which booking closes.
+function QtyRepairRow({ row, actionLabel, onResolved }: { row: PendingRepairDamage; actionLabel: string; onResolved: () => void }) {
+  const [maintOpen, setMaintOpen] = useState(false);
+  const unit = row.item.issueUnit.name;
+
+  return (
+    <Card className="border shadow-none py-2.5">
+      <CardContent>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
+              <ItemThumb src={row.item.imageUrl} alt={row.item.name} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm leading-snug">
+                {row.item.name}
+                <span className="ml-2 rounded-full bg-warning/10 px-1.5 py-0 text-xs font-medium text-warning-700 dark:text-warning-200">
+                  {row.qty} {unit}
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground font-mono">{row.item.code}</p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                {row.item.location && (
+                  <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(row.item.location)}</span>
+                )}
+                {row.notes && <span className="text-foreground">{row.notes}</span>}
+                <span className="text-border">│</span>
+                <span>แจ้งชำรุด {sentAtLabel(row.adjustedAt)} · {row.by}</span>
+              </div>
+            </div>
+          </div>
+          <Button size="sm" className="h-9 w-full shrink-0 sm:w-auto" onClick={() => setMaintOpen(true)}>
+            <Wrench className="size-3.5" />
+            {actionLabel}
+          </Button>
+        </div>
+      </CardContent>
+
+      <MaintenanceFormDialog
+        open={maintOpen}
+        onOpenChange={setMaintOpen}
+        itemId={row.item.id}
+        itemLabel={row.item.name}
+        subItemLabel={`${row.qty} ${unit}`}
+        subItemLabelTitle="จำนวน"
+        adjustmentId={row.id}
+        maintenanceCycleMonths={row.item.maintenanceCycleMonths}
+        fromRepair
+        repairInfo={{ damage: row.notes, venue: null, note: null, sentAt: sentAtLabel(row.adjustedAt) }}
+        onSuccess={onResolved}
+      />
     </Card>
   );
 }
