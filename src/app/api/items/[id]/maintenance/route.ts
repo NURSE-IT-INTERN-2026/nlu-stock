@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError } from "@/lib/api-utils";
-import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { recomputeItemCounts, restoreDamagedQty } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { nextDateAfterJob } from "@/lib/maintenance";
@@ -128,38 +128,16 @@ export async function POST(
         if (adj.reason !== AdjustmentReason.DAMAGED_PENDING_REPAIR) throw new Error("ไม่ใช่รายการชำรุด");
         if (adj.recoveredAt) throw new Error("รับคืนแล้ว");
 
-        const qty = adj.previousQty - adj.newQty;
-        const origNotes = adj.notes ?? "";
-        await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
-
-        const before = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { availableQty: true } });
         if (data.result === "AVAILABLE") {
-          if (adj.lotId) {
-            // Booked against a specific lot — put it back there and let the recompute
-            // re-derive availableQty from SUM(lots); incrementing the item would desync.
-            await tx.lot.update({ where: { id: adj.lotId }, data: { remainingQty: { increment: qty } } });
-          } else {
-            // Item-level damage: land it on a lot when the item has any (otherwise the next
-            // recompute resyncs availableQty from SUM(lots) and eats the recovery).
-            const landed = await allocateAcrossLots(tx, itemId, qty);
-            if (!landed) await tx.item.update({ where: { id: itemId }, data: { availableQty: { increment: qty } } });
-          }
-          await tx.stockAdjustment.create({
-            data: {
-              itemId,
-              delta: qty,
-              previousQty: before.availableQty,
-              newQty: before.availableQty + qty,
-              reason: AdjustmentReason.OTHER,
-              notes: `รับคืนจากซ่อม${origNotes ? ` (${origNotes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
-              adjustedBy: auth.user.userId,
-            },
-          });
+          await restoreDamagedQty(tx, { adj, label: "รับคืนจากซ่อม", note: data.description, userId: auth.user.userId });
         } else {
           // ซ่อมไม่ได้: แจ้งชำรุด parked these units in totalQty (lib/stock holdsTotalQty) on the
           // promise they'd come back. This is where that promise ends — availableQty already
           // lost them at แจ้งชำรุด time, so only the total drops. The item's own status is left
           // alone: writing off 3 of 40 does not dispose the item.
+          const qty = adj.previousQty - adj.newQty;
+          await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
+          const before = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { availableQty: true } });
           await tx.item.update({ where: { id: itemId }, data: { totalQty: { decrement: qty } } });
           await tx.stockAdjustment.create({
             data: {
@@ -168,12 +146,12 @@ export async function POST(
               previousQty: before.availableQty,
               newQty: before.availableQty,
               reason: AdjustmentReason.DISPOSAL,
-              notes: `ตัดจำหน่ายจากผลการซ่อม ${qty}${origNotes ? ` (${origNotes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
+              notes: `ตัดจำหน่ายจากผลการซ่อม ${qty}${adj.notes ? ` (${adj.notes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
               adjustedBy: auth.user.userId,
             },
           });
+          await recomputeItemCounts(tx, itemId);
         }
-        await recomputeItemCounts(tx, itemId);
       } else if (data.subItemId) {
         // Tracked copy: the schedule lives on the SubItem, so this copy alone gets
         // re-dated — servicing/disposing one piece never moves its siblings.

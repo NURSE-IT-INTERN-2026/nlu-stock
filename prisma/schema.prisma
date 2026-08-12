@@ -475,7 +475,16 @@ model StockAdjustment {
   adjuster      User             @relation(fields: [adjustedBy], references: [id])
   imageEvidence String?
   adjustedAt    DateTime         @default(now())
-  recoveredAt   DateTime? // set when a LOST adjustment is reversed (เรียกคืน)
+  recoveredAt   DateTime? // set when a LOST adjustment is reversed (เรียกคืน) or a repair is closed
+
+  // ── ส่งซ่อม, for a DAMAGED_PENDING_REPAIR booking of qty stock ──
+  // A tracked piece carries its trip on sub_items.status + an UNDER_REPAIR log row; qty stock
+  // has neither, so the booking itself holds the trip. repairSentAt null = ชำรุด รอส่งซ่อม
+  // (the /alerts worklist); set = อยู่ระหว่างซ่อม (the รับคืนจากส่งซ่อม tab). Same three-step
+  // flow as a piece — ชำรุด → ส่งซ่อม → รับคืน — so neither kind skips a stage.
+  repairSentAt  DateTime?
+  repairVenue   RepairVenue?
+  repairNote    String?
 
   @@index([itemId, adjustedAt])
   @@map("stock_adjustments")
