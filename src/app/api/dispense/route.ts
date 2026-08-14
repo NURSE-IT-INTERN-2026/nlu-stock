@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const parsed = dispenseRequestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { items, usageType, courseCode, usageNote, notes, recipient, locationId, dueAt } = parsed.data;
+  const { items, usageType, courseCode, usageNote, notes, locationId, dueAt } = parsed.data;
   const inRoom = parsed.data.loanType === "INUSE"; // trackIndividually → IN_USE instead of ON_LOAN
 
   // One loanGroupId per borrow event → groups all lines for the return screen.
@@ -92,7 +92,6 @@ export async function POST(req: NextRequest) {
             usageNote: usageNote ?? undefined,
             staffId: auth.user.userId,
             notes: notes ?? undefined,
-            recipient: recipient ?? undefined,
             locationId: locationId ?? undefined,
             loanGroupId,
             loanType: inRoom ? LoanType.INUSE : LoanType.BORROW,

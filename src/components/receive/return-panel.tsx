@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { getOpenBorrows, type OpenBorrow } from "@/lib/api";
 import { ReturnLoanDetail, type LoanGroup } from "@/components/receive/return-loan-detail";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
+import { recipientLabel } from "@/lib/constants";
 
 const fmtDate = (iso: string | null) => (iso ? fmt(iso, TH_DATE) : null);
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -109,7 +110,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
   const filteredGroups = q
     ? chipFiltered.filter((g) => {
         const head = g.records[0];
-        const recipientMatch = (head.recipient ?? "").toLowerCase().includes(q);
+        const recipientMatch = (recipientLabel(head) ?? "").toLowerCase().includes(q);
         const itemMatch = g.records.some(
           (r) => r.item.name.toLowerCase().includes(q) || r.item.code.toLowerCase().includes(q),
         );
@@ -222,7 +223,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
                 rowTint(head.dueAt),
               )}
             >
-              <span className="flex-1 min-w-0 truncate font-semibold text-foreground">{head.recipient ?? "ไม่ระบุชื่อผู้ยืม"}</span>
+              <span className="flex-1 min-w-0 truncate font-semibold text-foreground">{recipientLabel(head) ?? "ไม่ระบุผู้ยืม"}</span>
               <span className={COL.owe}>
                 <Badge className="text-[10px] bg-red-700 text-white font-semibold hover:bg-red-700">{outstanding}/{total}</Badge>
               </span>

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 import { NextRequest, NextResponse } from "next/server";
-import { USAGE_TYPE_LABELS, locationLabel } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, locationLabel, recipientLabel } from "@/lib/constants";
 import { parseDispenseKind } from "@/lib/dispense-kind";
 import { kindWhere, kindSql } from "@/lib/dispense-kind-where";
 import type { UsageType } from "@/generated/prisma/enums";
@@ -44,8 +44,10 @@ export async function GET(request: NextRequest) {
     const staffId = params.get("staffId") || undefined;
     const usageType = params.get("usageType") || undefined;
     const loanStatus = params.get("loanStatus") || undefined; // "open" | "overdue"
-    // ผู้รับ is free text typed at the cart, so this is a contains-match, not an id. Trimmed
-    // because a stray space makes an otherwise-matching search return nothing.
+    // ผู้รับ is not a stored field any more — it is the usage block (lib/constants
+    // recipientLabel), so the search has to hit every column that label can come out of, or
+    // typing what the row visibly says finds nothing. `recipient` stays in the OR for the
+    // legacy rows that still carry a typed name.
     const recipient = params.get("recipient")?.trim() || undefined;
     const kind = parseDispenseKind(params.get("kind"));
 
@@ -59,7 +61,14 @@ export async function GET(request: NextRequest) {
     if (itemId) where.itemId = itemId;
     if (staffId) where.staffId = staffId;
     if (usageType) where.usageType = usageType as UsageType;
-    if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
+    // AND, not OR: kindWhere already owns `where.OR` (the NULL-safe loanType pair), and
+    // assigning a second OR here would drop the kind filter and widen the page to every kind.
+    if (recipient) {
+      const like = { contains: recipient, mode: "insensitive" as const };
+      where.AND = [{ OR: [
+        { recipient: like }, { courseCode: like }, { usageNote: like }, { notes: like },
+      ] }];
+    }
 
     // Same filters as the Prisma `where` above, for the raw grouping query. Kept adjacent so
     // the two cannot drift: a filter added to one and not the other pages over a different
@@ -70,7 +79,10 @@ export async function GET(request: NextRequest) {
     if (itemId) conds.push(Prisma.sql`"itemId" = ${itemId}`);
     if (staffId) conds.push(Prisma.sql`"staffId" = ${staffId}`);
     if (usageType) conds.push(Prisma.sql`"usageType"::text = ${usageType}`);
-    if (recipient) conds.push(Prisma.sql`"recipient" ILIKE ${`%${recipient}%`}`);
+    if (recipient) {
+      const like = `%${recipient}%`;
+      conds.push(Prisma.sql`("recipient" ILIKE ${like} OR "courseCode" ILIKE ${like} OR "usageNote" ILIKE ${like} OR "notes" ILIKE ${like})`);
+    }
     // kindSql always contributes one, so conds is never empty.
     const whereSql = Prisma.sql`WHERE ${Prisma.join(conds, " AND ")}`;
 
@@ -180,7 +192,8 @@ export async function GET(request: NextRequest) {
       returnedAt: r.returnedAt?.toISOString() ?? null,
       returnCondition: r.returnCondition,
       loanGroupId: r.loanGroupId,
-      recipient: r.recipient ?? null,
+      // Derived, not stored — the cart has no ผู้รับ field (lib/constants recipientLabel).
+      recipient: recipientLabel(r),
       // นำไปใช้งาน only — where the stock was placed. Rows written before the location was
       // mandatory have none; say so rather than render an empty cell.
       location: r.location ? locationLabel(r.location) : null,
