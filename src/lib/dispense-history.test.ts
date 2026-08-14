@@ -4,6 +4,7 @@
 import assert from "node:assert";
 import { isDuplicateOfLoanRow, isLoanEdge, returnLocationUpdate } from "@/lib/returns";
 import { dispenseRequestSchema } from "@/lib/validators/dispense";
+import { recipientLabel } from "@/lib/constants";
 import type { ItemStatus } from "@/generated/prisma/enums";
 
 // ── Loan edges are dropped: the เบิก / รับคืน row beside them already tells the story ──
@@ -34,7 +35,7 @@ assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "AVAIL
 
 // ── กิจกรรม / อื่นๆ never file without the free-text line ──
 // The label alone is not an answer; the text under it is the whole reason those two exist.
-const cart = { items: [{ itemId: "i1", quantity: 1 }], recipient: "ครูสมชาย" };
+const cart = { items: [{ itemId: "i1", quantity: 1 }] };
 const ok = (input: object) => dispenseRequestSchema.safeParse(input).success;
 
 assert.equal(ok({ ...cart, usageType: "OTHER" }), false, "อื่นๆ ต้องมีรายละเอียด");
@@ -85,4 +86,24 @@ assert.deepEqual(patch("ON_LOAN", "AVAILABLE", "loc-501"), {});
 assert.deepEqual(patch("AVAILABLE", "IN_USE", "loc-501"), {});
 assert.deepEqual(patch("IN_USE", "IN_USE"), {});
 
+// ── ผู้รับ is derived from the usage, not typed into a field of its own ──
+// Every ผู้รับ / ผู้ยืม label in the app comes out of here, so a wrong fallback order shows
+// the wrong person on the return screen — which is the one place someone acts on it.
+assert.equal(
+  recipientLabel({ usageType: "COURSE", courseCode: "578101", usageNote: "การพยาบาลพื้นฐาน" }),
+  "578101 การพยาบาลพื้นฐาน",
+);
+// Registrar was down at dispense time — the code is still an answer, the name is not required.
+assert.equal(recipientLabel({ usageType: "COURSE", courseCode: "578101" }), "578101");
+assert.equal(recipientLabel({ usageType: "ACTIVITY", notes: "กีฬาสี" }), "กีฬาสี");
+assert.equal(recipientLabel({ usageType: "OTHER", notes: "อ.สมชายขอ" }), "อ.สมชายขอ");
+// Legacy rows kept the name someone deliberately typed, and it wins over the usage.
+assert.equal(recipientLabel({ recipient: "ครูสมชาย", usageType: "COURSE", courseCode: "578101" }), "ครูสมชาย");
+// Blank is not a value — null lets every caller supply its own "ไม่ระบุ…" wording.
+assert.equal(recipientLabel({ recipient: "   ", usageType: "ACTIVITY", notes: " " }), null);
+assert.equal(recipientLabel({ usageType: null }), null);
+// นำไปใช้งาน files no usageType at all; the row is named by its ห้อง, not by this.
+assert.equal(recipientLabel({ usageType: null, notes: "ตั้งไว้ห้อง 402" }), "ตั้งไว้ห้อง 402");
+
 console.log("dispense-history: ok");
+

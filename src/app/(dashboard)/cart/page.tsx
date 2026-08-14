@@ -44,7 +44,6 @@ export default function ConfirmDispensePage() {
   // so this is a notice, not an error state — but it has to be visible, because nobody is
   // watching the server log and the person at this screen is the one who can report it.
   const [courseApiError, setCourseApiError] = useState<string | null>(null);
-  const [recipient, setRecipient] = useState("");
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -297,7 +296,6 @@ export default function ConfirmDispensePage() {
         // The course name is snapshotted, not looked up at read time: history has to stay
         // readable when the registrar is down, and a renamed course must not rewrite it.
         usageNote: needsCourse ? courseName : null,
-        recipient: recipient || null,
         dueAt: dueDate || null,
       });
       toast.success(`เบิกพัสดุสำเร็จ ${data.count} รายการ`);
@@ -317,12 +315,13 @@ export default function ConfirmDispensePage() {
 
   // Free-text line โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) กับ อื่นๆ (OTHER).
   const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
-  const activityLabel = usageType === "OTHER" ? "ระบุการนำไปใช้" : "ระบุกิจกรรมที่นำไปใช้";
+  // This line IS the ผู้รับ now (see lib/constants recipientLabel) — there is no separate
+  // ผู้รับ field to name the person, so the prompt has to ask for both.
+  const activityLabel = usageType === "OTHER" ? "เอาไปทำอะไร / ใครขอ" : "ระบุกิจกรรมที่นำไปใช้";
 
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).
   const errors = {
     usageType: usageType ? null : "เลือกการใช้งาน",
-    recipient: recipient.trim() ? null : "ระบุผู้รับ",
     ...(hasDurable ? { dueDate: dueDate ? null : "เลือกกำหนดคืน" } : {}),
     ...(needsActivity ? { notes: notes.trim() ? null : activityLabel } : {}),
     ...(needsCourse ? { courseCode: courseCode ? null : "เลือกรายวิชา" } : {}),
@@ -652,7 +651,7 @@ export default function ConfirmDispensePage() {
                     id="notes"
                     aria-invalid={showErrors && !!errors.notes}
                     aria-describedby={showErrors && errors.notes ? "notes-error" : undefined}
-                    placeholder="ระบุว่านำไปใช้ทำอะไร..."
+                    placeholder="เช่น ซ้อมกีฬาสี / อ.สมชายขอไปใช้ที่ห้องพักครู"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
@@ -661,21 +660,6 @@ export default function ConfirmDispensePage() {
                   {showErrors && errors.notes && <FieldError id="notes-error">{errors.notes}</FieldError>}
                 </div>
               )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="recipient" className="text-xs text-muted-foreground" required>ผู้รับ</Label>
-                <Input
-                  id="recipient"
-                  required
-                  aria-invalid={showErrors && !!errors.recipient}
-                  aria-describedby={showErrors && errors.recipient ? "recipient-error" : undefined}
-                  placeholder="ใครเอาไป เช่น ครูสมชาย / ห้อง ม.4/1"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  className="text-sm"
-                />
-                {showErrors && errors.recipient && <FieldError id="recipient-error">{errors.recipient}</FieldError>}
-              </div>
 
               {hasDurable && (
                 <div className="space-y-1.5">

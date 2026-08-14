@@ -81,6 +81,32 @@ export const USAGE_TYPE_OPTIONS = [
   { value: "OTHER", label: "อื่นๆ" },
 ] as const;
 
+/**
+ * ผู้รับ = สิ่งที่ของถูกเบิกไปให้ ไม่ใช่ช่องกรอกแยกอีกช่อง.
+ *
+ * The cart used to ask "ผู้รับ" on top of the usage block, and the two answers were the same
+ * answer twice: a draw for รายวิชา is received by that course, a กิจกรรม by that activity, and
+ * อื่นๆ already asks "เอาไปทำอะไร / ใครขอ". So the field is gone from the cart and every
+ * ผู้รับ / ผู้ยืม label in the app is derived from the usage instead.
+ *
+ * `recipient` is still read first — the column stays for the rows written before this, where
+ * someone deliberately typed a name. New rows leave it null and fall through to the usage.
+ */
+export function recipientLabel(r: {
+  recipient?: string | null;
+  usageType?: string | null;
+  courseCode?: string | null;
+  usageNote?: string | null;
+  notes?: string | null;
+}): string | null {
+  if (r.recipient?.trim()) return r.recipient.trim();
+  // รหัสวิชา + ชื่อวิชา snapshot — the code alone is not something anyone reads as a recipient.
+  if (r.usageType === "COURSE") {
+    return [r.courseCode?.trim(), r.usageNote?.trim()].filter(Boolean).join(" ") || null;
+  }
+  return r.notes?.trim() || null;
+}
+
 // ─── Adjustment Reason ───
 
 export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {

@@ -35,7 +35,9 @@ export interface FilterValues {
   categoryId?: string;
   locationId?: string;
   staffId?: string;
-  recipient?: string; // ออกจากคลัง: free-text ผู้รับ, contains-match (no id to select — it is typed at the cart)
+  // ออกจากคลัง: contains-match over the columns ผู้รับ is rendered from (lib/constants
+  // recipientLabel) — รหัสวิชา, ชื่อวิชา, รายละเอียดการนำไปใช้, and the legacy typed name.
+  recipient?: string;
   usageType?: string;
   status?: string;
   loanStatus?: string; // ออกจากคลัง: "open" | "overdue" (export only — the tab drives it via `status`)

@@ -8,10 +8,17 @@ import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
-import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, locationLabel } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
 import { groupUsageBySubject } from "@/lib/usage-by-subject";
+
+/** ผู้รับ/ผู้ยืม search — the four columns recipientLabel can render from. Always nested under
+ *  AND: both callers' `where` already owns `OR` for the NULL-safe loanType pair. */
+function recipientOr(q: string): Prisma.DispenseRecordWhereInput {
+  const like = { contains: q, mode: "insensitive" as const };
+  return { OR: [{ recipient: like }, { courseCode: like }, { usageNote: like }, { notes: like }] };
+}
 
 // ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
 //
@@ -253,8 +260,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (usageType) where.usageType = usageType as UsageType;
       // Mirrors the ผู้รับ search box on the tab. Missing here, an Excel exported under a
       // recipient filter would quietly hold every row on screen plus the ones filtered out.
+      // Same four columns as api/reports/dispense-history — ผู้รับ is derived from the usage.
       const recipient = params.get("recipient")?.trim();
-      if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
+      if (recipient) where.AND = [recipientOr(recipient)];
       // นำไปใช้งาน + "ยังอยู่ข้างนอก" — the only loanStatus this case honours; ยืม + ค้างคืน
       // goes to outstanding-loans instead (see the tab's exportType).
       if (params.get("loanStatus")) where.returnedAt = null;
@@ -280,6 +288,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         if (kind === "consume") {
           return {
             ...head,
+            ผู้รับ: recipientLabel(r) ?? "",
             ผู้เบิก: r.staff.name,
             การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
             หมายเหตุ: r.notes ?? "",
@@ -302,7 +311,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           : "ยังไม่คืน";
         return {
           ...head,
-          ผู้ยืม: r.recipient ?? "",
+          ผู้ยืม: recipientLabel(r) ?? "",
           ผู้เบิก: r.staff.name,
           การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
           ครบกำหนด: r.dueAt ? fmtDate(r.dueAt, "yyyy-MM-dd") : "",
@@ -335,7 +344,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (staffId) where.staffId = staffId;
       // Same ผู้ยืม search as the tab — see the note on the dispense-history case.
       const recipient = params.get("recipient")?.trim();
-      if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
+      if (recipient) where.AND = [recipientOr(recipient)];
 
       const records = await prisma.dispenseRecord.findMany({
         where,
@@ -373,7 +382,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             : "ใกล้ครบกำหนด";
         return {
           วันที่: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
-          ผู้ยืม: head.recipient ?? "",
+          ผู้ยืม: recipientLabel(head) ?? "",
           ผู้เบิก: head.staff.name,
           รายการ: recs.length,
           ค้างคืน: outstanding,

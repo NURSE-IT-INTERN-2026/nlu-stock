@@ -33,8 +33,9 @@ export const dispenseRequestSchema = z.object({
   // COURSE only: the CMU รหัสวิชา, with the course name snapshotted into usageNote.
   courseCode: z.string().max(50).optional().nullable(),
   usageNote: z.string().max(500).optional().nullable(),
+  // ผู้รับ is not a field — it is derived from the usage block above (lib/constants
+  // recipientLabel). The DispenseRecord.recipient column stays for the rows that predate that.
   notes: z.string().max(500).optional().nullable(),
-  recipient: z.string().max(255).optional().nullable(),
   // นำไปใช้งาน (INUSE) only — the room the stock was placed in. Required for INUSE
   // (see the refine below); ignored for เบิก/ยืม, which don't move an item's home.
   locationId: z.string().optional().nullable(),
