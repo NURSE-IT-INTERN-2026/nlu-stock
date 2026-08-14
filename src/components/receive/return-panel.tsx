@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { getOpenBorrows, type OpenBorrow } from "@/lib/api";
 import { ReturnLoanDetail, type LoanGroup } from "@/components/receive/return-loan-detail";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
-import { recipientLabel } from "@/lib/constants";
+import { recipientLabel, USAGE_TYPE_LABELS, USAGE_TYPE_OPTIONS } from "@/lib/constants";
 
 const fmtDate = (iso: string | null) => (iso ? fmt(iso, TH_DATE) : null);
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -38,13 +39,25 @@ function rowTint(dueAt: string | null): string {
   return "bg-card border-border";
 }
 
-// A loan row is a flex line: ผู้ยืม (flex-1) absorbs all slack so the number
-// columns stay clustered at a fixed gap — they never spread apart as the screen
-// widens. Number columns are fixed-width + right-aligned so header and rows line
-// up and dates show in full. Columns drop in progressively as width shrinks:
-// base (≥320) keeps ค้าง/กำหนดคืน/รายการ, ≥400 adds กี่วัน, ≥sm adds ยืมเมื่อ.
-const ROW_LINE = "flex items-center gap-2 sm:gap-3";
+// A loan row is a flex line. Number columns are fixed-width + right-aligned so header and
+// rows line up and dates show in full; the two text columns share the slack, so a wide
+// screen spends it on more of the loan instead of on a gap in the middle.
+//
+// Columns come and go with width rather than clustering at one end:
+//   base (≥320) ผู้ยืม · ค้าง · กำหนดคืน · รายการ
+//   ≥400        + กี่วัน
+//   ≥sm         + ยืมเมื่อ
+//   ≥md         + พัสดุ (the names, not just the count)
+//   ≥lg         + การใช้งาน
+//   ≥xl         + ผู้ให้ยืม
+const ROW_LINE = "flex items-center gap-2 sm:gap-3 lg:gap-4";
 const COL = {
+  // Both flex-1 from a 0 basis: they split the leftover evenly instead of one of them
+  // swallowing it. min-w-0 is what lets truncate work inside a flex child.
+  who: "flex-1 min-w-0 truncate",
+  items: "hidden md:block flex-1 min-w-0 truncate",
+  usage: "hidden lg:block w-16 shrink-0 truncate",
+  staff: "hidden xl:block w-24 shrink-0 truncate",
   owe: "w-11 sm:w-14 shrink-0",
   // Thai dates ("31 ก.ค. 2569") are wider than the old 7/31/2026 — these two columns are
   // sized to hold one on a single line, otherwise the date wraps and the row grows.
@@ -66,6 +79,9 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<"all" | "overdue" | "near">(initialChip ?? "all");
+  // ผู้ยืม reads as the รายวิชา / กิจกรรม it went out for (lib/constants recipientLabel), so
+  // "ตามคืนของวิชาที่จบเทอมแล้ว" is a filter on the same field the rows are named by.
+  const [usage, setUsage] = useState<string>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,13 +113,14 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
     (g) => g.records.reduce((s, r) => s + outstandingOf(r), 0) > 0,
   );
 
-  const totalOutstanding = records.reduce((s, r) => s + outstandingOf(r), 0);
   const selected = groups.find((g) => g.key === selectedKey) ?? null;
 
-  // Filter chips (due status) AND text search (recipient / item / subCode / serial).
+  // Filter chips (due status) AND usage type AND text search (recipient / item / subCode / serial).
   const chipFiltered = groups.filter((g) => {
+    const head = g.records[0];
+    if (usage !== "all" && head.usageType !== usage) return false;
     if (chip === "all") return true;
-    const a = dueAlert(g.records[0].dueAt);
+    const a = dueAlert(head.dueAt);
     return chip === "overdue" ? a?.text === "เกินกำหนด" : a?.text === "ใกล้ครบกำหนด";
   });
   const q = query.trim().toLowerCase();
@@ -127,8 +144,8 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
   if (loading) {
     return (
       <div className="space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-9 w-full rounded-lg" />
         ))}
       </div>
     );
@@ -158,19 +175,22 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
 
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
-      <CardContent className="flex flex-col flex-1 min-h-0 gap-3">
-        <div className="shrink-0 space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">{shownOutstanding} ชิ้นค้างคืน · {filteredGroups.length} รายการยืม</p>
+      <CardContent className="flex flex-col flex-1 min-h-0 gap-2">
+        {/* Two lines on every width, phone included: the count truncates before it pushes the
+            chips off, and the usage select rides beside the search instead of claiming a third
+            row. A phone screen holds ~4 more loans for it. */}
+        <div className="shrink-0 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-[11px] text-muted-foreground">{shownOutstanding} ชิ้นค้างคืน · {filteredGroups.length} รายการยืม</p>
             {!readOnly && (
-              <div className="flex items-center gap-1">
-                {([["all", "ทั้งหมด"], ["overdue", "เกินกำหนด"], ["near", "ใกล้ครบกำหนด"]] as const).map(([value, label]) => (
+              <div className="flex shrink-0 items-center gap-1">
+                {([["all", "ทั้งหมด"], ["overdue", "เกินกำหนด"], ["near", "ใกล้ครบ"]] as const).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setChip(value)}
                     className={cn(
-                      "px-2 py-1.5 rounded-full text-[11px] whitespace-nowrap shrink-0 border transition-colors",
+                      "rounded-full border px-2 py-1 text-[11px] whitespace-nowrap shrink-0 transition-colors",
                       chip === value ? CHIP_STYLES[value].active : CHIP_STYLES[value].idle,
                     )}
                   >
@@ -180,20 +200,40 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
               </div>
             )}
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="ค้นหา ผู้ยืม / พัสดุ…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="h-9 pl-9 text-sm"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="ค้นหา ผู้ยืม / พัสดุ…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="h-8 pl-8 text-sm"
+              />
+            </div>
+            <Select value={usage} onValueChange={(v) => setUsage(String(v ?? "all"))}>
+              {/* ponytail: explicit children on SelectValue — Base UI falls back to the raw
+                  value when the popup items are unmounted. Same as reports' FilterSelect. */}
+              {/* No width cap — the trigger is w-fit by default and "ทุกการใช้งาน" was being
+                  clipped by one. It is the widest label there is, so it sets the size. */}
+              <SelectTrigger className="shrink-0 text-xs">
+                <SelectValue>{USAGE_TYPE_LABELS[usage] ?? "ทุกการใช้งาน"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">ทุกการใช้งาน</SelectItem>
+                {USAGE_TYPE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Separator />
         </div>
         {filteredGroups.length > 0 && (
-          <div className={cn(ROW_LINE, "shrink-0 px-2.5 text-[11px] text-muted-foreground")}>
-            <span className="flex-1 min-w-0">ผู้ยืม</span>
+          <div className={cn(ROW_LINE, "shrink-0 px-2.5 text-[10px] text-muted-foreground sm:text-[11px]")}>
+            <span className={COL.who}>ผู้ยืม</span>
+            <span className={COL.items}>พัสดุ</span>
+            <span className={COL.usage}>การใช้งาน</span>
+            <span className={COL.staff}>ผู้ให้ยืม</span>
             <span className={COL.owe}>ค้าง</span>
             <span className={COL.borrowed}>ยืมเมื่อ</span>
             <span className={COL.days}>กี่วัน</span>
@@ -202,7 +242,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
             <span className="w-4 shrink-0" aria-hidden />
           </div>
         )}
-        <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-1.5 pr-1">
+        <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-1 pr-1 sm:gap-1.5">
           {filteredGroups.length === 0 ? (
             <div className="text-center py-10 text-sm text-muted-foreground">ไม่พบ &ldquo;{query}&rdquo;</div>
           ) : filteredGroups.map((g) => {
@@ -212,6 +252,9 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
           const itemCount = new Set(g.records.map((r) => r.item.id)).size;
           const borrowed = fmtDate(head.dispensedAt);
           const days = head.dispensedAt ? daysSince(head.dispensedAt) : null;
+          // Distinct names, in the order they were borrowed — one ใบ of 10 pieces of the same
+          // model must read as that model once, not ten times.
+          const itemNames = [...new Set(g.records.map((r) => r.item.name))].join(" · ");
           return (
             <button
               key={g.key}
@@ -219,11 +262,16 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
               onClick={() => setSelectedKey(g.key)}
               className={cn(
                 ROW_LINE,
-                "w-full text-left border rounded-lg px-2.5 py-2 text-xs sm:text-sm transition-colors hover:border-primary/50",
+                "w-full text-left border rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:border-primary/50 sm:py-2 sm:text-sm",
                 rowTint(head.dueAt),
               )}
             >
-              <span className="flex-1 min-w-0 truncate font-semibold text-foreground">{recipientLabel(head) ?? "ไม่ระบุผู้ยืม"}</span>
+              <span className={cn(COL.who, "font-semibold text-foreground")}>{recipientLabel(head) ?? "ไม่ระบุผู้ยืม"}</span>
+              <span className={cn(COL.items, "text-muted-foreground")}>{itemNames}</span>
+              <span className={cn(COL.usage, "text-muted-foreground")}>
+                {head.usageType ? USAGE_TYPE_LABELS[head.usageType] ?? head.usageType : "—"}
+              </span>
+              <span className={cn(COL.staff, "text-muted-foreground")}>{head.staff.name}</span>
               <span className={COL.owe}>
                 <Badge className="text-[10px] bg-red-700 text-white font-semibold hover:bg-red-700">{outstanding}/{total}</Badge>
               </span>
