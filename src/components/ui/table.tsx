@@ -4,7 +4,28 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+// The report tables' look — column rules + zebra rows — as descendant selectors, so a table
+// opts in with one prop instead of every th/td carrying border classes.
+// ponytail: CSS-only on purpose. Structure (expandable rows, server pagination, mobile card
+// lists) stays where it is; only the skin is shared.
+const gridSkin = [
+  "[&_th]:border-r [&_th]:border-border/70 [&_th:last-child]:border-r-0",
+  "[&_td]:border-r [&_td]:border-border/60 [&_td:last-child]:border-r-0",
+].join(" ")
+
+// Separate from `grid`: a table whose tbody holds expanded detail rows has to stripe by data
+// index, not by nth-child, or the extra rows flip the parity mid-list.
+// :where() zeroes the selector's specificity so this lands at the same weight as a class on the
+// row. Without it the descendant selector outranks TableRow's hover:/selected: backgrounds and
+// the row stops reacting to the pointer.
+const zebraSkin = "[&_:where(tbody_tr:nth-child(even))]:bg-muted/25"
+
+function Table({
+  className,
+  grid,
+  zebra,
+  ...props
+}: React.ComponentProps<"table"> & { grid?: boolean; zebra?: boolean }) {
   // table-fixed fits at md+ → overflow-visible: no scrollbar, and avoids the
   // overflow-x:auto→computed overflow-y:auto gotcha that hijacks sticky headers.
   const compact = className?.includes("table-fixed");
@@ -15,7 +36,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom text-sm", grid && gridSkin, zebra && zebraSkin, className)}
         {...props}
       />
     </div>

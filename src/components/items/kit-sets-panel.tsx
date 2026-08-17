@@ -118,7 +118,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
         <div className="overflow-hidden rounded-xl border bg-card">
           {/* Desktop: table. Mobile: one stacked card per component — five fixed columns
               squeeze ชื่อ down to nothing under ~600px. */}
-          <Table className="hidden table-fixed md:table">
+          <Table grid zebra className="hidden table-fixed md:table">
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="w-32 px-2">รหัส</TableHead>
@@ -183,7 +183,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card">
-            <Table className="hidden table-fixed md:table">
+            <Table grid zebra className="hidden table-fixed md:table">
               <TableHeader>
                 <TableRow className="bg-muted/40">
                   <TableHead className="w-24 px-2">ชุดที่</TableHead>
