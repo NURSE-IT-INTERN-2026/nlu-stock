@@ -156,8 +156,11 @@ export async function recomputeItemCounts(
   }
 
   // Tracked: one query for all sub-item statuses, then derive counts + status in JS.
-  const subs = await tx.subItem.findMany({ where: { itemId }, select: { status: true } });
-  const availableQty = subs.filter((s) => s.status === ItemStatus.AVAILABLE).length;
+  const subs = await tx.subItem.findMany({ where: { itemId }, select: { status: true, needsCheck: true } });
+  // needsCheck is a KIT set waiting for someone to confirm its contents — it is on the shelf
+  // but cannot be lent, so counting it as พร้อมใช้ would make the number disagree with the
+  // ยืม button. Every other kind of sub-item holds false forever, so this narrows nothing else.
+  const availableQty = subs.filter((s) => s.status === ItemStatus.AVAILABLE && !s.needsCheck).length;
   const totalQty = subs.filter((s) => s.status !== ItemStatus.DISPOSED).length;
   const status = deriveStatusFromSubItems(subs.map((s) => s.status));
 
@@ -202,4 +205,60 @@ export function damagedQtyOf(
   rows: { previousQty: number; newQty: number; recoveredAt: Date | null }[],
 ): number {
   return rows.reduce((sum, r) => (r.recoveredAt ? sum : sum + Math.max(0, r.previousQty - r.newQty)), 0);
+}
+
+/**
+ * Close an open แจ้งชำรุด booking by putting its units back on the shelf.
+ *
+ * Two doors lead here — รับคืนจากส่งซ่อม (repaired) and ยกเลิกคำขอชำรุด (never broken) — and
+ * they must move stock identically, so the arithmetic lives here rather than in either route.
+ * `recoveredAt` is what takes the booking off the ชำรุด bucket (damagedQtyOf above), and it is
+ * stamped inside the same transaction as the qty move so the two can never disagree.
+ *
+ * Caller must have checked the booking is open; `label` heads the audit adjustment row.
+ */
+export async function restoreDamagedQty(
+  tx: TxClient,
+  input: {
+    adj: { id: string; itemId: string; lotId: string | null; previousQty: number; newQty: number; notes: string | null };
+    /** Which door this is — it names the audit row so the history never has to read the note. */
+    reason: typeof AdjustmentReason.REPAIR_RETURN | typeof AdjustmentReason.DAMAGE_CANCELLED;
+    note?: string | null;
+    userId: string;
+  },
+): Promise<number> {
+  const { adj, reason, note, userId } = input;
+  const qty = adj.previousQty - adj.newQty;
+
+  await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
+
+  const before = await tx.item.findUniqueOrThrow({ where: { id: adj.itemId }, select: { availableQty: true } });
+  if (adj.lotId) {
+    // Booked against a specific lot — put it back there and let the recompute re-derive
+    // availableQty from SUM(lots); incrementing the item directly would desync.
+    await tx.lot.update({ where: { id: adj.lotId }, data: { remainingQty: { increment: qty } } });
+  } else {
+    // Item-level damage: land it on a lot when the item has any (otherwise the next recompute
+    // resyncs availableQty from SUM(lots) and eats the recovery), else straight onto the item.
+    const landed = await allocateAcrossLots(tx, adj.itemId, qty);
+    if (!landed) await tx.item.update({ where: { id: adj.itemId }, data: { availableQty: { increment: qty } } });
+  }
+
+  await tx.stockAdjustment.create({
+    data: {
+      itemId: adj.itemId,
+      delta: qty,
+      previousQty: before.availableQty,
+      newQty: before.availableQty + qty,
+      reason,
+      // No "รับคืนจากซ่อม" prefix here — `reason` says that now, and the history prints it as
+      // the headline. The note carries only what a human typed: the original symptom, and
+      // whatever was said while closing it.
+      notes: [adj.notes, note].filter(Boolean).join(" — ") || null,
+      adjustedBy: userId,
+    },
+  });
+
+  await recomputeItemCounts(tx, adj.itemId);
+  return qty;
 }

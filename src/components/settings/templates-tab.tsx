@@ -173,9 +173,9 @@ export function TemplatesTab() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="text-xs font-medium text-muted-foreground">ชื่อ</TableHead>
-                <TableHead className="w-24 text-xs font-medium text-muted-foreground">รายการ</TableHead>
-                <TableHead className="w-40 text-xs font-medium text-muted-foreground">ผู้สร้าง</TableHead>
+                <TableHead>ชื่อ</TableHead>
+                <TableHead className="w-24">รายการ</TableHead>
+                <TableHead className="w-40">ผู้สร้าง</TableHead>
                 <TableHead className="w-24" />
               </TableRow>
             </TableHeader>

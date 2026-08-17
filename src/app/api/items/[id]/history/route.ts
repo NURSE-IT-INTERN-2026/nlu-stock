@@ -4,7 +4,9 @@ import {
   ADJUSTMENT_REASON_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
   USAGE_TYPE_LABELS, RETURN_CONDITION_LABELS, type TimelineEventType,
 } from "@/lib/constants";
-import { isLoanEdge } from "@/lib/returns";
+import { isDuplicateOfLoanRow } from "@/lib/returns";
+import { AdjustmentReason } from "@/generated/prisma/enums";
+import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 
 // A history row as the table renders it: what happened, how much stock moved (signed,
@@ -30,6 +32,29 @@ type TimelineEvent = {
 
 const joinNotes = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
 
+// Adjustment reasons that describe an event rather than a bookkeeping correction — these get
+// to be the headline of their row. ตรวจนับขาด/เกิน and อื่นๆ are left out on purpose: they only
+// qualify a number, so the number leads instead.
+const NAMED_ADJUSTMENT = new Set<AdjustmentReason>([
+  AdjustmentReason.DAMAGED_PENDING_REPAIR,
+  AdjustmentReason.REPAIR_RETURN,
+  AdjustmentReason.DAMAGE_CANCELLED,
+  AdjustmentReason.DISPOSAL,
+  AdjustmentReason.ASSEMBLY,
+]);
+
+// ยืม/นำไปใช้งาน rows say what left the store but not whether it is still out — the same row
+// reads identically whether the 5 pieces came back in July or are three weeks overdue. The
+// numbers are already on the DispenseRecord (quantity vs resolvedQty, dueAt), so this is the
+// one thing the row was missing.
+const loanStatus = (r: { quantity: number; resolvedQty: number; dueAt: Date | null }, unit: string) => {
+  const owed = r.quantity - r.resolvedQty;
+  if (owed <= 0) return "คืนครบแล้ว";
+  const due = r.dueAt ? ` · กำหนดคืน ${fmtDate(r.dueAt, TH_DATE)}` : "";
+  const late = r.dueAt && r.dueAt < new Date() ? "เกินกำหนด · " : "";
+  return `${late}ค้าง ${owed} ${unit}${due}`;
+};
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -40,13 +65,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     select: {
       id: true,
       issueUnit: { select: { name: true } },
-      category: { select: { profile: { select: { dispenseType: true } } } },
+      category: { select: { profile: { select: { code: true, dispenseType: true } } } },
     },
   });
   if (!item) return notFound("Item not found");
 
   const unit = item.issueUnit.name;
   const isConsumable = item.category.profile?.dispenseType === "CONSUMABLE";
+  const isKit = item.category.profile?.code === "KIT";
 
   const searchParams = getSearchParams(request);
   const { page, perPage, skip, take } = paginate(searchParams);
@@ -87,25 +113,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             ? "DISPENSE"
             : r.loanType === "INUSE" ? "INUSE" : "BORROW";
           const place = r.location ? [r.location.building, r.location.room].filter(Boolean).join(" ") : null;
+          // เหตุผล lives in usageNote; notes is where กิจกรรม/อื่นๆ wrote it before that, and
+          // where นำไปใช้งาน still writes it (lib/constants recipientLabel uses the same order).
+          const reason = r.usageNote?.trim() || r.notes?.trim() || null;
           events.push({
             id: r.id,
             type,
             date: r.dispensedAt,
             delta: -r.quantity,
             qty: r.quantity,
-            // "อื่นๆ" as a headline says nothing — for that one type the free text IS the
+            // "อื่นๆ" as a headline says nothing — for that one type the เหตุผล IS the
             // event, so it leads and drops out of the quieter second line.
-            note: r.usageType === "OTHER" && r.notes?.trim()
-              ? r.notes.trim()
+            note: r.usageType === "OTHER" && reason
+              ? reason
               : (r.usageType ? USAGE_TYPE_LABELS[r.usageType] : null) ?? "นำออกจากคลัง",
             detail: joinNotes(
-              r.usageNote,
+              // Leads the line: on a ยืม row "ค้าง 5 ชิ้น" is the thing worth scanning, and
+              // a consumable never comes back so it gets no status at all.
+              isConsumable ? null : loanStatus(r, unit),
+              r.usageType === "OTHER" ? null : reason,
+              // Legacy rows only: someone typed a name back when ผู้รับ was a field of its own.
               r.recipient ? `ผู้รับ ${r.recipient}` : null,
               place ? `ห้องที่ตั้ง ${place}` : null,
-              r.usageType === "OTHER" ? null : r.notes,
             ),
             user: r.staff.name,
-            details: { quantity: r.quantity, usageType: r.usageType, returnedAt: r.returnedAt, loanType: r.loanType },
+            details: {
+              quantity: r.quantity, usageType: r.usageType, returnedAt: r.returnedAt, loanType: r.loanType,
+              resolvedQty: r.resolvedQty, dueAt: r.dueAt,
+            },
           });
         }
       })
@@ -173,14 +208,35 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         for (const r of records) {
           events.push({
             id: r.id,
-            type: "ADJUSTMENT",
+            // Two reasons are events, not stock corrections: แจ้งชำรุด opens the repair flow, and
+            // the row that hands repaired units back is stock walking in the door — the same
+            // thing รับเข้า means everywhere else in the app. ยกเลิกคำขอชำรุด stays ปรับสต๊อก: it
+            // withdraws a booking that should not have existed, it does not receive anything.
+            type: lost
+              ? "ADJUSTMENT"
+              : r.reason === AdjustmentReason.DAMAGED_PENDING_REPAIR
+                ? "DAMAGE_REPORT"
+                : r.reason === AdjustmentReason.REPAIR_RETURN
+                  ? "RECEIVE"
+                  : "ADJUSTMENT",
             date: r.adjustedAt,
             delta: r.newQty - r.previousQty,
             qty: Math.abs(r.newQty - r.previousQty),
+            // A reason that names a real event leads the row — "แจ้งชำรุด 5 ชิ้น" is what the
+            // reader is scanning for, and the yard figures belong on the quieter second line.
+            // The generic ones (ตรวจนับขาด/เกิน, อื่นๆ) say nothing on their own, so there the
+            // numbers stay the headline and the label stays underneath.
             note: lost
               ? `สูญหาย ${r.previousQty - r.newQty} ${unit}`
-              : `ปรับยอด ${r.previousQty} → ${r.newQty}`,
-            detail: joinNotes(lost ? null : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason, r.notes),
+              : NAMED_ADJUSTMENT.has(r.reason)
+                ? `${ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason} ${Math.abs(r.newQty - r.previousQty)} ${unit}`
+                : `ปรับยอด ${r.previousQty} → ${r.newQty}`,
+            detail: joinNotes(
+              lost ? null : NAMED_ADJUSTMENT.has(r.reason)
+                ? `ปรับยอด ${r.previousQty} → ${r.newQty}`
+                : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason,
+              r.notes,
+            ),
             user: r.adjuster.name,
             details: lost
               ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
@@ -202,19 +258,32 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { changedAt: "desc" },
     }).then((records) => {
       for (const r of records) {
-        // Loan transitions belong to the เบิก/รับคืน rows, both ways — see isLoanEdge.
-        if (!lost && isLoanEdge(r)) continue;
+        // Loan transitions belong to the เบิก/รับคืน rows, both ways — see isDuplicateOfLoanRow.
+        if (!lost && isDuplicateOfLoanRow(r)) continue;
+        // A birth certificate, not a transition: ประกอบชุด logs AVAILABLE → AVAILABLE because
+        // the set did not exist a moment earlier. "พร้อมใช้งาน → พร้อมใช้งาน" describes
+        // nothing, so the reason — which names the set — becomes the headline.
+        const sameStatus = r.previousStatus === r.newStatus;
+        // A kit set is retired by ยกเลิกชุด, which hands its durables back. DISPOSED is the
+        // right row in the database and the wrong word on the screen: nothing was written off.
+        const to = isKit && r.newStatus === "DISPOSED" ? "ยกเลิกชุด" : (STATUS_LABELS[r.newStatus] ?? r.newStatus);
         events.push({
           id: r.id,
-          type: "STATUS_CHANGE",
+          // repairVenue is only ever written by a ส่งซ่อม (and by the edits to one), on both
+          // paths: the piece's DAMAGED → UNDER_REPAIR row, and the qty booking's same-status
+          // audit row. That single column is the whole test — no status matching needed.
+          type: r.repairVenue ? "REPAIR_SENT" : "STATUS_CHANGE",
           date: r.changedAt,
           delta: null,
           qty: null,
-          note: `${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABELS[r.newStatus] ?? r.newStatus}`,
+          note: sameStatus
+            ? (r.reason ?? STATUS_LABELS[r.newStatus] ?? r.newStatus)
+            : `${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${to}`,
           detail: joinNotes(
             r.repairVenue && r.newStatus === "UNDER_REPAIR" ? `ส่งซ่อม${r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}` : null,
             r.damageNote,
-            r.reason,
+            // The headline already is the reason in that case — printing it twice is noise.
+            sameStatus ? null : r.reason,
           ),
           user: r.changer.name,
           details: lost
@@ -235,7 +304,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         for (const r of records) {
           events.push({
             id: r.id,
-            type: "MAINTENANCE",
+            // A CORRECTIVE record only ever exists as the tail of ชำรุด → ส่งซ่อม → รับคืน, so it
+            // IS the รับคืนจากซ่อม event — filing it under บำรุงรักษา buried repairs among the
+            // scheduled rounds, which are a different thing on a different cadence.
+            type: r.type === "CORRECTIVE" ? "REPAIR_RETURN" : "MAINTENANCE",
             date: r.performedAt,
             delta: null,
             qty: null,

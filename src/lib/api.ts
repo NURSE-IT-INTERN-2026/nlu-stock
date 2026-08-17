@@ -22,6 +22,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      // ponytail: ngrok free serves an HTML warning page instead of JSON without this; no-op on other hosts.
+      "ngrok-skip-browser-warning": "any",
       ...init?.headers,
     },
   });
@@ -97,7 +99,10 @@ export function login(email: string, password: string) {
 }
 
 export function logout() {
-  return fetch("/api/auth/logout", { method: "POST" });
+  return fetch("/api/auth/logout", {
+    method: "POST",
+    headers: { "ngrok-skip-browser-warning": "any" },
+  });
 }
 
 export function getSession() {
@@ -439,22 +444,101 @@ export function deleteDispenseTemplate(id: string) {
   return request<{ ok: true }>(`/api/dispense-templates/${id}`, { method: "DELETE" });
 }
 
-// ─── Kit assembly ───
+// ─── Kit recipes & sets ───
+// A kit Item is the recipe; each assembled set is a SubItem of it. See lib/kits.ts.
 
 export interface KitComponentInput {
   componentItemId: string;
   quantity: number; // จำนวนต่อ 1 ชุด
 }
 
-export interface AssembleKitPayload {
+export interface CreateKitPayload {
   name: string;
   issueUnitId: string;
   components: KitComponentInput[];
-  assembleQty: number;
 }
 
-export function assembleKit(data: AssembleKitPayload) {
-  return request<{ kitItemId: string; kitCode: string; assembledQty: number }>("/api/kits", {
+export interface KitComponent {
+  itemId: string;
+  code: string;
+  name: string;
+  /** Unit the item's stock is counted in. */
+  unitName: string;
+  /** Unit the recipe counts in — "5 ชิ้น" out of an item stocked in กล่อง. */
+  bomUnitName: string;
+  kind: "TRACKED" | "COUNT" | "CONSUMABLE";
+  perSet: number;
+  availableQty: number;
+}
+
+export interface KitDetail {
+  kit: { id: string; code: string; name: string; issueUnit: { id: string; name: string } };
+  components: KitComponent[];
+  unlinked: { id: string; name: string; quantity: number; unit: { name: string } }[];
+  sets: {
+    id: string;
+    subCode: string;
+    status: string;
+    /** true = ถูกใช้ไปแล้ว ยังไม่มีใครยืนยันว่าของครบ — ยืมไม่ได้จนกว่าจะกดตรวจ. */
+    needsCheck: boolean;
+    kitContents: { id: string; subCode: string; item: { id: string; code: string; name: string } }[];
+  }[];
+  maxSets: number;
+  unitMismatches: { itemId: string; name: string; bomUnitName: string; unitName: string }[];
+}
+
+export function createKitRecipe(data: CreateKitPayload) {
+  return request<{ kitItemId: string; kitCode: string }>("/api/kits", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function fetchKit(kitItemId: string) {
+  return request<KitDetail>(`/api/kits/${kitItemId}`);
+}
+
+export function updateKitBom(kitItemId: string, components: KitComponentInput[]) {
+  return request<{ success: true }>(`/api/kits/${kitItemId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ components }),
+  });
+}
+
+export function assembleKit(
+  kitItemId: string,
+  data: { sets: number; picks?: { componentItemId: string; subItemIds: string[] }[] },
+) {
+  return request<{ assembledQty: number; setSubItemIds: string[] }>(`/api/kits/${kitItemId}/assemble`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export interface KitSetContents {
+  set: { id: string; subCode: string; status: string; needsCheck: boolean; item: { id: string; code: string; name: string } };
+  tracked: { id: string; subCode: string; serialNumber: string | null; item: { id: string; code: string; name: string; issueUnit: { name: string } } }[];
+  durables: KitComponent[];
+  consumables: KitComponent[];
+  /** Tracked slots the recipe expects but nothing fills — a piece reported broken left the box. */
+  missingTracked: { itemId: string; code: string; name: string; missing: number }[];
+}
+
+export function fetchKitSet(subItemId: string) {
+  return request<KitSetContents>(`/api/kits/sets/${subItemId}`);
+}
+
+/** ยกเลิกชุด — the exit door. Only for a set that is not out on loan. */
+export function cancelKitSet(subItemId: string, data: { note?: string }) {
+  return request<{ kitItemId: string; setLabel: string; consumables: { name: string; quantity: number; unitName: string }[] }>(
+    `/api/kits/sets/${subItemId}`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+/** ยืนยันตรวจชุด — lifts รอตรวจ. Checks nothing and moves no stock; it records that a human looked. */
+export function confirmKitSetChecked(subItemId: string, data: { note?: string }) {
+  return request<{ kitItemId: string; setLabel: string }>(`/api/kits/sets/${subItemId}/check`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -499,16 +583,6 @@ export function updateItemStatus(
   });
 }
 
-export function bulkUpdateSubItemStatus(
-  itemId: string,
-  data: { subItemIds: string[]; newStatus: string; notes?: string | null; imageUrl?: string | null },
-) {
-  return request<{ availableQty: number; totalQty: number }>(`/api/items/${itemId}/status/bulk`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
 export function returnItem(itemId: string, data: {
   subItemId?: string;
   dispenseRecordId?: string;
@@ -531,6 +605,9 @@ export interface OpenBorrow {
   resolvedQty: number;
   dispensedAt: string;
   usageType: string | null;
+  // เหตุผล is rendered from these three (lib/constants recipientLabel), not from `recipient` —
+  // that column only still carries a value on rows written before the cart dropped the field.
+  courseCode: string | null;
   usageNote: string | null;
   notes: string | null;
   recipient: string | null;
@@ -544,7 +621,7 @@ export interface OpenBorrow {
     name: string;
     imageUrl: string | null;
     issueUnit: { name: string };
-    category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+    category: { name: string; profile: { code: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
     _count: { subItems: number };
   };
@@ -559,6 +636,7 @@ export function getOpenBorrows() {
 export type ReturnCondition = "AVAILABLE" | "DAMAGED" | "LOST";
 
 export function returnLoanEntries(data: {
+  // A KIT set ignores `status`: it is returned whole and ปกติ, then unpacked (see api/returns).
   entries: { dispenseRecordId: string; subItemId: string; status: ReturnCondition; note?: string; photos?: string[] }[];
   note?: string | null;
   proofUrls?: string[];
@@ -587,7 +665,7 @@ export interface SubItemByStatus {
     name: string;
     imageUrl: string | null;
     issueUnit: { name: string };
-    category: { name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
+    category: { name: string; profile: { code: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM" } };
     location: { building: string; floor: string; room: string; detail: string | null } | null;
     maintenanceCycleMonths: number;
     _count: { subItems: number };
@@ -596,6 +674,60 @@ export interface SubItemByStatus {
 
 export function getSubItemsByStatus(status: "IN_USE" | "UNDER_REPAIR" | "DAMAGED") {
   return request<{ subItems: SubItemByStatus[] }>(`/api/sub-items?status=${status}`);
+}
+
+/**
+ * One open แจ้งชำรุด booking on non-tracked (qty) stock. Same three stages as a tracked piece:
+ * `repairSentAt` null = ชำรุด รอส่งซ่อม, set = อยู่ระหว่างซ่อม.
+ */
+export interface PendingRepairDamage {
+  /** The StockAdjustment id — what ส่งซ่อม and รับคืน both act on (maintenance `adjustmentId`). */
+  id: string;
+  qty: number;
+  notes: string | null;
+  adjustedAt: string;
+  repairSentAt: string | null;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
+  repairNote: string | null;
+  /** รูปหลักฐานก่อนส่งซ่อม. */
+  imageEvidence: string | null;
+  by: string;
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    imageUrl: string | null;
+    issueUnit: { name: string };
+    location: { building: string; floor: string; room: string; detail: string | null } | null;
+    maintenanceCycleMonths: number;
+  };
+}
+
+/** stage "damaged" = รอส่งซ่อม (alerts), "repair" = อยู่ระหว่างซ่อม (receive tab). */
+export function getPendingRepairDamage(stage: "damaged" | "repair") {
+  return request<{ rows: PendingRepairDamage[] }>(`/api/repairs?stage=${stage}`);
+}
+
+/** ส่งซ่อม a qty damage booking, or edit the details of a trip already under way. */
+export function sendQtyDamageToRepair(data: {
+  adjustmentId: string;
+  venue: "INTERNAL" | "EXTERNAL";
+  repairNote: string;
+  damageNote?: string;
+  imageEvidence?: string;
+}) {
+  return request<{ ok: boolean }>("/api/repairs", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** ยกเลิกคำขอชำรุด on qty stock — puts the units back. SUPERADMIN only. */
+export function cancelQtyDamage(data: { adjustmentId: string; note: string }) {
+  return request<{ ok: boolean; qty: number }>("/api/repairs", {
+    method: "DELETE",
+    body: JSON.stringify(data),
+  });
 }
 
 /** One open นำไปใช้งาน record. Covers both kinds: `subItem` is null for COUNT stock. */
@@ -650,7 +782,7 @@ export function getItemHistory(itemId: string, params?: string) {
 /** Put stock back: `kind` LOST = เรียกคืนสูญหาย (default), DAMAGED = รับคืนจากซ่อม. */
 export function recoverStock(
   itemId: string,
-  data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string; kind?: "LOST" | "DAMAGED" },
+  data: { source: "PIECE" | "ADJUSTMENT"; recordId: string; note?: string },
 ) {
   return request<{ ok: boolean; qty: number }>(`/api/items/${itemId}/recover`, {
     method: "POST",
@@ -701,7 +833,11 @@ export function deleteSubItem(subItemId: string) {
 // ─── Upload ───
 
 export function uploadFile(formData: FormData) {
-  return fetch("/api/upload", { method: "POST", body: formData }).then(async (res) => {
+  return fetch("/api/upload", {
+    method: "POST",
+    body: formData,
+    headers: { "ngrok-skip-browser-warning": "any" },
+  }).then(async (res) => {
     if (!res.ok) throw new ApiError(res.status, "Upload failed");
     return res.json() as Promise<{ url: string }>;
   });

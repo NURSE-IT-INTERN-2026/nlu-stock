@@ -37,6 +37,11 @@ enum AdjustmentReason {
   COUNT_MISMATCH_OVER
   DISPOSAL
   ASSEMBLY
+  // The two ways an open ชำรุด booking closes and its units come back (lib/stock
+  // restoreDamagedQty). Both used to be booked as OTHER, which printed "อื่นๆ" over the row
+  // that puts repaired stock back — the one row where the reason is the whole point.
+  REPAIR_RETURN
+  DAMAGE_CANCELLED
   OTHER
 }
 
@@ -300,6 +305,19 @@ model SubItem {
   // the Item-level columns instead.
   lastMaintenanceDate DateTime?
   nextMaintenanceDate DateTime?
+  // Which assembled KIT set this piece is inside RIGHT NOW (null = not in a set).
+  // Self-relation: a KIT SubItem is one physically assembled set, its contents are the
+  // tracked SubItems pointing at it. Cleared when the piece leaves the set (แจ้งชำรุด, or
+  // ยกเลิกชุด). History of the same lives on ItemStatusLog.kitSubItemId, which outlives this.
+  inKitSubItemId      String?
+  inKitSubItem        SubItem?       @relation("KitContents", fields: [inKitSubItemId], references: [id])
+  kitContents         SubItem[]      @relation("KitContents")
+  // KIT sets only. A set is persistent: it is borrowed, returned and borrowed again, and the
+  // system never counts the consumables inside it. What it does know for certain is that the
+  // set has been USED since someone last confirmed it was complete — set on เบิก, cleared by
+  // the ยืนยัน button on ตรวจชุด. True = ยืมไม่ได้ and not counted in availableQty.
+  // Every other kind of sub-item holds the default forever.
+  needsCheck          Boolean        @default(false)
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
@@ -310,6 +328,7 @@ model SubItem {
 
   @@unique([itemId, subCode])
   @@index([itemId, status])
+  @@index([inKitSubItemId])
   @@map("sub_items")
 }
 
@@ -461,7 +480,16 @@ model StockAdjustment {
   adjuster      User             @relation(fields: [adjustedBy], references: [id])
   imageEvidence String?
   adjustedAt    DateTime         @default(now())
-  recoveredAt   DateTime? // set when a LOST adjustment is reversed (เรียกคืน)
+  recoveredAt   DateTime? // set when a LOST adjustment is reversed (เรียกคืน) or a repair is closed
+
+  // ── ส่งซ่อม, for a DAMAGED_PENDING_REPAIR booking of qty stock ──
+  // A tracked piece carries its trip on sub_items.status + an UNDER_REPAIR log row; qty stock
+  // has neither, so the booking itself holds the trip. repairSentAt null = ชำรุด รอส่งซ่อม
+  // (the /alerts worklist); set = อยู่ระหว่างซ่อม (the รับคืนจากส่งซ่อม tab). Same three-step
+  // flow as a piece — ชำรุด → ส่งซ่อม → รับคืน — so neither kind skips a stage.
+  repairSentAt  DateTime?
+  repairVenue   RepairVenue?
+  repairNote    String?
 
   @@index([itemId, adjustedAt])
   @@map("stock_adjustments")
@@ -513,6 +541,9 @@ model ItemStatusLog {
   // symptom, the older rows keep the history. Null on non-repair rows and legacy rows
   // (those fall back to the trip-opening row's `reason`).
   damageNote     String?
+  // The KIT set SubItem this piece went into / came out of. Permanent history of
+  // SubItem.inKitSubItemId, which only ever holds the current set.
+  kitSubItemId   String?
   changedAt      DateTime     @default(now())
   recoveredAt    DateTime? // set when a →LOST transition is reversed (เรียกคืน)
 

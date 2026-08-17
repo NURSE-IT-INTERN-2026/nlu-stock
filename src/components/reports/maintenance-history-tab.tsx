@@ -9,6 +9,8 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
+import { History } from "lucide-react";
+import { SectionTitle } from "./report-kit";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
@@ -98,6 +100,12 @@ export function MaintenanceHistoryTab() {
 
   return (
     <div className="space-y-4 pb-2">
+      <SectionTitle
+        token="repair"
+        icon={History}
+        title="ประวัติบำรุงรักษา"
+        subtitle="รอบตรวจเช็คตามกำหนด และงานซ่อมที่ทำไปแล้ว พร้อมค่าใช้จ่าย"
+      />
       <ReportFilters
         config={filterConfig}
         values={filters}
@@ -111,17 +119,23 @@ export function MaintenanceHistoryTab() {
               label: "ตรวจบำรุงตามรอบ",
               value: summary.preventive.toLocaleString(),
               hint: `${periodLabel(filters)} · เช็ค/ทำความสะอาดตามกำหนด`,
+              token: "maintain",
             },
             {
               label: "ซ่อมเมื่อชำรุด",
               value: summary.corrective.toLocaleString(),
               hint: "ซ่อมหลังของพัง",
-              tone: summary.corrective > summary.preventive ? "warning" : "default",
+              token: summary.corrective > summary.preventive ? "damage" : "repair",
             },
+            // ฿0 อ่านว่า "ซ่อมฟรี" ไม่ใช่ "ยังไม่ได้กรอกราคา" — พอไม่มีแถวไหนมีค่าใช้จ่ายเลย
+            // ตัวเลขจึงเป็น — แล้วให้ hint บอกว่าต้องไปกรอกอีกกี่รายการ
             {
               label: "ค่าใช้จ่ายรวม",
-              value: `฿${summary.totalCost.toLocaleString()}`,
-              hint: `จาก ${summary.costedRecords.toLocaleString()} จาก ${total.toLocaleString()} รายการที่ระบุค่าใช้จ่าย`,
+              value: summary.costedRecords > 0 ? `฿${summary.totalCost.toLocaleString()}` : "—",
+              hint: summary.costedRecords > 0
+                ? `จาก ${summary.costedRecords.toLocaleString()} จาก ${total.toLocaleString()} รายการที่ระบุค่าใช้จ่าย`
+                : `ยังไม่ได้กรอกค่าใช้จ่ายสักรายการ (0 จาก ${total.toLocaleString()})`,
+              token: summary.costedRecords > 0 ? "value" : undefined,
             },
           ]}
         />
@@ -131,6 +145,7 @@ export function MaintenanceHistoryTab() {
         data={data}
         loading={loading}
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
+        token="repair"
       />
       {isMobile ? (
         data.length > 0 && (

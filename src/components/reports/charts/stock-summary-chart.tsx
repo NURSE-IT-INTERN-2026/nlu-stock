@@ -4,19 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
 } from "recharts";
-import { useMemo } from "react";
 import { ChartContainer } from "@/components/dashboard/chart-container";
-
-function resolveToHex(cssVar: string): string {
-  if (typeof window === "undefined") return "#888";
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-  if (!raw) return "#888";
-  if (raw.startsWith("#")) return raw;
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) return "#888";
-  ctx.fillStyle = raw;
-  return ctx.fillStyle;
-}
+import { useThemeColor } from "@/lib/resolve-color";
 
 interface StockSummaryData {
   categoryName: string;
@@ -30,8 +19,8 @@ interface StockSummaryChartProps {
 }
 
 export function StockSummaryChart({ data }: StockSummaryChartProps) {
-  const color1 = useMemo(() => resolveToHex("--chart-1"), []);
-  const color2 = useMemo(() => resolveToHex("--chart-2"), []);
+  const color1 = useThemeColor("--chart-1");
+  const color2 = useThemeColor("--chart-2");
 
   if (data.length === 0) {
     return (
