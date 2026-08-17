@@ -6,6 +6,8 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart } from "./charts/annual-cost-chart";
+import { Wallet } from "lucide-react";
+import { SectionTitle } from "./report-kit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtDate, TH_DATE } from "@/lib/format";
@@ -45,6 +47,9 @@ interface Summary {
   consumablePurchase: number;
   purchaseCount: number;
   repairCount: number;
+  /** รายการที่อยู่ในปีนี้แต่ยังไม่มีราคา — ตัวหารที่บอกว่ายอดข้างบนครอบคลุมแค่ไหน */
+  unpricedPurchases: number;
+  unpricedRepairs: number;
 }
 
 interface Result {
@@ -102,6 +107,12 @@ export function AnnualCostTab() {
 
   return (
     <div className="space-y-4">
+      <SectionTitle
+        token="value"
+        icon={Wallet}
+        title="ค่าใช้จ่ายรายปี"
+        subtitle="ซื้อและซ่อมไปเท่าไรในปีนั้น — นับเฉพาะรายการที่กรอกราคาไว้แล้ว"
+      />
       <ReportFilters
         config={filterConfig}
         values={filters}
@@ -112,22 +123,33 @@ export function AnnualCostTab() {
       {summary && (
         <ReportSummary
           stats={[
+            // ยอด ฿0 กับ "ยังไม่มีใครกรอกราคา" หน้าตาเหมือนกันเป๊ะ — พอไม่มีรายการที่มีราคาเลย
+            // ตัวเลขจึงเป็น — และ hint เปลี่ยนไปบอกจำนวนที่ค้างกรอกแทน
             {
               label: "ค่าจัดซื้อ",
-              value: baht(summary.totalPurchase),
+              value: summary.purchaseCount > 0 ? baht(summary.totalPurchase) : "—",
               // Both halves are named because the two come from different fields and only one
               // of them (consumables, via Lot.unitCost) is currently collected at รับเข้า.
-              hint: `ครุภัณฑ์/คงทน ${baht(summary.durablePurchase)} · สิ้นเปลือง ${baht(summary.consumablePurchase)}`,
+              hint: summary.purchaseCount > 0
+                ? `ครุภัณฑ์/คงทน ${baht(summary.durablePurchase)} · สิ้นเปลือง ${baht(summary.consumablePurchase)}`
+                : `ยังไม่ได้กรอกราคา ${summary.unpricedPurchases.toLocaleString()} รายการในปีนี้`,
+              token: summary.purchaseCount > 0 ? "value" : undefined,
             },
             {
               label: "ค่าซ่อมบำรุง",
-              value: baht(summary.totalRepair),
-              hint: `จาก ${summary.repairCount.toLocaleString()} รายการซ่อม`,
+              value: summary.repairCount > 0 ? baht(summary.totalRepair) : "—",
+              hint: summary.repairCount > 0
+                ? `จาก ${summary.repairCount.toLocaleString()} รายการซ่อม`
+                : `ยังไม่ได้กรอกค่าซ่อม ${summary.unpricedRepairs.toLocaleString()} รายการในปีนี้`,
+              token: summary.repairCount > 0 ? "repair" : undefined,
             },
             {
               label: `รวมปี พ.ศ. ${buddhistYear}`,
-              value: baht(summary.totalPurchase + summary.totalRepair),
-              hint: "นับเฉพาะรายการที่ระบุราคาไว้",
+              value: summary.purchaseCount + summary.repairCount > 0
+                ? baht(summary.totalPurchase + summary.totalRepair)
+                : "—",
+              hint: `นับเฉพาะรายการที่ระบุราคาไว้ · ยังค้างกรอก ${(summary.unpricedPurchases + summary.unpricedRepairs).toLocaleString()} รายการ`,
+              token: summary.purchaseCount + summary.repairCount > 0 ? "value" : undefined,
             },
           ]}
         />
@@ -146,6 +168,7 @@ export function AnnualCostTab() {
             loading={loading}
             pageSize={10}
             emptyMessage="ไม่มีรายการจัดซื้อที่ระบุราคาในปีนี้"
+            token="value"
           />
         </CardContent>
       </Card>
@@ -161,6 +184,7 @@ export function AnnualCostTab() {
             loading={loading}
             pageSize={10}
             emptyMessage="ไม่มีรายการซ่อมที่ระบุค่าใช้จ่ายในปีนี้"
+            token="repair"
           />
         </CardContent>
       </Card>

@@ -6,6 +6,8 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { StockSummaryChart } from "./charts/stock-summary-chart";
+import { Boxes } from "lucide-react";
+import { SectionTitle } from "./report-kit";
 import { getReport } from "@/lib/api";
 import { useAsync } from "@/hooks/use-async";
 
@@ -87,6 +89,12 @@ export function StockBalanceTab() {
 
   return (
     <div className="space-y-4">
+      <SectionTitle
+        token="value"
+        icon={Boxes}
+        title="มูลค่าคงคลัง"
+        subtitle="ของที่เหลืออยู่คิดเป็นเงินเท่าไร แยกตามหมวด — และยังขาดราคาอีกกี่รายการ"
+      />
       <ReportFilters
         config={filterConfig}
         values={filters}
@@ -98,24 +106,30 @@ export function StockBalanceTab() {
           stats={[
             {
               label: "มูลค่าคงเหลือรวม",
-              value: baht(summary.totalValue),
+              // ฿0 อ่านว่าของไม่มีมูลค่า ทั้งที่แปลว่ายังไม่มีใครกรอกราคา — ไม่มีแถวไหนมีราคาเลย
+              // ก็ไม่มียอดให้รายงาน
+              value: pricedInStock > 0 ? baht(summary.totalValue) : "—",
+              token: pricedInStock > 0 ? "value" : undefined,
               /* The sum can only count rows that carry a cost, and most don't — durables need
                  purchasePrice, consumables need unitCost on a lot, both optional. Without this
                  line the headline reads as the value of the whole storeroom when it is the value
                  of the handful of items somebody priced. The ยังไม่ระบุราคา card beside it is
                  the same fact from the other side; this makes the connection explicit. */
-              hint: `คิดจาก ${pricedInStock.toLocaleString()} จาก ${summary.totalAvailableItems.toLocaleString()} รายการที่มีสต็อก`,
+              hint: pricedInStock > 0
+                ? `คิดจาก ${pricedInStock.toLocaleString()} จาก ${summary.totalAvailableItems.toLocaleString()} รายการที่มีสต็อก`
+                : `ยังไม่ได้กรอกราคาสักรายการ (0 จาก ${summary.totalAvailableItems.toLocaleString()} ที่มีสต็อก)`,
             },
             {
               label: "รายการที่มีสต็อก",
               value: summary.totalAvailableItems.toLocaleString(),
               hint: `จากทั้งหมด ${data.length.toLocaleString()} รายการ`,
+              token: "stockin",
             },
             {
               label: "ยังไม่ระบุราคา",
               value: summary.itemsWithoutCost.toLocaleString(),
               hint: "กรอกราคาตอนรับเข้าเพื่อให้มูลค่าครบ",
-              tone: summary.itemsWithoutCost > 0 ? "warning" : "default",
+              token: summary.itemsWithoutCost > 0 ? "repair" : undefined,
             },
           ]}
         />
@@ -126,6 +140,7 @@ export function StockBalanceTab() {
         data={data}
         loading={loading}
         emptyMessage="ไม่พบพัสดุตามตัวกรอง"
+        token="value"
       />
     </div>
   );
