@@ -7,7 +7,8 @@ import { ChartContainer } from "./chart-container";
 import { CountUp, Panel } from "./primitives";
 import { getDashboardAssetStatus } from "@/lib/api";
 import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
-import { useDashboardScope, scopeKey } from "@/hooks/use-dashboard-scope";
+import { useDashboardScope } from "@/hooks/use-dashboard-scope";
+import { scopeKey } from "@/lib/dashboard-scope";
 
 interface Row {
   status: string;

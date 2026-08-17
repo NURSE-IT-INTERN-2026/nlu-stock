@@ -11,13 +11,24 @@ const NOT_INUSE: Prisma.DispenseRecordWhereInput = {
   OR: [{ loanType: null }, { loanType: "BORROW" }],
 };
 
+/** Which DispenseTypes a kind can own. inuse spans the same two as borrow — what separates
+ *  the two is loanType, which lives on the record, not on the item. */
+export function kindDispenseTypes(kind: DispenseKind) {
+  return kind === "consume"
+    ? { in: ["CONSUMABLE" as const] }
+    : { in: ["COUNT" as const, "ITEM" as const] };
+}
+
+/** The loanType half of the predicate, without the item filter — the dashboard AND-s its own
+ *  ประเภท/หมวดย่อย narrowing onto the item side and would otherwise overwrite this one's. */
+export function kindLoanWhere(kind: DispenseKind): Prisma.DispenseRecordWhereInput {
+  return kind === "inuse" ? { loanType: "INUSE" } : NOT_INUSE;
+}
+
 /** Prisma where fragment. */
 export function kindWhere(kind: DispenseKind): Prisma.DispenseRecordWhereInput {
   if (kind === "inuse") return { loanType: "INUSE" };
-  const dispenseType = kind === "consume"
-    ? { in: ["CONSUMABLE" as const] }
-    : { in: ["COUNT" as const, "ITEM" as const] };
-  return { ...NOT_INUSE, item: { category: { profile: { dispenseType } } } };
+  return { ...NOT_INUSE, item: { category: { profile: { dispenseType: kindDispenseTypes(kind) } } } };
 }
 
 // The same predicate in SQL, for the raw group-paging query in api/reports/dispense-history.

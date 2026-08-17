@@ -8,7 +8,7 @@ import {
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
-import { UsageBySubjectChart } from "@/components/dashboard/usage-by-subject-chart";
+import { UsageBySubjectChart } from "./charts/usage-by-subject-chart";
 import { TrendingUp } from "lucide-react";
 import { SectionTitle } from "./report-kit";
 import { getReport } from "@/lib/api";

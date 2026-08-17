@@ -92,8 +92,19 @@ assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true);
 assert.equal(ok({ ...cart, loanType: "INUSE" }), false, "INUSE ต้องระบุสถานที่");
 assert.equal(ok({ ...cart, loanType: "INUSE", locationId: null }), false, "INUSE ห้ามส่ง location ว่าง");
 // เบิก/ยืม don't move an item's registered room, so they never need one.
-assert.equal(ok({ ...cart, loanType: "BORROW" }), true, "ยืมไม่ต้องระบุสถานที่");
-assert.equal(ok(cart), true, "เบิกปกติไม่ต้องระบุสถานที่");
+assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101", loanType: "BORROW" }), true, "ยืมไม่ต้องระบุสถานที่");
+assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101" }), true, "เบิกปกติไม่ต้องระบุสถานที่");
+
+// ── เบิก/ยืม must say what it is for ──
+// The cart has always demanded this, but only in the browser: a row posted straight to the
+// API landed with usageType NULL, and EXEC has POST rights here. Those rows are why the
+// dashboard's usage stack ever needed a "ไม่ระบุ" band at all.
+assert.equal(ok(cart), false, "เบิกต้องเลือกการใช้งาน");
+assert.equal(ok({ ...cart, loanType: "BORROW" }), false, "ยืมก็ต้องเลือกการใช้งาน");
+assert.equal(ok({ ...cart, usageType: null, loanType: "BORROW" }), false, "null ไม่ใช่คำตอบ");
+// INUSE is the one exception, and not a loophole: its locationId is required (above), so the
+// room is the reason — dashboard-usage.ts files those rows under ตั้งใช้ในห้อง.
+assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true, "นำไปใช้งานไม่ต้องเลือกการใช้งาน");
 
 // ── Coming back from IN_USE clears the room นำไปใช้งาน stamped on the piece ──
 const HOME = "loc-home";

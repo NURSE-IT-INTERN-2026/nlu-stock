@@ -62,6 +62,16 @@ export const dispenseRequestSchema = z.object({
     (d) => d.usageType !== "COURSE" || !!d.courseCode?.trim(),
     { path: ["courseCode"], message: "เลือกรายวิชา" },
   )
+  // เบิก/ยืม with no usageType is a draw nobody can account for: it shows up in every
+  // breakdown as one anonymous lump. The cart has enforced this client-side since it was
+  // built, but only the client — a row written straight to the API landed as NULL, and
+  // EXEC has POST rights here. INUSE is the deliberate exception: นำไปใช้งาน never asks a
+  // usage question, its required locationId is the reason (dashboard-usage.ts usageSeries
+  // files those rows under ตั้งใช้ในห้อง).
+  .refine(
+    (d) => d.loanType === "INUSE" || !!d.usageType,
+    { path: ["usageType"], message: "เลือกการใช้งาน" },
+  )
   // นำไปใช้งาน moves stock to a room, so the room is the whole point of the record — an
   // INUSE row without one is stock the system has lost track of. The picker already
   // restricts to existing locations, but that guard is client-side: rows written before

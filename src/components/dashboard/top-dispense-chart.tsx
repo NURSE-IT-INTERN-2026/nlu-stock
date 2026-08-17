@@ -8,19 +8,25 @@ import { Panel } from "./primitives";
 // YAxis on Thai names it still had to truncate at 18 chars, and needed ChartContainer +
 // a custom tick renderer to do it. The same ranking in plain divs truncates at the real
 // column width, keeps the full name in the title attribute, and drops the chart entirely.
-export function TopDispenseChart({ data }: { data: TopDispenseData[] }) {
-  const max = Math.max(...data.map((d) => d.totalQuantity), 1);
+/**
+ * Every tab ranks its own kind of event with this list, so the wording comes from the caller:
+ * a "รายการที่เบิกบ่อยที่สุด" heading over the ยืม tab names an action that tab does not count.
+ * One verb drives the heading, the hint and the empty state together — they are the same
+ * sentence three times and drifted apart when they were three props.
+ */
+export function TopDispenseChart({ data, verb }: { data: TopDispenseData[]; verb: string }) {
+  const max = Math.max(...data.map((d) => d.records), 1);
 
   return (
-    <Panel title="รายการเบิกมากที่สุดเดือนนี้" hint="เรียงตามจำนวนชิ้นที่ถูกเบิก">
+    <Panel title={`รายการที่ถูก${verb}บ่อยที่สุด`} hint={`เรียงตามจำนวนครั้งที่ถูก${verb} ย้อนหลัง 1 ปี`}>
       {data.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
           <span className="grid size-12 place-items-center rounded-full bg-secondary">
             <BarChart3 className="size-5 text-muted-foreground" />
           </span>
           <div className="text-center">
-            <p className="text-[13px] font-medium text-foreground">ยังไม่มีการเบิกเดือนนี้</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">ข้อมูลจะแสดงเมื่อมีการเบิกครั้งแรก</p>
+            <p className="text-[13px] font-medium text-foreground">ยังไม่มีการ{verb}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">ข้อมูลจะแสดงเมื่อมีการ{verb}ครั้งแรก</p>
           </div>
         </div>
       ) : (
@@ -34,17 +40,20 @@ export function TopDispenseChart({ data }: { data: TopDispenseData[] }) {
                 <span className="grid size-5 shrink-0 place-items-center rounded bg-secondary text-[10px] font-bold tabular-nums text-muted-foreground">
                   {i + 1}
                 </span>
-                <span className="truncate text-sm" title={`${d.code} ${d.name}`}>
+                {/* หน่วย hides in the title: ranking on it put whatever ships in hundreds at
+                    the top forever, but it is still what explains a short bar that emptied a
+                    shelf. */}
+                <span className="truncate text-sm" title={`${d.code} ${d.name} · ${d.totalQuantity.toLocaleString("th-TH")} ชิ้น`}>
                   {d.name}
                 </span>
                 <span className="shrink-0 text-sm font-bold tabular-nums">
-                  {d.totalQuantity.toLocaleString("th-TH")}
+                  {d.records.toLocaleString("th-TH")}
                 </span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                 <div
                   className="bar-grow h-full rounded-full bg-danger-500"
-                  style={{ width: `${(d.totalQuantity / max) * 100}%`, animationDelay: `${i * 80}ms` }}
+                  style={{ width: `${(d.records / max) * 100}%`, animationDelay: `${i * 80}ms` }}
                 />
               </div>
             </li>

@@ -4,31 +4,45 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { getPublicCategories } from "@/lib/api";
-import { useAsync } from "@/hooks/use-async";
+import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
 import type { DashboardScope } from "@/lib/dashboard-scope";
+import type { DispenseKind } from "@/lib/dispense-kind";
 import type { DispenseType } from "@/generated/prisma/enums";
 
 // Base UI Select has no "empty" value, so the unfiltered choice needs a sentinel rather
 // than "" — it is translated back to undefined on the way into the scope.
 const ALL = "all";
 
-// ประเภท (CategoryProfile) → หมวดย่อย (CategoryType), both narrowed to the tab's
-// DispenseType. One /api/categories fetch carries both levels: every category names its
-// profile, so the profile list is just the distinct profiles of the categories in view.
+// Client-safe mirror of kindDispenseTypes: lib/dispense-kind-where is server-only (it pulls
+// the Prisma runtime), and a bare mapping is all the picker needs. consume owns CONSUMABLE;
+// ยืม and นำไปใช้งาน share the two durable types — loanType, not dispenseType, splits them.
+const KIND_TYPES: Record<DispenseKind, DispenseType[]> = {
+  consume: ["CONSUMABLE"],
+  borrow: ["COUNT", "ITEM"],
+  inuse: ["COUNT", "ITEM"],
+};
+
+// ประเภท (CategoryProfile) → หมวดย่อย (CategoryType), both narrowed to the tab's kind. One
+// /api/categories fetch carries both levels: every category names its profile, so the profile
+// list is just the distinct profiles of the categories in view.
 //
 // ponytail: a profile with zero categories never appears here. It also owns zero items,
 // so filtering to it would show an empty dashboard either way.
 export function DashboardScopeBar({
-  type, profileId, categoryId, onChange,
+  kind, profileId, categoryId, onChange,
 }: {
-  type: DispenseType;
+  kind: DispenseKind;
   profileId?: string;
   categoryId?: string;
-  onChange: (next: Omit<DashboardScope, "type">) => void;
+  onChange: (next: Omit<DashboardScope, "kind">) => void;
 }) {
-  const { data: cats = [] } = useAsync(() => getPublicCategories(), []);
+  const nonce = useDashboardRefreshNonce();
+  // Fold in the dashboard refresh nonce so the รีเฟรช button pulls a newly added ประเภท
+  // without a full page reload.
+  const { data: cats = [] } = useAsync(() => getPublicCategories(), [nonce]);
 
-  const inType = cats.filter((c) => c.profile?.dispenseType === type);
+  const types = KIND_TYPES[kind];
+  const inType = cats.filter((c) => c.profile != null && types.includes(c.profile.dispenseType));
   const profiles = [...new Map(inType.map((c) => [c.profile!.id, c.profile!])).values()];
   const subs = profileId ? inType.filter((c) => c.profile!.id === profileId) : inType;
 
