@@ -128,8 +128,15 @@ export async function POST(
         if (adj.reason !== AdjustmentReason.DAMAGED_PENDING_REPAIR) throw new Error("ไม่ใช่รายการชำรุด");
         if (adj.recoveredAt) throw new Error("รับคืนแล้ว");
 
+        // The adjustment this job writes is the row the item timeline shows for it — the one
+        // that carries the qty and the balance. Pointing the record at it lets the timeline
+        // fold ค่าซ่อม into that row instead of printing the same รับคืนจากซ่อม twice.
+        const timelineRow = async (adjustmentId: string) =>
+          tx.maintenanceRecord.update({ where: { id: rec.id }, data: { adjustmentId } });
+
         if (data.result === "AVAILABLE") {
-          await restoreDamagedQty(tx, { adj, reason: AdjustmentReason.REPAIR_RETURN, note: data.description, userId: auth.user.userId });
+          const back = await restoreDamagedQty(tx, { adj, reason: AdjustmentReason.REPAIR_RETURN, note: data.description, userId: auth.user.userId });
+          await timelineRow(back.adjustmentId);
         } else {
           // ซ่อมไม่ได้: แจ้งชำรุด parked these units in totalQty (lib/stock holdsTotalQty) on the
           // promise they'd come back. This is where that promise ends — availableQty already
@@ -139,7 +146,7 @@ export async function POST(
           await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
           const before = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { availableQty: true } });
           await tx.item.update({ where: { id: itemId }, data: { totalQty: { decrement: qty } } });
-          await tx.stockAdjustment.create({
+          const writeOff = await tx.stockAdjustment.create({
             data: {
               itemId,
               delta: 0,
@@ -150,6 +157,7 @@ export async function POST(
               adjustedBy: auth.user.userId,
             },
           });
+          await timelineRow(writeOff.id);
           await recomputeItemCounts(tx, itemId);
         }
       } else if (data.subItemId) {

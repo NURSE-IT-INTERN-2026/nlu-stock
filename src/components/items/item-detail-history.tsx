@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import type { ReactNode } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog, Flag,
+  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
@@ -15,15 +16,25 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { EVENT_TYPE_LABELS, type TimelineEventType } from "@/lib/constants";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
 interface TimelineEvent {
   id: string;
   type: TimelineEventType;
   date: string;
   delta: number | null;
+  // How many units the event was about. Equals |delta| on a stock movement; on a ส่งซ่อม it is
+  // the only count there is — 47 pieces went to the shop, but the stock left the shelf back at
+  // แจ้งชำรุด, so there is no delta to show and the column would otherwise read "—".
+  qty: number | null;
   note: string;
-  detail: string;
+  subtitle: string;
+  notes: string;
   user: string;
+  // Present only on qty-stock movements. Shown in the จำนวน column as `100 → 147`.
+  change?: { from: number; to: number } | null;
+  // Only on a รับคืนจากซ่อม row, folded in from the repair job that closed the trip.
+  cost?: number | null;
 }
 
 // Movement types lead with colour (stock left / stock came back); the three that don't touch
@@ -69,6 +80,7 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
   const [typeFilter, setTypeFilter] = useState<TimelineEventType | "">("");
   const [counts, setCounts] = useState<Counts>({});
   const [unit, setUnit] = useState("");
+  const [selected, setSelected] = useState<TimelineEvent | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   const fetchPage = useCallback(
@@ -92,35 +104,40 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
     items: events, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<TimelineEvent>({ fetchPage, pageSize: perPage, isMobile });
 
-  // "ทั้งหมด" counts rows, not units: adding ของเข้า and ของออก into one unit figure would
-  // produce a number that means nothing. Per-type chips carry the unit total instead.
+  // Every chip counts events, never units. The word "รายการ" is dropped from each pill — the
+  // caption above already frames these as counts, so a bare number reads compact and premium
+  // instead of stacking "รายการ" seven times across a row that overflows the card.
   const allRows = CHIP_ORDER.reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0);
   const chips: { value: TimelineEventType | ""; label: string; amount: string }[] = [
-    { value: "", label: "ทั้งหมด", amount: `${allRows} รายการ` },
+    { value: "", label: "ทั้งหมด", amount: `${allRows}` },
     ...CHIP_ORDER.filter((t) => (counts[t]?.n ?? 0) > 0).map((t) => {
       const c = counts[t]!;
       return {
         value: t,
         label: EVENT_TYPE_LABELS[t],
-        amount: c.qty === null ? `${c.n} ครั้ง` : `${c.qty} ${unit}`,
+        amount: `${c.n}`,
       };
     }),
   ];
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      {/* ── Header ── */}
-      <header className="px-4 py-4 sm:px-6 border-b border-border">
+      {/* ── Header ──
+          The four bands are one card, so their padding is what tells them apart: the header
+          breathes most, the filter half as much, the table least (it is data — density is the
+          point), the footer back to the filter's rhythm. Equal padding everywhere is what made
+          the card read as one dense block with hairlines through it. */}
+      <header className="border-b border-border px-5 py-6 sm:px-8">
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
-        <h2 className="mt-0.5 text-lg font-semibold leading-tight tracking-tight">ประวัติ</h2>
+        <h2 className="mt-1.5 text-lg font-semibold leading-tight tracking-tight">ประวัติ</h2>
       </header>
 
       {/* ── Filter pills ──
           Labelled "รวมทั้งประวัติ" on purpose: the stock card above these tabs shows ถูกยืม as
-          the units still out *right now*, and these chips sum every movement ever recorded.
-          Two different numbers under the same word on one screen needs the caption. */}
-      <div className="border-b border-border bg-muted/30 px-4 sm:px-6">
-        <p className="mb-2 text-[11px] text-muted-foreground">รวมทั้งประวัติ</p>
+          the units still out *right now*, while these chips count how many events of each kind
+          were ever recorded. Two different meanings under one word on one screen needs the caption. */}
+      <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8">
+        <p className="mb-2.5 text-[11px] text-muted-foreground">รวมทั้งประวัติ</p>
         <div className="flex gap-2 overflow-x-auto">
           {chips.map((chip) => {
             const on = typeFilter === chip.value;
@@ -129,14 +146,14 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
                 key={chip.value || "all"}
                 onClick={() => setTypeFilter(chip.value)}
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition",
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition",
                   on
                     ? "border-transparent bg-primary text-primary-foreground shadow-sm"
                     : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
                 )}
               >
                 {chip.label}
-                <span className={cn("tabular-nums", on ? "text-primary-foreground/75" : "text-muted-foreground/70")}>
+                <span className={cn("font-semibold tabular-nums", on ? "text-primary-foreground" : "text-foreground/80")}>
                   {chip.amount}
                 </span>
               </button>
@@ -154,37 +171,56 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
       ) : isMobile ? (
         <ul className="space-y-2 p-3">
           {events.map((e) => (
-            <li key={e.id} className="rounded-xl border border-border bg-muted/20 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <TypeChip type={e.type} />
-                <Delta value={e.delta} unit={unit} size="lg" />
-              </div>
-              <p className="mt-2 text-sm font-medium">{e.note}</p>
-              {e.detail && <p className="mt-0.5 text-xs text-muted-foreground">{e.detail}</p>}
-              <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <Avatar name={e.user} /> {e.user}
-                </span>
-                <span className="tabular-nums">{fmtDate(e.date, TH_DATE)} · {timeOf(e.date)} น.</span>
-              </div>
+            <li key={e.id}>
+              <button
+                type="button"
+                onClick={() => setSelected(e)}
+                className="w-full rounded-xl border border-border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-muted/40"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <TypeChip type={e.type} />
+                  <div className="flex flex-col items-end">
+                    <Delta value={e.delta ?? e.qty} unit={unit} size="lg" neutral={e.delta === null} />
+                    <ChangeHint delta={e.delta} change={e.change} />
+                  </div>
+                </div>
+                <p className="mt-2 flex items-center gap-1 text-sm font-medium">
+                  {e.note}
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                </p>
+                {e.subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{e.subtitle}</p>}
+                <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Avatar name={e.user} /> {e.user}
+                  </span>
+                  <span className="tabular-nums">{fmtDate(e.date, TH_DATE)} · {timeOf(e.date)} น.</span>
+                </div>
+              </button>
             </li>
           ))}
         </ul>
       ) : (
-        <Table grid zebra>
+        <Table grid zebra className="table-fixed">
           <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[160px] pl-4 sm:pl-6">Type</TableHead>
-              <TableHead className="w-[110px] text-right">จำนวน</TableHead>
-              <TableHead>หมายเหตุ</TableHead>
-              <TableHead className="w-[170px]">ผู้ดำเนินการ</TableHead>
-              <TableHead className="w-[130px] pr-4 text-right sm:pr-6">วันที่ / เวลา</TableHead>
+            {/* The shared table is a 32px-header datagrid; a history row carries two lines, so
+                the header is given the taller band that matches them. Local override — the
+                report tables keep the tighter default. */}
+            <TableRow className="hover:bg-transparent [&>th]:h-13">
+              <TableHead className="w-[18%] pl-5 sm:pl-8">ประเภท</TableHead>
+              <TableHead className="w-[12%] text-right">จำนวน</TableHead>
+              <TableHead className="w-[40%]">รายการ</TableHead>
+              <TableHead className="w-[17%]">ผู้ดำเนินการ</TableHead>
+              <TableHead className="w-[13%] pr-5 text-right sm:pr-8">วันที่ / เวลา</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {events.map((e) => (
-              <TableRow key={e.id} className="group">
-                <TableCell className="relative pl-4 sm:pl-6">
+              <TableRow
+                key={e.id}
+                className="group cursor-pointer"
+                onClick={() => setSelected(e)}
+              >
+                <TableCell className="relative pl-5 align-top sm:pl-8">
                   <span
                     aria-hidden
                     className={cn(
@@ -194,18 +230,24 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
                   />
                   <TypeChip type={e.type} />
                 </TableCell>
-                <TableCell className="text-right"><Delta value={e.delta} unit={unit} /></TableCell>
-                <TableCell className="max-w-sm">
-                  <p className="text-sm font-medium text-foreground">{e.note}</p>
-                  {e.detail && <p className="mt-0.5 truncate text-xs text-muted-foreground">{e.detail}</p>}
+                <TableCell className="text-right align-top">
+                  <Delta value={e.delta ?? e.qty} unit={unit} neutral={e.delta === null} />
+                  <ChangeHint delta={e.delta} change={e.change} />
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-top">
+                  <p className="flex items-center gap-1 text-sm font-medium leading-snug text-foreground">
+                    <span className="truncate">{e.note}</span>
+                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </p>
+                  {e.subtitle && <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">{e.subtitle}</p>}
+                </TableCell>
+                <TableCell className="align-top">
                   <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                     <Avatar name={e.user} />
-                    {e.user}
+                    <span className="truncate">{e.user}</span>
                   </span>
                 </TableCell>
-                <TableCell className="pr-4 text-right sm:pr-6">
+                <TableCell className="pr-5 text-right align-top sm:pr-8">
                   <p className="text-xs font-medium tabular-nums">{fmtDate(e.date, TH_DATE)}</p>
                   <p className="text-[11px] tabular-nums text-muted-foreground">{timeOf(e.date)} น.</p>
                 </TableCell>
@@ -217,7 +259,7 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
 
       {/* ── Footer / pagination ── */}
       {!loading && events.length > 0 && (
-        <div className="border-t border-border bg-muted/30 px-4 sm:px-6">
+        <div className="space-y-2 border-t border-border bg-muted/30 px-5 py-4 sm:px-8">
           <p className="text-xs text-muted-foreground">
             แสดง <span className="font-semibold tabular-nums text-foreground">{events.length}</span> จาก{" "}
             <span className="tabular-nums">{total}</span> รายการ
@@ -236,7 +278,78 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
           ))}
         </div>
       )}
+
+      <EventDetailDialog event={selected} unit={unit} onClose={() => setSelected(null)} />
     </section>
+  );
+}
+
+// The table answers "ใครทำอะไร กี่ชิ้น เมื่อไหร่"; everything quieter — the balance change, the
+// supporting context, the free-text note — lives here so it never crowds the row.
+function EventDetailDialog({ event, unit, onClose }: { event: TimelineEvent | null; unit: string; onClose: () => void }) {
+  return (
+    <Dialog open={!!event} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-md")}>
+        <DialogHeader>
+          <DialogTitle>รายละเอียดกิจกรรม</DialogTitle>
+          <DialogDescription className="sr-only">รายละเอียดของกิจกรรมในประวัติ</DialogDescription>
+        </DialogHeader>
+        {event && (
+          <div className={cn(DIALOG_BODY, "px-1")}>
+            <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
+              <TypeChip type={event.type} />
+              <Delta value={event.delta ?? event.qty} unit={unit} size="lg" neutral={event.delta === null} />
+            </div>
+            <dl className="divide-y divide-border">
+              <DetailRow label="รายการ" value={<span className="font-medium text-foreground">{event.note}</span>} />
+              {event.subtitle && <DetailRow label="รายละเอียด" value={event.subtitle} />}
+              {event.change && (
+                <DetailRow
+                  label="จำนวนคงเหลือ"
+                  value={
+                    <span className="tabular-nums">
+                      <span className="text-muted-foreground">{event.change.from}</span>
+                      <span className="mx-1.5 text-muted-foreground">→</span>
+                      <span className="font-semibold text-foreground">{event.change.to}</span>
+                      {unit && <span className="ml-1 text-xs text-muted-foreground">{unit}</span>}
+                    </span>
+                  }
+                />
+              )}
+              {event.cost != null && (
+                <DetailRow
+                  label="ค่าซ่อม"
+                  value={<span className="tabular-nums">{event.cost.toLocaleString("th-TH")} บาท</span>}
+                />
+              )}
+              {event.notes && <DetailRow label="หมายเหตุ" value={<span className="whitespace-pre-wrap">{event.notes}</span>} />}
+              <DetailRow
+                label="ผู้ดำเนินการ"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <Avatar name={event.user} />
+                    {event.user}
+                  </span>
+                }
+              />
+              <DetailRow
+                label="วันที่ / เวลา"
+                value={<span className="tabular-nums">{fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.</span>}
+              />
+            </dl>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-right text-sm text-foreground">{value}</dd>
+    </div>
   );
 }
 
@@ -265,10 +378,12 @@ function Avatar({ name }: { name: string }) {
 // No +/- sign — colour carries direction (green up, red down). Four cases: null = never
 // touched stock (สถานะ/ซ่อม/ย้ายที่), 0 = came back but written off — neither painted gain/loss.
 // back but written off, so neither may be painted as a gain or a loss.
-function Delta({ value, unit, size }: { value: number | null; unit: string; size?: "lg" }) {
+function Delta({ value, unit, size, neutral }: { value: number | null; unit: string; size?: "lg"; neutral?: boolean }) {
   if (value === null) return <span className="text-sm text-muted-foreground">—</span>;
   const tone =
-    value > 0 ? "text-success-700 dark:text-success-200"
+    // A count that is not a movement (ส่งซ่อม) gets no colour — green would claim stock came in.
+    neutral ? "text-foreground"
+      : value > 0 ? "text-success-700 dark:text-success-200"
       : value < 0 ? "text-destructive dark:text-danger-400"
       : "text-muted-foreground";
   return (
@@ -281,3 +396,24 @@ function Delta({ value, unit, size }: { value: number | null; unit: string; size
 
 const timeOf = (iso: string) =>
   new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+// The quieter second line under the count. `change` (the yard before → after) reads better than
+// a bare signed number, so it wins when present; otherwise the signed delta gives the direction
+// the abs count above cannot. Rows that never moved stock (delta null) or corrected nothing
+// (delta 0, a written-off return) get no line — there is no movement to caption.
+function ChangeHint({ delta, change }: { delta: number | null; change?: { from: number; to: number } | null }) {
+  if (change) {
+    return (
+      <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-muted-foreground">
+        {change.from} → {change.to}
+      </span>
+    );
+  }
+  if (delta === null || delta === 0) return null;
+  const tone = delta > 0 ? "text-success-700 dark:text-success-200" : "text-destructive dark:text-danger-400";
+  return (
+    <span className={cn("mt-0.5 block font-mono text-[10px] tabular-nums", tone)}>
+      {delta > 0 ? "+" : "−"}{Math.abs(delta)}
+    </span>
+  );
+}

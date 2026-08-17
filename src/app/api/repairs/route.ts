@@ -122,13 +122,20 @@ export async function POST(req: NextRequest) {
       // ITEM under repair, so the venue is spelled into `reason` instead of the status
       // (api/items/[id]/history only prints its ส่งซ่อม chip for newStatus UNDER_REPAIR,
       // deliberately — that chip means the whole row is at the shop).
-      const item = await tx.item.findUniqueOrThrow({ where: { id: adj.itemId }, select: { status: true, issueUnit: { select: { name: true } } } });
+      const item = await tx.item.findUniqueOrThrow({ where: { id: adj.itemId }, select: { status: true } });
       await tx.itemStatusLog.create({
         data: {
           itemId: adj.itemId,
           previousStatus: item.status,
           newStatus: item.status,
-          reason: `${isEdit ? "แก้ข้อมูลการส่งซ่อม" : "ส่งซ่อม"}${venueLabel} ${qty} ${item.issueUnit.name} · ${repairNote}`,
+          qty,
+          // The name of the action and nothing else. Qty rides in `qty`, the shop note in
+          // `repairNote`, the venue in `repairVenue` — each in the column that owns it, so
+          // the history table reads them into their own cells instead of splitting a string.
+          // An edit names the venue it changed, which is the whole point of re-logging it.
+          reason: isEdit
+            ? `แก้ข้อมูลส่งซ่อม${adj.repairVenue && adj.repairVenue !== venue ? ` (เดิม${adj.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"} → ${venueLabel})` : ""}`
+            : `ส่งซ่อม${venueLabel}`,
           changedBy: auth.user.userId,
           repairVenue: venue as RepairVenue,
           repairNote,
@@ -159,7 +166,7 @@ export async function DELETE(req: NextRequest) {
   if (!adjustmentId || !note) return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
 
   try {
-    const qty = await prisma.$transaction(async (tx) => {
+    const { qty } = await prisma.$transaction(async (tx) => {
       const adj = await tx.stockAdjustment.findUnique({ where: { id: adjustmentId } });
       if (!adj || adj.reason !== AdjustmentReason.DAMAGED_PENDING_REPAIR) throw new Error("ไม่พบรายการชำรุด");
       if (adj.recoveredAt) throw new Error("รายการนี้ปิดไปแล้ว");
