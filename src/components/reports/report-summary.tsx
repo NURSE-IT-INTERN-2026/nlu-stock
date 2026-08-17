@@ -13,6 +13,8 @@ export interface SummaryStat {
    *  report is a slice of something bigger, and a report that doesn't say which slice is how
    *  "มูลค่าคงเหลือรวม" came to read as the value of the whole storeroom when it was three items. */
   hint?: string;
+  /** Sits opposite the label, on the same line. */
+  icon?: React.ComponentType<{ className?: string }>;
   tone?: "default" | "warning" | "danger";
 }
 
@@ -26,13 +28,11 @@ const TONES: Record<NonNullable<SummaryStat["tone"]>, string> = {
  *  much of it is there. Shared so all report tabs answer in the same shape. */
 export function ReportSummary({ stats }: { stats: SummaryStat[] }) {
   return (
-    // Stacked full-height cards ate the whole first screen on a phone before any data showed,
-    // so mobile lays each one out as a single label→value row instead.
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
       {stats.map((s) => (
         <div
           key={s.label}
-          className={cn("rounded-lg border p-3", s.token ? "" : "bg-card")}
+          className={cn("rounded-lg border p-3 text-left", s.token ? "" : "bg-card")}
           style={
             s.token
               ? {
@@ -42,18 +42,24 @@ export function ReportSummary({ stats }: { stats: SummaryStat[] }) {
               : undefined
           }
         >
-          <div className="flex items-baseline justify-between gap-2 sm:block">
+          {/* Label row owns the icon, then the number, then the caveat — one reading order at
+              every width. The label used to jump to the left of the value on phones, which put
+              the numbers down the middle of the column instead of on a line you can scan.
+              No uppercase/tracking from the mock: the labels are Thai, where uppercase is a
+              no-op and letter-spacing only breaks up the cluster. */}
+          <div className={cn("flex items-center justify-between gap-2", s.token && tokenText[s.token])}>
             <p className="text-xs text-muted-foreground">{s.label}</p>
-            <p
-              className={cn(
-                "text-lg font-bold tabular-nums",
-                s.token ? tokenText[s.token] : TONES[s.tone ?? "default"],
-              )}
-            >
-              {s.value}
-            </p>
+            {s.icon && <s.icon className="size-4 shrink-0" />}
           </div>
-          {s.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{s.hint}</p>}
+          <p
+            className={cn(
+              "mt-1 text-xl leading-none font-bold tabular-nums",
+              s.token ? tokenText[s.token] : TONES[s.tone ?? "default"],
+            )}
+          >
+            {s.value}
+          </p>
+          {s.hint && <p className="mt-1 text-xs text-muted-foreground">{s.hint}</p>}
         </div>
       ))}
     </div>
