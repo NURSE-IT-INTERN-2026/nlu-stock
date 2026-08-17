@@ -4,19 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart, Pie, Cell, Tooltip, Legend,
 } from "recharts";
-import { useMemo } from "react";
 import { ChartContainer } from "@/components/dashboard/chart-container";
-
-function resolveToHex(cssVar: string): string {
-  if (typeof window === "undefined") return "#888";
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-  if (!raw) return "#888";
-  if (raw.startsWith("#")) return raw;
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (!ctx) return "#888";
-  ctx.fillStyle = raw;
-  return ctx.fillStyle;
-}
+import { useThemeColor } from "@/lib/resolve-color";
 
 interface AnnualCostData {
   categoryName: string;
@@ -29,10 +18,12 @@ interface AnnualCostChartProps {
 }
 
 export function AnnualCostChart({ data }: AnnualCostChartProps) {
-  const colors = useMemo(
-    () => [resolveToHex("--chart-1"), resolveToHex("--chart-2"), resolveToHex("--chart-3"), resolveToHex("--chart-4")],
-    [],
-  );
+  // useThemeColor re-resolves when the theme flips; the local copy this replaced memoized on
+  // [] and left the slices in their light-mode colours after a switch to dark.
+  const colors = [
+    useThemeColor("--chart-1"), useThemeColor("--chart-2"),
+    useThemeColor("--chart-3"), useThemeColor("--chart-4"),
+  ];
 
   const totalPurchase = data.reduce((s, d) => s + d.totalPurchase, 0);
   const totalRepair = data.reduce((s, d) => s + d.totalRepair, 0);
