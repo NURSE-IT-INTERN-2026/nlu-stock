@@ -1,10 +1,14 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { tokenText, tokenTint, tokenVar, type Token } from "./report-kit";
 
 export interface SummaryStat {
   label: string;
   value: string | number;
+  /** Colours the card with its event colour. Omit and the card stays plain, so the tabs that
+   *  have not been reworked yet keep the look they have today. */
+  token?: Token;
   /** One line under the number saying what it is counted from. Every headline number on a
    *  report is a slice of something bigger, and a report that doesn't say which slice is how
    *  "มูลค่าคงเหลือรวม" came to read as the value of the whole storeroom when it was three items. */
@@ -26,10 +30,28 @@ export function ReportSummary({ stats }: { stats: SummaryStat[] }) {
     // so mobile lays each one out as a single label→value row instead.
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
       {stats.map((s) => (
-        <div key={s.label} className="rounded-lg border bg-card p-3">
+        <div
+          key={s.label}
+          className={cn("rounded-lg border p-3", s.token ? "" : "bg-card")}
+          style={
+            s.token
+              ? {
+                  backgroundColor: tokenTint(s.token, 10),
+                  borderColor: `color-mix(in oklab, ${tokenVar[s.token]} 30%, transparent)`,
+                }
+              : undefined
+          }
+        >
           <div className="flex items-baseline justify-between gap-2 sm:block">
             <p className="text-xs text-muted-foreground">{s.label}</p>
-            <p className={cn("text-lg font-bold tabular-nums", TONES[s.tone ?? "default"])}>{s.value}</p>
+            <p
+              className={cn(
+                "text-lg font-bold tabular-nums",
+                s.token ? tokenText[s.token] : TONES[s.tone ?? "default"],
+              )}
+            >
+              {s.value}
+            </p>
           </div>
           {s.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{s.hint}</p>}
         </div>

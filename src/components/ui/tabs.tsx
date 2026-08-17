@@ -30,6 +30,10 @@ const tabsListVariants = cva(
       variant: {
         default: "bg-muted",
         line: "gap-1 bg-transparent",
+        // Free-standing pills instead of one segmented control. Used by the report tabs,
+        // where each sub-tab owns an event colour and the tracked strip has nothing to sit on.
+        // h-auto! because the base class pins horizontal lists to h-8.
+        chip: "h-auto! flex-wrap gap-2 bg-transparent p-0",
       },
     },
     defaultVariants: {
@@ -62,6 +66,11 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
         "data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
         "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        // chip: the active fill is the caller's colour, passed as `--chip` in a style prop —
+        // one class can't carry ten event tokens. Foreground is --card so the label stays
+        // readable against the fill in both themes without a second token per colour.
+        "group-data-[variant=chip]/tabs-list:h-9 group-data-[variant=chip]/tabs-list:flex-none group-data-[variant=chip]/tabs-list:rounded-full group-data-[variant=chip]/tabs-list:border-border group-data-[variant=chip]/tabs-list:bg-card group-data-[variant=chip]/tabs-list:px-4 group-data-[variant=chip]/tabs-list:after:hidden",
+        "group-data-[variant=chip]/tabs-list:data-active:border-(--chip) group-data-[variant=chip]/tabs-list:data-active:bg-(--chip) group-data-[variant=chip]/tabs-list:data-active:text-card dark:group-data-[variant=chip]/tabs-list:data-active:border-(--chip) dark:group-data-[variant=chip]/tabs-list:data-active:bg-(--chip) dark:group-data-[variant=chip]/tabs-list:data-active:text-card",
         className
       )}
       {...props}
