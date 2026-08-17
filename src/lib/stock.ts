@@ -226,7 +226,7 @@ export async function restoreDamagedQty(
     note?: string | null;
     userId: string;
   },
-): Promise<number> {
+): Promise<{ qty: number; adjustmentId: string }> {
   const { adj, reason, note, userId } = input;
   const qty = adj.previousQty - adj.newQty;
 
@@ -244,7 +244,9 @@ export async function restoreDamagedQty(
     if (!landed) await tx.item.update({ where: { id: adj.itemId }, data: { availableQty: { increment: qty } } });
   }
 
-  await tx.stockAdjustment.create({
+  // Returned to the caller so a repair job can point at the row that represents it in the
+  // item timeline — see MaintenanceRecord.adjustmentId.
+  const audit = await tx.stockAdjustment.create({
     data: {
       itemId: adj.itemId,
       delta: qty,
@@ -260,5 +262,5 @@ export async function restoreDamagedQty(
   });
 
   await recomputeItemCounts(tx, adj.itemId);
-  return qty;
+  return { qty, adjustmentId: audit.id };
 }

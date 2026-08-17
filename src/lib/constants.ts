@@ -56,7 +56,9 @@ export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   ADJUSTMENT: "ปรับสต๊อก",
   DAMAGE_REPORT: "แจ้งชำรุด",
   REPAIR_SENT: "ส่งซ่อม",
-  REPAIR_RETURN: "รับคืนจากซ่อม",
+  // The chip is the bucket ("ของกลับเข้าคลัง"); what came back and from where is the
+  // รายการ cell's job — it spells out "รับคืนจากซ่อม" there.
+  REPAIR_RETURN: "รับคืน",
   STATUS_CHANGE: "เปลี่ยนสถานะ",
   MAINTENANCE: "บำรุงรักษา",
   LOCATION_CHANGE: "ย้ายที่ตั้ง",

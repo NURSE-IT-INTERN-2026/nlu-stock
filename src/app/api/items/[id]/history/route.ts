@@ -9,11 +9,12 @@ import { AdjustmentReason } from "@/generated/prisma/enums";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 
-// A history row as the table renders it: what happened, how much stock moved (signed,
-// null when the event doesn't touch stock), why, who, when.
-// note/detail are split rather than joined into one string: the หมายเหตุ cell leads with the
-// one thing worth scanning (`ปรับยอด 130 → 125`) and demotes the supporting context to a
-// second, quieter line, which one `·`-joined blob cannot do.
+// A history row as the table renders it. Three text fields, each with one job:
+//   note     — the bold title, the one thing worth scanning ("รับคืนจากซ่อม").
+//   subtitle — a curated second line derived from structured data (loan status, repair venue,
+//              maintenance result, a canned reason phrase). Safe for the table: never free-text.
+//   notes    — the staff member's own free-text ("ทดสอบชำรุด รอบ 2"). Detail dialog only, so a
+//              test string or a paragraph can never leak into or bloat the table row.
 // `qty` is how many units the event involved; `delta` is how much stock actually moved.
 // They differ on a ชำรุด/สูญหาย return — 3 pieces came back through the door (qty 3) but none
 // of them re-entered usable stock (delta 0). Summing delta for the chips would report
@@ -25,23 +26,30 @@ type TimelineEvent = {
   delta: number | null;
   qty: number | null;
   note: string;
-  detail: string;
+  subtitle: string;
+  notes: string;
   user: string;
+  // Stock balance before/after the event, when it moved qty stock. The จำนวน cell shows it as
+  // `100 → 147` under the count, and the row detail spells it out in full.
+  change?: { from: number; to: number } | null;
+  // ค่าซ่อม, folded in from the MaintenanceRecord that closed the same trip. Dialog only.
+  cost?: number | null;
   details: Record<string, unknown>;
 };
 
 const joinNotes = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
+// "รายวิชา" + "ภาษาอังกฤษ 2" → "รายวิชา ภาษาอังกฤษ 2"; either half alone stands on its own.
+const joinLabel = (label: string | null, text: string | null) => [label, text].filter(Boolean).join(" ") || null;
 
-// Adjustment reasons that describe an event rather than a bookkeeping correction — these get
-// to be the headline of their row. ตรวจนับขาด/เกิน and อื่นๆ are left out on purpose: they only
-// qualify a number, so the number leads instead.
-const NAMED_ADJUSTMENT = new Set<AdjustmentReason>([
-  AdjustmentReason.DAMAGED_PENDING_REPAIR,
-  AdjustmentReason.REPAIR_RETURN,
-  AdjustmentReason.DAMAGE_CANCELLED,
-  AdjustmentReason.DISPOSAL,
-  AdjustmentReason.ASSEMBLY,
-]);
+// The subtitle earns its line only by saying something the chip and the รายการ cell have not
+// said already. "ตัดจำหน่าย" under a row headed ตัดจำหน่าย is the same word twice; what is left
+// here is the two reasons that carry a real state — where the units went, and what came back.
+// The staff member's own note (which may be a test string) never appears here — it rides in
+// `notes` for the detail dialog only.
+const ADJUSTMENT_SUBTITLE: Partial<Record<AdjustmentReason, string>> = {
+  [AdjustmentReason.DAMAGED_PENDING_REPAIR]: "รอดำเนินการซ่อม",
+  [AdjustmentReason.REPAIR_RETURN]: "ซ่อมเสร็จ พร้อมใช้งาน",
+};
 
 // ยืม/นำไปใช้งาน rows say what left the store but not whether it is still out — the same row
 // reads identically whether the 5 pieces came back in July or are three weeks overdue. The
@@ -85,6 +93,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const subItemId = searchParams.get("subItemId");
 
   const events: TimelineEvent[] = [];
+  // adjustment id → ค่าซ่อม of the job that closed it; merged in once both queries have run.
+  const repairJobs = new Map<string, number | null>();
 
   const itemLevel = !subItemId;
   const fetchDispense = !lost;
@@ -122,20 +132,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             date: r.dispensedAt,
             delta: -r.quantity,
             qty: r.quantity,
-            // "อื่นๆ" as a headline says nothing — for that one type the เหตุผล IS the
-            // event, so it leads and drops out of the quieter second line.
-            note: r.usageType === "OTHER" && reason
-              ? reason
-              : (r.usageType ? USAGE_TYPE_LABELS[r.usageType] : null) ?? "นำออกจากคลัง",
-            detail: joinNotes(
+            // The name of what happened, fixed per event type. It used to be the usageType
+            // ("รายวิชา"), which answers a different question — why the stock left, not what
+            // was done to it — and left the row with no word for the action anywhere.
+            note: type === "BORROW" ? "ยืมออก" : type === "INUSE" ? "ตั้งใช้ในห้อง" : "เบิกออก",
+            subtitle: joinNotes(
               // Leads the line: on a ยืม row "ค้าง 5 ชิ้น" is the thing worth scanning, and
               // a consumable never comes back so it gets no status at all.
               isConsumable ? null : loanStatus(r, unit),
-              r.usageType === "OTHER" ? null : reason,
+              // The purpose, now that the headline is the action: "รายวิชา ภาษาอังกฤษ 2".
+              // อื่นๆ prints the เหตุผล bare — the label adds nothing the text does not say.
+              r.usageType === "OTHER"
+                ? reason
+                : joinLabel(r.usageType ? USAGE_TYPE_LABELS[r.usageType] : null, reason),
               // Legacy rows only: someone typed a name back when ผู้รับ was a field of its own.
               r.recipient ? `ผู้รับ ${r.recipient}` : null,
               place ? `ห้องที่ตั้ง ${place}` : null,
             ),
+            notes: "",
             user: r.staff.name,
             details: {
               quantity: r.quantity, usageType: r.usageType, returnedAt: r.returnedAt, loanType: r.loanType,
@@ -164,8 +178,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             // would make the column stop adding up.
             delta: r.condition === "AVAILABLE" ? r.quantity : 0,
             qty: r.quantity,
-            note: RETURN_CONDITION_LABELS[r.condition] ?? r.condition,
-            detail: r.notes ?? "",
+            // The action, with the condition qualifying it — a ชำรุด return is still a return,
+            // and a row that reads only "ชำรุด" is indistinguishable from a แจ้งชำรุด row.
+            note: r.condition === "AVAILABLE"
+              ? "รับคืน"
+              : `รับคืน (${RETURN_CONDITION_LABELS[r.condition] ?? r.condition})`,
+            subtitle: "",
+            notes: r.notes ?? "",
             user: r.returner.name,
             details: { quantity: r.quantity, condition: r.condition },
           });
@@ -189,7 +208,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             delta: r.quantity,
             qty: r.quantity,
             note: "รับเข้าคลัง",
-            detail: r.notes ?? "",
+            subtitle: "",
+            notes: r.notes ?? "",
             user: r.receiver.name,
             details: { quantity: r.quantity },
           });
@@ -222,21 +242,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             date: r.adjustedAt,
             delta: r.newQty - r.previousQty,
             qty: Math.abs(r.newQty - r.previousQty),
-            // A reason that names a real event leads the row — "แจ้งชำรุด 5 ชิ้น" is what the
-            // reader is scanning for, and the yard figures belong on the quieter second line.
-            // The generic ones (ตรวจนับขาด/เกิน, อื่นๆ) say nothing on their own, so there the
-            // numbers stay the headline and the label stays underneath.
+            // รายการ leads with the reason label alone — the จำนวน column already carries how many
+            // units moved, and the before/after balance rides in `change`, so neither the yard
+            // figure nor the "ปรับยอด X → Y" string crowds the cell any more.
             note: lost
               ? `สูญหาย ${r.previousQty - r.newQty} ${unit}`
-              : NAMED_ADJUSTMENT.has(r.reason)
-                ? `${ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason} ${Math.abs(r.newQty - r.previousQty)} ${unit}`
-                : `ปรับยอด ${r.previousQty} → ${r.newQty}`,
-            detail: joinNotes(
-              lost ? null : NAMED_ADJUSTMENT.has(r.reason)
-                ? `ปรับยอด ${r.previousQty} → ${r.newQty}`
-                : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason,
-              r.notes,
-            ),
+              : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason,
+            subtitle: lost ? "" : (ADJUSTMENT_SUBTITLE[r.reason] ?? ""),
+            notes: r.notes ?? "",
+            change: lost ? null : { from: r.previousQty, to: r.newQty },
             user: r.adjuster.name,
             details: lost
               ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
@@ -275,12 +289,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           type: r.repairVenue ? "REPAIR_SENT" : "STATUS_CHANGE",
           date: r.changedAt,
           delta: null,
-          qty: null,
-          note: sameStatus
-            ? (r.reason ?? STATUS_LABELS[r.newStatus] ?? r.newStatus)
-            : `${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${to}`,
-          detail: joinNotes(
-            r.repairVenue && r.newStatus === "UNDER_REPAIR" ? `ส่งซ่อม${r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}` : null,
+          // A qty ส่งซ่อม is the one status row about a count rather than a single piece.
+          // It moves no stock (แจ้งชำรุด already did), so it fills จำนวน without a delta.
+          qty: r.qty,
+          // A repair trip is named by the action, on both paths — the piece's row said
+          // "ชำรุด → ซ่อมบำรุง", which is the status machine talking, not what anyone did.
+          note: r.repairVenue && r.newStatus === "UNDER_REPAIR"
+            ? `ส่งซ่อม${r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}`
+            : sameStatus
+              // Legacy qty rows packed the whole line into `reason`
+              // ("ส่งซ่อมภายนอก 47 ชิ้น · <repairNote>"); the writer now keeps qty and the note
+              // in their own columns, so this only trims what the old rows still carry.
+              ? (r.reason?.split(" · ")[0] ?? STATUS_LABELS[r.newStatus] ?? r.newStatus)
+              : `${STATUS_LABELS[r.previousStatus] ?? r.previousStatus} → ${to}`,
+          // The shop note is the one thing the headline does not already say — venue is part
+          // of the action's name now. The damage note and free-text reason stay in `notes`.
+          subtitle: r.repairVenue ? (r.repairNote ?? "") : "",
+          notes: joinNotes(
             r.damageNote,
             // The headline already is the reason in that case — printing it twice is noise.
             sameStatus ? null : r.reason,
@@ -299,20 +324,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       prisma.maintenanceRecord.findMany({
         where: { itemId: id, ...(subItemId ? { subItemId } : {}) },
         include: { performer: { select: { name: true } } },
-        orderBy: { performedAt: "desc" },
+        orderBy: { createdAt: "desc" },
       }).then((records) => {
         for (const r of records) {
+          // A qty repair writes this record AND the REPAIR_RETURN adjustment that hands the
+          // units back, in one transaction — one รับคืนจากซ่อม, told twice. The adjustment is
+          // the fuller row (qty, balance, the closing note), so it keeps the line and this
+          // record hands over the one thing it alone knows: what the repair cost.
+          if (r.adjustmentId) {
+            repairJobs.set(r.adjustmentId, r.cost);
+            continue;
+          }
           events.push({
             id: r.id,
             // A CORRECTIVE record only ever exists as the tail of ชำรุด → ส่งซ่อม → รับคืน, so it
             // IS the รับคืนจากซ่อม event — filing it under บำรุงรักษา buried repairs among the
             // scheduled rounds, which are a different thing on a different cadence.
             type: r.type === "CORRECTIVE" ? "REPAIR_RETURN" : "MAINTENANCE",
-            date: r.performedAt,
+            // The timeline is a log: rows sit where the action was recorded. `performedAt` is a
+            // date the staff member picks (date input → 00:00 UTC → 07:00 on screen), so a repair
+            // filed at 14:20 landed seven hours from the ปรับสต๊อก row of the very same
+            // transaction. `createdAt` is when it was written, same clock as every other table.
+            // performedAt stays the reporting date — reports/maintenance-history still read it.
+            date: r.createdAt,
             delta: null,
             qty: null,
-            note: MAINT_TYPE_LABELS[r.type] ?? r.type,
-            detail: joinNotes(MAINT_RESULT_LABELS[r.result] ?? r.result, r.issue),
+            note: r.type === "CORRECTIVE" ? "รับคืนจากซ่อม" : MAINT_TYPE_LABELS[r.type] ?? r.type,
+            subtitle: MAINT_RESULT_LABELS[r.result] ?? r.result,
+            notes: r.issue ?? "",
             user: r.performer.name,
             details: { type: r.type, result: r.result, cost: r.cost, issue: r.issue },
           });
@@ -336,7 +375,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             delta: null,
             qty: null,
             note: `${r.fromLabel ?? "—"} → ${r.toLabel ?? "ไม่ระบุ"}`,
-            detail: "",
+            subtitle: "",
+            notes: "",
             user: r.changer.name,
             details: { fromLabel: r.fromLabel, toLabel: r.toLabel },
           });
@@ -346,6 +386,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   await Promise.all(queries);
+
+  for (const e of events) {
+    if (repairJobs.has(e.id)) e.cost = repairJobs.get(e.id) ?? null;
+  }
 
   events.sort((a, b) => b.date.getTime() - a.date.getTime());
 
