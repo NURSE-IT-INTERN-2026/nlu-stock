@@ -18,22 +18,22 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { assembleKit } from "@/lib/api";
+import { createKitRecipe } from "@/lib/api";
 import type { CreateKitModalProps, KitFormState, ComponentRow, WizardStep } from "./types";
 import { StepKitDetails } from "./step-kit-details";
 import { StepComponents } from "./step-components";
-import { StepAssemble } from "./step-assemble";
+import { StepSummary } from "./step-summary";
 
 const STEP_TITLES: Record<WizardStep, string> = {
   "kit-details": "ข้อมูลชุด",
   components: "ส่วนประกอบ",
-  assemble: "ประกอบและสรุป",
+  summary: "สรุปสูตร",
 };
 
 const MAIN_STEPS = [
   { idx: 0, title: "ข้อมูลชุด", desc: "ชื่อ หมวดหมู่ รหัส หน่วย", icon: Boxes },
-  { idx: 1, title: "ส่วนประกอบ", desc: "พัสดุและจำนวนชุด", icon: ListPlus },
-  { idx: 2, title: "ประกอบและสรุป", desc: "ตรวจสอบและยืนยัน", icon: ClipboardCheck },
+  { idx: 1, title: "ส่วนประกอบ", desc: "พัสดุและจำนวนต่อชุด", icon: ListPlus },
+  { idx: 2, title: "สรุปสูตร", desc: "ตรวจสอบและบันทึก", icon: ClipboardCheck },
 ] as const;
 
 const INITIAL_FORM: KitFormState = {
@@ -57,14 +57,12 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
   const [step, setStep] = useState<WizardStep>("kit-details");
   const [form, setForm] = useState<KitFormState>(INITIAL_FORM);
   const [components, setComponents] = useState<ComponentRow[]>([]);
-  const [assembleQty, setAssembleQty] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const reset = useCallback(() => {
     setStep("kit-details");
     setForm(INITIAL_FORM);
     setComponents([]);
-    setAssembleQty(1);
     setIsSubmitting(false);
   }, []);
 
@@ -74,40 +72,39 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
   }, [reset, onClose]);
 
   // ── Validation ──────────────────────────────────────────────
-  const hasShortage = components.some((c) => c.quantity * assembleQty > c.availableQty);
+  // No stock check: writing a recipe cuts nothing. ประกอบชุด is where "มีไม่พอ" can happen.
   const canNext =
     (step === "kit-details" && form.name.trim() !== "" && form.issueUnitId !== "") ||
-    (step === "components" && components.length >= 1 && !hasShortage) ||
-    (step === "assemble" && !hasShortage);
+    (step === "components" && components.length >= 1) ||
+    step === "summary";
 
   const handleBack = useCallback(() => {
     if (step === "components") setStep("kit-details");
-    else if (step === "assemble") setStep("components");
+    else if (step === "summary") setStep("components");
     else handleClose();
   }, [step, handleClose]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      const result = await assembleKit({
+      const result = await createKitRecipe({
         name: form.name.trim(),
         issueUnitId: form.issueUnitId,
         components: components.map((c) => ({ componentItemId: c.componentItemId, quantity: c.quantity })),
-        assembleQty,
       });
-      toast.success(`จัด set อุปกรณ์ "${form.name}" สำเร็จ ได้ ${result.assembledQty} ชุด`);
+      toast.success(`สร้างสูตรชุด "${form.name}" (${result.kitCode}) แล้ว — ประกอบชุดได้ที่หน้ารายละเอียด`);
       onCreated(result);
       handleClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "จัด set อุปกรณ์ไม่สำเร็จ");
+      toast.error(e instanceof Error ? e.message : "สร้างสูตรชุดไม่สำเร็จ");
       setIsSubmitting(false);
     }
-  }, [form, components, assembleQty, onCreated, handleClose]);
+  }, [form, components, onCreated, handleClose]);
 
   const handleNext = useCallback(() => {
     if (step === "kit-details") setStep("components");
-    else if (step === "components") setStep("assemble");
-    else if (step === "assemble") handleSubmit();
+    else if (step === "components") setStep("summary");
+    else if (step === "summary") handleSubmit();
   }, [step, handleSubmit]);
 
   // ── Component row handlers ──────────────────────────────────
@@ -124,7 +121,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
   // ── Rendering ───────────────────────────────────────────────
   const stepIdx = step === "kit-details" ? 0 : step === "components" ? 1 : 2;
   const stepTitle = STEP_TITLES[step];
-  const title = "จัด set อุปกรณ์ใหม่";
+  const title = "สร้างสูตรชุดอุปกรณ์";
 
   function renderHeader() {
     return (
@@ -230,20 +227,17 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
         {step === "components" && (
           <StepComponents
             components={components}
-            assembleQty={assembleQty}
-            onAssembleQtyChange={setAssembleQty}
             onAdd={addComponent}
             onRemove={removeComponent}
             onQtyChange={changeQty}
           />
         )}
-        {step === "assemble" && (
-          <StepAssemble
+        {step === "summary" && (
+          <StepSummary
             kitName={form.name}
             kitCode={form.code}
             issueUnitName={form.issueUnitName}
             components={components}
-            assembleQty={assembleQty}
           />
         )}
       </div>
@@ -268,10 +262,10 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
           onClick={handleNext}
           className="gap-1.5"
         >
-          {step === "assemble" ? (
+          {step === "summary" ? (
             <>
               <Check className="h-4 w-4" />
-              {isSubmitting ? "กำลังจัด set..." : "จัด set อุปกรณ์"}
+              {isSubmitting ? "กำลังบันทึก..." : "บันทึกสูตรชุด"}
             </>
           ) : (
             <>

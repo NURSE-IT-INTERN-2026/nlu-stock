@@ -157,6 +157,9 @@ function ItemsContent() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [kitOpen, setKitOpen] = useState(false);
   const canManage = canManageStock(user?.role ?? "");
+  // Creating a kit recipe mints a registry code (NLU-KIT-NNN), same bar as creating any other
+  // item. Editing its BOM, assembling and ยกเลิกชุด stay ADMIN — those are edits, not new entries.
+  const isSuperAdmin = user?.role === "SUPERADMIN";
   const desktopCols = 6 + (canManage ? 1 : 0);
 
   const toggleSelect = (id: string) => setSelected((prev) => {
@@ -210,7 +213,7 @@ function ItemsContent() {
         resultCount={total}
         onScanQR={() => setScannerOpen(true)}
         hideAlertPicker
-        trailingAction={canManage ? (
+        trailingAction={isSuperAdmin ? (
           <Button
             type="button"
             variant="outline"
@@ -218,7 +221,7 @@ function ItemsContent() {
             className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 w-full justify-center"
           >
             <Boxes className="size-5" />
-            <span className="font-medium">จัด set อุปกรณ์</span>
+            <span className="font-medium">สร้างสูตรชุด</span>
           </Button>
         ) : undefined}
       />
@@ -228,8 +231,8 @@ function ItemsContent() {
       <div className="rounded-2xl border bg-card flex flex-col overflow-clip">
         <div className="[&_[data-slot=table-container]]:overflow-visible">
           <Table className="table-fixed">
-            <TableHeader>
-              <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+            <TableHeader sticky>
+              <TableRow>
                 {canManage && (
                   <TableHead className="hidden md:table-cell w-10 text-center">
                     <Checkbox
@@ -273,7 +276,7 @@ function ItemsContent() {
                 return (
                   <Fragment key={item.id}>
                     <TableRow
-                      className={`h-9 cursor-pointer hover:bg-muted/50 transition-colors [&>td]:py-1 ${expanded ? "bg-orange-50/40 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
+                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${expanded ? "bg-orange-50/40 dark:bg-orange-950/30" : idx % 2 === 1 ? "bg-muted/40" : ""}`}
                       onClick={() => {
                         // While filtering the pieces are already shown; collapsing them would
                         // hide the answer, so the row just opens the item instead.
@@ -326,7 +329,7 @@ function ItemsContent() {
                       return (
                       <TableRow
                         key={sub.id}
-                        className="h-9 [&>td]:py-1 bg-orange-50/40 dark:bg-orange-950/30 hover:bg-orange-50/60 dark:hover:bg-orange-950/40 cursor-pointer"
+                        className="bg-orange-50/40 dark:bg-orange-950/30 hover:bg-orange-50/60 dark:hover:bg-orange-950/40 cursor-pointer"
                         onClick={() => router.push(`/items/${item.code}?copy=${sub.subCode}`)}
                       >
                         {canManage && <TableCell className="hidden md:table-cell" />}

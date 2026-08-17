@@ -5,7 +5,7 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog,
+  RefreshCw, Wrench, MapPin, MonitorCog, Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
@@ -38,6 +38,13 @@ const TYPE_META: Record<TimelineEventType, { icon: typeof Package; chip: string;
   RETURN: { icon: Undo2, chip: "bg-success/10 text-success-700 dark:text-success-200", rail: "bg-success" },
   RECEIVE: { icon: ArrowDownToLine, chip: "bg-success/10 text-success-700 dark:text-success-200", rail: "bg-success" },
   ADJUSTMENT: { icon: Package, chip: "bg-foreground/5 text-foreground", rail: "bg-foreground/40" },
+  // แจ้งชำรุด opens the loop the repair pair closes — flagged, and red like the other row that
+  // takes stock off the shelf.
+  DAMAGE_REPORT: { icon: Flag, chip: "bg-destructive/10 text-destructive dark:text-danger-400", rail: "bg-destructive" },
+  // The repair pair shares the ประแจ with บำรุงรักษา but carries colour, because going out and
+  // coming back are the two ends of an open loop somebody is waiting on.
+  REPAIR_SENT: { icon: Wrench, chip: "bg-warning/15 text-warning-700 dark:text-warning-200", rail: "bg-warning" },
+  REPAIR_RETURN: { icon: Wrench, chip: "bg-success/10 text-success-700 dark:text-success-200", rail: "bg-success" },
   STATUS_CHANGE: { icon: RefreshCw, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
   MAINTENANCE: { icon: Wrench, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
   LOCATION_CHANGE: { icon: MapPin, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
@@ -45,7 +52,7 @@ const TYPE_META: Record<TimelineEventType, { icon: typeof Package; chip: string;
 
 const CHIP_ORDER: TimelineEventType[] = [
   "DISPENSE", "BORROW", "INUSE", "RETURN", "RECEIVE",
-  "ADJUSTMENT", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
+  "ADJUSTMENT", "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
 ];
 
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */
@@ -112,7 +119,7 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
           Labelled "รวมทั้งประวัติ" on purpose: the stock card above these tabs shows ถูกยืม as
           the units still out *right now*, and these chips sum every movement ever recorded.
           Two different numbers under the same word on one screen needs the caption. */}
-      <div className="border-b border-border bg-muted/30 px-4 py-3 sm:px-6">
+      <div className="border-b border-border bg-muted/30 px-4 sm:px-6">
         <p className="mb-2 text-[11px] text-muted-foreground">รวมทั้งประวัติ</p>
         <div className="flex gap-2 overflow-x-auto">
           {chips.map((chip) => {
@@ -167,17 +174,17 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[160px] pl-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground sm:pl-6">Type</TableHead>
-              <TableHead className="w-[110px] text-right text-[11px] uppercase tracking-[0.14em] text-muted-foreground">จำนวน</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">หมายเหตุ</TableHead>
-              <TableHead className="w-[170px] text-[11px] uppercase tracking-[0.14em] text-muted-foreground">ผู้ดำเนินการ</TableHead>
-              <TableHead className="w-[130px] pr-4 text-right text-[11px] uppercase tracking-[0.14em] text-muted-foreground sm:pr-6">วันที่ / เวลา</TableHead>
+              <TableHead className="w-[160px] pl-4 sm:pl-6">Type</TableHead>
+              <TableHead className="w-[110px] text-right">จำนวน</TableHead>
+              <TableHead>หมายเหตุ</TableHead>
+              <TableHead className="w-[170px]">ผู้ดำเนินการ</TableHead>
+              <TableHead className="w-[130px] pr-4 text-right sm:pr-6">วันที่ / เวลา</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {events.map((e) => (
               <TableRow key={e.id} className="group">
-                <TableCell className="relative py-3 pl-4 sm:pl-6">
+                <TableCell className="relative pl-4 sm:pl-6">
                   <span
                     aria-hidden
                     className={cn(
@@ -187,18 +194,18 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
                   />
                   <TypeChip type={e.type} />
                 </TableCell>
-                <TableCell className="py-3 text-right"><Delta value={e.delta} unit={unit} /></TableCell>
-                <TableCell className="max-w-sm py-3">
+                <TableCell className="text-right"><Delta value={e.delta} unit={unit} /></TableCell>
+                <TableCell className="max-w-sm">
                   <p className="text-sm font-medium text-foreground">{e.note}</p>
                   {e.detail && <p className="mt-0.5 truncate text-xs text-muted-foreground">{e.detail}</p>}
                 </TableCell>
-                <TableCell className="py-3">
+                <TableCell>
                   <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                     <Avatar name={e.user} />
                     {e.user}
                   </span>
                 </TableCell>
-                <TableCell className="py-3 pr-4 text-right sm:pr-6">
+                <TableCell className="pr-4 text-right sm:pr-6">
                   <p className="text-xs font-medium tabular-nums">{fmtDate(e.date, TH_DATE)}</p>
                   <p className="text-[11px] tabular-nums text-muted-foreground">{timeOf(e.date)} น.</p>
                 </TableCell>
@@ -210,7 +217,7 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
 
       {/* ── Footer / pagination ── */}
       {!loading && events.length > 0 && (
-        <div className="border-t border-border bg-muted/30 px-4 py-3 sm:px-6">
+        <div className="border-t border-border bg-muted/30 px-4 sm:px-6">
           <p className="text-xs text-muted-foreground">
             แสดง <span className="font-semibold tabular-nums text-foreground">{events.length}</span> จาก{" "}
             <span className="tabular-nums">{total}</span> รายการ

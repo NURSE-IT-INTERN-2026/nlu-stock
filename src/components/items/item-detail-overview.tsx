@@ -23,7 +23,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { returnItem } from "@/lib/api";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 import { DistributionTable, distributionTotal, type DistributionRow } from "@/components/items/distribution-table";
-import { RecoverDamageDialog, type OpenDamage } from "@/components/items/recover-damage-dialog";
+
+/** One open แจ้งชำรุด booking — as served by GET /api/items/:id (`openDamage`). */
+export interface OpenDamage {
+  id: string;
+  qty: number;
+  notes: string | null;
+  adjustedAt: string;
+  /** null = ยังไม่ได้ส่งซ่อม (sits on /alerts); set = อยู่ระหว่างซ่อม (sits on the receive tab). */
+  repairSentAt: string | null;
+  by: string;
+}
 
 interface SubItemRecord {
   id: string;
@@ -78,8 +88,9 @@ interface Props {
 export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, onReportStatus, onEdit, onRefresh }: Props) {
   const canAct = canManageStock(userRole);
   const [stationOpen, setStationOpen] = useState(false);
-  const [recoverOpen, setRecoverOpen] = useState(false);
   const openDamage = item.openDamage ?? [];
+  const damagePending = openDamage.filter((d) => !d.repairSentAt).reduce((s, d) => s + d.qty, 0);
+  const damageAtShop = openDamage.filter((d) => d.repairSentAt).reduce((s, d) => s + d.qty, 0);
   // COUNT durable (non-tracked, non-consumable = DUR) → eligible for "นำไปใช้งาน".
   const isCountDurable = !item.trackIndividually && (item.category.profile?.dispenseType ?? "COUNT") !== "CONSUMABLE";
 
@@ -113,15 +124,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   const handleReturn = async (subItemId: string) => {
     try {
       await returnItem(item.id, { subItemId });
-      toast.success("คืนแล้ว"); onRefresh();
-    } catch (e) { toast.error(e instanceof Error ? e.message : "คืนไม่สำเร็จ"); }
-  };
-
-  const handleReturnQty = async () => {
-    const qty = prompt("ระบุจำนวนที่จะคืน");
-    if (!qty) return;
-    try {
-      await returnItem(item.id, { quantity: parseInt(qty) });
       toast.success("คืนแล้ว"); onRefresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "คืนไม่สำเร็จ"); }
   };
@@ -274,36 +276,33 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               ) : (
                 <ActionTile icon={Package} label="ปรับสต็อก" tone="default" onClick={onAdjust} />
               )}
-              {isCountDurable ? (
-                // DUR: damage is usually partial (ตัดจำนวน) but the whole lot can also be
-                // pulled from service — that one sets Item.status, which recompute now keeps.
-                <DropdownMenu>
-                  <DropdownMenuTrigger render={<ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" />} />
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={onReportDamage}>
-                      <Package className="size-4" />ตัดจำนวนที่ชำรุด
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onReportStatus("DAMAGED")}>
-                      <Flag className="size-4" />ทั้งรายการชำรุด
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} />
+              {/* Neither ส่งซ่อม nor รับคืน is a tile here — both are steps in one worklist that
+                  has to hold pieces and qty side by side, so they live on their own screens.
+                  This just says which screen the damaged units are sitting on right now. */}
+              {damagePending > 0 && (
+                <a
+                  href="/alerts?damagedPending=true"
+                  className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10 dark:text-danger-400"
+                >
+                  <Flag className="size-4 shrink-0" />
+                  <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าแจ้งเตือน</span>
+                </a>
               )}
-              {openDamage.length > 0 && (
-                <ActionTile icon={Wrench} label="รับคืนจากซ่อม" tone="default" onClick={() => setRecoverOpen(true)} />
+              {damageAtShop > 0 && (
+                <a
+                  href="/receive?tab=repair"
+                  className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning-700 transition-colors hover:bg-warning/10 dark:text-warning-200"
+                >
+                  <Wrench className="size-4 shrink-0" />
+                  <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้ารับเข้า-คืนพัสดุ</span>
+                </a>
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (
                 <ActionTile icon={CheckCircle2} label="กลับพร้อมใช้งาน" tone="default" onClick={() => onReportStatus("AVAILABLE")} />
               )}
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
-              {!item.trackIndividually && item.category.profile?.dispenseType !== "CONSUMABLE" && item.availableQty < item.totalQty && (
-                <Button variant="outline" className="sm:col-span-2" onClick={handleReturnQty}>
-                  <Undo2 className="h-4 w-4 mr-1" />คืนตามจำนวน
-                </Button>
-              )}
             </div>
             {qrBlock(false)}
           </div>
@@ -353,7 +352,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       {isCountDurable && (
         <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={item.id} itemCode={item.code} itemName={item.name} availableQty={item.availableQty} issueUnit={item.issueUnit.name} onSuccess={onRefresh} />
       )}
-      <RecoverDamageDialog open={recoverOpen} onOpenChange={setRecoverOpen} itemId={item.id} unit={item.issueUnit.name} rows={openDamage} onSuccess={onRefresh} />
     </div>
   );
 }

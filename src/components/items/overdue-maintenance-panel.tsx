@@ -141,8 +141,8 @@ export function OverdueMaintenancePanel({ profiles, categories, locations, filte
         {/* Desktop: table */}
         <div className="hidden md:block overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
           <Table className="table-fixed">
-            <TableHeader>
-              <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+            <TableHeader sticky>
+              <TableRow>
                 <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
                 <TableHead className="px-2">ชื่อ</TableHead>
                 <TableHead className="w-48 px-2">การแจ้งเตือน</TableHead>
@@ -160,7 +160,7 @@ export function OverdueMaintenancePanel({ profiles, categories, locations, filte
               ) : paged.map((r, idx) => (
                 <TableRow
                   key={r.id}
-                  className={cn("h-9 cursor-pointer hover:bg-muted/50 transition-colors [&>td]:py-1", idx % 2 === 1 && "bg-muted/40")}
+                  className={cn("cursor-pointer hover:bg-muted/50 transition-colors", idx % 2 === 1 && "bg-muted/40")}
                   onClick={goMaintenance}
                 >
                   <TableCell className="font-mono text-xs px-2"><span className="block truncate">{r.code}</span></TableCell>

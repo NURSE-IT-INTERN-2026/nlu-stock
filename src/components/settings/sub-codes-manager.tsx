@@ -142,7 +142,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
       <div className="rounded-md border overflow-x-auto">
         <Table className="table-fixed">
           <TableHeader>
-            <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+            <TableRow>
               <TableHead className="w-36 px-2">รหัสย่อย</TableHead>
               <TableHead className="px-2">ชื่อ</TableHead>
               <TableHead className="w-28 px-2">สถานะ</TableHead>
@@ -156,7 +156,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
             {subItems.length === 0 ? (
               <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">ยังไม่มีรหัสย่อย</TableCell></TableRow>
             ) : subItems.map((sub) => (
-              <TableRow key={sub.id} className="h-9 [&>td]:py-1">
+              <TableRow key={sub.id}>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{formatSubCode(itemCode, sub.subCode)}</span></TableCell>
                 <TableCell className="px-2"><span className="truncate min-w-0">{sub.name || "-"}</span></TableCell>
                 <TableCell className="px-2">

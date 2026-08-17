@@ -248,14 +248,14 @@ export function ImportTab() {
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                  <TableRow>
                     <TableHead className="w-10 px-2">#</TableHead>
                     {headers.map((h) => <TableHead key={h} className="px-2">{h}</TableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {preview.map((row, i) => (
-                    <TableRow key={i} className="h-9 [&>td]:py-1">
+                    <TableRow key={i}>
                       <TableCell className="text-muted-foreground px-2">{i + 1}</TableCell>
                       {headers.map((h) => <TableCell key={h} className="px-2">{row[h]}</TableCell>)}
                     </TableRow>
@@ -286,14 +286,14 @@ export function ImportTab() {
               <div className="rounded-md border">
                 <Table className="table-fixed">
                   <TableHeader>
-                    <TableRow className="[&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+                    <TableRow>
                       <TableHead className="w-20 px-2">แถว</TableHead>
                       <TableHead className="px-2">ข้อผิดพลาด</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {result.errors.map((err, i) => (
-                      <TableRow key={i} className="h-9 [&>td]:py-1">
+                      <TableRow key={i}>
                         <TableCell className="font-mono text-xs px-2"><span className="block truncate">{err.row}</span></TableCell>
                         <TableCell className="text-xs text-destructive px-2"><span className="block truncate">{err.message}</span></TableCell>
                       </TableRow>

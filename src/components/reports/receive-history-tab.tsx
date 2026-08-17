@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useCallback, type ReactNode } from "react";
+import { useMemo, useState, useCallback } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   ReportFilters, defaultDateFilters, periodLabel,
   type FilterValues, type FilterConfig,
@@ -9,8 +10,9 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
-import { motion } from "motion/react";
-import { ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowDownToLine, ClipboardList, Recycle, Wrench, type LucideIcon } from "lucide-react";
+import { SectionTitle, chipStyle, type Token } from "./report-kit";
 import { Badge } from "@/components/ui/badge";
 import { getReport } from "@/lib/api";
 import { STATUS_LABELS, STATUS_PILLS, type ItemStatus } from "@/lib/constants";
@@ -24,12 +26,31 @@ type SubTab = "receive" | "in_use" | "return" | "repair";
 
 // ชื่อเดียวกับ tabs ใน /receive เป๊ะ. เดิมหน้านี้เรียกสิ่งเดียวกันว่า "รับซ่อม" ขณะที่หน้าทำงาน
 // เรียก "รับคืนจากส่งซ่อม" — คนละความหมายในหัวคนอ่าน ทั้งที่เป็นแถวชุดเดียวกัน.
-const SUB_TABS: { value: SubTab; label: string; icon: typeof ArrowDownToLine }[] = [
-  { value: "receive", label: "นำเข้าคลัง", icon: ArrowDownToLine },
-  { value: "in_use", label: "คืนเข้าคลัง", icon: PackageCheck },
-  { value: "return", label: "รับคืนจากใบยืม", icon: Undo2 },
-  { value: "repair", label: "รับคืนจากส่งซ่อม", icon: Wrench },
+//
+// สี่ sub-tab นี้คือ "ของกลับเข้าคลัง" เหมือนกันหมด แต่มาจากคนละที่ — token จึงเป็นสีของ
+// ต้นทาง (ยืม / นำไปใช้งาน / ส่งซ่อม) ไม่ใช่สีของปลายทาง ไม่งั้นทั้ง 4 อันเขียวเหมือนกันหมด.
+const SUB_TABS: { value: SubTab; label: string; token: Token; icon: LucideIcon; title: string; subtitle: string }[] = [
+  {
+    value: "receive", label: "นำเข้าคลัง", token: "stockin", icon: ArrowDownToLine,
+    title: "นำเข้าคลัง", subtitle: "ของใหม่ที่รับเข้าคลัง แยกตามล็อตและผู้รับเข้า",
+  },
+  {
+    value: "in_use", label: "คืนเข้าคลัง", token: "inuse", icon: Recycle,
+    title: "คืนเข้าคลัง", subtitle: "ของที่ตั้งใช้งานตามห้องแล้วส่งกลับคลัง",
+  },
+  {
+    value: "return", label: "รับคืนจากใบยืม", token: "borrow", icon: ClipboardList,
+    title: "รับคืนจากใบยืม", subtitle: "ของที่ยืมออกไปแล้วคืนกลับ — ดูว่าคืนมาในสภาพไหน",
+  },
+  {
+    value: "repair", label: "รับคืนจากส่งซ่อม", token: "repair", icon: Wrench,
+    title: "รับคืนจากส่งซ่อม", subtitle: "ของที่ซ่อมเสร็จและกลับมาพร้อมใช้งาน",
+  },
 ];
+
+function parseSubTab(value: string | null): SubTab {
+  return SUB_TABS.some((t) => t.value === value) ? (value as SubTab) : "receive";
+}
 
 function StatusPill({ status }: { status: ItemStatus }) {
   return (
@@ -40,48 +61,51 @@ function StatusPill({ status }: { status: ItemStatus }) {
 }
 
 export function ReceiveHistoryTab() {
-  const [sub, setSub] = useState<SubTab>("receive");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  // ?sub= อยู่ใน URL เหมือน ?tab= และ ?kind= — refresh หรือส่งลิงก์ให้คนอื่นแล้วยังอยู่ segment เดิม.
+  // ชื่อ param แยกจาก ?kind= ของออกจากคลัง เพราะทั้งสอง tab ถูก mount พร้อมกัน (หน้า reports
+  // ซ่อนด้วย CSS ไม่ได้ unmount) — param ชื่อเดียวกันจะแย่งกันเขียน.
+  const sub = parseSubTab(searchParams.get("sub"));
+  const spec = SUB_TABS.find((t) => t.value === sub)!;
 
-  // Segmented control — lives inside each sub-tab's filter bar via `leading`.
-  const subTabsEl = (
-    <div className="inline-flex w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-1 sm:w-auto">
-      {SUB_TABS.map(({ value, label, icon: Icon }) => {
-        const isActive = sub === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setSub(value)}
-            className={cn(
-              "relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {isActive && (
-              <motion.span
-                layoutId="receive-history-subtab"
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                className="absolute inset-0 rounded-md bg-background shadow-sm"
-              />
-            )}
-            <Icon className="relative h-4 w-4 shrink-0" />
-            <span className="relative">{label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+  const selectSub = (next: SubTab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sub", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
+  // Segment picker sits above the filter card, same as ออกจากคลัง — it chooses WHICH ledger is
+  // on screen, so it is not one of that ledger's filters and does not belong inside their box.
   return (
     <div className="space-y-4">
+      <SectionTitle token={spec.token} icon={spec.icon} title={spec.title} subtitle={spec.subtitle} />
+
+      {/* Sticky on phones only — same reasoning as ออกจากคลัง: the segment picker is the
+          control people come back to, and top-16 clears the app header. */}
+      <Tabs
+        value={sub}
+        onValueChange={(v) => selectSub(v as SubTab)}
+        className="sticky top-16 z-20 -mx-4 bg-background px-4 py-2 md:static md:mx-0 md:bg-transparent md:p-0"
+      >
+        <TabsList variant="chip" className="w-full min-w-0 sm:w-auto">
+          {SUB_TABS.map(({ value, label, token }) => (
+            <TabsTrigger key={value} value={value} className="min-w-0" style={chipStyle(token)}>
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       {sub === "receive" ? (
-        <ReceiveLogTable leading={subTabsEl} />
+        <ReceiveLogTable token={spec.token} />
       ) : sub === "in_use" ? (
-        <StatusLogTable from="IN_USE" to="AVAILABLE" leading={subTabsEl} noun="คืนเข้าคลัง" />
+        <StatusLogTable from="IN_USE" to="AVAILABLE" noun="คืนเข้าคลัง" token={spec.token} />
       ) : sub === "return" ? (
-        <StatusLogTable from="ON_LOAN" leading={subTabsEl} noun="รับคืนจากใบยืม" />
+        <StatusLogTable from="ON_LOAN" noun="รับคืนจากใบยืม" token={spec.token} />
       ) : (
-        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" leading={subTabsEl} noun="รับคืนจากส่งซ่อม" />
+        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" noun="รับคืนจากส่งซ่อม" token={spec.token} />
       )}
     </div>
   );
@@ -95,10 +119,10 @@ interface ReportTableProps<T extends { id: string }> {
   exportType: string;
   exportFilters?: FilterValues; // extra params merged into export URL (from/to)
   extraParams?: Record<string, string | undefined>; // extra fetch params (from/to)
-  leading?: ReactNode;
   /** summary numbers → cards; runs on whatever shape the route returns */
   statsFor: (s: Record<string, number>, values: FilterValues) => SummaryStat[];
   emptyMessage: string;
+  token: Token;
 }
 
 function ReportTable<T extends { id: string }>({
@@ -108,9 +132,9 @@ function ReportTable<T extends { id: string }>({
   exportType,
   exportFilters,
   extraParams,
-  leading,
   statsFor,
   emptyMessage,
+  token,
 }: ReportTableProps<T>) {
   const isMobile = useIsMobile();
   const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
@@ -149,7 +173,6 @@ function ReportTable<T extends { id: string }>({
         values={filters}
         onChange={setFilters}
         actions={<ExportButtons reportType={exportType} filters={{ ...filters, ...exportFilters }} />}
-        leading={leading}
       />
       {summary && <ReportSummary stats={statsFor(summary, filters)} />}
       <ReportDataTable
@@ -158,6 +181,7 @@ function ReportTable<T extends { id: string }>({
         loading={loading}
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
         emptyMessage={emptyMessage}
+        token={token}
       />
       {isMobile ? (
         data.length > 0 && (
@@ -208,19 +232,19 @@ const receiveColumns: Column<ReceiveRow>[] = [
   { key: "receiverName", header: "ผู้รับเข้า" },
 ];
 
-function ReceiveLogTable({ leading }: { leading?: ReactNode }) {
+function ReceiveLogTable({ token }: { token: Token }) {
   return (
     <ReportTable<ReceiveRow>
+      token={token}
       path="receive-history"
       columns={receiveColumns}
       filterConfig={COMMON_FILTERS}
       exportType="receive-history"
-      leading={leading}
       emptyMessage="ไม่มีการนำเข้าคลังในช่วงนี้"
       statsFor={(s, v) => [
-        { label: "ครั้งที่นำเข้า", value: s.records.toLocaleString(), hint: periodLabel(v) },
-        { label: "จำนวนหน่วยรวม", value: s.units.toLocaleString(), hint: "รวมทุกล็อตในช่วงนี้" },
-        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง" },
+        { label: "ครั้งที่นำเข้า", value: s.records.toLocaleString(), hint: periodLabel(v), token: "stockin" },
+        { label: "จำนวนหน่วยรวม", value: s.units.toLocaleString(), hint: "รวมทุกล็อตในช่วงนี้", token: "stockin" },
+        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง", token: "stockin" },
       ]}
     />
   );
@@ -251,7 +275,7 @@ const statusColumns: Column<StatusRow>[] = [
   { key: "changerName", header: "ผู้บันทึก" },
 ];
 
-function StatusLogTable({ from, to, leading, noun }: { from: string; to?: string; leading?: ReactNode; noun: string }) {
+function StatusLogTable({ from, to, noun, token }: { from: string; to?: string; noun: string; token: Token }) {
   // Memoized so identity is stable across re-renders — otherwise ReportTable's
   // fetchPage (useCallback deps on extraParams) would change every render,
   // re-triggering its effect and refetching in an unbounded loop.
@@ -259,17 +283,17 @@ function StatusLogTable({ from, to, leading, noun }: { from: string; to?: string
   const exportFilters = useMemo(() => ({ from, to }), [from, to]);
   return (
     <ReportTable<StatusRow>
+      token={token}
       path="status-log"
       columns={statusColumns}
       filterConfig={COMMON_FILTERS}
       exportType="status-log"
       extraParams={extraParams}
       exportFilters={exportFilters}
-      leading={leading}
       emptyMessage={`ไม่มีการ${noun}ในช่วงนี้`}
       statsFor={(s, v) => [
-        { label: `ครั้งที่${noun}`, value: s.records.toLocaleString(), hint: periodLabel(v) },
-        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง" },
+        { label: `ครั้งที่${noun}`, value: s.records.toLocaleString(), hint: periodLabel(v), token },
+        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง", token },
       ]}
     />
   );

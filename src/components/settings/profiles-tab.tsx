@@ -281,15 +281,15 @@ export function ProfilesTab() {
 
       <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
         <Table className="table-fixed">
-          <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+          <TableHeader sticky>
+            <TableRow>
               <TableHead className="px-2">ประเภท</TableHead>
-              <TableHead className="w-24 px-2">รหัส</TableHead>
+              <TableHead className="w-16 px-2">รหัส</TableHead>
               <TableHead className="w-40 px-2">การเบิกจ่าย</TableHead>
-              <TableHead className="w-32 px-2">คุณสมบัติเพิ่มเติม</TableHead>
-              <TableHead className="w-20 px-2">หมวด</TableHead>
-              <TableHead className="w-20 px-2">เปิดใช้</TableHead>
-              <TableHead className="w-[100px] px-2">การดำเนินการ</TableHead>
+              <TableHead className="w-28 px-2">คุณสมบัติ</TableHead>
+              <TableHead className="w-14 px-2">หมวด</TableHead>
+              <TableHead className="w-14 px-2">ใช้งาน</TableHead>
+              <TableHead className="w-24 px-2">จัดการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -307,7 +307,7 @@ export function ProfilesTab() {
             ) : profiles.map((p) => {
               const Icon = profileIcon(p.icon);
               return (
-                <TableRow key={p.id} className={`h-9 [&>td]:py-1 ${!p.isActive ? "opacity-50" : ""}`}>
+                <TableRow key={p.id} className={`${!p.isActive ? "opacity-50" : ""}`}>
                   <TableCell className="px-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`grid place-items-center size-7 rounded-lg ${p.color}`}><Icon className="h-4 w-4" /></span>

@@ -34,6 +34,11 @@ interface Props {
   itemLabel?: string;
   subItemId?: string;
   subItemLabel?: string;
+  // Heading for the second identity line: "ชิ้น" for a tracked copy, "จำนวน" for a qty booking.
+  subItemLabelTitle?: string;
+  // Qty stock: the แจ้งชำรุด booking this job closes, in place of a tracked piece. The server
+  // hands that booking's units back (or writes them off) — see the maintenance route.
+  adjustmentId?: string;
   maintenanceCycleMonths?: number;
   // Opened from the ชำรุด → ส่งซ่อม → รับคืน flow: the job is corrective by definition and
   // doesn't start a maintenance cycle, so both pickers are dropped.
@@ -51,7 +56,7 @@ interface SearchItem {
   category: { name: string; category: string };
 }
 
-export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, maintenanceCycleMonths, fromRepair, repairInfo, onSuccess }: Props) {
+export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, subItemLabelTitle = "ชิ้น", adjustmentId, maintenanceCycleMonths, fromRepair, repairInfo, onSuccess }: Props) {
   // ── Item selection ──
   const hasDefaultItem = !!itemId;
   const [selectedItemId, setSelectedItemId] = useState<string | null>(itemId ?? null);
@@ -141,6 +146,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
         nextMaintenanceAt: nextOverride || undefined,
         attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
         subItemId: subItemId ?? undefined,
+        adjustmentId: adjustmentId ?? undefined,
       });
       toast.success("บันทึกการบำรุงรักษาแล้ว");
       resetAndClose();
@@ -211,7 +217,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                 </div>
                 {subItemLabel && (
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">ชิ้น:</span>
+                    <span className="text-muted-foreground">{subItemLabelTitle}:</span>
                     <span className="font-mono font-medium text-foreground">{subItemLabel}</span>
                   </div>
                 )}

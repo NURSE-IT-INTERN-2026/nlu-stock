@@ -44,7 +44,6 @@ export default function ConfirmDispensePage() {
   // so this is a notice, not an error state — but it has to be visible, because nobody is
   // watching the server log and the person at this screen is the one who can report it.
   const [courseApiError, setCourseApiError] = useState<string | null>(null);
-  const [recipient, setRecipient] = useState("");
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -289,15 +288,19 @@ export default function ConfirmDispensePage() {
           quantity: i.quantity,
         })),
         usageType: usageType || null,
-        // Only the types that show the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
+        // เหตุผล lands in usageNote for every usage type, never in notes. Both columns used to
+        // carry it — รายวิชา in usageNote, กิจกรรม/อื่นๆ in notes — which printed the same text
+        // under two headings on the report and left lib/usage-by-subject unable to tell one
+        // activity from another (they all grouped under a null usageNote).
+        //
+        // Only the type that shows the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
         // hides the textarea but leaves its text in state, and posting that would file one
         // usage type's description under another. Same for the course going the other way.
-        notes: needsActivity ? notes.trim() || null : null,
-        courseCode: needsCourse ? courseCode || null : null,
         // The course name is snapshotted, not looked up at read time: history has to stay
         // readable when the registrar is down, and a renamed course must not rewrite it.
-        usageNote: needsCourse ? courseName : null,
-        recipient: recipient || null,
+        usageNote: needsCourse ? courseName : needsActivity ? notes.trim() || null : null,
+        notes: null,
+        courseCode: needsCourse ? courseCode || null : null,
         dueAt: dueDate || null,
       });
       toast.success(`เบิกพัสดุสำเร็จ ${data.count} รายการ`);
@@ -317,12 +320,13 @@ export default function ConfirmDispensePage() {
 
   // Free-text line โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) กับ อื่นๆ (OTHER).
   const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
-  const activityLabel = usageType === "OTHER" ? "ระบุการนำไปใช้" : "ระบุกิจกรรมที่นำไปใช้";
+  // This line IS the เหตุผล on the report (see lib/constants recipientLabel) — there is no
+  // ผู้รับ field to name a person, so the prompt has to ask what it was for and who asked.
+  const activityLabel = usageType === "OTHER" ? "เอาไปทำอะไร / ใครขอ" : "ระบุกิจกรรมที่นำไปใช้";
 
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).
   const errors = {
     usageType: usageType ? null : "เลือกการใช้งาน",
-    recipient: recipient.trim() ? null : "ระบุผู้รับ",
     ...(hasDurable ? { dueDate: dueDate ? null : "เลือกกำหนดคืน" } : {}),
     ...(needsActivity ? { notes: notes.trim() ? null : activityLabel } : {}),
     ...(needsCourse ? { courseCode: courseCode ? null : "เลือกรายวิชา" } : {}),
@@ -404,15 +408,15 @@ export default function ConfirmDispensePage() {
             {/* Desktop ≥md — shadcn Table (table-fixed → sticky header works, columns auto-align) */}
             <div className="hidden md:block rounded-lg border border-border bg-card overflow-x-auto">
               <Table className="table-fixed">
-                <TableHeader>
+                <TableHeader sticky>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-16 sticky top-0 z-10 rounded-tl-lg bg-card" />
-                    <TableHead className="min-w-0 sticky top-0 z-10 bg-card text-xs font-medium text-muted-foreground">รายการ</TableHead>
-                    <TableHead className="w-[120px] sticky top-0 z-10 bg-card text-xs font-medium text-muted-foreground">ประเภท</TableHead>
-                    <TableHead className="w-[90px] sticky top-0 z-10 bg-card text-xs font-medium text-muted-foreground">สถานะ</TableHead>
-                    <TableHead className="w-[240px] sticky top-0 z-10 bg-card text-right text-xs font-medium text-muted-foreground">{group === "durable" ? "ชิ้น" : ""}</TableHead>
-                    <TableHead className="w-[150px] sticky top-0 z-10 bg-card text-right text-xs font-medium text-muted-foreground">จำนวน</TableHead>
-                    <TableHead className="w-14 sticky top-0 z-10 rounded-tr-lg bg-card" />
+                    <TableHead className="w-16 rounded-tl-lg" />
+                    <TableHead className="min-w-0">รายการ</TableHead>
+                    <TableHead className="w-[120px]">ประเภท</TableHead>
+                    <TableHead className="w-[90px]">สถานะ</TableHead>
+                    <TableHead className="w-[240px] text-right">{group === "durable" ? "ชิ้น" : ""}</TableHead>
+                    <TableHead className="w-[150px] text-right">จำนวน</TableHead>
+                    <TableHead className="w-14 rounded-tr-lg" />
                   </TableRow>
                 </TableHeader>
                 <TableBody className="[&_td]:py-4">
@@ -652,7 +656,7 @@ export default function ConfirmDispensePage() {
                     id="notes"
                     aria-invalid={showErrors && !!errors.notes}
                     aria-describedby={showErrors && errors.notes ? "notes-error" : undefined}
-                    placeholder="ระบุว่านำไปใช้ทำอะไร..."
+                    placeholder="เช่น ซ้อมกีฬาสี / อ.สมชายขอไปใช้ที่ห้องพักครู"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
@@ -661,21 +665,6 @@ export default function ConfirmDispensePage() {
                   {showErrors && errors.notes && <FieldError id="notes-error">{errors.notes}</FieldError>}
                 </div>
               )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="recipient" className="text-xs text-muted-foreground" required>ผู้รับ</Label>
-                <Input
-                  id="recipient"
-                  required
-                  aria-invalid={showErrors && !!errors.recipient}
-                  aria-describedby={showErrors && errors.recipient ? "recipient-error" : undefined}
-                  placeholder="ใครเอาไป เช่น ครูสมชาย / ห้อง ม.4/1"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  className="text-sm"
-                />
-                {showErrors && errors.recipient && <FieldError id="recipient-error">{errors.recipient}</FieldError>}
-              </div>
 
               {hasDurable && (
                 <div className="space-y-1.5">

@@ -72,7 +72,7 @@ function dispenseTypeLabel(p: ProfileOption | null): string {
 
 function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c: CategoryType) => void; onDelete: (c: CategoryType) => void }) {
   return (
-    <TableRow className="h-9 [&>td]:py-1">
+    <TableRow>
       <TableCell className="px-2"><span className="block truncate font-medium">{cat.name}</span></TableCell>
       <TableCell className="px-2"><Badge variant="outline" className={cn("px-1.5 py-0 leading-5 text-[11px]", cat.profile?.color)}>{cat.profile?.name ?? "—"}</Badge></TableCell>
       <TableCell className="text-xs text-muted-foreground whitespace-nowrap px-2">{dispenseTypeLabel(cat.profile)}</TableCell>
@@ -279,8 +279,8 @@ export function CategoriesTab() {
 
       <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
         <Table className="table-fixed">
-          <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+          <TableHeader sticky>
+            <TableRow>
               <TableHead className="px-2">ชื่อหมวดหมู่</TableHead>
               <TableHead className="w-32 px-2">ประเภท</TableHead>
               <TableHead className="w-40 px-2">ประเภทการเบิกจ่าย</TableHead>

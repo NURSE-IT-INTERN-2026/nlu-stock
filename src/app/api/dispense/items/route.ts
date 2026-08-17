@@ -12,6 +12,9 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q")?.trim() ?? "";
   const categoryId = searchParams.get("categoryId") ?? "";
   const profileId = searchParams.get("profileId") ?? "";
+  // Explicit id list — used by ชุดประกอบ to load the kit's consumables with their real lots
+  // and location, so the cart it prefills is built from the same shape the picker uses.
+  const ids = (searchParams.get("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
   // Location cascade filter (building → floor → room → detail)
   const building = searchParams.get("building") ?? "";
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
 
   const where = {
     isActive: true,
+    ...(ids.length > 0 && { id: { in: ids } }),
     ...(q && {
       OR: [
         { code: { contains: q, mode: "insensitive" as const } },
@@ -55,7 +59,10 @@ export async function GET(req: NextRequest) {
           select: { id: true, lotNumber: true, expiryDate: true, remainingQty: true },
         },
         subItems: {
-          where: { status: "AVAILABLE" },
+          // needsCheck excludes a KIT set that has been used since anyone confirmed its
+          // contents. api/dispense refuses it anyway; keeping it out of the picker means staff
+          // never build a cart around a set they are not allowed to lend.
+          where: { status: "AVAILABLE", needsCheck: false },
           select: { id: true, subCode: true, status: true, condition: true },
         },
         location: { select: { building: true, floor: true, room: true, detail: true } },

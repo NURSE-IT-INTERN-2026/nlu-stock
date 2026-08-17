@@ -34,7 +34,7 @@ type ProfileSpec = {
 };
 const PROFILE_SPEC: ProfileSpec[] = [
   { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "ITEM", assetTracking: false, setTracking: false, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
   { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, setTracking: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
   { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, setTracking: false, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
   { code: "BAT", name: "หนังสือและของเล่น", dispenseType: "ITEM", assetTracking: false, setTracking: true, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
@@ -643,7 +643,10 @@ async function main() {
   console.log(`  ${conCount} items`);
 
   // ============================================================
-  // 7. Import อุปกรณ์นักศึกษายืมประกอบวิชา (KIT) — plain items (kit components: Phase 2)
+  // 7. Import อุปกรณ์นักศึกษายืมประกอบวิชา (KIT) — recipes only, no stock.
+  // A KIT Item is the recipe; a physically assembled set is a SubItem of it, created by
+  // ประกอบชุด. The CSV's จำนวน column counted sets that existed on paper under the old
+  // consumable model — importing it as stock would invent sets nobody assembled.
   // ============================================================
   console.log("Importing อุปกรณ์ประกอบวิชา (KIT)...");
   const kitRows = readCsv("ข้อมูลทรัพย์สิน NLU - อุปกรณ์นักศึกษายืมประกอบวิชา.csv");
@@ -663,12 +666,10 @@ async function main() {
     if (seq) {
       // Parent row → kit Item
       const nameRaw = (row[1] || "").trim();
-      const qtyStr = (row[2] || "").trim();
       const unitRaw = (row[3] || "").trim();
       const notes = (row[8] || row[4] || "").trim();
       if (!nameRaw) continue;
 
-      const qty = parseInt(qtyStr) || 1;
       const unitName = parseUnit(unitRaw);
       const code = nextCode("KIT");
 
@@ -676,10 +677,10 @@ async function main() {
         data: {
           code, name: nameRaw,
           categoryId: catKit.id,
-          trackIndividually: false,
+          trackIndividually: true,
           issueUnitId: unitId(unitName),
           minThreshold: 0, locationId: defaultLocId,
-          totalQty: qty, availableQty: qty,
+          totalQty: 0, availableQty: 0,
           description: notes || null,
         },
       });
@@ -744,6 +745,7 @@ async function main() {
           quantity: qty,
           usageType: ["COURSE", "ACTIVITY", "OTHER"][j % 3] as any,
           staffId: admin.id, dispensedAt: day(j * 3 + 1),
+          loanType: "BORROW",
         },
       });
     }
@@ -815,6 +817,7 @@ async function main() {
         usageType: m.usageType,
         staffId: admin.id,
         dispensedAt: day(m.daysAgo),
+        loanType: "BORROW",
         // Closed so these chart-only records don't pollute the รับคืน open-loan list.
         resolvedQty: m.qty,
         returnedAt: day(m.daysAgo),
@@ -980,6 +983,7 @@ async function main() {
         staffId: admin.id, dispensedAt: opts.at,
         loanGroupId: opts.loanGroupId, dueAt: opts.due,
         recipient: opts.recipient, usageType: opts.usage,
+        loanType: "BORROW",
       },
     });
     affectedTracked.add(itemId);
@@ -994,6 +998,7 @@ async function main() {
         staffId: admin.id, dispensedAt: opts.at,
         loanGroupId: opts.loanGroupId, dueAt: opts.due,
         recipient: opts.recipient, usageType: opts.usage,
+        loanType: "BORROW",
         returnedAt: new Date(opts.at.getTime() + 2 * 86400000),
       },
     });
@@ -1008,6 +1013,7 @@ async function main() {
         staffId: admin.id, dispensedAt: opts.at,
         loanGroupId: opts.loanGroupId, dueAt: opts.due,
         recipient: opts.recipient, usageType: opts.usage,
+        loanType: "BORROW",
       },
     });
     loanRecCount++;
@@ -1021,6 +1027,7 @@ async function main() {
         staffId: admin.id, dispensedAt: opts.at,
         loanGroupId: opts.loanGroupId, dueAt: opts.due,
         recipient: opts.recipient, usageType: opts.usage,
+        loanType: "BORROW",
       },
     });
     loanRecCount++;

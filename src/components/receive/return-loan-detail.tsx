@@ -28,7 +28,8 @@ import {
   returnLoanEntries, returnItem, uploadFile,
   type OpenBorrow, type ReturnCondition,
 } from "@/lib/api";
-import { effectiveCode } from "@/lib/constants";
+import { KitSetContentsPicker } from "@/components/items/kit-sets-panel";
+import { effectiveCode, recipientLabel } from "@/lib/constants";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
 export interface LoanGroup {
@@ -69,6 +70,11 @@ function dueAlert(dueAt: string | null): { text: string; cls: string } | null {
   return null;
 }
 
+/** A borrowed KIT set: returning it unpacks it, so the row asks about contents, not condition. */
+function isKitRecord(r: OpenBorrow) {
+  return r.item.category.profile.code === "KIT";
+}
+
 function outstandingOf(r: OpenBorrow) {
   return r.returnedAt ? 0 : r.quantity - r.resolvedQty;
 }
@@ -85,7 +91,8 @@ export function ReturnLoanDetail({
   readOnly?: boolean;
 }) {
   const head = group.records[0];
-  const recipient = head.recipient;
+  // เหตุผล = ยืมไปทำอะไร (รายวิชา/กิจกรรม/ที่ระบุไว้) — ไม่มีช่อง ผู้รับ/ผู้ยืม แยกแล้ว
+  const recipient = recipientLabel(head);
   const borrowed = fmtDate(head.dispensedAt);
   const due = fmtDate(head.dueAt);
 
@@ -180,7 +187,7 @@ export function ReturnLoanDetail({
   // and any damaged/lost count-return needs ≥1 overall photo.
   const missingEvidence =
     group.records.some(
-      (r) => r.subItem && selected.has(r.id) && cond(r.id) !== "AVAILABLE" && (rowPhotos[r.id]?.length ?? 0) === 0,
+      (r) => r.subItem && !isKitRecord(r) && selected.has(r.id) && cond(r.id) !== "AVAILABLE" && (rowPhotos[r.id]?.length ?? 0) === 0,
     ) || (countNeedsEvidence && proofs.length === 0);
   const canSave = !saving && !uploading && !missingEvidence && (hasTrackedAction || countActions.length > 0);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -208,7 +215,9 @@ export function ReturnLoanDetail({
         .map((r) => ({
           dispenseRecordId: r.id,
           subItemId: r.subItem!.id,
-          status: cond(r.id),
+          // A KIT set is handed back whole and ปกติ — the rule for borrowing one. The server
+          // ignores this for kits, but sending the real value keeps the payload honest.
+          status: isKitRecord(r) ? ("AVAILABLE" as ReturnCondition) : cond(r.id),
           note: rowNotes[r.id]?.trim() || undefined,
           photos: rowPhotos[r.id]?.length ? rowPhotos[r.id] : undefined,
         }));
@@ -259,7 +268,7 @@ export function ReturnLoanDetail({
               <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
               กลับ
             </button>
-            <h2 className="text-lg font-semibold leading-tight">{recipient ?? "ไม่ระบุชื่อผู้ยืม"}</h2>
+            <h2 className="text-lg font-semibold leading-tight">{recipient ?? "—"}</h2>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5" /> ยืม {borrowed}{borrowed ? ` · ${daysSince(head.dispensedAt)} วันที่แล้ว` : ""}
@@ -328,7 +337,7 @@ export function ReturnLoanDetail({
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
             กลับ
           </button>
-          <h2 className="text-lg font-semibold leading-tight">{recipient ?? "ไม่ระบุชื่อผู้ยืม"}</h2>
+          <h2 className="text-lg font-semibold leading-tight">{recipient ?? "—"}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" /> ยืม {borrowed}{borrowed ? ` · ${daysSince(head.dispensedAt)} วันที่แล้ว` : ""}
@@ -552,12 +561,17 @@ function TrackedRows({
                   {r.subItem!.name && <p className="text-sm truncate">{r.subItem!.name}</p>}
                   <span className="font-mono text-xs text-muted-foreground truncate">{effectiveCode(code, r.subItem!.subCode, r.item._count.subItems)}</span>
                 </div>
-                {isSel && (
+                {isSel && !isKitRecord(r) && (
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded border", COND_CHIP[c].active)}>{condLabel}</span>
                 )}
                 <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isSel && "rotate-180")} />
               </button>
-              {isSel && (
+              {isSel && isKitRecord(r) && (
+                <div className="px-3 pb-3 pt-3 border-t border-border/60">
+                  <KitSetContentsPicker subItemId={r.subItem!.id} />
+                </div>
+              )}
+              {isSel && !isKitRecord(r) && (
                 <div className="px-3 pb-3 pt-3 space-y-2 border-t border-border/60">
                   <div className="flex flex-wrap gap-1.5">
                     {CONDITION_OPTIONS.map((o) => (

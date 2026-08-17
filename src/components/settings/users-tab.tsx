@@ -219,8 +219,8 @@ export function UsersTab() {
 
       <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
         <Table className="table-fixed">
-          <TableHeader>
-            <TableRow className="sticky top-0 z-10 bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.08)] [&>th]:h-8 [&>th]:py-0 [&>th]:text-xs [&>th]:text-muted-foreground">
+          <TableHeader sticky>
+            <TableRow>
               <TableHead className="px-2">ชื่อ</TableHead>
               <TableHead className="w-56 px-2">อีเมล</TableHead>
               <TableHead className="w-28 px-2">บทบาท</TableHead>
@@ -241,7 +241,7 @@ export function UsersTab() {
                 </div>
               </TableCell></TableRow>
             ) : users.map((user) => (
-              <TableRow key={user.id} className={`h-9 [&>td]:py-1 ${!user.isActive ? "opacity-50" : ""}`}>
+              <TableRow key={user.id} className={`${!user.isActive ? "opacity-50" : ""}`}>
                 <TableCell className="px-2"><span className="block truncate font-medium">{user.name}</span></TableCell>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{user.email}</span></TableCell>
                 <TableCell className="px-2">
