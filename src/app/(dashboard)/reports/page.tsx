@@ -17,15 +17,19 @@ import { MaintenanceHistoryTab } from "@/components/reports/maintenance-history-
 import { usePageHeader } from "@/components/layout/page-header-context";
 
 // เรียงตาม tab ที่มีข้อมูลจริงก่อน — ออกจากคลังคือสิ่งที่เกิดขึ้นทุกวัน ส่วนมูลค่า/ค่าใช้จ่าย
-// รอให้มีคนกรอกราคาก่อนถึงจะมีอะไรให้อ่าน. `hint` คือประโยคเดียวที่บอกว่า tab นี้ตอบคำถามอะไร.
+// รอให้มีคนกรอกราคาก่อนถึงจะมีอะไรให้อ่าน.
+//
+// เดิมมี `hint` ที่ระดับหน้านี้ ตอนนี้ย้ายไปเป็น SectionTitle ในแต่ละ tab แทน: tab ที่มี
+// sub-tab (ออกจากคลัง, เข้าคลัง) ตอบคนละคำถามในแต่ละ sub-tab ซึ่งบรรทัดเดียวระดับหน้าทำไม่ได้.
+// `token` คือสีประจำ tab ที่ SectionTitle / หัวตาราง / การ์ดตัวเลขข้างในใช้ร่วมกัน.
 const TABS = [
-  { value: "dispense-history", label: "ออกจากคลัง", hint: "ของที่จ่ายออกไปแล้ว — เลือกดูทีละชนิด: เบิกใช้ / ยืม / นำไปใช้งาน", icon: ShoppingCart, component: StockOutTab },
-  { value: "receive-history", label: "เข้าคลัง", hint: "ของที่รับเข้าและคืนกลับเข้าคลัง", icon: ArrowDownToLine, component: ReceiveHistoryTab },
-  { value: "usage-by-subject", label: "สถิติการใช้งาน", hint: "เบิกไปใช้กับวิชาหรือกิจกรรมไหน", icon: BookOpen, component: UsageBySubjectTab },
-  { value: "damaged-assets", label: "ชำรุด & ส่งซ่อม", hint: "ตอนนี้อะไรพังอยู่ พังเพราะอะไร ซ่อมที่ไหน", icon: Wrench, component: DamagedAssetsTab },
-  { value: "maintenance-history", label: "ประวัติบำรุงรักษา", hint: "รอบตรวจเช็คและซ่อมที่ทำไปแล้ว", icon: History, component: MaintenanceHistoryTab },
-  { value: "stock-balance", label: "มูลค่าคงคลัง", hint: "ของที่เหลืออยู่ คิดเป็นเงินเท่าไร แยกตามหมวด", icon: Boxes, component: StockBalanceTab },
-  { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", hint: "ซื้อและซ่อมไปเท่าไรในปีนั้น", icon: Wallet, component: AnnualCostTab },
+  { value: "dispense-history", label: "ออกจากคลัง", token: "issue", icon: ShoppingCart, component: StockOutTab },
+  { value: "receive-history", label: "เข้าคลัง", token: "stockin", icon: ArrowDownToLine, component: ReceiveHistoryTab },
+  { value: "usage-by-subject", label: "สถิติการใช้งาน", token: "maintain", icon: BookOpen, component: UsageBySubjectTab },
+  { value: "damaged-assets", label: "ชำรุด & ส่งซ่อม", token: "damage", icon: Wrench, component: DamagedAssetsTab },
+  { value: "maintenance-history", label: "ประวัติบำรุงรักษา", token: "repair", icon: History, component: MaintenanceHistoryTab },
+  { value: "stock-balance", label: "มูลค่าคงคลัง", token: "value", icon: Boxes, component: StockBalanceTab },
+  { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", token: "value", icon: Wallet, component: AnnualCostTab },
 ] as const;
 
 export default function ReportsPage() {
@@ -95,10 +99,6 @@ function ReportsContent() {
           })}
         </nav>
       </div>
-
-      {/* One line saying what this tab answers — the tab labels alone never told anyone
-          whether "ชำรุด" meant what is broken now or what was repaired last year. */}
-      <p className="-mt-2 mb-4 text-xs text-muted-foreground sm:-mt-3 sm:mb-5">{active.hint}</p>
 
       {/* Content area */}
       <div>

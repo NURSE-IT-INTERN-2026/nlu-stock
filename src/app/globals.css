@@ -112,6 +112,24 @@
   --color-warning-500: oklch(72% 0.16 75);
   --color-warning-700: oklch(55% 0.15 75);
 
+  /* ── Report event tokens ──
+     One colour per kind of stock event, so a pill, a stat card, a table header and a chart
+     bar all say "ยืม" in the same blue without each file picking its own emerald-100.
+     The hues are spread ~35° apart on purpose: the earlier draft reused --success for
+     "เข้าคลัง", but --success in this repo *is* teal (hue 185) — the same colour as
+     "นำไปใช้งาน" — so two different events rendered identically. Values live in :root/.dark
+     below because a -700 step that passes AA on white fails it on a dark card. */
+  --color-issue: var(--issue);
+  --color-borrow: var(--borrow);
+  --color-inuse: var(--inuse);
+  --color-stockin: var(--stockin);
+  --color-damage: var(--damage);
+  --color-repair: var(--repair);
+  --color-dispose: var(--dispose);
+  --color-maintain: var(--maintain);
+  --color-value: var(--value);
+  --color-lost: var(--lost);
+
   /* Surface (light) */
   --color-surface-page: oklch(97% 0.003 264);
   --color-surface-card: #ffffff;
@@ -184,6 +202,22 @@
   --success-foreground: oklch(100% 0 0);
   --warning: oklch(72% 0.16 75);
   --warning-foreground: oklch(25% 0.05 75);
+
+  /* Report event tokens — light. Held at L≈50% because each one is used as *text* on a
+     white card, where anything lighter drops under 4.5:1. */
+  --issue: oklch(52% 0.18 40); /* เบิกใช้ — orange, the app's primary hue */
+  --repair: oklch(50% 0.14 75); /* ส่งซ่อม — amber */
+  --stockin: oklch(48% 0.13 150); /* เข้าคลัง — green */
+  --inuse: oklch(48% 0.12 185); /* นำไปใช้งาน — teal */
+  --value: oklch(48% 0.11 215); /* มูลค่า — sky */
+  --borrow: oklch(48% 0.15 255); /* ยืม — blue */
+  --maintain: oklch(48% 0.16 300); /* บำรุงรักษา — violet */
+  --lost: oklch(50% 0.19 340); /* สูญหาย — pink */
+  --damage: oklch(50% 0.20 25); /* ชำรุด — red */
+  /* ตัดจำหน่าย is the only terminal state here. A red would put it in the same family as
+     ชำรุด/สูญหาย, which are things to act on; this one is closed. Neutral says "off the
+     books" without competing for attention. */
+  --dispose: oklch(45% 0.02 264);
 }
 
 .dark {
@@ -223,6 +257,19 @@
   --sidebar-accent-foreground: oklch(92% 0.003 264);
   --sidebar-border: oklch(100% 0 0 / 10%);
   --sidebar-ring: oklch(72% 0.16 40);
+
+  /* Report event tokens — dark. Same hues, lifted to L≈76% so they clear AA as text on the
+     28% card. Reusing the light values here is the -700 trap: they measure ~2:1 on dark. */
+  --issue: oklch(76% 0.15 40);
+  --repair: oklch(78% 0.13 75);
+  --stockin: oklch(76% 0.13 150);
+  --inuse: oklch(76% 0.11 185);
+  --value: oklch(76% 0.10 215);
+  --borrow: oklch(76% 0.12 255);
+  --maintain: oklch(76% 0.13 300);
+  --lost: oklch(76% 0.15 340);
+  --damage: oklch(74% 0.16 25);
+  --dispose: oklch(72% 0.02 264);
 }
 
 @layer base {
