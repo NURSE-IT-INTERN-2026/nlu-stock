@@ -171,7 +171,7 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
           ))}
         </ul>
       ) : (
-        <Table>
+        <Table grid zebra>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[160px] pl-4 sm:pl-6">Type</TableHead>

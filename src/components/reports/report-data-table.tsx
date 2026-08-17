@@ -99,16 +99,13 @@ export function ReportDataTable<T extends Record<string, any>>({
           that scrolls sideways shows the shape of the data even when it does not all fit.
           `Table` brings its own overflow-x-auto, min-w keeps the columns from crushing. */}
       <div>
-        <Table className="min-w-[640px]">
+        <Table grid zebra className="min-w-[640px]">
           <TableHeader>
             {/* The header wash is what tells you at a glance which section's table you scrolled
                 into once several of them look alike. */}
             <TableRow style={token ? { backgroundColor: tokenTint(token, 14) } : undefined}>
               {columns.map((col) => (
-                <TableHead
-                  key={col.key}
-                  className={cn("border-r border-border/70 px-2 last:border-r-0", col.className)}
-                >
+                <TableHead key={col.key} className={cn("px-2", col.className)}>
                   {col.header}
                 </TableHead>
               ))}
@@ -116,18 +113,11 @@ export function ReportDataTable<T extends Record<string, any>>({
           </TableHeader>
           <TableBody>
             {paged.map((row, i) => (
-              // Zebra rows: report tables run wide, and tracking one row across seven columns
+              // Zebra rows come from Table's `grid` skin: tracking one row across seven columns
               // is where the eye slips a line.
-              <TableRow
-                key={i}
-                className={cn(i % 2 === 1 && "bg-muted/25", rowCls)}
-                {...rowProps(row)}
-              >
+              <TableRow key={i} className={rowCls} {...rowProps(row)}>
                 {columns.map((col) => (
-                  <TableCell
-                    key={col.key}
-                    className={cn("border-r border-border/60 px-2 last:border-r-0", col.className)}
-                  >
+                  <TableCell key={col.key} className={cn("px-2", col.className)}>
                     {col.render
                       ? col.render(row)
                       : (row[col.key] as React.ReactNode) ?? "—"}

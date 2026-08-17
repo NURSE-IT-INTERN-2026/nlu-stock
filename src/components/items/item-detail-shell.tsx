@@ -997,7 +997,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <SectionHeader eyebrow="spec เดียวกัน" title={`ชิ้นอื่นใน spec (${rows.length})`} />
       <div className="overflow-x-auto">
-        <Table>
+        <Table grid zebra>
           <TableHeader>
             <TableRow className="bg-muted/40">
               <TableHead className="w-40 px-3">รหัส</TableHead>
@@ -1138,7 +1138,7 @@ function KitComponentsTab({ components }: { components: ItemData["kitComponents"
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">ของที่ประกอบเป็นชุดนี้ {components.length} รายการ — จำนวนต่อ 1 ชุด</p>
       <div className="rounded-xl border overflow-hidden bg-card">
-        <Table className="table-fixed">
+        <Table grid zebra className="table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/40">
               <TableHead className="w-28 md:w-32 px-2">รหัส</TableHead>

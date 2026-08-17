@@ -230,7 +230,7 @@ function ItemsContent() {
           so sticky header still references the viewport and iOS page scroll isn't captured. */}
       <div className="rounded-2xl border bg-card flex flex-col overflow-clip">
         <div className="[&_[data-slot=table-container]]:overflow-visible">
-          <Table className="table-fixed">
+          <Table grid className="table-fixed">
             <TableHeader sticky>
               <TableRow>
                 {canManage && (

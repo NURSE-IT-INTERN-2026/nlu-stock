@@ -141,7 +141,7 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
           })}
         </ul>
       ) : (
-        <Table>
+        <Table grid zebra>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[170px]">วันที่</TableHead>

@@ -228,7 +228,7 @@ export default function MaintenancePage() {
 
           <div className="overflow-hidden rounded-2xl border bg-card">
             <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
-              <Table className="table-fixed">
+              <Table grid zebra className="table-fixed">
                 <TableHeader sticky>
                   <TableRow>
                     <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>

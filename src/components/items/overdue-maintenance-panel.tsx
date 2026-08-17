@@ -7,7 +7,6 @@ import { ChevronRight, MapPin, Wrench } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getReport } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -140,7 +139,7 @@ export function OverdueMaintenancePanel({ profiles, categories, locations, filte
       <div className="rounded-2xl border overflow-hidden bg-card">
         {/* Desktop: table */}
         <div className="hidden md:block overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
-          <Table className="table-fixed">
+          <Table grid zebra className="table-fixed">
             <TableHeader sticky>
               <TableRow>
                 <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
@@ -157,10 +156,10 @@ export function OverdueMaintenancePanel({ profiles, categories, locations, filte
                     ไม่มีรายการแจ้งเตือน
                   </TableCell>
                 </TableRow>
-              ) : paged.map((r, idx) => (
+              ) : paged.map((r) => (
                 <TableRow
                   key={r.id}
-                  className={cn("cursor-pointer hover:bg-muted/50 transition-colors", idx % 2 === 1 && "bg-muted/40")}
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={goMaintenance}
                 >
                   <TableCell className="font-mono text-xs px-2"><span className="block truncate">{r.code}</span></TableCell>

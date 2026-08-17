@@ -407,7 +407,7 @@ export default function ConfirmDispensePage() {
             />
             {/* Desktop ≥md — shadcn Table (table-fixed → sticky header works, columns auto-align) */}
             <div className="hidden md:block rounded-lg border border-border bg-card overflow-x-auto">
-              <Table className="table-fixed">
+              <Table grid zebra className="table-fixed">
                 <TableHeader sticky>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-16 rounded-tl-lg" />

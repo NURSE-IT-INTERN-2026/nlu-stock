@@ -280,7 +280,7 @@ export function ProfilesTab() {
       </div>
 
       <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
-        <Table className="table-fixed">
+        <Table grid zebra className="table-fixed">
           <TableHeader sticky>
             <TableRow>
               <TableHead className="px-2">ประเภท</TableHead>

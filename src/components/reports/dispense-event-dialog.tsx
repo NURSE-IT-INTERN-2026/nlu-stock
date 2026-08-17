@@ -45,7 +45,7 @@ function ItemLines({ rows, showReturned }: { rows: StockOutRow[]; showReturned: 
       {/* Desktop: table. Mobile: stacked lines — the same split ReportDataTable makes, done
           inline because this table is nested in a dialog and must not bring its own Card. */}
       <div className="hidden overflow-x-auto rounded-lg border sm:block">
-        <Table>
+        <Table grid zebra>
           <TableHeader>
             <TableRow>
               <TableHead>รหัสพัสดุ</TableHead>
