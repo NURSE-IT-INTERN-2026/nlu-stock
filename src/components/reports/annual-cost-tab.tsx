@@ -9,25 +9,12 @@ import { AnnualCostChart } from "./charts/annual-cost-chart";
 import { Wallet } from "lucide-react";
 import { SectionTitle } from "./report-kit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
 import { useAsync } from "@/hooks/use-async";
 import { MAINT_TYPE_LABELS, labelFor, type MaintenanceType } from "@/lib/constants";
 
 const filterConfig: FilterConfig = { year: true, categories: true };
-
-interface PurchaseRow {
-  id: string;
-  kind: "DURABLE" | "CONSUMABLE";
-  code: string;
-  name: string;
-  categoryName: string;
-  detail: string;
-  quantity: number;
-  amount: number;
-  date: string;
-}
 
 interface RepairRow {
   id: string;
@@ -54,30 +41,12 @@ interface Summary {
 
 interface Result {
   year: number;
-  purchases: PurchaseRow[];
   repairs: RepairRow[];
   byCategory: { categoryName: string; totalPurchase: number; totalRepair: number }[];
   summary: Summary;
 }
 
 const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-
-const purchaseColumns: Column<PurchaseRow>[] = [
-  { key: "date", header: "วันที่", render: (r) => fmtDate(new Date(r.date), TH_DATE) },
-  {
-    key: "kind",
-    header: "ประเภท",
-    render: (r) => (
-      <Badge variant="outline">{r.kind === "DURABLE" ? "ครุภัณฑ์ / คงทน" : "วัสดุสิ้นเปลือง"}</Badge>
-    ),
-  },
-  { key: "code", header: "รหัสพัสดุ" },
-  { key: "name", header: "รายการพัสดุ" },
-  { key: "categoryName", header: "หมวดหมู่" },
-  { key: "detail", header: "ล็อต", render: (r) => r.detail || "—" },
-  { key: "quantity", header: "จำนวน", className: "text-right" },
-  { key: "amount", header: "เป็นเงิน", className: "text-right", render: (r) => baht(r.amount) },
-];
 
 const repairColumns: Column<RepairRow>[] = [
   { key: "performedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.performedAt), TH_DATE) },
@@ -100,7 +69,6 @@ export function AnnualCostTab() {
 
   const { data: result, isFetching: loading } = useAsync(fetcher, [fetcher]);
 
-  const purchases = result?.purchases ?? [];
   const repairs = result?.repairs ?? [];
   const summary = result?.summary ?? null;
   const buddhistYear = (result?.year ?? new Date().getFullYear()) + 543;
@@ -156,22 +124,6 @@ export function AnnualCostTab() {
       )}
 
       <AnnualCostChart data={result?.byCategory ?? []} />
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">รายการจัดซื้อ</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ReportDataTable
-            columns={purchaseColumns}
-            data={purchases}
-            loading={loading}
-            pageSize={10}
-            emptyMessage="ไม่มีรายการจัดซื้อที่ระบุราคาในปีนี้"
-            token="value"
-          />
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader className="pb-2">
