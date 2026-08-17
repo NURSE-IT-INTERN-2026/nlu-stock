@@ -5,7 +5,7 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog,
+  RefreshCw, Wrench, MapPin, MonitorCog, Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
@@ -38,6 +38,13 @@ const TYPE_META: Record<TimelineEventType, { icon: typeof Package; chip: string;
   RETURN: { icon: Undo2, chip: "bg-success/10 text-success-700 dark:text-success-200", rail: "bg-success" },
   RECEIVE: { icon: ArrowDownToLine, chip: "bg-success/10 text-success-700 dark:text-success-200", rail: "bg-success" },
   ADJUSTMENT: { icon: Package, chip: "bg-foreground/5 text-foreground", rail: "bg-foreground/40" },
+  // แจ้งชำรุด opens the loop the repair pair closes — flagged, and red like the other row that
+  // takes stock off the shelf.
+  DAMAGE_REPORT: { icon: Flag, chip: "bg-destructive/10 text-destructive dark:text-danger-400", rail: "bg-destructive" },
+  // The repair pair shares the ประแจ with บำรุงรักษา but carries colour, because going out and
+  // coming back are the two ends of an open loop somebody is waiting on.
+  REPAIR_SENT: { icon: Wrench, chip: "bg-warning/15 text-warning-700 dark:text-warning-200", rail: "bg-warning" },
+  REPAIR_RETURN: { icon: Wrench, chip: "bg-success/10 text-success-700 dark:text-success-200", rail: "bg-success" },
   STATUS_CHANGE: { icon: RefreshCw, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
   MAINTENANCE: { icon: Wrench, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
   LOCATION_CHANGE: { icon: MapPin, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
@@ -45,7 +52,7 @@ const TYPE_META: Record<TimelineEventType, { icon: typeof Package; chip: string;
 
 const CHIP_ORDER: TimelineEventType[] = [
   "DISPENSE", "BORROW", "INUSE", "RETURN", "RECEIVE",
-  "ADJUSTMENT", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
+  "ADJUSTMENT", "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
 ];
 
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */

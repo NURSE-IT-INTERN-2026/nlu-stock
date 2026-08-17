@@ -221,12 +221,13 @@ export async function restoreDamagedQty(
   tx: TxClient,
   input: {
     adj: { id: string; itemId: string; lotId: string | null; previousQty: number; newQty: number; notes: string | null };
-    label: string;
+    /** Which door this is — it names the audit row so the history never has to read the note. */
+    reason: typeof AdjustmentReason.REPAIR_RETURN | typeof AdjustmentReason.DAMAGE_CANCELLED;
     note?: string | null;
     userId: string;
   },
 ): Promise<number> {
-  const { adj, label, note, userId } = input;
+  const { adj, reason, note, userId } = input;
   const qty = adj.previousQty - adj.newQty;
 
   await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
@@ -249,8 +250,11 @@ export async function restoreDamagedQty(
       delta: qty,
       previousQty: before.availableQty,
       newQty: before.availableQty + qty,
-      reason: AdjustmentReason.OTHER,
-      notes: `${label}${adj.notes ? ` (${adj.notes})` : ""}${note ? ` — ${note}` : ""}`,
+      reason,
+      // No "รับคืนจากซ่อม" prefix here — `reason` says that now, and the history prints it as
+      // the headline. The note carries only what a human typed: the original symptom, and
+      // whatever was said while closing it.
+      notes: [adj.notes, note].filter(Boolean).join(" — ") || null,
       adjustedBy: userId,
     },
   });

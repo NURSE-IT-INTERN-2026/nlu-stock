@@ -5,6 +5,7 @@ import {
   USAGE_TYPE_LABELS, RETURN_CONDITION_LABELS, type TimelineEventType,
 } from "@/lib/constants";
 import { isDuplicateOfLoanRow } from "@/lib/returns";
+import { AdjustmentReason } from "@/generated/prisma/enums";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 
@@ -30,6 +31,17 @@ type TimelineEvent = {
 };
 
 const joinNotes = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
+
+// Adjustment reasons that describe an event rather than a bookkeeping correction — these get
+// to be the headline of their row. ตรวจนับขาด/เกิน and อื่นๆ are left out on purpose: they only
+// qualify a number, so the number leads instead.
+const NAMED_ADJUSTMENT = new Set<AdjustmentReason>([
+  AdjustmentReason.DAMAGED_PENDING_REPAIR,
+  AdjustmentReason.REPAIR_RETURN,
+  AdjustmentReason.DAMAGE_CANCELLED,
+  AdjustmentReason.DISPOSAL,
+  AdjustmentReason.ASSEMBLY,
+]);
 
 // ยืม/นำไปใช้งาน rows say what left the store but not whether it is still out — the same row
 // reads identically whether the 5 pieces came back in July or are three weeks overdue. The
@@ -193,14 +205,35 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         for (const r of records) {
           events.push({
             id: r.id,
-            type: "ADJUSTMENT",
+            // Two reasons are events, not stock corrections: แจ้งชำรุด opens the repair flow, and
+            // the row that hands repaired units back is stock walking in the door — the same
+            // thing รับเข้า means everywhere else in the app. ยกเลิกคำขอชำรุด stays ปรับสต๊อก: it
+            // withdraws a booking that should not have existed, it does not receive anything.
+            type: lost
+              ? "ADJUSTMENT"
+              : r.reason === AdjustmentReason.DAMAGED_PENDING_REPAIR
+                ? "DAMAGE_REPORT"
+                : r.reason === AdjustmentReason.REPAIR_RETURN
+                  ? "RECEIVE"
+                  : "ADJUSTMENT",
             date: r.adjustedAt,
             delta: r.newQty - r.previousQty,
             qty: Math.abs(r.newQty - r.previousQty),
+            // A reason that names a real event leads the row — "แจ้งชำรุด 5 ชิ้น" is what the
+            // reader is scanning for, and the yard figures belong on the quieter second line.
+            // The generic ones (ตรวจนับขาด/เกิน, อื่นๆ) say nothing on their own, so there the
+            // numbers stay the headline and the label stays underneath.
             note: lost
               ? `สูญหาย ${r.previousQty - r.newQty} ${unit}`
-              : `ปรับยอด ${r.previousQty} → ${r.newQty}`,
-            detail: joinNotes(lost ? null : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason, r.notes),
+              : NAMED_ADJUSTMENT.has(r.reason)
+                ? `${ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason} ${Math.abs(r.newQty - r.previousQty)} ${unit}`
+                : `ปรับยอด ${r.previousQty} → ${r.newQty}`,
+            detail: joinNotes(
+              lost ? null : NAMED_ADJUSTMENT.has(r.reason)
+                ? `ปรับยอด ${r.previousQty} → ${r.newQty}`
+                : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason,
+              r.notes,
+            ),
             user: r.adjuster.name,
             details: lost
               ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
@@ -233,7 +266,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const to = isKit && r.newStatus === "DISPOSED" ? "ยกเลิกชุด" : (STATUS_LABELS[r.newStatus] ?? r.newStatus);
         events.push({
           id: r.id,
-          type: "STATUS_CHANGE",
+          // repairVenue is only ever written by a ส่งซ่อม (and by the edits to one), on both
+          // paths: the piece's DAMAGED → UNDER_REPAIR row, and the qty booking's same-status
+          // audit row. That single column is the whole test — no status matching needed.
+          type: r.repairVenue ? "REPAIR_SENT" : "STATUS_CHANGE",
           date: r.changedAt,
           delta: null,
           qty: null,
@@ -265,7 +301,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         for (const r of records) {
           events.push({
             id: r.id,
-            type: "MAINTENANCE",
+            // A CORRECTIVE record only ever exists as the tail of ชำรุด → ส่งซ่อม → รับคืน, so it
+            // IS the รับคืนจากซ่อม event — filing it under บำรุงรักษา buried repairs among the
+            // scheduled rounds, which are a different thing on a different cadence.
+            type: r.type === "CORRECTIVE" ? "REPAIR_RETURN" : "MAINTENANCE",
             date: r.performedAt,
             delta: null,
             qty: null,
