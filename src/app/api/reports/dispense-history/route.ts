@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     const staffId = params.get("staffId") || undefined;
     const usageType = params.get("usageType") || undefined;
     const loanStatus = params.get("loanStatus") || undefined; // "open" | "overdue"
-    // ผู้รับ is not a stored field any more — it is the usage block (lib/constants
+    // เหตุผล is not a stored field — it is the usage block (lib/constants
     // recipientLabel), so the search has to hit every column that label can come out of, or
     // typing what the row visibly says finds nothing. `recipient` stays in the OR for the
     // legacy rows that still carry a typed name.
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
       returnedAt: r.returnedAt?.toISOString() ?? null,
       returnCondition: r.returnCondition,
       loanGroupId: r.loanGroupId,
-      // Derived, not stored — the cart has no ผู้รับ field (lib/constants recipientLabel).
+      // Derived, not stored — the cart has no ผู้รับ field, this is เหตุผล (lib/constants recipientLabel).
       recipient: recipientLabel(r),
       // นำไปใช้งาน only — where the stock was placed. Rows written before the location was
       // mandatory have none; say so rather than render an empty cell.

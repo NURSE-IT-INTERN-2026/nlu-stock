@@ -91,7 +91,7 @@ export function ReturnLoanDetail({
   readOnly?: boolean;
 }) {
   const head = group.records[0];
-  // ผู้ยืม = สิ่งที่ยืมไปให้ (รายวิชา/กิจกรรม/ที่ระบุไว้) — ไม่มีช่อง ผู้รับ แยกแล้ว
+  // เหตุผล = ยืมไปทำอะไร (รายวิชา/กิจกรรม/ที่ระบุไว้) — ไม่มีช่อง ผู้รับ/ผู้ยืม แยกแล้ว
   const recipient = recipientLabel(head);
   const borrowed = fmtDate(head.dispensedAt);
   const due = fmtDate(head.dueAt);
@@ -268,7 +268,7 @@ export function ReturnLoanDetail({
               <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
               กลับ
             </button>
-            <h2 className="text-lg font-semibold leading-tight">{recipient ?? "ไม่ระบุผู้ยืม"}</h2>
+            <h2 className="text-lg font-semibold leading-tight">{recipient ?? "—"}</h2>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5" /> ยืม {borrowed}{borrowed ? ` · ${daysSince(head.dispensedAt)} วันที่แล้ว` : ""}
@@ -337,7 +337,7 @@ export function ReturnLoanDetail({
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
             กลับ
           </button>
-          <h2 className="text-lg font-semibold leading-tight">{recipient ?? "ไม่ระบุผู้ยืม"}</h2>
+          <h2 className="text-lg font-semibold leading-tight">{recipient ?? "—"}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" /> ยืม {borrowed}{borrowed ? ` · ${daysSince(head.dispensedAt)} วันที่แล้ว` : ""}

@@ -90,12 +90,13 @@ export const USAGE_TYPE_OPTIONS = [
 ] as const;
 
 /**
- * ผู้รับ = สิ่งที่ของถูกเบิกไปให้ ไม่ใช่ช่องกรอกแยกอีกช่อง.
+ * เหตุผล = สิ่งที่ของถูกเบิกไปทำ. There is no ผู้รับ field, and no ผู้รับ column anywhere in
+ * the app any more: staff monitor stock by what it was used for, not by whose name is on it.
  *
  * The cart used to ask "ผู้รับ" on top of the usage block, and the two answers were the same
  * answer twice: a draw for รายวิชา is received by that course, a กิจกรรม by that activity, and
  * อื่นๆ already asks "เอาไปทำอะไร / ใครขอ". So the field is gone from the cart and every
- * ผู้รับ / ผู้ยืม label in the app is derived from the usage instead.
+ * เหตุผล label in the app is derived from the usage instead.
  *
  * `recipient` is still read first — the column stays for the rows written before this, where
  * someone deliberately typed a name. New rows leave it null and fall through to the usage.
@@ -108,11 +109,33 @@ export function recipientLabel(r: {
   notes?: string | null;
 }): string | null {
   if (r.recipient?.trim()) return r.recipient.trim();
-  // รหัสวิชา + ชื่อวิชา snapshot — the code alone is not something anyone reads as a recipient.
+  // รหัสวิชา + ชื่อวิชา snapshot — the code alone is not something anyone reads as a reason.
   if (r.usageType === "COURSE") {
     return [r.courseCode?.trim(), r.usageNote?.trim()].filter(Boolean).join(" ") || null;
   }
-  return r.notes?.trim() || null;
+  // กิจกรรม / อื่นๆ write their line into usageNote too, so the reason lives in one column for
+  // every usage type — that is what lets lib/usage-by-subject tell one activity from another.
+  // `notes` stays as the fallback for rows written before that: their text is still the reason,
+  // it just landed in the wrong column, and a migration to move it is not worth its own risk.
+  return r.usageNote?.trim() || stripLegacyRoomNote(r.notes) || null;
+}
+
+/**
+ * นำไปใช้งาน used to fold the destination room into notes as "ห้องที่ตั้ง: X", back when
+ * locationId could come back null (see item-detail-shell roomFromNotes, which still reads it
+ * to place those rows). The dialog stopped writing it once INUSE required a real Location.
+ *
+ * Those rows now sit under เหตุผล, one column away from a สถานที่ that says the same room —
+ * so the room half is dropped and only a genuine reason ("ยืมเล่นๆ | ห้องที่ตั้ง: …") survives.
+ * A row that was nothing but the room reads "—", which is honest: nobody ever gave a reason.
+ */
+export function stripLegacyRoomNote(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  return notes
+    .split("|")
+    .filter((part) => !/^\s*ห้องที่ตั้ง\s*:/.test(part))
+    .join("|")
+    .trim() || null;
 }
 
 // ─── Adjustment Reason ───

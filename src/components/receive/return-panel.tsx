@@ -44,7 +44,7 @@ function rowTint(dueAt: string | null): string {
 // screen spends it on more of the loan instead of on a gap in the middle.
 //
 // Columns come and go with width rather than clustering at one end:
-//   base (≥320) ผู้ยืม · ค้าง · กำหนดคืน · รายการ
+//   base (≥320) เหตุผล · ค้าง · กำหนดคืน · รายการ
 //   ≥400        + กี่วัน
 //   ≥sm         + ยืมเมื่อ
 //   ≥md         + พัสดุ (the names, not just the count)
@@ -79,7 +79,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<"all" | "overdue" | "near">(initialChip ?? "all");
-  // ผู้ยืม reads as the รายวิชา / กิจกรรม it went out for (lib/constants recipientLabel), so
+  // เหตุผล reads as the รายวิชา / กิจกรรม it went out for (lib/constants recipientLabel), so
   // "ตามคืนของวิชาที่จบเทอมแล้ว" is a filter on the same field the rows are named by.
   const [usage, setUsage] = useState<string>("all");
 
@@ -204,7 +204,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="ค้นหา ผู้ยืม / พัสดุ…"
+                placeholder="ค้นหา เหตุผล / พัสดุ…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="h-8 pl-8 text-sm"
@@ -230,7 +230,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
         </div>
         {filteredGroups.length > 0 && (
           <div className={cn(ROW_LINE, "shrink-0 px-2.5 text-[10px] text-muted-foreground sm:text-[11px]")}>
-            <span className={COL.who}>ผู้ยืม</span>
+            <span className={COL.who}>เหตุผล</span>
             <span className={COL.items}>พัสดุ</span>
             <span className={COL.usage}>การใช้งาน</span>
             <span className={COL.staff}>ผู้ให้ยืม</span>
@@ -266,7 +266,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
                 rowTint(head.dueAt),
               )}
             >
-              <span className={cn(COL.who, "font-semibold text-foreground")}>{recipientLabel(head) ?? "ไม่ระบุผู้ยืม"}</span>
+              <span className={cn(COL.who, "font-semibold text-foreground")}>{recipientLabel(head) ?? "—"}</span>
               <span className={cn(COL.items, "text-muted-foreground")}>{itemNames}</span>
               <span className={cn(COL.usage, "text-muted-foreground")}>
                 {head.usageType ? USAGE_TYPE_LABELS[head.usageType] ?? head.usageType : "—"}
