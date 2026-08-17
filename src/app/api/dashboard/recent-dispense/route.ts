@@ -1,14 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
-import { parseScope, scopeRecordWhere } from "@/lib/dashboard-scope";
+import { parseScope, scopeDispenseWhere } from "@/lib/dashboard-scope-where";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
 
   const records = await prisma.dispenseRecord.findMany({
-    where: scopeRecordWhere(parseScope(getSearchParams(request))),
+    where: scopeDispenseWhere(parseScope(getSearchParams(request))),
     take: 10,
     orderBy: { dispensedAt: "desc" },
     include: {

@@ -1,54 +1,56 @@
 "use client";
 
 import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
-import { useDashboardScope, scopeKey } from "@/hooks/use-dashboard-scope";
+import { useDashboardScope } from "@/hooks/use-dashboard-scope";
+import { scopeKey, type DashboardScope } from "@/lib/dashboard-scope";
 import {
+  getDashboardTabSummary,
+  getDashboardFlowMonthly,
+  getDashboardLoanDuration,
+  getDashboardOutstandingLoans,
+  getDashboardAssetStatus,
+  getDashboardDispenseByUsageMonthly,
   getDashboardRecentDispense,
   getDashboardRecentReceive,
   getDashboardTopDispense,
-  getDashboardUsageBySubject,
-  getDashboardRepairStatus,
+  getDashboardTopCourses,
+  getDashboardStationByRoom,
 } from "@/lib/api";
-import type { DashboardScope } from "@/lib/dashboard-scope";
 import {
   DispenseRecordArraySchema,
   ReceiveRecordArraySchema,
   TopDispenseDataArraySchema,
-  UsageByTypeDataArraySchema,
-  RepairStatusDataSchema,
+  DispenseByUsageMonthArraySchema,
+  AssetStatusArraySchema,
+  TopCoursesSchema,
+  StationByRoomSchema,
+  LoanSummarySchema,
+  InUseSummarySchema,
+  FlowMonthlySchema,
+  LoanDurationSchema,
+  OutstandingLoansSchema,
 } from "@/lib/dashboard-types";
 
 // Every dashboard fetch is (scope + refresh nonce) → validated rows, so one helper covers
 // all of them: the hooks below only pick a fetcher and a schema.
-// `override` is for callers outside the dashboard tabs — /reports drives the same two
-// charts from its own filter bar, where there is no tab and so no scope context.
 function useScopedQuery<T>(
   fetcher: (scope: DashboardScope) => Promise<unknown>,
   schema: import("zod").ZodSchema<T>,
-  override?: DashboardScope,
 ) {
   const nonce = useDashboardRefreshNonce();
-  const ctx = useDashboardScope();
-  const scope = override ?? ctx;
+  const scope = useDashboardScope();
   return useAsync(async () => schema.parse(await fetcher(scope)), [nonce, scopeKey(scope)]);
 }
 
-export function useRecentDispense() {
-  return useScopedQuery(getDashboardRecentDispense, DispenseRecordArraySchema);
-}
-
-export function useRecentReceive() {
-  return useScopedQuery(getDashboardRecentReceive, ReceiveRecordArraySchema);
-}
-
-export function useTopDispense(scope?: DashboardScope) {
-  return useScopedQuery(getDashboardTopDispense, TopDispenseDataArraySchema, scope);
-}
-
-export function useUsageBySubject(scope?: DashboardScope) {
-  return useScopedQuery(getDashboardUsageBySubject, UsageByTypeDataArraySchema, scope);
-}
-
-export function useRepairStatus() {
-  return useScopedQuery(getDashboardRepairStatus, RepairStatusDataSchema);
-}
+export const useLoanSummary = () => useScopedQuery(getDashboardTabSummary, LoanSummarySchema);
+export const useInUseSummary = () => useScopedQuery(getDashboardTabSummary, InUseSummarySchema);
+export const useFlowMonthly = () => useScopedQuery(getDashboardFlowMonthly, FlowMonthlySchema);
+export const useLoanDuration = () => useScopedQuery(getDashboardLoanDuration, LoanDurationSchema);
+export const useOutstandingLoans = () => useScopedQuery(getDashboardOutstandingLoans, OutstandingLoansSchema);
+export const useAssetStatus = () => useScopedQuery(getDashboardAssetStatus, AssetStatusArraySchema);
+export const useRecentDispense = () => useScopedQuery(getDashboardRecentDispense, DispenseRecordArraySchema);
+export const useRecentReceive = () => useScopedQuery(getDashboardRecentReceive, ReceiveRecordArraySchema);
+export const useTopDispense = () => useScopedQuery(getDashboardTopDispense, TopDispenseDataArraySchema);
+export const useDispenseByUsage = () => useScopedQuery(getDashboardDispenseByUsageMonthly, DispenseByUsageMonthArraySchema);
+export const useTopCourses = () => useScopedQuery(getDashboardTopCourses, TopCoursesSchema);
+export const useStationByRoom = () => useScopedQuery(getDashboardStationByRoom, StationByRoomSchema);
