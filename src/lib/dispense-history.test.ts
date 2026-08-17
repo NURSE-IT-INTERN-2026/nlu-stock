@@ -33,6 +33,32 @@ assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "DISPO
 assert.equal(isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "DISPOSED" }), false, "ยกเลิกชุดต้องขึ้นประวัติ");
 assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "AVAILABLE" }), true, "คืนปกติยังซ้ำกับแถวรับคืน");
 
+// ── Same-status rows are annotations, not transitions: judged on their reason ──
+// Qty stock stamps its repair trip onto the item's own (unchanged) status. On an item that is
+// ON_LOAN the loan test used to swallow every one of them, so ส่งซ่อม never reached the history.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "ON_LOAN", reason: "ส่งซ่อมภายใน 5 ชิ้น · ร้าน ABC" }),
+  false,
+  "ส่งซ่อมของแบบนับจำนวนต้องขึ้นประวัติ แม้ของกำลังถูกยืม",
+);
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "ON_LOAN", reason: "ยกเลิกคำขอชำรุด 5 ชิ้น · ตรวจแล้วใช้ได้" }),
+  false,
+  "ยกเลิกคำขอชำรุดต้องขึ้นประวัติ",
+);
+// The adjust mirror stays hidden — its StockAdjustment row prints the same numbers.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "ON_LOAN", reason: "ปรับสต็อก: 76 → 71 บนชั้นวาง (รวม 163, ถูกเบิก 92)" }),
+  true,
+  "แถวคู่ของปรับสต๊อกยังต้องซ่อน",
+);
+// …but a count that moved nothing has no adjustment row to hide behind.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "AVAILABLE", reason: "ตรวจนับ: ตรงยอด 76 บนชั้นวาง" }),
+  false,
+  "ตรวจนับตรงยอดต้องขึ้นประวัติ",
+);
+
 // ── กิจกรรม / อื่นๆ never file without the free-text line ──
 // The label alone is not an answer; the text under it is the whole reason those two exist.
 const cart = { items: [{ itemId: "i1", quantity: 1 }] };

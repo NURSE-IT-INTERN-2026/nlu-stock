@@ -129,7 +129,7 @@ export async function POST(
         if (adj.recoveredAt) throw new Error("รับคืนแล้ว");
 
         if (data.result === "AVAILABLE") {
-          await restoreDamagedQty(tx, { adj, label: "รับคืนจากซ่อม", note: data.description, userId: auth.user.userId });
+          await restoreDamagedQty(tx, { adj, reason: AdjustmentReason.REPAIR_RETURN, note: data.description, userId: auth.user.userId });
         } else {
           // ซ่อมไม่ได้: แจ้งชำรุด parked these units in totalQty (lib/stock holdsTotalQty) on the
           // promise they'd come back. This is where that promise ends — availableQty already

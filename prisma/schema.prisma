@@ -37,6 +37,11 @@ enum AdjustmentReason {
   COUNT_MISMATCH_OVER
   DISPOSAL
   ASSEMBLY
+  // The two ways an open ชำรุด booking closes and its units come back (lib/stock
+  // restoreDamagedQty). Both used to be booked as OTHER, which printed "อื่นๆ" over the row
+  // that puts repaired stock back — the one row where the reason is the whole point.
+  REPAIR_RETURN
+  DAMAGE_CANCELLED
   OTHER
 }
 

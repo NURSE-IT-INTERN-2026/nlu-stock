@@ -38,8 +38,13 @@ export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
 // One DispenseRecord is three different real events depending on the item's dispenseType
 // and loanType, so they get three separate types here — calling all of them "เบิก" told a
 // reader nothing about whether the stock is coming back.
+// ซ่อม is its own pair of events, not a flavour of เปลี่ยนสถานะ / ซ่อมบำรุง: a repair trip is the
+// thing staff look for in the history, and it reads the same whether the unit is a tracked piece
+// (sub-item status log) or qty stock (a ชำรุด booking). REPAIR_RETURN also splits ซ่อมแซม
+// (CORRECTIVE) out of บำรุงรักษา (PREVENTIVE) — same split the reports already make.
 export type TimelineEventType =
   | "DISPENSE" | "INUSE" | "BORROW" | "RETURN" | "RECEIVE" | "ADJUSTMENT"
+  | "DAMAGE_REPORT" | "REPAIR_SENT" | "REPAIR_RETURN"
   | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
 
 export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
@@ -49,8 +54,11 @@ export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   RETURN: "รับคืน",
   RECEIVE: "รับเข้า",
   ADJUSTMENT: "ปรับสต๊อก",
+  DAMAGE_REPORT: "แจ้งชำรุด",
+  REPAIR_SENT: "ส่งซ่อม",
+  REPAIR_RETURN: "รับคืนจากซ่อม",
   STATUS_CHANGE: "เปลี่ยนสถานะ",
-  MAINTENANCE: "ซ่อมบำรุง",
+  MAINTENANCE: "บำรุงรักษา",
   LOCATION_CHANGE: "ย้ายที่ตั้ง",
 };
 
@@ -111,11 +119,13 @@ export function recipientLabel(r: {
 
 export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   LOST: "สูญหาย",
-  DAMAGED_PENDING_REPAIR: "เสียหาย/ชำรุด",
+  DAMAGED_PENDING_REPAIR: "ชำรุด",
   COUNT_MISMATCH_SHORT: "นับแล้วขาด",
   COUNT_MISMATCH_OVER: "นับแล้วเกิน",
   DISPOSAL: "ตัดจำหน่าย",
   ASSEMBLY: "ประกอบเป็นชุด",
+  REPAIR_RETURN: "รับคืนจากซ่อม",
+  DAMAGE_CANCELLED: "ยกเลิกคำขอชำรุด",
   OTHER: "อื่นๆ",
 };
 

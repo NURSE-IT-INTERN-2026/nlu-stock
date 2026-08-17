@@ -689,6 +689,8 @@ export interface PendingRepairDamage {
   repairSentAt: string | null;
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   repairNote: string | null;
+  /** รูปหลักฐานก่อนส่งซ่อม. */
+  imageEvidence: string | null;
   by: string;
   item: {
     id: string;
@@ -712,9 +714,18 @@ export function sendQtyDamageToRepair(data: {
   venue: "INTERNAL" | "EXTERNAL";
   repairNote: string;
   damageNote?: string;
+  imageEvidence?: string;
 }) {
   return request<{ ok: boolean }>("/api/repairs", {
     method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** ยกเลิกคำขอชำรุด on qty stock — puts the units back. SUPERADMIN only. */
+export function cancelQtyDamage(data: { adjustmentId: string; note: string }) {
+  return request<{ ok: boolean; qty: number }>("/api/repairs", {
+    method: "DELETE",
     body: JSON.stringify(data),
   });
 }
