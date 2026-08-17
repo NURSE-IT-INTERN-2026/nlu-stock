@@ -46,7 +46,13 @@ export async function GET(request: NextRequest) {
   };
   if (categoryId) maintWhere.item = { categoryId };
 
-  const [items, lots, repairs] = await Promise.all([
+  // ปีที่ยังไม่มีใครกรอกราคาเลยกับปีที่ไม่ได้ซื้ออะไรเลยให้ยอด 0 เท่ากัน — ตัวนับนี้คือสิ่งเดียว
+  // ที่แยกสองอย่างนั้นออกจากกัน และบอกด้วยว่าต้องตามไปกรอกอีกกี่รายการ.
+  const unpricedItemWhere = { ...itemWhere, purchasePrice: null };
+  const unpricedLotWhere = { ...lotWhere, unitCost: null };
+  const unpricedMaintWhere = { ...maintWhere, cost: null };
+
+  const [items, lots, repairs, unpricedItems, unpricedLots, unpricedRepairs] = await Promise.all([
     prisma.item.findMany({
       where: itemWhere,
       select: {
@@ -79,6 +85,9 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { performedAt: "desc" },
     }),
+    prisma.item.count({ where: unpricedItemWhere }),
+    prisma.lot.count({ where: unpricedLotWhere }),
+    prisma.maintenanceRecord.count({ where: unpricedMaintWhere }),
   ]);
 
   // Both purchase sources land in one list with a `kind` column — the reader wants "ซื้ออะไร
@@ -154,6 +163,8 @@ export async function GET(request: NextRequest) {
       consumablePurchase: purchaseData.filter((p) => p.kind === "CONSUMABLE").reduce((s, p) => s + p.amount, 0),
       purchaseCount: purchaseData.length,
       repairCount: repairData.length,
+      unpricedPurchases: unpricedItems + unpricedLots,
+      unpricedRepairs,
     },
   });
 }

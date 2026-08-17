@@ -9,6 +9,8 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
+import { Wrench } from "lucide-react";
+import { SectionTitle } from "./report-kit";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -97,6 +99,12 @@ export function DamagedAssetsTab() {
 
   return (
     <div className="space-y-4 pb-2">
+      <SectionTitle
+        token="damage"
+        icon={Wrench}
+        title="ชำรุด & ส่งซ่อม"
+        subtitle="ตอนนี้อะไรพังอยู่ พังเพราะอะไร และส่งซ่อมที่ไหน"
+      />
       <ReportFilters
         config={filterConfig}
         values={filters}
@@ -110,18 +118,19 @@ export function DamagedAssetsTab() {
               label: "ชำรุด รอส่งซ่อม",
               value: summary.damaged.toLocaleString(),
               hint: `${periodLabel(filters)} · นับเป็นชิ้น`,
-              tone: summary.damaged > 0 ? "warning" : "default",
+              token: summary.damaged > 0 ? "damage" : undefined,
             },
             {
               label: "กำลังซ่อม",
               value: summary.underRepair.toLocaleString(),
               hint: "ส่งซ่อมแล้ว ยังไม่กลับเข้าคลัง",
+              token: summary.underRepair > 0 ? "repair" : undefined,
             },
             {
               label: "จำหน่าย / สูญหาย",
               value: summary.writtenOff.toLocaleString(),
               hint: "ตัดออกจากคลังถาวร",
-              tone: summary.writtenOff > 0 ? "danger" : "default",
+              token: summary.writtenOff > 0 ? "dispose" : undefined,
             },
           ]}
         />
@@ -134,6 +143,7 @@ export function DamagedAssetsTab() {
         // copies), so the table must render the page whole and never re-paginate it.
         pageSize={Math.max(1, data.length)}
         emptyMessage="ไม่มีพัสดุชำรุดในช่วงนี้"
+        token="damage"
       />
       {isMobile ? (
         data.length > 0 && (
