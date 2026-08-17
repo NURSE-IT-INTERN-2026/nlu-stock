@@ -288,14 +288,19 @@ export default function ConfirmDispensePage() {
           quantity: i.quantity,
         })),
         usageType: usageType || null,
-        // Only the types that show the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
+        // เหตุผล lands in usageNote for every usage type, never in notes. Both columns used to
+        // carry it — รายวิชา in usageNote, กิจกรรม/อื่นๆ in notes — which printed the same text
+        // under two headings on the report and left lib/usage-by-subject unable to tell one
+        // activity from another (they all grouped under a null usageNote).
+        //
+        // Only the type that shows the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
         // hides the textarea but leaves its text in state, and posting that would file one
         // usage type's description under another. Same for the course going the other way.
-        notes: needsActivity ? notes.trim() || null : null,
-        courseCode: needsCourse ? courseCode || null : null,
         // The course name is snapshotted, not looked up at read time: history has to stay
         // readable when the registrar is down, and a renamed course must not rewrite it.
-        usageNote: needsCourse ? courseName : null,
+        usageNote: needsCourse ? courseName : needsActivity ? notes.trim() || null : null,
+        notes: null,
+        courseCode: needsCourse ? courseCode || null : null,
         dueAt: dueDate || null,
       });
       toast.success(`เบิกพัสดุสำเร็จ ${data.count} รายการ`);
@@ -315,8 +320,8 @@ export default function ConfirmDispensePage() {
 
   // Free-text line โผล่/บังคับเฉพาะ กิจกรรม (ACTIVITY) กับ อื่นๆ (OTHER).
   const needsActivity = usageType === "ACTIVITY" || usageType === "OTHER";
-  // This line IS the ผู้รับ now (see lib/constants recipientLabel) — there is no separate
-  // ผู้รับ field to name the person, so the prompt has to ask for both.
+  // This line IS the เหตุผล on the report (see lib/constants recipientLabel) — there is no
+  // ผู้รับ field to name a person, so the prompt has to ask what it was for and who asked.
   const activityLabel = usageType === "OTHER" ? "เอาไปทำอะไร / ใครขอ" : "ระบุกิจกรรมที่นำไปใช้";
 
   // Inline validation — surfaced after the first submit attempt (error prevention, not recovery).

@@ -65,10 +65,13 @@ const cart = { items: [{ itemId: "i1", quantity: 1 }] };
 const ok = (input: object) => dispenseRequestSchema.safeParse(input).success;
 
 assert.equal(ok({ ...cart, usageType: "OTHER" }), false, "อื่นๆ ต้องมีรายละเอียด");
-assert.equal(ok({ ...cart, usageType: "OTHER", notes: "   " }), false, "ช่องว่างล้วนไม่นับ");
+assert.equal(ok({ ...cart, usageType: "OTHER", usageNote: "   " }), false, "ช่องว่างล้วนไม่นับ");
 assert.equal(ok({ ...cart, usageType: "ACTIVITY" }), false, "กิจกรรม ต้องระบุกิจกรรม");
-assert.equal(ok({ ...cart, usageType: "OTHER", notes: "ยกไปเก็บห้องพักครู" }), true);
-assert.equal(ok({ ...cart, usageType: "ACTIVITY", notes: "กีฬาสี" }), true);
+assert.equal(ok({ ...cart, usageType: "OTHER", usageNote: "ยกไปเก็บห้องพักครู" }), true);
+assert.equal(ok({ ...cart, usageType: "ACTIVITY", usageNote: "กีฬาสี" }), true);
+// เหตุผล has to be in usageNote — notes is only where the older rows happen to keep it, and a
+// cart that still posted it there would file an activity the usage report cannot name.
+assert.equal(ok({ ...cart, usageType: "ACTIVITY", notes: "กีฬาสี" }), false, "กิจกรรมต้องลง usageNote");
 
 // ── รายวิชา must name the course, not just the category ──
 // Same reasoning as the two above: "รายวิชา" on its own tells a reader nothing, and the
@@ -79,7 +82,7 @@ assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "   " }), false, "�
 assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101" }), true);
 assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101", usageNote: "การพยาบาลพื้นฐาน" }), true);
 // A course code tagging along on กิจกรรม is harmless — only COURSE requires one.
-assert.equal(ok({ ...cart, usageType: "ACTIVITY", notes: "กีฬาสี", courseCode: null }), true);
+assert.equal(ok({ ...cart, usageType: "ACTIVITY", usageNote: "กีฬาสี", courseCode: null }), true);
 // ตั้งใช้ในห้อง (station-in-room-dialog) sends no usageType at all — the rule must not catch it.
 assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true);
 
@@ -112,24 +115,34 @@ assert.deepEqual(patch("ON_LOAN", "AVAILABLE", "loc-501"), {});
 assert.deepEqual(patch("AVAILABLE", "IN_USE", "loc-501"), {});
 assert.deepEqual(patch("IN_USE", "IN_USE"), {});
 
-// ── ผู้รับ is derived from the usage, not typed into a field of its own ──
-// Every ผู้รับ / ผู้ยืม label in the app comes out of here, so a wrong fallback order shows
-// the wrong person on the return screen — which is the one place someone acts on it.
+// ── เหตุผล is derived from the usage, not typed into a field of its own ──
+// Every เหตุผล label in the app comes out of here, so a wrong fallback order names the wrong
+// thing on the return screen — which is the one place someone acts on it.
 assert.equal(
   recipientLabel({ usageType: "COURSE", courseCode: "578101", usageNote: "การพยาบาลพื้นฐาน" }),
   "578101 การพยาบาลพื้นฐาน",
 );
 // Registrar was down at dispense time — the code is still an answer, the name is not required.
 assert.equal(recipientLabel({ usageType: "COURSE", courseCode: "578101" }), "578101");
+assert.equal(recipientLabel({ usageType: "ACTIVITY", usageNote: "กีฬาสี" }), "กีฬาสี");
+assert.equal(recipientLabel({ usageType: "OTHER", usageNote: "อ.สมชายขอ" }), "อ.สมชายขอ");
+// Rows written before เหตุผล moved to usageNote still read out of notes — no migration ran,
+// so dropping this fallback would blank the reason on every row already in the table.
 assert.equal(recipientLabel({ usageType: "ACTIVITY", notes: "กีฬาสี" }), "กีฬาสี");
-assert.equal(recipientLabel({ usageType: "OTHER", notes: "อ.สมชายขอ" }), "อ.สมชายขอ");
+// นำไปใช้งาน has no usage block at all and writes its line straight into notes.
+assert.equal(recipientLabel({ notes: "ตั้งใช้ประจำห้อง 402" }), "ตั้งใช้ประจำห้อง 402");
+// The room นำไปใช้งาน used to fold into notes is dropped: the report prints เหตุผล one column
+// away from สถานที่, and a row that repeats its neighbour is noise, not a reason.
+assert.equal(recipientLabel({ notes: "ห้องที่ตั้ง: อาคาร 2 / ชั้น 3 / 305" }), null);
+assert.equal(recipientLabel({ notes: "ยืมเล่นๆ | ห้องที่ตั้ง: ไม่บอก / อะไร" }), "ยืมเล่นๆ");
+// usageNote wins when both are set: notes is the older copy, and the two can disagree.
+assert.equal(recipientLabel({ usageType: "ACTIVITY", usageNote: "กีฬาสี", notes: "ของเก่า" }), "กีฬาสี");
 // Legacy rows kept the name someone deliberately typed, and it wins over the usage.
 assert.equal(recipientLabel({ recipient: "ครูสมชาย", usageType: "COURSE", courseCode: "578101" }), "ครูสมชาย");
 // Blank is not a value — null lets every caller supply its own "ไม่ระบุ…" wording.
-assert.equal(recipientLabel({ recipient: "   ", usageType: "ACTIVITY", notes: " " }), null);
+assert.equal(recipientLabel({ recipient: "   ", usageType: "ACTIVITY", usageNote: " ", notes: " " }), null);
 assert.equal(recipientLabel({ usageType: null }), null);
 // นำไปใช้งาน files no usageType at all; the row is named by its ห้อง, not by this.
 assert.equal(recipientLabel({ usageType: null, notes: "ตั้งไว้ห้อง 402" }), "ตั้งไว้ห้อง 402");
 
 console.log("dispense-history: ok");
-

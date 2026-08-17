@@ -13,7 +13,7 @@ import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
 import { groupUsageBySubject } from "@/lib/usage-by-subject";
 
-/** ผู้รับ/ผู้ยืม search — the four columns recipientLabel can render from. Always nested under
+/** เหตุผล search — the four columns recipientLabel can render from. Always nested under
  *  AND: both callers' `where` already owns `OR` for the NULL-safe loanType pair. */
 function recipientOr(q: string): Prisma.DispenseRecordWhereInput {
   const like = { contains: q, mode: "insensitive" as const };
@@ -258,9 +258,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (staffId) where.staffId = staffId;
       const usageType = params.get("usageType");
       if (usageType) where.usageType = usageType as UsageType;
-      // Mirrors the ผู้รับ search box on the tab. Missing here, an Excel exported under a
+      // Mirrors the เหตุผล search box on the tab. Missing here, an Excel exported under a
       // recipient filter would quietly hold every row on screen plus the ones filtered out.
-      // Same four columns as api/reports/dispense-history — ผู้รับ is derived from the usage.
+      // Same four columns as api/reports/dispense-history — เหตุผล is derived from the usage.
       const recipient = params.get("recipient")?.trim();
       if (recipient) where.AND = [recipientOr(recipient)];
       // นำไปใช้งาน + "ยังอยู่ข้างนอก" — the only loanStatus this case honours; ยืม + ค้างคืน
@@ -285,22 +285,26 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           รายการพัสดุ: r.item.name,
           จำนวน: r.quantity,
         };
+        // การใช้งาน then เหตุผล, in the order the tab shows them — an Excel whose columns run
+        // differently from the screen it was exported from cannot be checked against it.
+        // หมายเหตุ is gone: เหตุผล already renders notes for every row that is not a รายวิชา
+        // (lib/constants recipientLabel), so the two columns printed one text twice.
+        const usageLabel = r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—";
         if (kind === "consume") {
           return {
             ...head,
-            ผู้รับ: recipientLabel(r) ?? "",
+            การใช้งาน: usageLabel,
+            เหตุผล: recipientLabel(r) ?? "",
             ผู้เบิก: r.staff.name,
-            การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
-            หมายเหตุ: r.notes ?? "",
           };
         }
         if (kind === "inuse") {
           return {
             ...head,
             สถานที่: r.location ? locationLabel(r.location) : "ไม่ระบุที่ตั้ง",
+            เหตุผล: recipientLabel(r) ?? "",
             ผู้เบิก: r.staff.name,
             สถานะ: r.returnedAt ? "กลับเข้าคลังแล้ว" : "อยู่ที่ห้อง",
-            หมายเหตุ: r.notes ?? "",
           };
         }
         const cond =
@@ -311,12 +315,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           : "ยังไม่คืน";
         return {
           ...head,
-          ผู้ยืม: recipientLabel(r) ?? "",
+          การใช้งาน: usageLabel,
+          เหตุผล: recipientLabel(r) ?? "",
           ผู้เบิก: r.staff.name,
-          การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
           ครบกำหนด: r.dueAt ? fmtDate(r.dueAt, "yyyy-MM-dd") : "",
           สถานะ: cond,
-          หมายเหตุ: r.notes ?? "",
         };
       });
     }
@@ -342,7 +345,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       }
       const staffId = params.get("staffId");
       if (staffId) where.staffId = staffId;
-      // Same ผู้ยืม search as the tab — see the note on the dispense-history case.
+      // Same เหตุผล search as the tab — see the note on the dispense-history case.
       const recipient = params.get("recipient")?.trim();
       if (recipient) where.AND = [recipientOr(recipient)];
 
@@ -382,7 +385,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             : "ใกล้ครบกำหนด";
         return {
           วันที่: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
-          ผู้ยืม: recipientLabel(head) ?? "",
+          เหตุผล: recipientLabel(head) ?? "",
           ผู้เบิก: head.staff.name,
           รายการ: recs.length,
           ค้างคืน: outstanding,

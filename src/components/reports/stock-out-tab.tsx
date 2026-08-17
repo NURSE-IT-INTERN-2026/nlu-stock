@@ -116,15 +116,14 @@ function InUseStatus({ e }: { e: DispenseEvent }) {
 
 const num = "text-right tabular-nums";
 
-// ผู้รับ/ผู้ยืม เป็นคอลัมน์เดียวกัน ต่างแค่คำเรียกตาม segment
-const recipientCol = (header: string): Column<DispenseEvent> => ({
-  key: "recipient",
-  header,
-  render: (e) => e.head.recipient ?? `ไม่ระบุ${header}`,
-  className: "font-medium",
-});
-
 const COL = {
+  // เหตุผล — เบิกไปทำอะไร. ไม่ใช่ "ผู้รับ" อีกแล้ว: ค่าที่อยู่ในช่องนี้คือวิชา/กิจกรรม
+  // (lib/constants recipientLabel) ไม่ใช่ชื่อคน และคนดูรายงาน monitor จากการใช้งาน ไม่ใช่จากคน.
+  reason: {
+    key: "recipient", header: "เหตุผล",
+    render: (e: DispenseEvent) => e.head.recipient ?? "—",
+    className: "font-medium",
+  },
   location: {
     key: "location", header: "สถานที่",
     render: (e: DispenseEvent) => e.head.location ?? "ไม่ระบุที่ตั้ง",
@@ -144,7 +143,7 @@ const COL = {
 interface KindSpec {
   columns: Column<DispenseEvent>[];
   filters: FilterConfig;
-  /** ป้ายของคอลัมน์แรก — ป็อปอัพใช้คำเดียวกันเพื่อไม่ให้ตารางกับหัวป็อปอัพเรียกคนละอย่าง */
+  /** ป้ายของคอลัมน์ที่ตั้งชื่อแถว — ป็อปอัพใช้คำเดียวกันเพื่อไม่ให้ตารางกับหัวป็อปอัพเรียกคนละอย่าง */
   headerLabel: string;
   status?: (e: DispenseEvent) => React.ReactNode;
   stats: (s: Summary, f: FilterValues) => SummaryStat[];
@@ -155,11 +154,13 @@ interface KindSpec {
 
 const baseFilters: FilterConfig = { dateRange: true, staff: true, usageTypes: true };
 
+// การใช้งาน ก่อน เหตุผล ทุก segment: คนอ่านรายงาน monitor จาก "ของถูกเอาไปใช้ทำอะไร" ก่อนเสมอ
+// แล้วค่อยเจาะว่าอันไหน — ประเภทกว้างๆ 3 ค่าจึงมาก่อน ตามด้วยบรรทัดที่ระบุตัวจริง.
 const KINDS: Record<DispenseKind, KindSpec> = {
   consume: {
-    headerLabel: "ผู้รับ",
-    columns: [recipientCol("ผู้รับ"), COL.date, COL.staff, COL.usage, COL.itemCount, COL.qty],
-    filters: { ...baseFilters, recipientSearch: "ค้นหาผู้รับ" },
+    headerLabel: "เหตุผล",
+    columns: [COL.usage, COL.reason, COL.date, COL.staff, COL.itemCount, COL.qty],
+    filters: { ...baseFilters, recipientSearch: "ค้นหาวิชา / กิจกรรม / เหตุผล" },
     emptyMessage: "ไม่มีการเบิกใช้ในช่วงนี้",
     exportType: () => "dispense-history",
     stats: (s, f) => [
@@ -168,13 +169,13 @@ const KINDS: Record<DispenseKind, KindSpec> = {
     ],
   },
   borrow: {
-    headerLabel: "ผู้ยืม",
-    columns: [recipientCol("ผู้ยืม"), COL.date, COL.staff, COL.usage, COL.itemCount, COL.qty, COL.due,
+    headerLabel: "เหตุผล",
+    columns: [COL.usage, COL.reason, COL.date, COL.staff, COL.itemCount, COL.qty, COL.due,
       { key: "status", header: "สถานะ", render: (e) => <LoanStatus e={e} /> }],
     status: (e) => <LoanStatus e={e} />,
     filters: {
       ...baseFilters,
-      recipientSearch: "ค้นหาผู้ยืม",
+      recipientSearch: "ค้นหาวิชา / กิจกรรม / เหตุผล",
       statusOptions: [
         { value: "open", label: "ยังไม่คืน" },
         { value: "overdue", label: "เกินกำหนดคืน" },
@@ -191,8 +192,10 @@ const KINDS: Record<DispenseKind, KindSpec> = {
   inuse: {
     headerLabel: "สถานที่",
     // ไม่มีคอลัมน์การใช้งาน: นำไปใช้งานไม่เคยบันทึก usageType (station-in-room-dialog ไม่ส่ง)
-    // ทุกแถวจึงเป็น "—" เหมือนกันหมด. และไม่มีคอลัมน์ "รายการ": dialog ส่งทีละชิ้น ค่าเป็น 1 ตลอด.
-    columns: [COL.location, COL.date, COL.staff, COL.qty,
+    // ทุกแถวจึงเป็น "—" เหมือนกันหมด — และตัว action เองก็บอกอยู่แล้วว่าเอาไปตั้งใช้ที่ห้อง.
+    // เหตุผล ยังมี: มันคือช่องในไดอะล็อก ซึ่งตกมาทาง notes (lib/constants recipientLabel).
+    // และไม่มีคอลัมน์ "รายการ": dialog ส่งทีละชิ้น ค่าเป็น 1 ตลอด.
+    columns: [COL.location, COL.reason, COL.date, COL.staff, COL.qty,
       { key: "status", header: "สถานะ", render: (e) => <InUseStatus e={e} /> }],
     status: (e) => <InUseStatus e={e} />,
     // ponytail: ไม่มีช่องค้นหา — คอลัมน์แรกของ segment นี้คือ location ไม่ใช่ recipient

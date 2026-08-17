@@ -605,7 +605,7 @@ export interface OpenBorrow {
   resolvedQty: number;
   dispensedAt: string;
   usageType: string | null;
-  // ผู้ยืม is rendered from these three (lib/constants recipientLabel), not from `recipient` —
+  // เหตุผล is rendered from these three (lib/constants recipientLabel), not from `recipient` —
   // that column only still carries a value on rows written before the cart dropped the field.
   courseCode: string | null;
   usageNote: string | null;

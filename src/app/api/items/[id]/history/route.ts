@@ -113,25 +113,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             ? "DISPENSE"
             : r.loanType === "INUSE" ? "INUSE" : "BORROW";
           const place = r.location ? [r.location.building, r.location.room].filter(Boolean).join(" ") : null;
+          // เหตุผล lives in usageNote; notes is where กิจกรรม/อื่นๆ wrote it before that, and
+          // where นำไปใช้งาน still writes it (lib/constants recipientLabel uses the same order).
+          const reason = r.usageNote?.trim() || r.notes?.trim() || null;
           events.push({
             id: r.id,
             type,
             date: r.dispensedAt,
             delta: -r.quantity,
             qty: r.quantity,
-            // "อื่นๆ" as a headline says nothing — for that one type the free text IS the
+            // "อื่นๆ" as a headline says nothing — for that one type the เหตุผล IS the
             // event, so it leads and drops out of the quieter second line.
-            note: r.usageType === "OTHER" && r.notes?.trim()
-              ? r.notes.trim()
+            note: r.usageType === "OTHER" && reason
+              ? reason
               : (r.usageType ? USAGE_TYPE_LABELS[r.usageType] : null) ?? "นำออกจากคลัง",
             detail: joinNotes(
               // Leads the line: on a ยืม row "ค้าง 5 ชิ้น" is the thing worth scanning, and
               // a consumable never comes back so it gets no status at all.
               isConsumable ? null : loanStatus(r, unit),
-              r.usageNote,
+              r.usageType === "OTHER" ? null : reason,
+              // Legacy rows only: someone typed a name back when ผู้รับ was a field of its own.
               r.recipient ? `ผู้รับ ${r.recipient}` : null,
               place ? `ห้องที่ตั้ง ${place}` : null,
-              r.usageType === "OTHER" ? null : r.notes,
             ),
             user: r.staff.name,
             details: {

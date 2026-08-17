@@ -106,7 +106,7 @@ export async function getItemDistribution(itemId: string): Promise<DistributionR
   const borrowerRows: DistributionRow[] = loans
     .map((l) => ({
       kind: "borrower" as const,
-      // ผู้ยืม is the usage now (lib/constants recipientLabel) — "อยู่กับ 578101 การพยาบาลพื้นฐาน".
+      // The row is named by its เหตุผล now (lib/constants recipientLabel) — "อยู่กับ 578101 การพยาบาลพื้นฐาน".
       // Falls back to the staff who filed it: a row with no usage at all still needs a name
       // to chase, and that person is the one who signed the stock out.
       label: recipientLabel(l) ?? l.staff.name,

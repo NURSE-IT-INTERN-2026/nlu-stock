@@ -99,7 +99,7 @@ export function DispenseEventDialog({
   onClose,
 }: {
   event: DispenseEvent | null;
-  /** "ผู้รับ" / "ผู้ยืม" / "สถานที่" — the same thing the table's first column is called. */
+  /** "เหตุผล" / "สถานที่" — the same thing the table calls the column that names the row. */
   headerLabel: string;
   status: ReactNode;
   showReturn: boolean;
@@ -165,7 +165,10 @@ export function DispenseEventDialog({
                   {head.dueAt ? fmtDate(new Date(head.dueAt), TH_DATE) : "—"}
                 </Meta>
               )}
-              {head.notes && (
+              {/* เหตุผล of the older rows lives in notes and is already the dialog title
+                  (lib/constants recipientLabel), so printing it again under หมายเหตุ says
+                  the same sentence twice. Only a note that differs earns the line. */}
+              {head.notes && head.notes !== title && (
                 <div className="col-span-2 sm:col-span-3">
                   <Meta label="หมายเหตุ">{head.notes}</Meta>
                 </div>
