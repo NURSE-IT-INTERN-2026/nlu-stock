@@ -5,10 +5,11 @@ import type { DispenseKind } from "@/lib/dispense-kind";
 // query. Separate file because the kind labels are read by a client component and this one
 // pulls in the Prisma runtime.
 
-// Explicit OR, never `loanType: { not: "INUSE" }` — that compiles to a NULL-unsafe
-// comparison and silently drops every legacy row. Same trap as api/returns/route.ts.
+// Listed explicitly rather than `not: "INUSE"`: the column is NOT NULL now so the trap that
+// used to make that unsafe is gone, but naming the two values keeps this honest when a third
+// one is added — `not: "INUSE"` would quietly sweep it in here.
 const NOT_INUSE: Prisma.DispenseRecordWhereInput = {
-  OR: [{ loanType: null }, { loanType: "BORROW" }],
+  loanType: { in: ["BORROW", "CONSUME"] },
 };
 
 /** Which DispenseTypes a kind can own. inuse spans the same two as borrow — what separates
@@ -46,7 +47,7 @@ function profileIs(types: string[]): Prisma.Sql {
 /** SQL predicate on dispense_records, matching kindWhere row for row. */
 export function kindSql(kind: DispenseKind): Prisma.Sql {
   if (kind === "inuse") return Prisma.sql`"loanType"::text = 'INUSE'`;
-  const notInuse = Prisma.sql`("loanType" IS NULL OR "loanType"::text = 'BORROW')`;
+  const notInuse = Prisma.sql`"loanType"::text IN ('BORROW', 'CONSUME')`;
   const types = kind === "consume" ? ["CONSUMABLE"] : ["COUNT", "ITEM"];
   return Prisma.sql`${notInuse} AND ${profileIs(types)}`;
 }

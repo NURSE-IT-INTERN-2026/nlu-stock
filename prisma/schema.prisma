@@ -83,6 +83,10 @@ enum ReturnCondition {
 enum LoanType {
   BORROW
   INUSE
+  // เบิกใช้ — ของสิ้นเปลืองที่ออกไปแล้วไม่กลับ. เคยเขียนเป็น NULL ซึ่งทับความหมายกับ "แถวเก่า
+  // ก่อนมีคอลัมน์นี้" จนแยกไม่ออก และบังคับให้ทุก query ต้องเขียน OR [null, BORROW] กันแถวหาย
+  // (Prisma แปล `not: "INUSE"` เป็น SQL ที่ NULL-unsafe). ค่าจริงทำให้คอลัมน์เป็น NOT NULL ได้.
+  CONSUME
 }
 
 enum UsageType {
@@ -408,7 +412,7 @@ model DispenseRecord {
   // Lets the return screen show one card per loan instead of merging by item.
   loanGroupId     String?
   // null (legacy) treated as BORROW. INUSE records are excluded from the รับคืน/outstanding-loan screens.
-  loanType        LoanType?
+  loanType        LoanType
   dueAt           DateTime?
   returnProofUrls String[]         @default([]) // photos uploaded when the loan is returned
   recoveredAt     DateTime? // set when a return-as-LOST is reversed (เรียกคืน)

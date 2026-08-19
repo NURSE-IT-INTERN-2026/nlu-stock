@@ -37,6 +37,8 @@ async function main() {
           staff: { connect: { id: pick(staff).id } },
           quantity: 1 + rand(25),
           usageType: pick(usageTypes as unknown as UsageType[]),
+          // loanType is NOT NULL now — seeded rows are plain เบิกใช้, no due date, never returned
+          loanType: "CONSUME",
           dispensedAt,
         },
       });
