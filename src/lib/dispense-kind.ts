@@ -9,8 +9,11 @@
  *   1. loanType = INUSE            → นำไปใช้งาน (whatever the item's dispenseType)
  *   2. dispenseType = CONSUMABLE   → เบิกใช้
  *   3. everything else             → ยืม
- * loanType null = rows written before the column existed; treated as BORROW, same as
- * everywhere else in the app (api/returns, lib/alerts, lib/distribution).
+ * loanType is NOT NULL: เบิกใช้ writes CONSUME, so no reader has to guess what a missing
+ * value meant. It used to be nullable, where NULL stood for both "เบิกใช้" and "row written
+ * before the column existed" at once — and every loan query had to spell out
+ * `OR [{ loanType: null }, { loanType: "BORROW" }]` because Prisma compiles `not: "INUSE"`
+ * into a NULL-unsafe comparison that drops those rows silently.
  *
  * Every row lands in exactly one kind, so the three segments add up to the whole table —
  * asserted against the database in dispense-kind.test.ts.
@@ -27,6 +30,24 @@ export const DISPENSE_KIND_LABELS: Record<DispenseKind, string> = {
   borrow: "ยืม",
   inuse: "นำไปใช้งาน",
 };
+
+/**
+ * The two loan columns, decided per line at write time (api/dispense).
+ *
+ * เบิกใช้ gets its own value rather than borrowing BORROW's: a consumable used to file as
+ * BORROW with a due date, which reads as an open loan to anyone looking at the row. Nothing
+ * broke only because every loan query AND-s a dispenseType filter over it — a guard the next
+ * query to be written could easily forget. CONSUME carries no dueAt and never returns.
+ */
+export function loanFields(
+  dispenseType: string,
+  inRoom: boolean,
+  dueAt: Date | null,
+): { loanType: "BORROW" | "INUSE" | "CONSUME"; dueAt: Date | null } {
+  if (dispenseType === "CONSUMABLE") return { loanType: "CONSUME", dueAt: null };
+  // นำไปใช้งาน is open-ended — a room, not a debt.
+  return { loanType: inRoom ? "INUSE" : "BORROW", dueAt: inRoom ? null : dueAt };
+}
 
 export function parseDispenseKind(v: string | null | undefined): DispenseKind {
   return (DISPENSE_KINDS as readonly string[]).includes(v ?? "")

@@ -202,7 +202,7 @@ export function ItemsMasterTab() {
       {/* Table — hero zone, most visual weight */}
       <div className="rounded-2xl border bg-card shadow-sm flex flex-col md:overflow-clip">
         <div className="hidden md:block">
-        <Table className="table-fixed">
+        <Table grid className="table-fixed">
           <TableHeader sticky>
             <TableRow>
               <TableHead className="w-[48px] pl-4">

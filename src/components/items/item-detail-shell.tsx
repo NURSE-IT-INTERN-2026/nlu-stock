@@ -25,7 +25,7 @@ import {
   STATUS_LABELS, locationLabel, formatSubCode, qrUrl, labelFor,
   CONDITION_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
   type MaintenanceType, type MaintenanceResult, type ItemStatus,
-  USAGE_STATUS_ORDER, STATUS_PILLS,
+  USAGE_STATUS_ORDER, STATUS_PILLS, recipientLabel,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
 import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
@@ -85,7 +85,7 @@ interface ParentItem {
   category: { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null };
   location: LocationType | null; issueUnit: { id: string; name: string };
 }
-interface DispenseRecord { id: string; quantity: number; dispensedAt: string; returnedAt: string | null; usageType: string | null; usageNote: string | null; notes: string | null; recipient?: string | null; loanType?: string | null; staff: { name: string } }
+interface DispenseRecord { id: string; quantity: number; dispensedAt: string; returnedAt: string | null; usageType: string | null; courseCode?: string | null; usageNote: string | null; notes: string | null; recipient?: string | null; loanType?: string | null; staff: { name: string } }
 // Sibling row as served by GET /api/settings/items/:id/sub-items — location + the one
 // open dispense record (returnedAt: null, take 1), which is what the table needs.
 interface SiblingRow {
@@ -848,7 +848,7 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
             // Same fallback as the รหัสย่อย table: a piece with no location sits where its spec sits.
             const loc = s.location ?? itemLocation;
             const where = s.status === "ON_LOAN" && loan
-              ? loan.recipient || loan.staff.name
+              ? recipientLabel(loan) ?? loan.staff.name
               : roomFromNotes(loan?.notes) ?? (loc ? locationLabel(loc) : null);
             // Repeating the spec's own location on every row says nothing — only a piece
             // that sits somewhere else (or is out with someone) is worth a second line.
@@ -997,7 +997,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <SectionHeader eyebrow="spec เดียวกัน" title={`ชิ้นอื่นใน spec (${rows.length})`} />
       <div className="overflow-x-auto">
-        <Table>
+        <Table grid zebra>
           <TableHeader>
             <TableRow className="bg-muted/40">
               <TableHead className="w-40 px-3">รหัส</TableHead>
@@ -1030,7 +1030,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
                   </TableCell>
                   <TableCell className="px-3 text-sm text-muted-foreground">
                     {s.status === "ON_LOAN" && loan ? (
-                      <span><User2 className="size-3 inline mr-1 -mt-0.5" />{loan.recipient || loan.staff.name} · {fmtDT(loan.dispensedAt)}</span>
+                      <span><User2 className="size-3 inline mr-1 -mt-0.5" />{recipientLabel(loan) ?? loan.staff.name} · {fmtDT(loan.dispensedAt)}</span>
                     ) : s.status === "IN_USE" ? (
                       <span><MapPin className="size-3 inline mr-1 -mt-0.5" />{where ?? "ไม่ระบุที่ตั้ง"}{loan ? ` · ${fmtDay(loan.dispensedAt)}` : ""}</span>
                     ) : where ? (
@@ -1138,7 +1138,7 @@ function KitComponentsTab({ components }: { components: ItemData["kitComponents"
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">ของที่ประกอบเป็นชุดนี้ {components.length} รายการ — จำนวนต่อ 1 ชุด</p>
       <div className="rounded-xl border overflow-hidden bg-card">
-        <Table className="table-fixed">
+        <Table grid zebra className="table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/40">
               <TableHead className="w-28 md:w-32 px-2">รหัส</TableHead>

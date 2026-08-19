@@ -340,7 +340,7 @@ function AlertsContent() {
       <div className="rounded-2xl border overflow-hidden bg-card">
         {/* Desktop: table */}
         <div className="hidden md:block overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
-          <Table className="table-fixed">
+          <Table grid zebra className="table-fixed">
             <TableHeader sticky>
               <TableRow>
                 <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
@@ -365,10 +365,10 @@ function AlertsContent() {
                     ไม่มีรายการแจ้งเตือน
                   </TableCell>
                 </TableRow>
-              ) : items.map((item, idx) => (
+              ) : items.map((item) => (
                 <TableRow
                   key={item.id}
-                  className={`cursor-pointer hover:bg-muted/50 transition-colors ${idx % 2 === 1 ? "bg-muted/40" : ""}`}
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => router.push(`/items/${item.id}`)}
                 >
                   <TableCell className="font-mono text-xs px-2"><span className="block truncate">{item.code}</span></TableCell>

@@ -32,9 +32,14 @@ export const dispenseRequestSchema = z.object({
   usageType: z.enum(["COURSE", "ACTIVITY", "OTHER"]).optional().nullable(),
   // COURSE only: the CMU รหัสวิชา, with the course name snapshotted into usageNote.
   courseCode: z.string().max(50).optional().nullable(),
+  // เหตุผล for every usage type — the course name for COURSE, the free-text line for
+  // กิจกรรม/อื่นๆ. One column, so a reader never has to know which type wrote where.
   usageNote: z.string().max(500).optional().nullable(),
+  // ผู้รับ is not a field — เหตุผล is derived from the usage block above (lib/constants
+  // recipientLabel). The DispenseRecord.recipient column stays for the rows that predate that.
+  // notes is เหตุผล's fallback for rows written before it moved to usageNote, plus the free
+  // line on นำไปใช้งาน, which has no usage block of its own.
   notes: z.string().max(500).optional().nullable(),
-  recipient: z.string().max(255).optional().nullable(),
   // นำไปใช้งาน (INUSE) only — the room the stock was placed in. Required for INUSE
   // (see the refine below); ignored for เบิก/ยืม, which don't move an item's home.
   locationId: z.string().optional().nullable(),
@@ -46,9 +51,16 @@ export const dispenseRequestSchema = z.object({
   // กิจกรรม and อื่นๆ are only labels — the free-text line is what a reader of the history
   // actually learns from, so neither may be filed without it. Enforced here rather than in
   // the dialog alone: a bare "อื่นๆ" record explains nothing no matter which client wrote it.
+  //
+  // INUSE is exempt: นำไปใช้งาน files as OTHER so no row is left without a usageType, but it
+  // never asks a usage question — its required locationId is the line a reader learns from,
+  // and the history renders those rows as "ตั้งใช้ในห้อง <ห้อง>" off loanType, not off this note.
   .refine(
-    (d) => !(d.usageType === "ACTIVITY" || d.usageType === "OTHER") || !!d.notes?.trim(),
-    { path: ["notes"], message: "ระบุรายละเอียดการนำไปใช้" },
+    (d) =>
+      d.loanType === "INUSE" ||
+      !(d.usageType === "ACTIVITY" || d.usageType === "OTHER") ||
+      !!d.usageNote?.trim(),
+    { path: ["usageNote"], message: "ระบุรายละเอียดการนำไปใช้" },
   )
   // Same reasoning one refine up: "รายวิชา" on its own tells a reader of the history
   // nothing, and the report cannot split by course without the code. Enforced server-side
@@ -56,6 +68,16 @@ export const dispenseRequestSchema = z.object({
   .refine(
     (d) => d.usageType !== "COURSE" || !!d.courseCode?.trim(),
     { path: ["courseCode"], message: "เลือกรายวิชา" },
+  )
+  // เบิก/ยืม with no usageType is a draw nobody can account for: it shows up in every
+  // breakdown as one anonymous lump. The cart has enforced this client-side since it was
+  // built, but only the client — a row written straight to the API landed as NULL, and
+  // EXEC has POST rights here. INUSE is the deliberate exception: นำไปใช้งาน never asks a
+  // usage question, its required locationId is the reason (dashboard-usage.ts usageSeries
+  // files those rows under ตั้งใช้ในห้อง).
+  .refine(
+    (d) => d.loanType === "INUSE" || !!d.usageType,
+    { path: ["usageType"], message: "เลือกการใช้งาน" },
   )
   // นำไปใช้งาน moves stock to a room, so the room is the whole point of the record — an
   // INUSE row without one is stock the system has lost track of. The picker already

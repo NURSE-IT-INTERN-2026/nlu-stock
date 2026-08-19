@@ -72,7 +72,7 @@ export function DistributionTable({ rows, unit }: { rows: DistributionRow[]; uni
 
   return (
     <div className="overflow-x-auto">
-      <Table>
+      <Table grid zebra>
         <TableHeader>
           <TableRow className="bg-muted/40">
             <TableHead className="px-3">สถานที่</TableHead>

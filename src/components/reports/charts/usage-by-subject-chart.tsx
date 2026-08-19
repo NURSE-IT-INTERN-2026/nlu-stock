@@ -3,9 +3,14 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 import { PieChart } from "lucide-react";
 import { useThemeColor } from "@/lib/resolve-color";
-import type { UsageByTypeData } from "@/lib/dashboard-types";
-import { ChartContainer } from "./chart-container";
-import { Panel } from "./primitives";
+import { ChartContainer } from "@/components/dashboard/chart-container";
+import { Panel } from "@/components/dashboard/primitives";
+
+interface UsageByTypeData {
+  usageType: string | null;
+  label: string;
+  totalQuantity: number;
+}
 
 interface ChartTooltipProps {
   active?: boolean;
@@ -25,22 +30,20 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
   );
 }
 
-// title/hint are overridable because /reports shows this chart over whatever range the user
-// filtered to — the dashboard's fixed "เดือนนี้" was a lie there.
-// On the dashboard this sits in a flex column with a definite height, so `min-h + flex-1` and
-// ChartContainer's height:100% resolve. In /reports it sits in a plain stack where 100% of an
-// only-min-height parent computes to 0 and the chart rendered blank — `height` gives those
-// callers a definite box instead.
+// Reports-only since the dashboard moved to รายวิชา (top-courses-chart). title/hint come from
+// the caller because /reports draws this over whatever range the filter bar is set to.
+// It sits in a plain stack there, where ChartContainer's height:100% of an only-min-height
+// parent computes to 0 and the chart renders blank — `height` gives it a definite box.
 export function UsageBySubjectChart({
   data,
-  title = "สัดส่วนการใช้งานเดือนนี้",
-  hint = "วัตถุประสงค์ของการเบิก",
+  title,
+  hint,
   height,
 }: {
   data: UsageByTypeData[];
-  title?: string;
-  hint?: string;
-  height?: number;
+  title: string;
+  hint: string;
+  height: number;
 }) {
   // ponytail: one fill, not a colour per bar. The categories are already named on the axis,
   // so a second encoding would carry no information.
@@ -61,8 +64,7 @@ export function UsageBySubjectChart({
         </div>
       ) : (
         <div
-          className={height ? undefined : "min-h-[240px] flex-1"}
-          style={height ? { height } : undefined}
+          style={{ height }}
           role="img"
           aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.name} (${d.totalQuantity})`).join(", ")}`}
         >

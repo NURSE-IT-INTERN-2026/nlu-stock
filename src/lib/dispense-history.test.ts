@@ -4,6 +4,8 @@
 import assert from "node:assert";
 import { isDuplicateOfLoanRow, isLoanEdge, returnLocationUpdate } from "@/lib/returns";
 import { dispenseRequestSchema } from "@/lib/validators/dispense";
+import { recipientLabel } from "@/lib/constants";
+import { loanFields } from "@/lib/dispense-kind";
 import type { ItemStatus } from "@/generated/prisma/enums";
 
 // ── Loan edges are dropped: the เบิก / รับคืน row beside them already tells the story ──
@@ -32,16 +34,45 @@ assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "DISPO
 assert.equal(isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "DISPOSED" }), false, "ยกเลิกชุดต้องขึ้นประวัติ");
 assert.equal(isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "AVAILABLE" }), true, "คืนปกติยังซ้ำกับแถวรับคืน");
 
+// ── Same-status rows are annotations, not transitions: judged on their reason ──
+// Qty stock stamps its repair trip onto the item's own (unchanged) status. On an item that is
+// ON_LOAN the loan test used to swallow every one of them, so ส่งซ่อม never reached the history.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "ON_LOAN", reason: "ส่งซ่อมภายใน 5 ชิ้น · ร้าน ABC" }),
+  false,
+  "ส่งซ่อมของแบบนับจำนวนต้องขึ้นประวัติ แม้ของกำลังถูกยืม",
+);
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "ON_LOAN", reason: "ยกเลิกคำขอชำรุด 5 ชิ้น · ตรวจแล้วใช้ได้" }),
+  false,
+  "ยกเลิกคำขอชำรุดต้องขึ้นประวัติ",
+);
+// The adjust mirror stays hidden — its StockAdjustment row prints the same numbers.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "ON_LOAN", newStatus: "ON_LOAN", reason: "ปรับสต็อก: 76 → 71 บนชั้นวาง (รวม 163, ถูกเบิก 92)" }),
+  true,
+  "แถวคู่ของปรับสต๊อกยังต้องซ่อน",
+);
+// …but a count that moved nothing has no adjustment row to hide behind.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "AVAILABLE", reason: "ตรวจนับ: ตรงยอด 76 บนชั้นวาง" }),
+  false,
+  "ตรวจนับตรงยอดต้องขึ้นประวัติ",
+);
+
 // ── กิจกรรม / อื่นๆ never file without the free-text line ──
 // The label alone is not an answer; the text under it is the whole reason those two exist.
-const cart = { items: [{ itemId: "i1", quantity: 1 }], recipient: "ครูสมชาย" };
+const cart = { items: [{ itemId: "i1", quantity: 1 }] };
 const ok = (input: object) => dispenseRequestSchema.safeParse(input).success;
 
 assert.equal(ok({ ...cart, usageType: "OTHER" }), false, "อื่นๆ ต้องมีรายละเอียด");
-assert.equal(ok({ ...cart, usageType: "OTHER", notes: "   " }), false, "ช่องว่างล้วนไม่นับ");
+assert.equal(ok({ ...cart, usageType: "OTHER", usageNote: "   " }), false, "ช่องว่างล้วนไม่นับ");
 assert.equal(ok({ ...cart, usageType: "ACTIVITY" }), false, "กิจกรรม ต้องระบุกิจกรรม");
-assert.equal(ok({ ...cart, usageType: "OTHER", notes: "ยกไปเก็บห้องพักครู" }), true);
-assert.equal(ok({ ...cart, usageType: "ACTIVITY", notes: "กีฬาสี" }), true);
+assert.equal(ok({ ...cart, usageType: "OTHER", usageNote: "ยกไปเก็บห้องพักครู" }), true);
+assert.equal(ok({ ...cart, usageType: "ACTIVITY", usageNote: "กีฬาสี" }), true);
+// เหตุผล has to be in usageNote — notes is only where the older rows happen to keep it, and a
+// cart that still posted it there would file an activity the usage report cannot name.
+assert.equal(ok({ ...cart, usageType: "ACTIVITY", notes: "กีฬาสี" }), false, "กิจกรรมต้องลง usageNote");
 
 // ── รายวิชา must name the course, not just the category ──
 // Same reasoning as the two above: "รายวิชา" on its own tells a reader nothing, and the
@@ -52,8 +83,22 @@ assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "   " }), false, "�
 assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101" }), true);
 assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101", usageNote: "การพยาบาลพื้นฐาน" }), true);
 // A course code tagging along on กิจกรรม is harmless — only COURSE requires one.
-assert.equal(ok({ ...cart, usageType: "ACTIVITY", notes: "กีฬาสี", courseCode: null }), true);
-// ตั้งใช้ในห้อง (station-in-room-dialog) sends no usageType at all — the rule must not catch it.
+assert.equal(ok({ ...cart, usageType: "ACTIVITY", usageNote: "กีฬาสี", courseCode: null }), true);
+// ตั้งใช้ในห้อง files as OTHER so no row is left without a usageType, but it never collects the
+// free-text line — its room is the reason. Without the INUSE arm of that refine, every
+// นำไปใช้งาน submitted from station-in-room-dialog would be rejected.
+assert.equal(
+  ok({ ...cart, usageType: "OTHER", usageNote: null, loanType: "INUSE", locationId: "loc-402" }),
+  true,
+  "นำไปใช้งานส่ง OTHER โดยไม่มีรายละเอียดได้",
+);
+// The exemption is scoped to INUSE only — a plain เบิก/ยืม picking อื่นๆ still owes the line.
+assert.equal(
+  ok({ ...cart, usageType: "OTHER", usageNote: null, loanType: "BORROW" }),
+  false,
+  "ยืมเลือกอื่นๆ ยังต้องระบุรายละเอียด",
+);
+// Rows written straight to the API without a usageType are still accepted for INUSE.
 assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true);
 
 // ── นำไปใช้งาน must name the room it moved stock to ──
@@ -62,8 +107,37 @@ assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true);
 assert.equal(ok({ ...cart, loanType: "INUSE" }), false, "INUSE ต้องระบุสถานที่");
 assert.equal(ok({ ...cart, loanType: "INUSE", locationId: null }), false, "INUSE ห้ามส่ง location ว่าง");
 // เบิก/ยืม don't move an item's registered room, so they never need one.
-assert.equal(ok({ ...cart, loanType: "BORROW" }), true, "ยืมไม่ต้องระบุสถานที่");
-assert.equal(ok(cart), true, "เบิกปกติไม่ต้องระบุสถานที่");
+assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101", loanType: "BORROW" }), true, "ยืมไม่ต้องระบุสถานที่");
+assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101" }), true, "เบิกปกติไม่ต้องระบุสถานที่");
+
+// ── เบิก/ยืม must say what it is for ──
+// The cart has always demanded this, but only in the browser: a row posted straight to the
+// API landed with usageType NULL, and EXEC has POST rights here. Those rows are why the
+// dashboard's usage stack ever needed a "ไม่ระบุ" band at all.
+assert.equal(ok(cart), false, "เบิกต้องเลือกการใช้งาน");
+assert.equal(ok({ ...cart, loanType: "BORROW" }), false, "ยืมก็ต้องเลือกการใช้งาน");
+assert.equal(ok({ ...cart, usageType: null, loanType: "BORROW" }), false, "null ไม่ใช่คำตอบ");
+// INUSE is the one exception, and not a loophole: its locationId is required (above), so the
+// room is the reason — dashboard-usage.ts files those rows under ตั้งใช้ในห้อง.
+assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true, "นำไปใช้งานไม่ต้องเลือกการใช้งาน");
+
+// ── loanType/dueAt are the ต้องคืน columns, and เบิกใช้ must not fill them ──
+// A consumable used to file as BORROW carrying the cart's due date. Every loan query AND-s a
+// dispenseType filter, so nothing showed it — the row just claimed to be a loan that would
+// never be returned. One cart submits both kinds at once, so this is decided per line.
+const DUE = new Date("2026-08-18T00:00:00Z");
+
+assert.deepEqual(loanFields("CONSUMABLE", false, DUE), { loanType: "CONSUME", dueAt: null }, "เบิกใช้ไม่ใช่การยืม");
+assert.deepEqual(loanFields("COUNT", false, DUE), { loanType: "BORROW", dueAt: DUE });
+assert.deepEqual(loanFields("ITEM", false, DUE), { loanType: "BORROW", dueAt: DUE });
+// นำไปใช้งาน is open-ended whatever the cart sent — the room is the record, not a due date.
+assert.deepEqual(loanFields("ITEM", true, DUE), { loanType: "INUSE", dueAt: null });
+assert.deepEqual(loanFields("COUNT", true, null), { loanType: "INUSE", dueAt: null });
+// INUSE never reaches a consumable (the dialog is durable-only) — if it ever does, เบิกใช้ wins:
+// a spent consumable has no room to sit in and no way back.
+assert.deepEqual(loanFields("CONSUMABLE", true, DUE), { loanType: "CONSUME", dueAt: null });
+// ยืมไม่ระบุกำหนดคืนได้ — null dueAt is a loan without a deadline, not a เบิกใช้.
+assert.deepEqual(loanFields("COUNT", false, null), { loanType: "BORROW", dueAt: null });
 
 // ── Coming back from IN_USE clears the room นำไปใช้งาน stamped on the piece ──
 const HOME = "loc-home";
@@ -84,5 +158,35 @@ assert.deepEqual(patch("ON_LOAN", "AVAILABLE", "loc-501"), {});
 // Not leaving IN_USE at all — nothing to undo.
 assert.deepEqual(patch("AVAILABLE", "IN_USE", "loc-501"), {});
 assert.deepEqual(patch("IN_USE", "IN_USE"), {});
+
+// ── เหตุผล is derived from the usage, not typed into a field of its own ──
+// Every เหตุผล label in the app comes out of here, so a wrong fallback order names the wrong
+// thing on the return screen — which is the one place someone acts on it.
+assert.equal(
+  recipientLabel({ usageType: "COURSE", courseCode: "578101", usageNote: "การพยาบาลพื้นฐาน" }),
+  "578101 การพยาบาลพื้นฐาน",
+);
+// Registrar was down at dispense time — the code is still an answer, the name is not required.
+assert.equal(recipientLabel({ usageType: "COURSE", courseCode: "578101" }), "578101");
+assert.equal(recipientLabel({ usageType: "ACTIVITY", usageNote: "กีฬาสี" }), "กีฬาสี");
+assert.equal(recipientLabel({ usageType: "OTHER", usageNote: "อ.สมชายขอ" }), "อ.สมชายขอ");
+// Rows written before เหตุผล moved to usageNote still read out of notes — no migration ran,
+// so dropping this fallback would blank the reason on every row already in the table.
+assert.equal(recipientLabel({ usageType: "ACTIVITY", notes: "กีฬาสี" }), "กีฬาสี");
+// นำไปใช้งาน has no usage block at all and writes its line straight into notes.
+assert.equal(recipientLabel({ notes: "ตั้งใช้ประจำห้อง 402" }), "ตั้งใช้ประจำห้อง 402");
+// The room นำไปใช้งาน used to fold into notes is dropped: the report prints เหตุผล one column
+// away from สถานที่, and a row that repeats its neighbour is noise, not a reason.
+assert.equal(recipientLabel({ notes: "ห้องที่ตั้ง: อาคาร 2 / ชั้น 3 / 305" }), null);
+assert.equal(recipientLabel({ notes: "ยืมเล่นๆ | ห้องที่ตั้ง: ไม่บอก / อะไร" }), "ยืมเล่นๆ");
+// usageNote wins when both are set: notes is the older copy, and the two can disagree.
+assert.equal(recipientLabel({ usageType: "ACTIVITY", usageNote: "กีฬาสี", notes: "ของเก่า" }), "กีฬาสี");
+// Legacy rows kept the name someone deliberately typed, and it wins over the usage.
+assert.equal(recipientLabel({ recipient: "ครูสมชาย", usageType: "COURSE", courseCode: "578101" }), "ครูสมชาย");
+// Blank is not a value — null lets every caller supply its own "ไม่ระบุ…" wording.
+assert.equal(recipientLabel({ recipient: "   ", usageType: "ACTIVITY", usageNote: " ", notes: " " }), null);
+assert.equal(recipientLabel({ usageType: null }), null);
+// นำไปใช้งาน files no usageType at all; the row is named by its ห้อง, not by this.
+assert.equal(recipientLabel({ usageType: null, notes: "ตั้งไว้ห้อง 402" }), "ตั้งไว้ห้อง 402");
 
 console.log("dispense-history: ok");

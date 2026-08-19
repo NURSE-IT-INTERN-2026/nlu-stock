@@ -56,6 +56,7 @@ interface HistoryRow {
   result: string;
   issue: string;
   cost: number;
+  attachmentUrls: string[];
   performer: string;
   performedAt: string;
 }
@@ -227,7 +228,7 @@ export default function MaintenancePage() {
 
           <div className="overflow-hidden rounded-2xl border bg-card">
             <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
-              <Table className="table-fixed">
+              <Table grid zebra className="table-fixed">
                 <TableHeader sticky>
                   <TableRow>
                     <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>
@@ -403,8 +404,21 @@ export default function MaintenancePage() {
                     <span className="font-medium">{rec.itemName}</span>
                   </div>
                   {rec.issue && <p className="mt-0.5 text-sm text-muted-foreground">{rec.issue}</p>}
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    โดย {rec.performer}{rec.cost > 0 ? ` · ฿${rec.cost.toLocaleString()}` : ""}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                    <span>ผู้บันทึก {rec.performer}</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{rec.cost > 0 ? `฿${rec.cost.toLocaleString()}` : "0.-"}</span>
+                    {rec.attachmentUrls?.map((url, i) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline underline-offset-2"
+                      >
+                        {url.toLowerCase().endsWith(".pdf") ? `PDF ${i + 1}` : `ไฟล์แนบ ${i + 1}`}
+                      </a>
+                    ))}
                   </div>
                 </div>
               ))}

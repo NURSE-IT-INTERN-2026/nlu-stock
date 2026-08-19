@@ -25,13 +25,27 @@ export function isLoanEdge(log: { previousStatus: ItemStatus; newStatus: ItemSta
   return LOANED.has(log.previousStatus) || LOANED.has(log.newStatus);
 }
 
+// The one same-status log that IS a duplicate: api/items/[id]/adjust writes it beside the
+// StockAdjustment that already prints the very same numbers. Matched on the reason it writes
+// there ("ปรับสต็อก: 71 → 76 บนชั้นวาง …") because nothing on the row distinguishes it — and
+// deliberately NOT on "ตรวจนับ: ตรงยอด …" / "ยืนยันพร้อมใช้งาน …", which have no adjustment
+// row of their own and would vanish from the history entirely.
+const ADJUST_MIRROR_REASON = /^(ปรับสต็อก|ตรวจนับ): \d+ → \d+/;
+
 /**
  * Whether an item's ประวัติ should drop this status log as a duplicate.
  * A loan edge that ends on DISPOSED is kept: ยกเลิกชุด retires a KIT set and hands its pieces
  * back, closing each one's นำไปใช้งาน record, and those ReturnRecords only say the pieces came
  * home — nothing else in the history would explain the set copy itself leaving.
+ *
+ * A same-status row is judged on its reason, not on the loan test: it is an annotation, not a
+ * transition, so no เบิก/รับคืน row was ever written in its place. Qty stock stamps its
+ * ส่งซ่อม / แก้ข้อมูลส่งซ่อม / ยกเลิกคำขอชำรุด onto exactly this shape (the item's own status,
+ * unchanged — 10 of 40 units at the shop does not move the item), and while the loan test ran
+ * on those rows every one of them was swallowed on any item that happened to be ON_LOAN.
  */
-export function isDuplicateOfLoanRow(log: { previousStatus: ItemStatus; newStatus: ItemStatus }): boolean {
+export function isDuplicateOfLoanRow(log: { previousStatus: ItemStatus; newStatus: ItemStatus; reason?: string | null }): boolean {
+  if (log.previousStatus === log.newStatus) return ADJUST_MIRROR_REASON.test(log.reason ?? "");
   return isLoanEdge(log) && log.newStatus !== ItemStatus.DISPOSED;
 }
 

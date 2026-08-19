@@ -170,7 +170,7 @@ export function TemplatesTab() {
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card overflow-x-auto">
-          <Table>
+          <Table grid zebra>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>ชื่อ</TableHead>

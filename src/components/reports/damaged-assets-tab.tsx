@@ -1,33 +1,37 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import {
   ReportFilters, defaultDateFilters, periodLabel,
   type FilterValues, type FilterConfig,
 } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
-import { ReportSummary } from "./report-summary";
+import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Wrench } from "lucide-react";
+import { SectionTitle, chipStyle, type Token } from "./report-kit";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
-import { STATUS_LABELS, STATUS_VARIANTS, type ItemStatus } from "@/lib/constants";
+import {
+  STATUS_LABELS, STATUS_VARIANTS, MAINT_RESULT_LABELS, labelFor, effectiveCode,
+  type ItemStatus, type MaintenanceResult,
+} from "@/lib/constants";
 
-const filterConfig: FilterConfig = {
-  dateRange: true,
-  statusOptions: [
-    { value: "DAMAGED", label: "ชำรุด" },
-    { value: "UNDER_REPAIR", label: "ซ่อมบำรุง" },
-    { value: "DISPOSED", label: "จำหน่าย" },
-    { value: "LOST", label: "สูญหาย" },
-  ],
-};
+const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
-interface Row {
+const venue = (v: "INTERNAL" | "EXTERNAL" | null) =>
+  v ? (v === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—";
+
+// ── ชำรุด / ตัดจำหน่าย — สถานะของพัสดุ ──────────────────────────────────────────
+
+interface DamageRow {
   id: string;
   code: string;
   name: string;
@@ -36,96 +40,97 @@ interface Row {
   location: string;
   reason: string;
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
+  value: number | null;
   changedAt: string;
 }
 
-interface Summary {
+interface DamageSummary {
   damaged: number;
   underRepair: number;
   writtenOff: number;
+  disposed: number;
+  lost: number;
+  writtenOffValue: number;
+  pricedWriteOffs: number;
+  unpricedWriteOffs: number;
 }
 
-// /alerts และ /items ตอบได้แล้วว่า "ชิ้นไหนพัง" — tab นี้จึงตอบสิ่งที่อีกสองที่ตอบไม่ได้:
-// พังเพราะอะไร ส่งซ่อมในหรือนอก และเกิดขึ้นเมื่อไหร่. คอลัมน์เรียงตามลำดับนั้น.
-const columns: Column<Row>[] = [
-  {
-    key: "changedAt",
-    header: "แจ้งเมื่อ",
-    // แถวที่ไม่มี statusLog (ของที่ import เข้ามาพร้อมสถานะชำรุด) ไม่มีวันที่ให้แสดง
-    render: (r) => (r.changedAt ? fmtDate(new Date(r.changedAt), TH_DATE) : "—"),
-  },
+const dateCol: Column<DamageRow> = {
+  key: "changedAt",
+  header: "แจ้งเมื่อ",
+  // แถวที่ไม่มี statusLog (ของที่ import เข้ามาพร้อมสถานะชำรุด) ไม่มีวันที่ให้แสดง
+  render: (r) => (r.changedAt ? fmtDate(new Date(r.changedAt), TH_DATE) : "—"),
+};
+
+// /alerts และ /items ตอบได้แล้วว่า "ชิ้นไหนพังอยู่ตอนนี้" — ส่วนนี้จึงเป็นประวัติย้อนหลัง:
+// ช่วงที่เลือกมีอะไรพังบ้าง พังเพราะอะไร ส่งซ่อมในหรือนอก. คอลัมน์เรียงตามลำดับนั้น.
+const damagedColumns: Column<DamageRow>[] = [
+  dateCol,
+  { key: "code", header: "รหัสพัสดุ" },
+  { key: "name", header: "รายการพัสดุ" },
+  { key: "reason", header: "เหตุผล", render: (r) => r.reason || "—" },
+  { key: "repairVenue", header: "ส่งซ่อมที่", render: (r) => venue(r.repairVenue) },
+  { key: "categoryName", header: "หมวดหมู่" },
+  { key: "location", header: "สถานที่", render: (r) => r.location || "—" },
+];
+
+const writeOffColumns: Column<DamageRow>[] = [
+  { ...dateCol, header: "ตัดออกเมื่อ" },
   { key: "code", header: "รหัสพัสดุ" },
   { key: "name", header: "รายการพัสดุ" },
   {
     key: "status",
     header: "สถานะ",
-    render: (r) => <Badge variant={STATUS_VARIANTS[r.status] ?? "default"}>{STATUS_LABELS[r.status] ?? r.status.replace(/_/g, " ")}</Badge>,
+    render: (r) => <Badge variant={STATUS_VARIANTS[r.status] ?? "default"}>{STATUS_LABELS[r.status] ?? r.status}</Badge>,
   },
   { key: "reason", header: "เหตุผล", render: (r) => r.reason || "—" },
   {
-    key: "repairVenue",
-    header: "ส่งซ่อมที่",
-    render: (r) => (r.repairVenue ? (r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน") : "—"),
+    key: "value",
+    header: "มูลค่าประมาณการ",
+    className: "text-right",
+    render: (r) => (r.value === null ? "—" : baht(r.value)),
   },
   { key: "categoryName", header: "หมวดหมู่" },
-  { key: "location", header: "สถานที่", render: (r) => r.location || "—" },
 ];
 
-export function DamagedAssetsTab() {
+function DamageSection({
+  statuses, token, columns, empty, stats,
+}: {
+  statuses: string;
+  token: Token;
+  columns: Column<DamageRow>[];
+  empty: string;
+  stats: (s: DamageSummary, f: FilterValues) => SummaryStat[];
+}) {
   const isMobile = useIsMobile();
   const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summary, setSummary] = useState<DamageSummary | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
-  // เดิม tab นี้ไม่ส่ง page เลยทั้งที่ route แบ่งหน้าอยู่ — เห็นแค่หน้าแรกโดยไม่มีอะไรบอก
-  // ว่ายังมีต่อ. usePagedList ทำให้ตัวเลข total กับสิ่งที่แสดงตรงกัน.
   const fetchPage = useCallback(async (p: number) => {
-    const params: Record<string, string> = { page: String(p), perPage: String(perPage) };
+    const params: Record<string, string> = { page: String(p), perPage: String(perPage), status: statuses };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    if (filters.status) params.status = filters.status;
     const json = (await getReport("damaged-assets", params)) as {
-      items: Row[]; total: number; summary: Summary;
+      items: DamageRow[]; total: number; summary: DamageSummary;
     };
     setSummary(json.summary);
     return { items: json.items, total: json.total };
-  }, [filters, perPage]);
+  }, [filters, perPage, statuses]);
 
   const {
     items: data, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
-  } = usePagedList<Row>({ fetchPage, pageSize: perPage, isMobile });
+  } = usePagedList<DamageRow>({ fetchPage, pageSize: perPage, isMobile });
 
   return (
-    <div className="space-y-4 pb-2">
+    <>
       <ReportFilters
-        config={filterConfig}
+        config={{ dateRange: true } satisfies FilterConfig}
         values={filters}
         onChange={setFilters}
-        actions={<ExportButtons reportType="damaged-assets" filters={filters} />}
+        actions={<ExportButtons reportType="damaged-assets" filters={{ ...filters, status: statuses }} />}
       />
-      {summary && (
-        <ReportSummary
-          stats={[
-            {
-              label: "ชำรุด รอส่งซ่อม",
-              value: summary.damaged.toLocaleString(),
-              hint: `${periodLabel(filters)} · นับเป็นชิ้น`,
-              tone: summary.damaged > 0 ? "warning" : "default",
-            },
-            {
-              label: "กำลังซ่อม",
-              value: summary.underRepair.toLocaleString(),
-              hint: "ส่งซ่อมแล้ว ยังไม่กลับเข้าคลัง",
-            },
-            {
-              label: "จำหน่าย / สูญหาย",
-              value: summary.writtenOff.toLocaleString(),
-              hint: "ตัดออกจากคลังถาวร",
-              tone: summary.writtenOff > 0 ? "danger" : "default",
-            },
-          ]}
-        />
-      )}
+      {summary && <ReportSummary stats={stats(summary, filters)} />}
       <ReportDataTable
         columns={columns}
         data={data}
@@ -133,7 +138,8 @@ export function DamagedAssetsTab() {
         // A page of items can carry more rows than perPage (one tracked item = many damaged
         // copies), so the table must render the page whole and never re-paginate it.
         pageSize={Math.max(1, data.length)}
-        emptyMessage="ไม่มีพัสดุชำรุดในช่วงนี้"
+        emptyMessage={empty}
+        token={token}
       />
       {isMobile ? (
         data.length > 0 && (
@@ -155,6 +161,223 @@ export function DamagedAssetsTab() {
           </p>
           <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
         </>
+      )}
+    </>
+  );
+}
+
+// ── ส่งซ่อม — บันทึกการซ่อม ไม่ใช่สถานะ ─────────────────────────────────────────
+
+interface RepairRow {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  subCode: string | null;
+  subCount: number;
+  result: string;
+  issue: string;
+  cost: number;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
+  performer: string;
+  performedAt: string;
+}
+
+interface RepairSummary {
+  corrective: number;
+  totalCost: number;
+  costedRecords: number;
+}
+
+const repairColumns: Column<RepairRow>[] = [
+  { key: "performedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.performedAt), TH_DATE) },
+  { key: "itemCode", header: "รหัสพัสดุ", render: (r) => effectiveCode(r.itemCode, r.subCode, r.subCount) },
+  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "issue", header: "อาการ / สิ่งที่ทำ", render: (r) => r.issue || "—" },
+  {
+    key: "result",
+    header: "ผลการดำเนินการ",
+    render: (r) => <Badge variant="secondary">{labelFor(MAINT_RESULT_LABELS, r.result as MaintenanceResult)}</Badge>,
+  },
+  { key: "cost", header: "ค่าใช้จ่าย", className: "text-right", render: (r) => (r.cost > 0 ? baht(r.cost) : "—") },
+  { key: "repairVenue", header: "ส่งซ่อมที่", render: (r) => venue(r.repairVenue) },
+  { key: "performer", header: "ผู้ดำเนินการ" },
+];
+
+/**
+ * งานซ่อม (MaintenanceRecord type = CORRECTIVE) เคยอยู่ปนกับรอบตรวจบำรุงใน tab ประวัติบำรุงรักษา
+ * ทั้งที่คนละเรื่องกัน — รอบตรวจคืองานตามแผน ส่วนงานซ่อมคือผลของการชำรุดที่อยู่ในหน้านี้.
+ * ย้ายมาแล้วสองที่จึงตอบคนละคำถามเต็มๆ และค่าซ่อมมาอยู่ข้างของที่พัง.
+ */
+function RepairSection() {
+  const isMobile = useIsMobile();
+  const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
+  const [summary, setSummary] = useState<RepairSummary | null>(null);
+  const perPage = PAGE_SIZE.DEFAULT;
+
+  const fetchPage = useCallback(async (p: number) => {
+    const params: Record<string, string> = {
+      page: String(p), perPage: String(perPage), maintenanceType: "CORRECTIVE",
+    };
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    const json = (await getReport("maintenance-history", params)) as {
+      records: RepairRow[]; total: number; summary: RepairSummary;
+    };
+    setSummary(json.summary);
+    return { items: json.records, total: json.total };
+  }, [filters, perPage]);
+
+  const {
+    items: data, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
+  } = usePagedList<RepairRow>({ fetchPage, pageSize: perPage, isMobile });
+
+  return (
+    <>
+      <ReportFilters
+        config={{ dateRange: true } satisfies FilterConfig}
+        values={filters}
+        onChange={setFilters}
+        actions={
+          <ExportButtons reportType="maintenance-history" filters={{ ...filters, maintenanceType: "CORRECTIVE" }} />
+        }
+      />
+      {summary && (
+        <ReportSummary
+          stats={[
+            {
+              label: "ครั้งที่ส่งซ่อม",
+              value: total.toLocaleString(),
+              hint: periodLabel(filters),
+              token: "repair",
+            },
+            // ฿0 อ่านว่า "ซ่อมฟรี" ไม่ใช่ "ยังไม่ได้กรอกราคา" — ไม่มีแถวไหนมีค่าใช้จ่ายเลยจึงเป็น —
+            {
+              label: "ค่าซ่อมรวม",
+              value: summary.costedRecords > 0 ? baht(summary.totalCost) : "—",
+              hint: summary.costedRecords > 0
+                ? `จาก ${summary.costedRecords.toLocaleString()} จาก ${total.toLocaleString()} รายการที่ระบุค่าใช้จ่าย`
+                : `ยังไม่ได้กรอกค่าใช้จ่ายสักรายการ (0 จาก ${total.toLocaleString()})`,
+              token: summary.costedRecords > 0 ? "value" : undefined,
+            },
+          ]}
+        />
+      )}
+      <ReportDataTable
+        columns={repairColumns}
+        data={data}
+        loading={loading}
+        pageSize={isMobile ? Math.max(1, data.length) : perPage}
+        emptyMessage="ไม่มีงานซ่อมในช่วงนี้"
+        token="repair"
+      />
+      {isMobile ? (
+        data.length > 0 && (
+          <Pagination
+            mode="loadMore"
+            shown={data.length}
+            total={total}
+            hasMore={hasNext}
+            isLoading={isLoadingMore}
+            onLoadMore={loadMore}
+          />
+        )
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground py-1">
+            หน้า {page} จาก {totalPages} ({total} รายการ)
+          </p>
+          <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
+        </>
+      )}
+    </>
+  );
+}
+
+// ── Tab ────────────────────────────────────────────────────────────────────────
+
+const SEGMENTS = ["damaged", "repair", "writeoff"] as const;
+type Segment = (typeof SEGMENTS)[number];
+
+const SEGMENT_META: Record<Segment, { label: string; token: Token; subtitle: string }> = {
+  damaged: { label: "ชำรุด", token: "damage", subtitle: "ช่วงที่เลือกมีอะไรพังบ้าง และพังเพราะอะไร" },
+  repair: { label: "ส่งซ่อม", token: "repair", subtitle: "งานซ่อมที่ทำไปแล้ว ซ่อมที่ไหน และจ่ายไปเท่าไร" },
+  writeoff: { label: "ตัดจำหน่าย", token: "dispose", subtitle: "ของที่ตัดออกจากคลังถาวร และมูลค่าที่เสียไป" },
+};
+
+export function DamagedAssetsTab() {
+  const [segment, setSegment] = useState<Segment>("damaged");
+  const meta = SEGMENT_META[segment];
+
+  return (
+    <div className="space-y-4 pb-2">
+      <SectionTitle token={meta.token} icon={Wrench} title="ชำรุด & ส่งซ่อม" subtitle={meta.subtitle} />
+
+      {/* segment เป็น state ในหน้านี้เอง ไม่ขึ้น URL: ?kind= ถูก tab ออกจากคลังจองไว้แล้ว และทุก
+          tab ของหน้ารายงานถูก mount พร้อมกัน — ใช้ชื่อซ้ำจะเด้งข้ามกัน */}
+      <Tabs value={segment} onValueChange={(v) => setSegment(v as Segment)}>
+        <TabsList variant="chip" className="w-full min-w-0 sm:w-auto">
+          {SEGMENTS.map((s) => (
+            <TabsTrigger key={s} value={s} className="min-w-0" style={chipStyle(SEGMENT_META[s].token)}>
+              {SEGMENT_META[s].label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {segment === "damaged" && (
+        <>
+          {/* หน้านี้เป็นประวัติ ไม่ใช่คิวงาน — ที่ปิดงานได้จริงคือ /alerts จึงชี้ไปตรงนั้นแทนที่จะ
+              ทำปุ่มจัดการซ้ำอีกชุด */}
+          <p className="text-sm text-muted-foreground">
+            ต้องการปิดงานที่ค้างอยู่ตอนนี้{" "}
+            <Link href="/alerts" className="text-primary hover:underline">
+              ไปจัดการที่แจ้งเตือน →
+            </Link>
+          </p>
+          <DamageSection
+            statuses="DAMAGED"
+            token="damage"
+            columns={damagedColumns}
+            empty="ไม่มีพัสดุชำรุดในช่วงนี้"
+            stats={(s, f) => [
+              {
+                label: "ชิ้นที่ชำรุด",
+                value: s.damaged.toLocaleString(),
+                hint: `${periodLabel(f)} · นับเป็นชิ้น`,
+                token: s.damaged > 0 ? "damage" : undefined,
+              },
+            ]}
+          />
+        </>
+      )}
+
+      {segment === "repair" && <RepairSection />}
+
+      {segment === "writeoff" && (
+        <DamageSection
+          statuses="DISPOSED,LOST"
+          token="dispose"
+          columns={writeOffColumns}
+          empty="ไม่มีของที่ตัดจำหน่ายในช่วงนี้"
+          stats={(s, f) => [
+            {
+              label: "ตัดจำหน่าย / สูญหาย",
+              value: s.writtenOff.toLocaleString(),
+              hint: `${periodLabel(f)} · จำหน่าย ${s.disposed.toLocaleString()} · สูญหาย ${s.lost.toLocaleString()}`,
+              token: s.writtenOff > 0 ? "dispose" : undefined,
+            },
+            // ราคาเก็บที่ระดับรายการ ไม่ใช่รายชิ้น — ของที่ซื้อหลายรอบคนละราคา ระบบรู้ราคาเดียว
+            // ยอดนี้จึงเป็นประมาณการเสมอ และต้องเขียนกำกับไว้ ไม่ให้ถูกอ่านเป็นยอดที่จ่ายจริง
+            {
+              label: "มูลค่าที่เสียไป (ประมาณการ)",
+              value: s.pricedWriteOffs > 0 ? baht(s.writtenOffValue) : "—",
+              hint: s.pricedWriteOffs > 0
+                ? `ประมาณการจากราคาต่อชิ้น · คิดจาก ${s.pricedWriteOffs.toLocaleString()} จาก ${s.writtenOff.toLocaleString()} ชิ้น`
+                : `ยังไม่ได้กรอกราคาสักรายการ (0 จาก ${s.writtenOff.toLocaleString()} ชิ้น)`,
+              token: s.pricedWriteOffs > 0 ? "value" : undefined,
+            },
+          ]}
+        />
       )}
     </div>
   );

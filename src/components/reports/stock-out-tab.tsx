@@ -8,9 +8,10 @@ import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { DispenseEventDialog } from "./dispense-event-dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ShoppingCart, ClipboardList, MapPin } from "lucide-react";
+import { Pill, SectionTitle, chipStyle, type Token } from "./report-kit";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { getReport } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -67,22 +68,21 @@ interface Summary {
   overdueUnits: number;
 }
 
-const pill = "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium";
-
-function loanStatus(e: DispenseEvent): { label: string; cls: string } {
+function loanStatus(e: DispenseEvent): { label: string; token?: Token } {
   const resolved = e.totalQty - e.outstanding;
-  if (e.outstanding <= 0) return { label: "คืนครบ", cls: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-900" };
-  if (resolved > 0) return { label: `คืนบางส่วน ${resolved}/${e.totalQty}`, cls: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-900" };
-  return { label: "ยังไม่คืน", cls: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700" };
+  if (e.outstanding <= 0) return { label: "คืนครบ", token: "ready" };
+  if (resolved > 0) return { label: `คืนบางส่วน ${resolved}/${e.totalQty}`, token: "repair" };
+  // ยังไม่คืน ที่ยังไม่ถึงกำหนดไม่ใช่ปัญหา — ปล่อยเป็นสีเทา ให้สีไปอยู่กับแถวที่ต้องตามจริง
+  return { label: "ยังไม่คืน" };
 }
 
 // กำหนดคืน — เกินกำหนด / ใกล้ครบ (≤3 วัน). เดิมอยู่แต่ใน tab ยืมค้าง ทำให้การ์ดใบเดียวกัน
 // บอกว่าเลยกำหนดใน tab หนึ่งแต่เงียบในอีก tab หนึ่ง.
-function dueAlert(dueAt: string | null, resolved: boolean): { label: string; cls: string } | null {
+function dueAlert(dueAt: string | null, resolved: boolean): { label: string; token: Token } | null {
   if (!dueAt || resolved) return null;
   const days = (new Date(dueAt).getTime() - Date.now()) / 86_400_000;
-  if (days < 0) return { label: "เกินกำหนดคืน", cls: "bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200 dark:border-red-900" };
-  if (days <= 3) return { label: "ใกล้ครบกำหนด", cls: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-900" };
+  if (days < 0) return { label: "เกินกำหนดคืน", token: "damage" };
+  if (days <= 3) return { label: "ใกล้ครบกำหนด", token: "repair" };
   return null;
 }
 
@@ -91,11 +91,11 @@ function LoanStatus({ e }: { e: DispenseEvent }) {
   const alert = dueAlert(e.head.dueAt, e.outstanding === 0);
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      {alert && <span className={cn(pill, alert.cls)}>{alert.label}</span>}
+      {alert && <Pill token={alert.token}>{alert.label}</Pill>}
       {/* "เกินกำหนดคืน" already says it is not back; the plain "ยังไม่คืน" beside it
           is the same fact twice. คืนบางส่วน n/m still earns its place. */}
       {!(alert && status.label === "ยังไม่คืน") && (
-        <span className={cn(pill, status.cls)}>{status.label}</span>
+        <Pill token={status.token}>{status.label}</Pill>
       )}
     </span>
   );
@@ -105,26 +105,25 @@ function LoanStatus({ e }: { e: DispenseEvent }) {
 // "ตอนนี้ของยังอยู่ที่ห้องนั้นไหม" ไม่ใช่ "คืนหรือยัง".
 function InUseStatus({ e }: { e: DispenseEvent }) {
   if (e.outstanding <= 0) {
-    return <span className={cn(pill, "bg-muted text-muted-foreground border-border")}>กลับเข้าคลังแล้ว</span>;
+    return <Pill token="stockin">กลับเข้าคลังแล้ว</Pill>;
   }
   return (
-    <span className={cn(pill, "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-900")}>
+    <Pill token="inuse">
       {e.outstanding < e.totalQty ? `อยู่ที่ห้อง ${e.outstanding}/${e.totalQty}` : "อยู่ที่ห้อง"}
-    </span>
+    </Pill>
   );
 }
 
 const num = "text-right tabular-nums";
 
-// ผู้รับ/ผู้ยืม เป็นคอลัมน์เดียวกัน ต่างแค่คำเรียกตาม segment
-const recipientCol = (header: string): Column<DispenseEvent> => ({
-  key: "recipient",
-  header,
-  render: (e) => e.head.recipient ?? `ไม่ระบุ${header}`,
-  className: "font-medium",
-});
-
 const COL = {
+  // เหตุผล — เบิกไปทำอะไร. ไม่ใช่ "ผู้รับ" อีกแล้ว: ค่าที่อยู่ในช่องนี้คือวิชา/กิจกรรม
+  // (lib/constants recipientLabel) ไม่ใช่ชื่อคน และคนดูรายงาน monitor จากการใช้งาน ไม่ใช่จากคน.
+  reason: {
+    key: "recipient", header: "เหตุผล",
+    render: (e: DispenseEvent) => e.head.recipient ?? "—",
+    className: "font-medium",
+  },
   location: {
     key: "location", header: "สถานที่",
     render: (e: DispenseEvent) => e.head.location ?? "ไม่ระบุที่ตั้ง",
@@ -142,9 +141,15 @@ const COL = {
 } satisfies Record<string, Column<DispenseEvent>>;
 
 interface KindSpec {
+  /** สีประจำ segment — chip, หัวตาราง, การ์ดตัวเลข และไอคอนหัวเรื่องใช้ตัวเดียวกันหมด */
+  token: Token;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  /** ประโยคเดียวที่บอกว่า segment นี้ตอบคำถามอะไร — เดิมอยู่ที่ระดับหน้า จึงไม่เปลี่ยนตาม segment */
+  subtitle: string;
   columns: Column<DispenseEvent>[];
   filters: FilterConfig;
-  /** ป้ายของคอลัมน์แรก — ป็อปอัพใช้คำเดียวกันเพื่อไม่ให้ตารางกับหัวป็อปอัพเรียกคนละอย่าง */
+  /** ป้ายของคอลัมน์ที่ตั้งชื่อแถว — ป็อปอัพใช้คำเดียวกันเพื่อไม่ให้ตารางกับหัวป็อปอัพเรียกคนละอย่าง */
   headerLabel: string;
   status?: (e: DispenseEvent) => React.ReactNode;
   stats: (s: Summary, f: FilterValues) => SummaryStat[];
@@ -155,26 +160,36 @@ interface KindSpec {
 
 const baseFilters: FilterConfig = { dateRange: true, staff: true, usageTypes: true };
 
+// การใช้งาน ก่อน เหตุผล ทุก segment: คนอ่านรายงาน monitor จาก "ของถูกเอาไปใช้ทำอะไร" ก่อนเสมอ
+// แล้วค่อยเจาะว่าอันไหน — ประเภทกว้างๆ 3 ค่าจึงมาก่อน ตามด้วยบรรทัดที่ระบุตัวจริง.
 const KINDS: Record<DispenseKind, KindSpec> = {
   consume: {
-    headerLabel: "ผู้รับ",
-    columns: [recipientCol("ผู้รับ"), COL.date, COL.staff, COL.usage, COL.itemCount, COL.qty],
-    filters: { ...baseFilters, recipientSearch: "ค้นหาผู้รับ" },
+    token: "issue",
+    icon: ShoppingCart,
+    title: "เบิกใช้ — ของสิ้นเปลือง",
+    subtitle: "ของที่จ่ายออกไปแล้วไม่มีวันกลับเข้าคลัง — ใครเบิก เอาไปใช้กับอะไร",
+    headerLabel: "เหตุผล",
+    columns: [COL.usage, COL.reason, COL.date, COL.staff, COL.itemCount, COL.qty],
+    filters: { ...baseFilters, recipientSearch: "ค้นหาวิชา / กิจกรรม / เหตุผล" },
     emptyMessage: "ไม่มีการเบิกใช้ในช่วงนี้",
     exportType: () => "dispense-history",
     stats: (s, f) => [
-      { label: "ใบเบิกในช่วงนี้", value: s.events.toLocaleString(), hint: `${periodLabel(f)} · นับเป็นครั้ง ไม่ใช่รายบรรทัด` },
-      { label: "จ่ายออกทั้งหมด", value: s.units.toLocaleString(), hint: "รวมทุกรายการ นับเป็นหน่วย" },
+      { label: "ใบเบิกในช่วงนี้", value: s.events.toLocaleString(), hint: `${periodLabel(f)} · นับเป็นครั้ง ไม่ใช่รายบรรทัด`, token: "issue" },
+      { label: "จ่ายออกทั้งหมด", value: s.units.toLocaleString(), hint: "รวมทุกรายการ นับเป็นหน่วย", token: "issue" },
     ],
   },
   borrow: {
-    headerLabel: "ผู้ยืม",
-    columns: [recipientCol("ผู้ยืม"), COL.date, COL.staff, COL.usage, COL.itemCount, COL.qty, COL.due,
+    token: "borrow",
+    icon: ClipboardList,
+    title: "ยืม — ยืมอะไรออกไป คืนครบหรือยัง",
+    subtitle: "ติดตามการคืน: คืนครบ / คืนบางส่วน / เกินกำหนดคืน",
+    headerLabel: "เหตุผล",
+    columns: [COL.usage, COL.reason, COL.date, COL.staff, COL.itemCount, COL.qty, COL.due,
       { key: "status", header: "สถานะ", render: (e) => <LoanStatus e={e} /> }],
     status: (e) => <LoanStatus e={e} />,
     filters: {
       ...baseFilters,
-      recipientSearch: "ค้นหาผู้ยืม",
+      recipientSearch: "ค้นหาวิชา / กิจกรรม / เหตุผล",
       statusOptions: [
         { value: "open", label: "ยังไม่คืน" },
         { value: "overdue", label: "เกินกำหนดคืน" },
@@ -183,16 +198,23 @@ const KINDS: Record<DispenseKind, KindSpec> = {
     emptyMessage: "ไม่มีการยืมในช่วงนี้",
     exportType: (f) => (f.status ? "outstanding-loans" : "dispense-history"),
     stats: (s, f) => [
-      { label: "การยืมในช่วงนี้", value: s.events.toLocaleString(), hint: `${periodLabel(f)} · นับเป็นครั้ง ไม่ใช่รายบรรทัด` },
-      { label: "ยังไม่คืน", value: s.openEvents.toLocaleString(), hint: `ค้าง ${s.openUnits.toLocaleString()} หน่วย`, tone: s.openEvents > 0 ? "warning" : "default" },
-      { label: "เกินกำหนดคืน", value: s.overdueEvents.toLocaleString(), hint: `ค้าง ${s.overdueUnits.toLocaleString()} หน่วย`, tone: s.overdueEvents > 0 ? "danger" : "default" },
+      { label: "การยืมในช่วงนี้", value: s.events.toLocaleString(), hint: `${periodLabel(f)} · นับเป็นครั้ง ไม่ใช่รายบรรทัด`, token: "borrow" },
+      // ศูนย์คือข่าวดี — การ์ดที่ไม่มีอะไรค้างจึงไม่ต้องย้อมสี ให้สีเหลือไว้กับตัวเลขที่ต้องทำอะไรต่อ
+      { label: "ยังไม่คืน", value: s.openEvents.toLocaleString(), hint: `ค้าง ${s.openUnits.toLocaleString()} หน่วย`, token: s.openEvents > 0 ? "repair" : undefined },
+      { label: "เกินกำหนดคืน", value: s.overdueEvents.toLocaleString(), hint: `ค้าง ${s.overdueUnits.toLocaleString()} หน่วย`, token: s.overdueEvents > 0 ? "damage" : undefined },
     ],
   },
   inuse: {
+    token: "inuse",
+    icon: MapPin,
+    title: "นำไปใช้งาน — ของอยู่ที่ห้องไหน",
+    subtitle: "ของที่ตั้งไว้ใช้งานประจำที่ ไม่มีกำหนดคืน — กลับเข้าคลังทางหน้าคืนเข้าคลัง",
     headerLabel: "สถานที่",
     // ไม่มีคอลัมน์การใช้งาน: นำไปใช้งานไม่เคยบันทึก usageType (station-in-room-dialog ไม่ส่ง)
-    // ทุกแถวจึงเป็น "—" เหมือนกันหมด. และไม่มีคอลัมน์ "รายการ": dialog ส่งทีละชิ้น ค่าเป็น 1 ตลอด.
-    columns: [COL.location, COL.date, COL.staff, COL.qty,
+    // ทุกแถวจึงเป็น "—" เหมือนกันหมด — และตัว action เองก็บอกอยู่แล้วว่าเอาไปตั้งใช้ที่ห้อง.
+    // เหตุผล ยังมี: มันคือช่องในไดอะล็อก ซึ่งตกมาทาง notes (lib/constants recipientLabel).
+    // และไม่มีคอลัมน์ "รายการ": dialog ส่งทีละชิ้น ค่าเป็น 1 ตลอด.
+    columns: [COL.location, COL.reason, COL.date, COL.staff, COL.qty,
       { key: "status", header: "สถานะ", render: (e) => <InUseStatus e={e} /> }],
     status: (e) => <InUseStatus e={e} />,
     // ponytail: ไม่มีช่องค้นหา — คอลัมน์แรกของ segment นี้คือ location ไม่ใช่ recipient
@@ -205,8 +227,8 @@ const KINDS: Record<DispenseKind, KindSpec> = {
     emptyMessage: "ไม่มีการนำไปใช้งานในช่วงนี้",
     exportType: () => "dispense-history",
     stats: (s, f) => [
-      { label: "นำไปใช้งานในช่วงนี้", value: s.events.toLocaleString(), hint: periodLabel(f) },
-      { label: "ยังอยู่ข้างนอก", value: s.openEvents.toLocaleString(), hint: `${s.openUnits.toLocaleString()} หน่วยยังไม่กลับเข้าคลัง`, tone: s.openEvents > 0 ? "warning" : "default" },
+      { label: "นำไปใช้งานในช่วงนี้", value: s.events.toLocaleString(), hint: periodLabel(f), token: "inuse" },
+      { label: "ยังอยู่ข้างนอก", value: s.openEvents.toLocaleString(), hint: `${s.openUnits.toLocaleString()} หน่วยยังไม่กลับเข้าคลัง`, token: s.openEvents > 0 ? "inuse" : undefined },
     ],
   },
 };
@@ -279,10 +301,24 @@ export function StockOutTab() {
 
   return (
     <div className="space-y-4 pb-2">
-      <Tabs value={kind} onValueChange={(v) => selectKind(v as string)}>
-        <TabsList className="w-full min-w-0 sm:w-auto">
+      <SectionTitle
+        token={spec.token}
+        icon={spec.icon}
+        title={spec.title}
+        subtitle={spec.subtitle}
+      />
+
+      {/* Sticky on phones only. Switching segment is the thing people do over and over on a
+          phone, and it was the one control that scrolled away the moment they started reading.
+          top-16 clears the app header, which is sticky at h-16 there. */}
+      <Tabs
+        value={kind}
+        onValueChange={(v) => selectKind(v as string)}
+        className="sticky top-16 z-20 -mx-4 bg-background px-4 py-2 md:static md:mx-0 md:bg-transparent md:p-0"
+      >
+        <TabsList variant="chip" className="w-full min-w-0 sm:w-auto">
           {DISPENSE_KINDS.map((k) => (
-            <TabsTrigger key={k} value={k} className="min-w-0 px-3.5">
+            <TabsTrigger key={k} value={k} className="min-w-0" style={chipStyle(KINDS[k].token)}>
               {DISPENSE_KIND_LABELS[k]}
             </TabsTrigger>
           ))}
@@ -311,6 +347,7 @@ export function StockOutTab() {
         pageSize={Math.max(events.length, 1)}
         emptyMessage={filters.status ? "ไม่มีรายการค้างอยู่ในช่วงนี้" : spec.emptyMessage}
         onRowClick={setOpenEvent}
+        token={spec.token}
       />
 
       <DispenseEventDialog

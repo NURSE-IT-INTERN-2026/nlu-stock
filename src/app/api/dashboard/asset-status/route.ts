@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { STATUS_LABELS, STATUS_COLORS, USAGE_STATUS_ORDER } from "@/lib/constants";
-import { parseScope, scopeItemWhere } from "@/lib/dashboard-scope";
+import { parseScope, scopeItemWhere } from "@/lib/dashboard-scope-where";
 
 // Per-piece status breakdown for tracked (durable/asset) items. Same six-status set as the
 // "สัดส่วนการใช้งาน" convention (USAGE_STATUS_ORDER) — LOST/DISPOSED are written off, excluded.

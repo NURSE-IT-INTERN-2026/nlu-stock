@@ -31,15 +31,14 @@ test("dispense kinds partition the table, and SQL agrees with Prisma", { skip: !
   // makes it short, a row caught by two makes it long.
   assert.equal(summed, total, "สามชนิดรวมกันต้องเท่ากับ dispense_records ทั้งตาราง");
 
-  // The partition must survive the legacy rows too: loanType null predates the column and is
-  // treated as BORROW everywhere. Prove at least one arm actually matched something.
   if (total > 0) assert.ok(summed > 0, "ไม่มีแถวไหนเข้าชนิดใดเลย — predicate พัง");
 
-  // Guard the NULL-unsafe trap this file's comment warns about: `not: "INUSE"` would drop
-  // every legacy row, so the legacy count must land inside consume+borrow, never nowhere.
-  const legacy = await prisma.dispenseRecord.count({ where: { loanType: null } });
-  const legacyInKinds = await prisma.dispenseRecord.count({
-    where: { AND: [{ loanType: null }, { OR: [kindWhere("consume"), kindWhere("borrow")] as Prisma.DispenseRecordWhereInput[] }] },
+  // เบิกใช้ used to be written as NULL, which every predicate had to spell out an OR for.
+  // The column is NOT NULL now, so the check that replaces it is the one that matters going
+  // forward: every CONSUME row must land in consume or borrow, never fall through all three.
+  const consumeRows = await prisma.dispenseRecord.count({ where: { loanType: "CONSUME" } });
+  const consumeInKinds = await prisma.dispenseRecord.count({
+    where: { AND: [{ loanType: "CONSUME" }, { OR: [kindWhere("consume"), kindWhere("borrow")] as Prisma.DispenseRecordWhereInput[] }] },
   });
-  assert.equal(legacyInKinds, legacy, "แถวเก่า (loanType null) ต้องถูกนับเป็นเบิกใช้หรือยืม");
+  assert.equal(consumeInKinds, consumeRows, "แถว CONSUME ต้องถูกนับเป็นเบิกใช้หรือยืม");
 });

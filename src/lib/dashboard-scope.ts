@@ -1,52 +1,43 @@
-import type { DispenseType } from "@/generated/prisma/enums";
-import type { Prisma } from "@/generated/prisma/client";
+import { parseDispenseKind, type DispenseKind } from "@/lib/dispense-kind";
 
-// The dashboard is split by how a thing is counted, because that is what decides which
-// number means anything: a CONSUMABLE has flow (รับเข้า/เบิกออก qty) and no per-piece
-// status, an ITEM has per-piece status and no meaningful qty flow, COUNT sits between.
-// One tab per DispenseType, plus an optional CategoryType (หมวดย่อย) filter inside it.
-export const DISPENSE_TYPES = ["CONSUMABLE", "COUNT", "ITEM"] as const;
-
-// Three nesting levels, narrowest first: หมวดย่อย (CategoryType) sits inside ประเภท
-// (CategoryProfile) sits inside a DispenseType, so the narrowest one set wins outright.
+/**
+ * The dashboard is split by what happened to the stock, not by how the stock is counted.
+ * เบิกใช้ never comes back, ยืม has a due date and someone to chase, นำไปใช้งาน has a room and
+ * no due date at all — three different questions, so three tabs, each with its own numbers.
+ *
+ * The tab axis IS lib/dispense-kind's DispenseKind, reused rather than redefined: /reports
+ * partitions the same table the same way, and two definitions of "ยืม" would eventually
+ * disagree on a legacy row (loanType null) and print two different totals for one event.
+ *
+ * Inside a tab, ประเภท (CategoryProfile) → หมวดย่อย (CategoryType) narrow further.
+ *
+ * ponytail: no Prisma here on purpose. The Item/DispenseRecord where-builders live in
+ * dashboard-scope-where.ts — pulling them in dragged the whole Prisma runtime through api.ts
+ * into every client bundle, and Turbopack refused it (node:module in the browser).
+ */
 export interface DashboardScope {
-  type?: DispenseType;
+  kind: DispenseKind;
   profileId?: string;
   categoryId?: string;
 }
 
 export function parseScope(params: URLSearchParams): DashboardScope {
-  const type = params.get("type");
   return {
-    type: (DISPENSE_TYPES as readonly string[]).includes(type ?? "")
-      ? (type as DispenseType)
-      : undefined,
+    kind: parseDispenseKind(params.get("tab")),
     profileId: params.get("profileId") || undefined,
     categoryId: params.get("categoryId") || undefined,
   };
 }
 
-/** Prisma where fragment on Item. */
-export function scopeItemWhere({ type, profileId, categoryId }: DashboardScope): Prisma.ItemWhereInput {
-  if (categoryId) return { categoryId };
-  if (profileId) return { category: { profileId } };
-  if (type) return { category: { profile: { dispenseType: type } } };
-  return {};
-}
-
-/** Same predicate for anything hanging off an item — DispenseRecord, ReceiveRecord, SubItem. */
-export function scopeRecordWhere(scope: DashboardScope): { item?: Prisma.ItemWhereInput } {
-  const item = scopeItemWhere(scope);
-  return Object.keys(item).length > 0 ? { item } : {};
-}
-
-/** Query string for the dashboard API calls. Empty when unscoped. */
-export function scopeQuery(scope: DashboardScope | undefined): string {
-  if (!scope) return "";
-  const qs = new URLSearchParams();
-  if (scope.type) qs.set("type", scope.type);
+/** Query string for the dashboard API calls. `tab` is always written — it is the page. */
+export function scopeQuery(scope: DashboardScope): string {
+  const qs = new URLSearchParams({ tab: scope.kind });
   if (scope.profileId) qs.set("profileId", scope.profileId);
   if (scope.categoryId) qs.set("categoryId", scope.categoryId);
-  const s = qs.toString();
-  return s ? `?${s}` : "";
+  return `?${qs.toString()}`;
+}
+
+/** Stable dependency key for useAsync — the scope object's identity changes every render. */
+export function scopeKey(scope: DashboardScope) {
+  return `${scope.kind}|${scope.profileId ?? ""}|${scope.categoryId ?? ""}`;
 }

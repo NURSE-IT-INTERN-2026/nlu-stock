@@ -8,16 +8,20 @@ import {
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { History } from "lucide-react";
+import { SectionTitle } from "./report-kit";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
-import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
+import { MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceResult } from "@/lib/constants";
 
-const filterConfig: FilterConfig = { dateRange: true, maintenanceType: true };
+// ประเภทหายไปจากตัวกรองแล้ว — tab นี้ถือ PREVENTIVE อย่างเดียว ตัวเลือกที่มีค่าเดียวไม่ใช่ตัวกรอง
+const filterConfig: FilterConfig = { dateRange: true };
 
 interface Row {
   id: string;
@@ -37,7 +41,6 @@ interface Row {
 
 interface Summary {
   preventive: number;
-  corrective: number;
   totalCost: number;
   costedRecords: number;
 }
@@ -50,11 +53,6 @@ const columns: Column<Row>[] = [
   },
   { key: "itemCode", header: "รหัสพัสดุ", render: (r) => effectiveCode(r.itemCode, r.subCode, r.subCount) },
   { key: "itemName", header: "รายการพัสดุ" },
-  {
-    key: "type",
-    header: "ประเภท",
-    render: (r) => <Badge variant="outline">{labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType)}</Badge>,
-  },
   {
     key: "result",
     header: "ผลการดำเนินการ",
@@ -84,7 +82,8 @@ export function MaintenanceHistoryTab() {
     };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    if (filters.maintenanceType) params.maintenanceType = filters.maintenanceType;
+    // งานซ่อม (CORRECTIVE) ย้ายไปอยู่ tab ชำรุด & ส่งซ่อม แล้ว — ที่นี่เหลือรอบตรวจบำรุงตามแผน
+    params.maintenanceType = "PREVENTIVE";
     const json = (await getReport("maintenance-history", params)) as {
       records: Row[]; total: number; summary: Summary;
     };
@@ -98,11 +97,26 @@ export function MaintenanceHistoryTab() {
 
   return (
     <div className="space-y-4 pb-2">
+      <SectionTitle
+        token="repair"
+        icon={History}
+        title="ประวัติบำรุงรักษา"
+        subtitle="รอบตรวจเช็คตามกำหนดที่ทำไปแล้ว พร้อมค่าใช้จ่าย"
+      />
+      {/* รายงานอ่านอย่างเดียว — ที่บันทึกงานได้จริงคือหน้า /maintenance จึงมีทางกลับไว้ให้ */}
+      <p className="text-sm text-muted-foreground">
+        ต้องการบันทึกงานใหม่หรือดูตารางรอบถัดไป{" "}
+        <Link href="/maintenance" className="text-primary hover:underline">
+          ไปหน้าบันทึกการบำรุงรักษา →
+        </Link>
+      </p>
       <ReportFilters
         config={filterConfig}
         values={filters}
         onChange={setFilters}
-        actions={<ExportButtons reportType="maintenance-history" filters={filters} />}
+        actions={
+          <ExportButtons reportType="maintenance-history" filters={{ ...filters, maintenanceType: "PREVENTIVE" }} />
+        }
       />
       {summary && (
         <ReportSummary
@@ -111,17 +125,17 @@ export function MaintenanceHistoryTab() {
               label: "ตรวจบำรุงตามรอบ",
               value: summary.preventive.toLocaleString(),
               hint: `${periodLabel(filters)} · เช็ค/ทำความสะอาดตามกำหนด`,
+              token: "maintain",
             },
-            {
-              label: "ซ่อมเมื่อชำรุด",
-              value: summary.corrective.toLocaleString(),
-              hint: "ซ่อมหลังของพัง",
-              tone: summary.corrective > summary.preventive ? "warning" : "default",
-            },
+            // ฿0 อ่านว่า "ซ่อมฟรี" ไม่ใช่ "ยังไม่ได้กรอกราคา" — พอไม่มีแถวไหนมีค่าใช้จ่ายเลย
+            // ตัวเลขจึงเป็น — แล้วให้ hint บอกว่าต้องไปกรอกอีกกี่รายการ
             {
               label: "ค่าใช้จ่ายรวม",
-              value: `฿${summary.totalCost.toLocaleString()}`,
-              hint: `จาก ${summary.costedRecords.toLocaleString()} จาก ${total.toLocaleString()} รายการที่ระบุค่าใช้จ่าย`,
+              value: summary.costedRecords > 0 ? `฿${summary.totalCost.toLocaleString()}` : "—",
+              hint: summary.costedRecords > 0
+                ? `จาก ${summary.costedRecords.toLocaleString()} จาก ${total.toLocaleString()} รายการที่ระบุค่าใช้จ่าย`
+                : `ยังไม่ได้กรอกค่าใช้จ่ายสักรายการ (0 จาก ${total.toLocaleString()})`,
+              token: summary.costedRecords > 0 ? "value" : undefined,
             },
           ]}
         />
@@ -131,6 +145,7 @@ export function MaintenanceHistoryTab() {
         data={data}
         loading={loading}
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
+        token="repair"
       />
       {isMobile ? (
         data.length > 0 && (

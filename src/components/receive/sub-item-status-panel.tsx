@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from "lucide-react";
 import { ItemThumb } from "@/components/shared/item-thumb";
-import { getPendingRepairDamage, getSubItemsByStatus, sendQtyDamageToRepair, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
+import { cancelQtyDamage, getPendingRepairDamage, getSubItemsByStatus, sendQtyDamageToRepair, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
@@ -193,23 +193,40 @@ export function SubItemStatusPanel({
 // on the repair tab through the same MaintenanceFormDialog the tracked rows use, so ผล and
 // ค่าใช้จ่าย land in maintenance_records either way. `adjustmentId` says which booking closes.
 function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRepairDamage; status: "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
+  const { user } = useSession();
+  const isSuperAdmin = user?.role === "SUPERADMIN";
   const [maintOpen, setMaintOpen] = useState(false);
-  const [sendOpen, setSendOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editRepairOpen, setEditRepairOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
   const [repairNote, setRepairNote] = useState("");
   const [damage, setDamage] = useState("");
+  const [note, setNote] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const isRepair = status === "UNDER_REPAIR";
   const unit = row.item.issueUnit.name;
-  // Editing, not re-entering: start from what's on record.
-  const openSend = () => {
+
+  const reset = () => {
+    setVenue("");
+    setRepairNote("");
+    setDamage("");
+    setNote("");
+    setPhotoUrl(null);
+  };
+
+  // Editing, not re-entering — and on the ส่งซ่อม step the symptom is already on the booking
+  // (แจ้งชำรุด and ส่งซ่อม are rarely the same day), so it comes prefilled either way.
+  const openWith = (setOpen: (v: boolean) => void) => {
     setVenue(row.repairVenue ?? "");
     setRepairNote(row.repairNote ?? "");
     setDamage(row.notes ?? "");
-    setSendOpen(true);
+    setPhotoUrl(row.imageEvidence ?? null);
+    setOpen(true);
   };
 
-  const send = async () => {
+  const send = async (successMsg: string) => {
     setSaving(true);
     try {
       await sendQtyDamageToRepair({
@@ -217,9 +234,10 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
         venue: venue as "INTERNAL" | "EXTERNAL",
         repairNote: repairNote.trim(),
         damageNote: damage.trim() || undefined,
+        imageEvidence: photoUrl ?? undefined,
       });
-      toast.success(isRepair ? "แก้ข้อมูลการส่งซ่อมแล้ว" : "ส่งซ่อมเรียบร้อย");
-      setSendOpen(false);
+      toast.success(successMsg);
+      reset();
       onResolved();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
@@ -227,6 +245,61 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
       setSaving(false);
     }
   };
+
+  // ADMIN only — the units turned out not to be broken, so the booking is withdrawn and the
+  // qty goes back on the shelf.
+  const cancelDamage = async () => {
+    setSaving(true);
+    try {
+      await cancelQtyDamage({ adjustmentId: row.id, note: note.trim() });
+      toast.success("ยกเลิกคำขอชำรุดแล้ว");
+      reset();
+      onResolved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ยกเลิกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ส่งซ่อม and แก้ข้อมูลส่งซ่อม collect the same three fields in the same order as the tracked
+  // dialogs; only the photo is ส่งซ่อม-only (evidence of the state it left in).
+  const repairFields = (withPhoto: boolean) => (
+    <>
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground" required>
+          {withPhoto ? "ระบุรายละเอียดการชำรุด" : "อาการที่ชำรุด"}
+        </Label>
+        <Textarea
+          value={damage}
+          onChange={(e) => setDamage(e.target.value)}
+          placeholder="เช่น จอแตก ปุ่มหลุด สายชาร์จขาด…"
+          rows={2}
+          className="bg-card"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground" required>รายละเอียดการส่งซ่อม</Label>
+        <Textarea
+          value={repairNote}
+          onChange={(e) => setRepairNote(e.target.value)}
+          placeholder={withPhoto ? "เช่น ส่งซ่อมร้าน ABC…" : "เช่น ซ่อมภายในไม่ได้ ส่งต่อร้าน ABC…"}
+          rows={2}
+          className="bg-card"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground" required>ส่งซ่อมที่</Label>
+        <VenuePicker value={venue} onChange={setVenue} />
+      </div>
+      {withPhoto && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
+          <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+        </div>
+      )}
+    </>
+  );
 
   return (
     <Card className="border shadow-none py-2.5">
@@ -273,15 +346,20 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
             {isRepair && (
-              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={openSend}>
+              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => openWith(setEditRepairOpen)}>
                 <Pencil className="size-3.5" />แก้ข้อมูลส่งซ่อม
+              </Button>
+            )}
+            {!isRepair && isSuperAdmin && (
+              <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" disabled={saving} onClick={() => setCancelOpen(true)}>
+                <Undo2 className="size-3.5" />ยกเลิกคำขอชำรุด
               </Button>
             )}
             <Button
               size="sm"
               className="h-9 w-full sm:w-auto"
               disabled={saving}
-              onClick={() => (isRepair ? setMaintOpen(true) : openSend())}
+              onClick={() => (isRepair ? setMaintOpen(true) : openWith(setConfirmOpen))}
             >
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : isRepair ? <Wrench className="size-3.5" /> : <Send className="size-3.5" />}
               {actionLabel}
@@ -290,55 +368,89 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
         </div>
       </CardContent>
 
-      {/* ส่งซ่อม, and the mid-trip correction of the same fields (ซ่อมภายในไม่ได้ → ส่งภายนอก).
-          One dialog: the second is the first with the values already filled in. */}
-      <AlertDialog open={sendOpen} onOpenChange={setSendOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{isRepair ? "แก้ข้อมูลการส่งซ่อม" : "ยืนยันการส่งซ่อม"}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {isRepair ? (
-                <><span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ยังอยู่ระหว่างส่งซ่อมเหมือนเดิม — แก้เฉพาะข้อมูลการส่งซ่อม วันที่ส่งซ่อมเดิมไม่เปลี่ยน</>
-              ) : (
-                <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="w-full space-y-3 text-left">
-            <div className="-mx-4"><Separator /></div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground" required>อาการที่ชำรุด</Label>
-              <Textarea
-                value={damage}
-                onChange={(e) => setDamage(e.target.value)}
-                placeholder="เช่น ขาหัก 3 ตัว ล้อแตก…"
-                rows={2}
-                className="bg-card"
-              />
+      {/* ส่งซ่อม — the qty twin of StatusRow's DAMAGED confirm dialog, same fields, same order. */}
+      {!isRepair && (
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>ยืนยันการ{actionLabel}</AlertDialogTitle>
+              <AlertDialogDescription>
+                ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {/* Direct child of AlertDialogContent (not Header) so the separator's -mx-4 reaches
+                both dialog edges (Header is a centered grid → clips). */}
+            <div className="w-full space-y-3 text-left">
+              <div className="-mx-4"><Separator /></div>
+              {repairFields(true)}
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground" required>ส่งซ่อมที่</Label>
-              <VenuePicker value={venue} onChange={setVenue} />
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={reset}>ยกเลิก</AlertDialogCancel>
+              <AlertDialogAction disabled={!venue || !repairNote.trim() || !damage.trim()} onClick={() => { setConfirmOpen(false); send("ส่งซ่อมเรียบร้อย"); }}>ยืนยัน</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* Repair details changed mid-repair (ซ่อมภายในไม่ได้ → ส่งภายนอก). Still the same trip. */}
+      {isRepair && (
+        <AlertDialog open={editRepairOpen} onOpenChange={setEditRepairOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>แก้ข้อมูลการส่งซ่อม</AlertDialogTitle>
+              <AlertDialogDescription>
+                <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ยังอยู่ระหว่างส่งซ่อมเหมือนเดิม — แก้เฉพาะข้อมูลการส่งซ่อม ระบบจะบันทึกเป็นประวัติเพิ่ม ไม่ทับของเดิม
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="w-full space-y-3 text-left">
+              <div className="-mx-4"><Separator /></div>
+              {/* When the trip started is a fact, not an edit — the rest of the card is. */}
+              <dl className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm">
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-muted-foreground">วันที่ส่งซ่อม:</dt>
+                  <dd className="min-w-0 text-foreground">{(row.repairSentAt && sentAtLabel(row.repairSentAt)) || "—"}</dd>
+                </div>
+              </dl>
+              {repairFields(false)}
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground" required>รายละเอียดการส่งซ่อม</Label>
-              <Textarea
-                value={repairNote}
-                onChange={(e) => setRepairNote(e.target.value)}
-                placeholder="เช่น ส่งซ่อมร้าน ABC…"
-                rows={2}
-                className="bg-card"
-              />
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={reset}>ยกเลิก</AlertDialogCancel>
+              <AlertDialogAction disabled={!venue || !repairNote.trim() || !damage.trim()} onClick={() => { setEditRepairOpen(false); send("แก้ข้อมูลการส่งซ่อมแล้ว"); }}>บันทึก</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* ADMIN-only withdrawal of a ชำรุด booking — the qty goes straight back on the shelf. */}
+      {!isRepair && isSuperAdmin && (
+        <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>ยกเลิกคำขอชำรุด</AlertDialogTitle>
+              <AlertDialogDescription>
+                คืน <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} กลับเข้ายอดว่าง — ใช้เมื่อแจ้งชำรุดผิดหรือตรวจแล้วของไม่ได้เสีย
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="w-full space-y-3 text-left">
+              <div className="-mx-4"><Separator /></div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" required>เหตุผลที่ยกเลิก</Label>
+                <Textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="เช่น ตรวจแล้วใช้งานได้ปกติ แจ้งผิดรายการ…"
+                  rows={2}
+                  className="bg-card"
+                />
+              </div>
             </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction disabled={!venue || !repairNote.trim() || !damage.trim()} onClick={send}>
-              {isRepair ? "บันทึก" : "ยืนยัน"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={reset}>ปิด</AlertDialogCancel>
+              <AlertDialogAction disabled={!note.trim()} onClick={() => { setCancelOpen(false); cancelDamage(); }}>ยืนยันยกเลิก</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
       {isRepair && (
         <MaintenanceFormDialog

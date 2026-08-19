@@ -9,18 +9,22 @@ export async function GET(request: NextRequest) {
   // Per-profile stock-status buckets. Each active item lands in exactly one bucket:
   //   out  = availableQty 0, low = 0 < availableQty < minThreshold (same predicate as the
   //   low-stock alert in lib/alerts.ts), ok = availableQty >= minThreshold.
+  // Driven FROM category_profiles with LEFT JOINs so a profile with no items yet still
+  // returns a row (total 0) — a freshly added ประเภท shows up here before its first item.
+  // COUNT(i.id), not COUNT(*): the LEFT JOIN keeps one all-NULL row for an empty profile.
   const groups = await prisma.$queryRaw<Array<{
     profileId: string; total: bigint; ok: bigint; low: bigint; out: bigint;
   }>>`
-    SELECT c."profileId" AS "profileId",
-      COUNT(*) AS total,
+    SELECT p.id AS "profileId",
+      COUNT(i.id) AS total,
       SUM(CASE WHEN i."availableQty" > 0 AND i."availableQty" >= i."minThreshold" THEN 1 ELSE 0 END) AS ok,
       SUM(CASE WHEN i."availableQty" > 0 AND i."availableQty" <  i."minThreshold" THEN 1 ELSE 0 END) AS low,
       SUM(CASE WHEN i."availableQty" = 0 THEN 1 ELSE 0 END) AS out
-    FROM items i
-    JOIN categories c ON c.id = i."categoryId"
-    WHERE i."isActive" = true
-    GROUP BY c."profileId"
+    FROM category_profiles p
+    LEFT JOIN categories c ON c."profileId" = p.id
+    LEFT JOIN items i ON i."categoryId" = c.id AND i."isActive" = true
+    WHERE p."isActive" = true
+    GROUP BY p.id
   `;
 
   const profiles = await prisma.categoryProfile.findMany({
