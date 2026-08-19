@@ -78,6 +78,9 @@ export function StationInRoomDialog({
         items: [{ itemId, subItemId: subItemId ?? null, quantity: isTracked ? 1 : qty }],
         notes: notes.trim() || null,
         locationId,
+        // ทุกแถวมี usageType ไม่มี null — นำไปใช้งานคือการใช้งานแบบ "อื่นๆ" ที่ผูกกับห้อง.
+        // ไม่มี usageNote คู่มาด้วยเพราะห้องคือเหตุผล (validators/dispense ยกเว้น INUSE ไว้ให้)
+        usageType: "OTHER",
         dueAt: null, // INUSE: open-ended, no return date
         loanType: "INUSE",
       });
