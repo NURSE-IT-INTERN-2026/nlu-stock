@@ -4,7 +4,7 @@ import { requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { receiveRequestSchema } from "@/lib/validators";
 import { autoLotNumber, OPENING_LOT_NUMBER } from "@/lib/lot-code";
-import { weightedUnitCost } from "@/lib/cost";
+import { syncItemPurchasePrice, syncLotUnitCost } from "@/lib/cost";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -103,22 +103,11 @@ export async function POST(req: NextRequest) {
           }
 
           if (existingLot) {
-            // Weighted-average unit cost when appending at a new price
-            let nextUnitCost = existingLot.unitCost;
-            if (ri.unitCost != null) {
-              const oldRemaining = existingLot.remainingQty;
-              const newRemaining = oldRemaining + ri.quantity;
-              nextUnitCost =
-                existingLot.unitCost != null && oldRemaining > 0
-                  ? (oldRemaining * existingLot.unitCost + ri.quantity * ri.unitCost) / newRemaining
-                  : ri.unitCost;
-            }
             await tx.lot.update({
               where: { id: existingLot.id },
               data: {
                 receivedQty: { increment: ri.quantity },
                 remainingQty: { increment: ri.quantity },
-                unitCost: nextUnitCost,
                 ...(ri.expiryDate && { expiryDate: new Date(ri.expiryDate) }),
               },
             });
@@ -131,11 +120,11 @@ export async function POST(req: NextRequest) {
                 expiryDate: ri.expiryDate ? new Date(ri.expiryDate) : null,
                 receivedQty: ri.quantity,
                 remainingQty: ri.quantity,
-                unitCost: ri.unitCost ?? null,
               },
             });
             lotId = newLot.id;
           }
+          // unitCost ไม่ได้เขียนตรงนี้ — ตั้งจากใบรับเข้าหลังสร้าง record (syncLotUnitCost)
         }
 
         // Tracked durables must supply exactly one sub-code per copy
@@ -195,27 +184,13 @@ export async function POST(req: NextRequest) {
         });
         ids.push(record.id);
 
-        // มูลค่าคงคลังตีราคาของคงทนจาก Item.purchasePrice (สิ้นเปลืองใช้ Lot.unitCost ต่อล็อต) —
-        // ราคาที่เพิ่งกรอกจะไปไม่ถึงรายงานนั้นถ้าไม่อัปเดตตรงนี้.
-        // ถัวเฉลี่ยถ่วงน้ำหนักจากทุกครั้งที่รับเข้ามีราคา ไม่ใช่ราคาล่าสุด: ซื้อ 10 ชิ้นราคาหนึ่ง
-        // แล้วรับเพิ่ม 1 ชิ้นราคาถูก ไม่ควรทำให้ของทั้งคลังถูกลงตามชิ้นเดียวนั้น.
-        if (!isConsumable && ri.unitCost != null) {
-          const priced = await tx.receiveRecord.findMany({
-            where: { itemId: item.id, unitCost: { not: null } },
-            select: { quantity: true, unitCost: true },
-          });
-          const avg = weightedUnitCost(priced);
-          if (avg != null) {
-            await tx.item.update({
-              where: { id: item.id },
-              data: {
-                purchasePrice: avg,
-                // วันที่ซื้อ = ครั้งแรกที่มีราคา; ครั้งถัดไปไม่ทับ เพราะช่องนี้คือวันได้ของมาครั้งแรก
-                // (ประกัน/รอบบำรุงรักษาอ่านจากมัน) ไม่ใช่วันรับเข้าล่าสุด.
-                ...(item.purchaseDate == null && { purchaseDate: record.receivedAt }),
-              },
-            });
-          }
+        // มูลค่าคงคลังตีราคาของคงทนจาก Item.purchasePrice และของสิ้นเปลืองจาก Lot.unitCost —
+        // ราคาที่เพิ่งกรอกจะไปไม่ถึงรายงานนั้นถ้าไม่ derive ใหม่ตรงนี้. ทั้งสองมาจากใบรับเข้า
+        // ชุดเดียวกัน จึงแก้ราคาย้อนหลังได้ (PATCH api/receive/[id]) แล้วตัวเลขตามทันเสมอ.
+        if (isConsumable) {
+          if (lotId) await syncLotUnitCost(tx, lotId);
+        } else if (ri.unitCost != null) {
+          await syncItemPurchasePrice(tx, item.id, record.receivedAt);
         }
       }
 

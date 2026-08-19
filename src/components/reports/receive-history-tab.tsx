@@ -14,7 +14,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowDownToLine, ClipboardList, Recycle, Wrench, type LucideIcon } from "lucide-react";
 import { SectionTitle, chipStyle, type Token } from "./report-kit";
 import { Badge } from "@/components/ui/badge";
-import { getReport } from "@/lib/api";
+import { getReport, updateReceiveUnitCost } from "@/lib/api";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { useSession } from "@/components/layout/auth-guard";
+import { canManageStock } from "@/lib/roles";
 import { STATUS_LABELS, STATUS_PILLS, type ItemStatus } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Pagination } from "@/components/shared/pagination";
@@ -215,36 +219,115 @@ interface ReceiveRow {
   itemName: string;
   category: string;
   quantity: number;
+  unitCost: number | null;
   lotNumber: string;
   expiryDate: string | null;
   receiverName: string;
   receivedAt: string;
 }
 
-const receiveColumns: Column<ReceiveRow>[] = [
-  { key: "receivedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.receivedAt), TH_DATETIME) },
-  { key: "itemCode", header: "รหัสพัสดุ" },
-  { key: "itemName", header: "รายการพัสดุ" },
-  { key: "category", header: "หมวดหมู่" },
-  { key: "lotNumber", header: "ล็อต" },
-  { key: "quantity", header: "จำนวน" },
-  { key: "expiryDate", header: "วันหมดอายุ", render: (r) => (r.expiryDate ? fmtDate(new Date(r.expiryDate), TH_DATE) : "—") },
-  { key: "receiverName", header: "ผู้รับเข้า" },
-];
+/**
+ * ช่องราคาที่แก้ได้ในบรรทัด — ตารางนี้คือที่เดียวที่เห็นใบรับเข้าทีละใบ และราคาส่วนใหญ่ใน
+ * ประวัติยังว่าง (เพิ่งเริ่มถามราคาของคงทนเมื่อ 2026-08-19) ทั้งที่ค่าใช้จ่ายรายปีบวกจากช่องนี้.
+ *
+ * เป็น input ตลอดเวลา ไม่ใช่กดแล้วค่อยแก้: งานจริงคือไล่กรอกทีละสิบๆ แถว การต้องกดก่อนพิมพ์
+ * ทุกแถวคือการกดเปล่าอีกเท่าตัว. บันทึกตอน blur เฉพาะเมื่อค่าเปลี่ยน — ไล่ Tab ผ่านแถวที่กรอก
+ * แล้วจึงไม่ยิง request.
+ */
+function UnitCostCell({ row, editable }: { row: ReceiveRow; editable: boolean }) {
+  // saved = ค่าที่บันทึกไว้จริงล่าสุด ไม่ใช่ค่าใน row ตอน render — เก็บแยกไว้เพราะรายการที่ fetch
+  // มาไม่ได้ refetch หลังบันทึก การเทียบกับ row.unitCost จะยิง PATCH ซ้ำทุกครั้งที่ blur.
+  const [saved, setSaved] = useState(row.unitCost);
+  const [value, setValue] = useState(row.unitCost != null ? String(row.unitCost) : "");
+  const [saving, setSaving] = useState(false);
+
+  if (!editable) {
+    return <span>{row.unitCost != null ? row.unitCost.toLocaleString() : "—"}</span>;
+  }
+
+  const revert = () => setValue(saved != null ? String(saved) : "");
+
+  const save = async () => {
+    const trimmed = value.trim();
+    // ว่าง = ไม่ทราบราคา (null) ซึ่งต่างจาก 0 ที่แปลว่าได้มาฟรี — รายงานนับคนละแบบ
+    const next = trimmed === "" ? null : Number(trimmed);
+    if (next != null && (!Number.isFinite(next) || next < 0)) {
+      toast.error("ราคาต้องเป็นตัวเลขไม่ติดลบ");
+      revert();
+      return;
+    }
+    if (next === saved) return;
+    setSaving(true);
+    try {
+      await updateReceiveUnitCost(row.id, next);
+      setSaved(next);
+      toast.success("บันทึกราคาแล้ว");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "บันทึกราคาไม่สำเร็จ");
+      revert();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Input
+      type="number"
+      min="0"
+      step="0.01"
+      inputMode="decimal"
+      placeholder="—"
+      disabled={saving}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      className="h-8 w-24 text-sm text-right"
+    />
+  );
+}
+
+function receiveColumns(editable: boolean): Column<ReceiveRow>[] {
+  return [
+    { key: "receivedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.receivedAt), TH_DATETIME) },
+    { key: "itemCode", header: "รหัสพัสดุ" },
+    { key: "itemName", header: "รายการพัสดุ" },
+    { key: "category", header: "หมวดหมู่" },
+    { key: "lotNumber", header: "ล็อต" },
+    { key: "quantity", header: "จำนวน" },
+    {
+      key: "unitCost", header: "ราคา/หน่วย", className: "text-right",
+      render: (r) => <UnitCostCell row={r} editable={editable} />,
+    },
+    { key: "expiryDate", header: "วันหมดอายุ", render: (r) => (r.expiryDate ? fmtDate(new Date(r.expiryDate), TH_DATE) : "—") },
+    { key: "receiverName", header: "ผู้รับเข้า" },
+  ];
+}
 
 function ReceiveLogTable({ token }: { token: Token }) {
+  const { user } = useSession();
+  const editable = canManageStock(user?.role ?? "");
+  const columns = useMemo(() => receiveColumns(editable), [editable]);
   return (
     <ReportTable<ReceiveRow>
       token={token}
       path="receive-history"
-      columns={receiveColumns}
+      columns={columns}
       filterConfig={COMMON_FILTERS}
       exportType="receive-history"
       emptyMessage="ไม่มีการนำเข้าคลังในช่วงนี้"
       statsFor={(s, v) => [
         { label: "ครั้งที่นำเข้า", value: s.records.toLocaleString(), hint: periodLabel(v), token: "stockin" },
         { label: "จำนวนหน่วยรวม", value: s.units.toLocaleString(), hint: "รวมทุกล็อตในช่วงนี้", token: "stockin" },
-        { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง", token: "stockin" },
+        {
+          // ค่าใช้จ่ายรายปีบวกจากช่องราคาของแถวพวกนี้ — 0 ที่แปลว่า "ยังไม่ได้กรอก" ต้องอ่านออก
+          // ว่าไม่ใช่ 0 ที่แปลว่า "ไม่ได้ซื้อ" และบอกด้วยว่าเหลือให้ไล่กรอกอีกกี่ใบ
+          label: "ยังไม่ได้กรอกราคา",
+          value: s.unpriced.toLocaleString(),
+          hint: editable ? "แก้ได้ที่ช่องราคาในตาราง" : "ค่าใช้จ่ายรายปีไม่นับใบที่ไม่มีราคา",
+          tone: s.unpriced > 0 ? "warning" : "default",
+          token: "stockin",
+        },
       ]}
     />
   );

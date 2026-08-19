@@ -444,6 +444,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         หมวดหมู่: r.item.category?.name ?? "—",
         ล็อต: r.lot?.lotNumber ?? "—",
         จำนวน: r.quantity,
+        // ว่าง = ยังไม่ได้กรอกราคา ไม่ใช่ 0 บาท — ค่าใช้จ่ายรายปีก็ไม่นับใบพวกนี้เหมือนกัน
+        "ราคา/หน่วย": r.unitCost ?? "",
+        เป็นเงิน: r.unitCost != null ? r.quantity * r.unitCost : "",
         วันหมดอายุ: r.lot?.expiryDate ? fmtDate(r.lot.expiryDate, "yyyy-MM-dd") : "",
         ผู้รับเข้า: r.receiver.name,
         หมายเหตุ: r.notes ?? "",
