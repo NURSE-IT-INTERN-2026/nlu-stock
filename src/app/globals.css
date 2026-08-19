@@ -282,6 +282,20 @@
   html {
     @apply font-sans;
   }
+
+  /* ── ช่องกรอกตัวเลข: ไม่เอาลูกศรขึ้น-ลง ──
+     ทุกช่องในระบบเป็นการพิมพ์เลข ไม่ใช่การไล่กด: จำนวนที่รับเข้า ราคาต่อหน่วย เดือนรับประกัน
+     ล้วนเป็นเลขที่คนอ่านมาจากเอกสารแล้วพิมพ์ลงไป ปุ่มขึ้นลงจึงมีแต่บังตัวเลขกับกดโดนเอง.
+     ที่นี่ไม่ใช่ที่ component เพราะ <input type="number"> ดิบที่ไหนก็ตามต้องได้เหมือนกัน. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 /* ── Animation tokens ── */
