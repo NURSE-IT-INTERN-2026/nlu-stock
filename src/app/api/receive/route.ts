@@ -4,6 +4,7 @@ import { requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { receiveRequestSchema } from "@/lib/validators";
 import { autoLotNumber, OPENING_LOT_NUMBER } from "@/lib/lot-code";
+import { weightedUnitCost } from "@/lib/cost";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -179,17 +180,43 @@ export async function POST(req: NextRequest) {
           await recomputeItemCounts(tx, item.id);
         }
 
-        // Create ReceiveRecord
+        // Create ReceiveRecord. unitCost lands here for EVERY kind of พัสดุ, not just the
+        // consumables that get a lot — this row is what ค่าใช้จ่ายรายปี adds up, and a
+        // durable bought three times in a year has to count three times.
         const record = await tx.receiveRecord.create({
           data: {
             itemId: item.id,
             lotId,
             quantity: ri.quantity,
+            unitCost: ri.unitCost ?? null,
             receivedBy: auth.user.userId,
             notes: notes ?? undefined,
           },
         });
         ids.push(record.id);
+
+        // มูลค่าคงคลังตีราคาของคงทนจาก Item.purchasePrice (สิ้นเปลืองใช้ Lot.unitCost ต่อล็อต) —
+        // ราคาที่เพิ่งกรอกจะไปไม่ถึงรายงานนั้นถ้าไม่อัปเดตตรงนี้.
+        // ถัวเฉลี่ยถ่วงน้ำหนักจากทุกครั้งที่รับเข้ามีราคา ไม่ใช่ราคาล่าสุด: ซื้อ 10 ชิ้นราคาหนึ่ง
+        // แล้วรับเพิ่ม 1 ชิ้นราคาถูก ไม่ควรทำให้ของทั้งคลังถูกลงตามชิ้นเดียวนั้น.
+        if (!isConsumable && ri.unitCost != null) {
+          const priced = await tx.receiveRecord.findMany({
+            where: { itemId: item.id, unitCost: { not: null } },
+            select: { quantity: true, unitCost: true },
+          });
+          const avg = weightedUnitCost(priced);
+          if (avg != null) {
+            await tx.item.update({
+              where: { id: item.id },
+              data: {
+                purchasePrice: avg,
+                // วันที่ซื้อ = ครั้งแรกที่มีราคา; ครั้งถัดไปไม่ทับ เพราะช่องนี้คือวันได้ของมาครั้งแรก
+                // (ประกัน/รอบบำรุงรักษาอ่านจากมัน) ไม่ใช่วันรับเข้าล่าสุด.
+                ...(item.purchaseDate == null && { purchaseDate: record.receivedAt }),
+              },
+            });
+          }
+        }
       }
 
       return ids;

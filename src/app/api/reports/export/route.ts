@@ -546,29 +546,24 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const startOfYear = new Date(year, 0, 1);
       const endOfYear = new Date(year, 11, 31, 23, 59, 59);
 
-      const itemWhere: Record<string, unknown> = {
-        purchaseDate: { gte: startOfYear, lte: endOfYear },
-        purchasePrice: { not: null },
-      };
-      if (categoryId) itemWhere.categoryId = categoryId;
-
-      const purchases = await prisma.item.findMany({
-        where: itemWhere,
-        select: { code: true, name: true, purchasePrice: true, purchaseDate: true, category: { select: { name: true } } },
-        take: 10000,
-      });
-
-      // Mirrors api/reports/annual-cost: consumables are bought as lots and priced on the lot,
-      // so leaving them out here made the sheet disagree with the screen it was exported from.
-      const lots = await prisma.lot.findMany({
+      // Mirrors api/reports/annual-cost: one row per receipt, whatever kind of พัสดุ it was.
+      // The sheet has to agree with the screen it was exported from, so it reads the same
+      // source — not Item.purchasePrice, which holds one price for a thing bought many times.
+      const receipts = await prisma.receiveRecord.findMany({
         where: {
-          receivedDate: { gte: startOfYear, lte: endOfYear },
+          receivedAt: { gte: startOfYear, lte: endOfYear },
           unitCost: { not: null },
           item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
         },
         select: {
-          lotNumber: true, receivedQty: true, unitCost: true, receivedDate: true,
-          item: { select: { code: true, name: true, category: { select: { name: true } } } },
+          quantity: true, unitCost: true, receivedAt: true,
+          lot: { select: { lotNumber: true } },
+          item: {
+            select: {
+              code: true, name: true,
+              category: { select: { name: true, profile: { select: { dispenseType: true } } } },
+            },
+          },
         },
         take: 10000,
       });
@@ -585,27 +580,18 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         take: 10000,
       });
 
-      const purchaseRows = purchases.map((p) => ({
-        ประเภท: "จัดซื้อ — ครุภัณฑ์/คงทน",
-        รหัสพัสดุ: p.code,
-        รายการพัสดุ: p.name,
-        หมวดหมู่: p.category.name,
-        ล็อต: "",
-        จำนวน: 1,
-        เป็นเงิน: p.purchasePrice ?? 0,
-        วันที่: fmtDate(p.purchaseDate!, "yyyy-MM-dd"),
-        ผู้ดำเนินการ: "",
-      }));
-
-      const lotRows = lots.map((l) => ({
-        ประเภท: "จัดซื้อ — วัสดุสิ้นเปลือง",
-        รหัสพัสดุ: l.item.code,
-        รายการพัสดุ: l.item.name,
-        หมวดหมู่: l.item.category.name,
-        ล็อต: l.lotNumber,
-        จำนวน: l.receivedQty,
-        เป็นเงิน: l.receivedQty * (l.unitCost ?? 0),
-        วันที่: fmtDate(l.receivedDate, "yyyy-MM-dd"),
+      const purchaseRows = receipts.map((r) => ({
+        ประเภท:
+          r.item.category.profile?.dispenseType === "CONSUMABLE"
+            ? "จัดซื้อ — วัสดุสิ้นเปลือง"
+            : "จัดซื้อ — ครุภัณฑ์/คงทน",
+        รหัสพัสดุ: r.item.code,
+        รายการพัสดุ: r.item.name,
+        หมวดหมู่: r.item.category.name,
+        ล็อต: r.lot?.lotNumber ?? "",
+        จำนวน: r.quantity,
+        เป็นเงิน: r.quantity * (r.unitCost ?? 0),
+        วันที่: fmtDate(r.receivedAt, "yyyy-MM-dd"),
         ผู้ดำเนินการ: "",
       }));
 
@@ -621,7 +607,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         ผู้ดำเนินการ: r.performer.name,
       }));
 
-      return [...purchaseRows, ...lotRows, ...repairRows].sort((a, b) => b.วันที่.localeCompare(a.วันที่));
+      return [...purchaseRows, ...repairRows].sort((a, b) => b.วันที่.localeCompare(a.วันที่));
     }
 
     case "damaged-assets": {
