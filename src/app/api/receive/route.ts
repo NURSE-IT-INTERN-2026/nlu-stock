@@ -145,6 +145,23 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        // Create ReceiveRecord. unitCost lands here for EVERY kind of พัสดุ, not just the
+        // consumables that get a lot — this row is what ค่าใช้จ่ายรายปี adds up, and a
+        // durable bought three times in a year has to count three times.
+        // Written before the sub-items below so each copy can point back at the receipt that
+        // delivered it — that link is where ราคาต่อชิ้นจริง comes from at ตัดจำหน่าย.
+        const record = await tx.receiveRecord.create({
+          data: {
+            itemId: item.id,
+            lotId,
+            quantity: ri.quantity,
+            unitCost: ri.unitCost ?? null,
+            receivedBy: auth.user.userId,
+            notes: notes ?? undefined,
+          },
+        });
+        ids.push(record.id);
+
         // Sub-items for tracked durables — check duplicates first
         if (item.trackIndividually && ri.subCodes?.length) {
           const existing = await tx.subItem.findMany({
@@ -162,27 +179,13 @@ export async function POST(req: NextRequest) {
                 itemId: item.id,
                 subCode,
                 status: "AVAILABLE",
+                receiveRecordId: record.id,
               },
             });
           }
           // Qty derived from sub-items — recompute instead of manual increment
           await recomputeItemCounts(tx, item.id);
         }
-
-        // Create ReceiveRecord. unitCost lands here for EVERY kind of พัสดุ, not just the
-        // consumables that get a lot — this row is what ค่าใช้จ่ายรายปี adds up, and a
-        // durable bought three times in a year has to count three times.
-        const record = await tx.receiveRecord.create({
-          data: {
-            itemId: item.id,
-            lotId,
-            quantity: ri.quantity,
-            unitCost: ri.unitCost ?? null,
-            receivedBy: auth.user.userId,
-            notes: notes ?? undefined,
-          },
-        });
-        ids.push(record.id);
 
         // มูลค่าคงคลังตีราคาของคงทนจาก Item.purchasePrice และของสิ้นเปลืองจาก Lot.unitCost —
         // ราคาที่เพิ่งกรอกจะไปไม่ถึงรายงานนั้นถ้าไม่ derive ใหม่ตรงนี้. ทั้งสองมาจากใบรับเข้า

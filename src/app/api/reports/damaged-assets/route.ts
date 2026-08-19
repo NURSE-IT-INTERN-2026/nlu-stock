@@ -3,6 +3,7 @@ import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { effectiveCode } from "@/lib/constants";
+import { writeOffValue } from "@/lib/cost";
 
 const DAMAGE_STATUSES: ItemStatus[] = ["DAMAGED", "UNDER_REPAIR", "DISPOSED", "LOST"];
 
@@ -62,7 +63,13 @@ export async function GET(request: NextRequest) {
         _count: { select: { subItems: true } },
         subItems: {
           where: { status: { in: statuses } },
-          select: { id: true, subCode: true, status: true },
+          select: {
+            id: true,
+            subCode: true,
+            status: true,
+            // ราคาที่จ่ายจริงของชิ้นนี้ — ของที่ซื้อคนละรอบคนละราคาจึงตัดจำหน่ายคนละยอด
+            receiveRecord: { select: { unitCost: true } },
+          },
           orderBy: { subCode: "asc" },
         },
         statusLogs: {
@@ -92,16 +99,19 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  const writeOffPrices = wantsWriteOff
+  // ราคาต่อชิ้น: ใบรับเข้าของชิ้นนั้นก่อน (ยอดที่จ่ายจริง) แล้วค่อยตกไปที่ราคาเฉลี่ยของรายการ
+  // (ประมาณการ) สำหรับของที่รับเข้ามาก่อนระบบผูกชิ้นกับใบรับเข้า. ของที่ไม่ track รายชิ้นไม่มี
+  // ใบของตัวเองให้ชี้ จึงเป็นประมาณการเสมอ — หน้าจอนับสองก้อนนี้แยกกันเพื่อบอกผู้อ่านว่ายอดแม่นแค่ไหน.
+  const writeOffPrices: { value: number | null; exact: boolean }[] = wantsWriteOff
     ? [
         ...(await prisma.subItem.findMany({
           where: { status: { in: statuses.filter((s) => WRITE_OFF_STATUSES.includes(s)) }, item: where },
-          select: { item: { select: { purchasePrice: true } } },
-        })).map((s) => s.item.purchasePrice),
+          select: { receiveRecord: { select: { unitCost: true } }, item: { select: { purchasePrice: true } } },
+        })).map((s) => writeOffValue(s.receiveRecord?.unitCost, s.item.purchasePrice)),
         ...(await prisma.item.findMany({
           where: { ...where, status: { in: statuses.filter((s) => WRITE_OFF_STATUSES.includes(s)) }, subItems: { none: { status: { in: statuses } } } },
           select: { purchasePrice: true },
-        })).map((i) => i.purchasePrice),
+        })).map((i) => writeOffValue(null, i.purchasePrice)),
       ]
     : [];
 
@@ -116,16 +126,20 @@ export async function GET(request: NextRequest) {
     const locationLabel = [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail]
       .filter(Boolean)
       .join(" / ");
-    // ราคาเก็บที่ระดับรายการ ไม่ใช่รายชิ้น — ของที่ซื้อหลายรอบคนละราคา ระบบรู้ราคาเดียว
-    // ตัวเลขนี้จึงเป็น "ประมาณการ" เสมอ และหน้าจอต้องเขียนกำกับไว้ ไม่ใช่ยอดที่จ่ายจริงของชิ้นนั้น
-    const base = { name: i.name, categoryName: i.category.name, location: locationLabel, value: i.purchasePrice ?? null };
+    // ราคาระดับรายการ = ราคาเฉลี่ยถ่วงน้ำหนักจากใบรับเข้าทั้งหมด ใช้เมื่อชิ้นนั้นไม่มีใบของตัวเอง
+    // (รับเข้าก่อนมีคอลัมน์ receiveRecordId หรือของที่ไม่ track รายชิ้น) — เป็น "ประมาณการ"
+    // ส่วนชิ้นที่ผูกใบไว้ใช้ยอดที่จ่ายจริงของใบนั้น ตั้งทับที่ละแถวด้านล่าง
+    const base = { name: i.name, categoryName: i.category.name, location: locationLabel, value: i.purchasePrice ?? null, valueExact: false };
     const logFor = (subItemId: string | null) => i.statusLogs.find((l) => l.subItemId === subItemId);
 
     if (i.subItems.length > 0) {
       return i.subItems.map((s) => {
         const log = logFor(s.id);
+        const price = writeOffValue(s.receiveRecord?.unitCost, i.purchasePrice);
         return {
           ...base,
+          value: price.value,
+          valueExact: price.exact,
           id: s.id,
           code: effectiveCode(i.code, s.subCode, i._count.subItems),
           status: s.status,
@@ -159,10 +173,12 @@ export async function GET(request: NextRequest) {
       writtenOff: (byStatus.DISPOSED ?? 0) + (byStatus.LOST ?? 0),
       disposed: byStatus.DISPOSED ?? 0,
       lost: byStatus.LOST ?? 0,
-      /** ประมาณการ: ราคาต่อชิ้นของรายการ × ชิ้นที่ตัดออก — ดูหมายเหตุที่ base ด้านบน */
-      writtenOffValue: writeOffPrices.reduce((sum: number, p) => sum + (p ?? 0), 0),
-      pricedWriteOffs: writeOffPrices.filter((p) => p !== null).length,
-      unpricedWriteOffs: writeOffPrices.filter((p) => p === null).length,
+      /** ยอดที่จ่ายจริงของชิ้นที่ผูกใบรับเข้าไว้ + ประมาณการของที่เหลือ — ดูหมายเหตุที่ base ด้านบน */
+      writtenOffValue: writeOffPrices.reduce((sum: number, p) => sum + (p.value ?? 0), 0),
+      pricedWriteOffs: writeOffPrices.filter((p) => p.value !== null).length,
+      unpricedWriteOffs: writeOffPrices.filter((p) => p.value === null).length,
+      /** กี่ชิ้นที่ราคามาจากใบรับเข้าของชิ้นนั้นเอง — เท่ากับ pricedWriteOffs เมื่อไหร่ ยอดนี้ก็ไม่ใช่ประมาณการอีกต่อไป */
+      exactWriteOffs: writeOffPrices.filter((p) => p.exact).length,
     },
   });
 }

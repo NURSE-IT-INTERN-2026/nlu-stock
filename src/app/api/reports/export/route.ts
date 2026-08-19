@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
+import { writeOffValue } from "@/lib/cost";
 import { ItemStatus } from "@/generated/prisma/enums";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
@@ -649,7 +650,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           category: { select: { name: true } },
           location: { select: { building: true, floor: true, room: true, detail: true } },
           _count: { select: { subItems: true } },
-          subItems: { where: { status: { in: statuses } }, select: { subCode: true, status: true }, orderBy: { subCode: "asc" } },
+          subItems: {
+            where: { status: { in: statuses } },
+            select: { subCode: true, status: true, receiveRecord: { select: { unitCost: true } } },
+            orderBy: { subCode: "asc" },
+          },
         },
         take: 10000,
       });
@@ -660,8 +665,16 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           หมวดหมู่: i.category.name,
           สถานที่: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
         };
-        // ราคาเก็บที่ระดับรายการ ไม่ใช่รายชิ้น จึงเป็นประมาณการ — ชื่อคอลัมน์บอกไว้ตรงๆ
-        const value = wantsValue ? { "มูลค่าประมาณการ": i.purchasePrice ?? "" } : {};
+        // ชิ้นที่ผูกใบรับเข้าไว้ = ยอดที่จ่ายจริงของใบนั้น; ที่เหลือตกไปใช้ราคาเฉลี่ยของรายการ
+        // ไฟล์จึงมีสองคอลัมน์แยกกัน คนอ่านงบต้องรู้ว่าตัวเลขไหนเป็นของจริง ไม่ใช่เดารวมในช่องเดียว
+        const valueFor = (unitCost: number | null | undefined) => {
+          if (!wantsValue) return {};
+          const { value, exact } = writeOffValue(unitCost, i.purchasePrice);
+          return {
+            "มูลค่าที่เสียไป": value ?? "",
+            "ที่มาของราคา": value == null ? "" : exact ? "ใบรับเข้าของชิ้นนี้" : "ประมาณการจากราคาเฉลี่ย",
+          };
+        };
         if (i.subItems.length > 0) {
           return i.subItems.map((s) => ({
             รหัสพัสดุ: effectiveCode(i.code, s.subCode, i._count.subItems),
@@ -669,7 +682,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             สถานะ: STATUS_LABELS[s.status] ?? s.status,
             หมวดหมู่: base.หมวดหมู่,
             สถานที่: base.สถานที่,
-            ...value,
+            ...valueFor(s.receiveRecord?.unitCost),
           }));
         }
         return [{
@@ -678,7 +691,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           สถานะ: STATUS_LABELS[i.status] ?? i.status,
           หมวดหมู่: base.หมวดหมู่,
           สถานที่: base.สถานที่,
-          ...value,
+          ...valueFor(null),
         }];
       });
     }

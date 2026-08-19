@@ -41,6 +41,8 @@ interface DamageRow {
   reason: string;
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   value: number | null;
+  /** true = ราคาจากใบรับเข้าของชิ้นนั้นเอง (ยอดที่จ่ายจริง); false = ราคาเฉลี่ยของรายการ (ประมาณการ) */
+  valueExact: boolean;
   changedAt: string;
 }
 
@@ -53,6 +55,7 @@ interface DamageSummary {
   writtenOffValue: number;
   pricedWriteOffs: number;
   unpricedWriteOffs: number;
+  exactWriteOffs: number;
 }
 
 const dateCol: Column<DamageRow> = {
@@ -86,9 +89,10 @@ const writeOffColumns: Column<DamageRow>[] = [
   { key: "reason", header: "เหตุผล", render: (r) => r.reason || "—" },
   {
     key: "value",
-    header: "มูลค่าประมาณการ",
+    header: "มูลค่าที่เสียไป",
     className: "text-right",
-    render: (r) => (r.value === null ? "—" : baht(r.value)),
+    // ≈ = ราคาเฉลี่ยของรายการ ไม่ใช่ยอดที่จ่ายจริงของชิ้นนี้ — ชิ้นที่ผูกใบรับเข้าไว้แสดงตัวเลขเปล่า
+    render: (r) => (r.value === null ? "—" : r.valueExact ? baht(r.value) : `≈ ${baht(r.value)}`),
   },
   { key: "categoryName", header: "หมวดหมู่" },
 ];
@@ -366,13 +370,13 @@ export function DamagedAssetsTab() {
               hint: `${periodLabel(f)} · จำหน่าย ${s.disposed.toLocaleString()} · สูญหาย ${s.lost.toLocaleString()}`,
               token: s.writtenOff > 0 ? "dispose" : undefined,
             },
-            // ราคาเก็บที่ระดับรายการ ไม่ใช่รายชิ้น — ของที่ซื้อหลายรอบคนละราคา ระบบรู้ราคาเดียว
-            // ยอดนี้จึงเป็นประมาณการเสมอ และต้องเขียนกำกับไว้ ไม่ให้ถูกอ่านเป็นยอดที่จ่ายจริง
+            // ชิ้นที่ผูกใบรับเข้าไว้ใช้ยอดที่จ่ายจริงของใบนั้น ส่วนที่เหลือยังเป็นราคาเฉลี่ยของรายการ
+            // ป้ายจึงเลิกเขียน "ประมาณการ" เมื่อทุกชิ้นที่คิดราคาได้มาจากใบของตัวเองครบแล้ว
             {
-              label: "มูลค่าที่เสียไป (ประมาณการ)",
+              label: s.exactWriteOffs === s.pricedWriteOffs ? "มูลค่าที่เสียไป" : "มูลค่าที่เสียไป (ประมาณการ)",
               value: s.pricedWriteOffs > 0 ? baht(s.writtenOffValue) : "—",
               hint: s.pricedWriteOffs > 0
-                ? `ประมาณการจากราคาต่อชิ้น · คิดจาก ${s.pricedWriteOffs.toLocaleString()} จาก ${s.writtenOff.toLocaleString()} ชิ้น`
+                ? `คิดจาก ${s.pricedWriteOffs.toLocaleString()} จาก ${s.writtenOff.toLocaleString()} ชิ้น · ราคาจริงจากใบรับเข้า ${s.exactWriteOffs.toLocaleString()} ชิ้น`
                 : `ยังไม่ได้กรอกราคาสักรายการ (0 จาก ${s.writtenOff.toLocaleString()} ชิ้น)`,
               token: s.pricedWriteOffs > 0 ? "value" : undefined,
             },
