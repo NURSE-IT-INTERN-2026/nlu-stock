@@ -322,6 +322,14 @@ model SubItem {
   // the ยืนยัน button on ตรวจชุด. True = ยืมไม่ได้ and not counted in availableQty.
   // Every other kind of sub-item holds the default forever.
   needsCheck          Boolean        @default(false)
+  // ใบรับเข้าที่พาชิ้นนี้เข้าคลัง — ราคาต่อชิ้นจริงอ่านจาก receiveRecord.unitCost.
+  // A foreign key, not a copied price: มูลค่าตัดจำหน่าย used to be ราคาเฉลี่ยของรายการ × จำนวน,
+  // so ten pieces bought across three years at three prices all wrote off at one figure.
+  // Pointing at the receipt keeps ONE price on file — correcting a receipt (PATCH
+  // api/receive/[id]) moves every piece it delivered, with no second copy to fall out of step.
+  // null = รับเข้าก่อนมีคอลัมน์นี้ → รายงานตกกลับไปใช้ Item.purchasePrice และบอกว่าเป็นประมาณการ.
+  receiveRecordId     String?
+  receiveRecord       ReceiveRecord? @relation(fields: [receiveRecordId], references: [id], onDelete: SetNull)
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
@@ -445,6 +453,8 @@ model ReceiveRecord {
   receiver   User     @relation(fields: [receivedBy], references: [id])
   receivedAt DateTime @default(now())
   notes      String?
+  // ชิ้นที่ใบนี้พาเข้าคลัง (ครุภัณฑ์ที่ track รายชิ้นเท่านั้น) — ใช้ตีราคาต่อชิ้นตอนตัดจำหน่าย
+  subItems   SubItem[]
 
   @@index([itemId, receivedAt])
   @@map("receive_records")

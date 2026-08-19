@@ -56,3 +56,15 @@ export async function syncLotUnitCost(tx: TxClient, lotId: string) {
   });
   await tx.lot.update({ where: { id: lotId }, data: { unitCost: weightedUnitCost(priced) } });
 }
+
+/** ราคาที่ใช้ตีมูลค่าของชิ้นที่ตัดจำหน่าย/สูญหาย.
+ *
+ *  ใบรับเข้าของชิ้นนั้นเองมาก่อนเสมอ (ยอดที่จ่ายจริง) แล้วค่อยตกไปที่ราคาเฉลี่ยของรายการ.
+ *  `exact` is what the screen and the export column read to say which of the two a number is —
+ *  ตัดจำหน่ายกล้อง 3 ตัวที่ซื้อคนละปีคนละราคา used to write off at one averaged figure, and a
+ *  ยอดที่จ่ายจริง that is silently an average is worse than one labelled as an estimate. */
+export function writeOffValue(receiptUnitCost: number | null | undefined, itemAvgPrice: number | null | undefined) {
+  return receiptUnitCost != null
+    ? { value: receiptUnitCost, exact: true }
+    : { value: itemAvgPrice ?? null, exact: false };
+}
