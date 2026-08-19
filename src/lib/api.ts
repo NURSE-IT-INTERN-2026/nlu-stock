@@ -555,6 +555,14 @@ export function createReceive(data: Record<string, unknown>) {
   });
 }
 
+/** แก้ราคาต่อหน่วยของใบรับเข้าย้อนหลัง — null = ลบราคา (ไม่ทราบ), ต่างจาก 0 (ได้มาฟรี). */
+export function updateReceiveUnitCost(id: string, unitCost: number | null) {
+  return request<{ id: string; unitCost: number | null }>(`/api/receive/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ unitCost }),
+  });
+}
+
 // ─── Item actions ───
 
 export function adjustStock(

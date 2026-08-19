@@ -434,6 +434,13 @@ model ReceiveRecord {
   lotId      String?
   lot        Lot?     @relation(fields: [lotId], references: [id])
   quantity   Int
+  // ราคาต่อหน่วยที่จ่ายจริงในการรับเข้าครั้งนี้; null = ไม่ได้กรอก.
+  // This is where a purchase price belongs: the receipt is the only event carrying a price,
+  // a date and a quantity at once, and it exists for every kind of พัสดุ. Item.purchasePrice
+  // holds ONE price and ONE date, so a durable bought in three batches could only ever count
+  // against one year — ค่าใช้จ่ายรายปี reads this instead. Item.purchasePrice stays as the
+  // per-unit figure มูลค่าคงคลัง values durable stock at, kept in step on receive.
+  unitCost   Float?
   receivedBy String
   receiver   User     @relation(fields: [receivedBy], references: [id])
   receivedAt DateTime @default(now())
