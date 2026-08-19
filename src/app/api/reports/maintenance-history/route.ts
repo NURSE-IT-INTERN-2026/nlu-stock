@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
     issue: r.issue ?? "",
     description: r.description ?? "",
     cost: r.cost ?? 0,
+    attachmentUrls: r.attachmentUrls,
     repairVenue: r.repairVenue,
     performer: r.performer.name,
     performedAt: r.performedAt.toISOString(),

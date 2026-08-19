@@ -55,16 +55,13 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     }),
     prisma.item.count({
       // onLoan = ยืมออกไปและยังไม่คืน. นำไปใช้งาน (INUSE) is not a loan — it is stationed
-      // somewhere with no due date, so it never counts as ค้าง. null loanType = legacy BORROW.
+      // somewhere with no due date. เบิกใช้ (CONSUME) is not one either, and it has no item
+      // filter beside it to catch that: while เบิกใช้ still filed as a null/BORROW row, every
+      // consumable ever drawn counted here as ค้าง and could never clear (returnedAt stays
+      // null forever by design).
       where: {
         dispenseRecords: {
-          some: {
-            returnedAt: null,
-            OR: [
-              { loanType: null },
-              { loanType: "BORROW" },
-            ],
-          },
+          some: { returnedAt: null, loanType: "BORROW" },
         },
       },
     }),

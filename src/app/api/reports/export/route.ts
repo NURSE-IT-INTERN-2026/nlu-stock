@@ -8,10 +8,17 @@ import { fmtDate } from "@/lib/format";
 import { ItemStatus } from "@/generated/prisma/enums";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
-import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, locationLabel } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
-import { groupUsageBySubject } from "@/lib/usage-by-subject";
+import { groupUsageBySubject, groupInUseByLocation } from "@/lib/usage-by-subject";
+
+/** เหตุผล search — the four columns recipientLabel can render from. Always nested under
+ *  AND: both callers' `where` already owns `OR` for the NULL-safe loanType pair. */
+function recipientOr(q: string): Prisma.DispenseRecordWhereInput {
+  const like = { contains: q, mode: "insensitive" as const };
+  return { OR: [{ recipient: like }, { courseCode: like }, { usageNote: like }, { notes: like }] };
+}
 
 // ponytail: inlined from lib/export-utils — this route is the sole consumer. Report-specific Response builders.
 //
@@ -185,6 +192,18 @@ const REPORT_TITLES: Record<ReportType, string> = {
   "maintenance-history": "ประวัติบำรุงรักษา",
 };
 
+/** ชื่อส่วนของ tab ชำรุด & ส่งซ่อม — slug ลงชื่อไฟล์ (ห้ามมีจุลภาค), label ลงหัวเรื่อง PDF */
+const DAMAGE_SEGMENTS: Record<string, { slug: string; label: string }> = {
+  DAMAGED: { slug: "damaged", label: "ชำรุด" },
+  UNDER_REPAIR: { slug: "under-repair", label: "กำลังซ่อม" },
+  "DISPOSED,LOST": { slug: "write-off", label: "ตัดจำหน่าย" },
+};
+
+const SIDE_LABELS: Record<string, string> = {
+  consumable: "สิ้นเปลือง",
+  durable: "คงทน + ครุภัณฑ์",
+};
+
 async function fetchReportData(type: ReportType, params: URLSearchParams) {
   switch (type) {
     case "stock-balance": {
@@ -204,7 +223,14 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         orderBy: { code: "asc" },
       });
 
-      return items.map((it) => {
+      // หน้าจอแยกสิ้นเปลืองกับคงทนคนละฝั่ง ไฟล์จึงต้องแยกตาม — ไม่งั้นกด export จากฝั่งหนึ่ง
+      // แล้วได้ทั้งคลัง ซึ่งยอดรวมท้ายไฟล์ไม่ตรงกับการ์ดที่คนกดปุ่มเพิ่งอ่าน.
+      const side = params.get("side");
+      const scoped = side
+        ? items.filter((it) => (it.category.profile?.dispenseType === "CONSUMABLE") === (side === "consumable"))
+        : items;
+
+      return scoped.map((it) => {
         const isConsumable = it.category.profile?.dispenseType === "CONSUMABLE";
         let value = 0;
         let unitCost: number | null = null;
@@ -251,10 +277,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (staffId) where.staffId = staffId;
       const usageType = params.get("usageType");
       if (usageType) where.usageType = usageType as UsageType;
-      // Mirrors the ผู้รับ search box on the tab. Missing here, an Excel exported under a
+      // Mirrors the เหตุผล search box on the tab. Missing here, an Excel exported under a
       // recipient filter would quietly hold every row on screen plus the ones filtered out.
+      // Same four columns as api/reports/dispense-history — เหตุผล is derived from the usage.
       const recipient = params.get("recipient")?.trim();
-      if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
+      if (recipient) where.AND = [recipientOr(recipient)];
       // นำไปใช้งาน + "ยังอยู่ข้างนอก" — the only loanStatus this case honours; ยืม + ค้างคืน
       // goes to outstanding-loans instead (see the tab's exportType).
       if (params.get("loanStatus")) where.returnedAt = null;
@@ -277,21 +304,26 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           รายการพัสดุ: r.item.name,
           จำนวน: r.quantity,
         };
+        // การใช้งาน then เหตุผล, in the order the tab shows them — an Excel whose columns run
+        // differently from the screen it was exported from cannot be checked against it.
+        // หมายเหตุ is gone: เหตุผล already renders notes for every row that is not a รายวิชา
+        // (lib/constants recipientLabel), so the two columns printed one text twice.
+        const usageLabel = r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—";
         if (kind === "consume") {
           return {
             ...head,
+            การใช้งาน: usageLabel,
+            เหตุผล: recipientLabel(r) ?? "",
             ผู้เบิก: r.staff.name,
-            การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
-            หมายเหตุ: r.notes ?? "",
           };
         }
         if (kind === "inuse") {
           return {
             ...head,
             สถานที่: r.location ? locationLabel(r.location) : "ไม่ระบุที่ตั้ง",
+            เหตุผล: recipientLabel(r) ?? "",
             ผู้เบิก: r.staff.name,
             สถานะ: r.returnedAt ? "กลับเข้าคลังแล้ว" : "อยู่ที่ห้อง",
-            หมายเหตุ: r.notes ?? "",
           };
         }
         const cond =
@@ -302,12 +334,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           : "ยังไม่คืน";
         return {
           ...head,
-          ผู้ยืม: r.recipient ?? "",
+          การใช้งาน: usageLabel,
+          เหตุผล: recipientLabel(r) ?? "",
           ผู้เบิก: r.staff.name,
-          การใช้งาน: r.usageType ? (USAGE_TYPE_LABELS[r.usageType] ?? r.usageType) : "—",
           ครบกำหนด: r.dueAt ? fmtDate(r.dueAt, "yyyy-MM-dd") : "",
           สถานะ: cond,
-          หมายเหตุ: r.notes ?? "",
         };
       });
     }
@@ -316,12 +347,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const where: Record<string, unknown> = {
         returnedAt: null,
         item: { category: { profile: { dispenseType: { in: ["COUNT", "ITEM"] } } } },
-        // Mirrors api/reports/outstanding-loans: นำไปใช้งาน (INUSE) is not owed back by
-        // anyone, so it never appears on a loan report. null loanType = legacy BORROW.
-        OR: [
-          { loanType: null },
-          { loanType: "BORROW" },
-        ],
+        // Mirrors api/reports/outstanding-loans: only ยืม is owed back — นำไปใช้งาน is
+        // stationed indefinitely and เบิกใช้ never comes back at all.
+        loanType: "BORROW",
       };
       const dateFrom = params.get("dateFrom");
       const dateTo = params.get("dateTo");
@@ -333,9 +361,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       }
       const staffId = params.get("staffId");
       if (staffId) where.staffId = staffId;
-      // Same ผู้ยืม search as the tab — see the note on the dispense-history case.
+      // Same เหตุผล search as the tab — see the note on the dispense-history case.
       const recipient = params.get("recipient")?.trim();
-      if (recipient) where.recipient = { contains: recipient, mode: "insensitive" };
+      if (recipient) where.AND = [recipientOr(recipient)];
 
       const records = await prisma.dispenseRecord.findMany({
         where,
@@ -373,7 +401,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             : "ใกล้ครบกำหนด";
         return {
           วันที่: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
-          ผู้ยืม: head.recipient ?? "",
+          เหตุผล: recipientLabel(head) ?? "",
           ผู้เบิก: head.staff.name,
           รายการ: recs.length,
           ค้างคืน: outstanding,
@@ -466,17 +494,37 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
     }
 
     case "usage-by-subject": {
-      const where: Record<string, unknown> = {};
+      // ไฟล์ต้องเป็นชนิดเดียวกับ segment ที่คนกดปุ่มเห็นอยู่ — ไม่กรอง kind แล้วยอด "รายวิชา"
+      // จะเป็นเบิกใช้บวกยืมรวมกัน ซึ่งไม่ตรงกับตัวเลขบนจอ (เหตุผลเต็มที่ api/reports/usage-by-subject)
+      const kind = parseDispenseKind(params.get("kind"));
+      const filters: Record<string, unknown>[] = [kindWhere(kind)];
       const dateFrom = params.get("dateFrom");
       const dateTo = params.get("dateTo");
       if (dateFrom || dateTo) {
-        where.dispensedAt = {
-          ...(dateFrom && { gte: new Date(dateFrom) }),
-          ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
-        };
+        filters.push({
+          dispensedAt: {
+            ...(dateFrom && { gte: new Date(dateFrom) }),
+            ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
+          },
+        });
       }
       const categoryId = params.get("categoryId");
-      if (categoryId) where.item = { categoryId };
+      // AND, ไม่ใช่ where.item = — kindWhere ถือคีย์ item ของตัวเองอยู่ การเขียนทับจะลบเงื่อนไข
+      // dispenseType ของ kind ทิ้งเงียบๆ
+      if (categoryId) filters.push({ item: { categoryId } });
+      const where = { AND: filters };
+
+      // นำไปใช้งานจัดกลุ่มตามห้อง ไม่ใช่ตามวิชา — หัวคอลัมน์จึงต้องเปลี่ยนตาม ไม่งั้นไฟล์จะพิมพ์
+      // ชื่อห้องไว้ใต้หัวข้อ "วิชา / กิจกรรม"
+      if (kind === "inuse") {
+        const rows = await groupInUseByLocation(where);
+        return rows.map((r) => ({
+          สถานที่: r.label,
+          จำนวนครั้ง: r.records,
+          จำนวนหน่วย: r.totalQuantity,
+          ชนิดพัสดุ: r.itemCount,
+        }));
+      }
 
       const rows = await groupUsageBySubject(where);
 
@@ -577,14 +625,36 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
     }
 
     case "damaged-assets": {
-      const status = params.get("status");
-      const statuses: ItemStatus[] = status ? [status as ItemStatus] : [ItemStatus.DAMAGED, ItemStatus.UNDER_REPAIR, ItemStatus.DISPOSED, ItemStatus.LOST];
+      const all: ItemStatus[] = [ItemStatus.DAMAGED, ItemStatus.UNDER_REPAIR, ItemStatus.DISPOSED, ItemStatus.LOST];
+      // หน้าจอส่งมาเป็นรายการคั่นด้วยจุลภาค ("DISPOSED,LOST") — ไฟล์ต้องได้ชุดเดียวกับที่เห็นอยู่
+      const asked = (params.get("status") ?? "").split(",").filter((s) => all.includes(s as ItemStatus)) as ItemStatus[];
+      const statuses: ItemStatus[] = asked.length > 0 ? asked : all;
+      // มูลค่าประมาณการมีความหมายเฉพาะของที่ตัดออกถาวร ส่วนของที่ยังพังอยู่ยังไม่ได้เสียไปไหน
+      const wantsValue = statuses.every((s) => s === ItemStatus.DISPOSED || s === ItemStatus.LOST);
+
+      // เดิม export ไม่อ่านช่วงวันที่เลย ทั้งที่หน้าจอกรองอยู่ — ไฟล์จึงมีแถวที่คนกดปุ่มไม่เห็น
+      const dfrom = params.get("dateFrom");
+      const dto = params.get("dateTo");
+      const dateWhere = dfrom || dto
+        ? {
+            statusLogs: {
+              some: {
+                newStatus: { in: statuses },
+                changedAt: {
+                  ...(dfrom && { gte: new Date(dfrom) }),
+                  ...(dto && { lte: new Date(dto + "T23:59:59") }),
+                },
+              },
+            },
+          }
+        : {};
 
       // Mirrors api/reports/damaged-assets: match written-off pieces too, one row each.
       const items = await prisma.item.findMany({
         where: {
           isActive: true,
           OR: [{ status: { in: statuses } }, { subItems: { some: { status: { in: statuses } } } }],
+          ...dateWhere,
         },
         include: {
           category: { select: { name: true } },
@@ -601,6 +671,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           หมวดหมู่: i.category.name,
           สถานที่: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
         };
+        // ราคาเก็บที่ระดับรายการ ไม่ใช่รายชิ้น จึงเป็นประมาณการ — ชื่อคอลัมน์บอกไว้ตรงๆ
+        const value = wantsValue ? { "มูลค่าประมาณการ": i.purchasePrice ?? "" } : {};
         if (i.subItems.length > 0) {
           return i.subItems.map((s) => ({
             รหัสพัสดุ: effectiveCode(i.code, s.subCode, i._count.subItems),
@@ -608,6 +680,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             สถานะ: STATUS_LABELS[s.status] ?? s.status,
             หมวดหมู่: base.หมวดหมู่,
             สถานที่: base.สถานที่,
+            ...value,
           }));
         }
         return [{
@@ -616,6 +689,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           สถานะ: STATUS_LABELS[i.status] ?? i.status,
           หมวดหมู่: base.หมวดหมู่,
           สถานที่: base.สถานที่,
+          ...value,
         }];
       });
     }
@@ -713,9 +787,18 @@ export async function GET(request: NextRequest) {
   // ออกจากคลัง ships three different sheets under one type, so the kind has to reach the
   // filename and the PDF heading — otherwise all three download as the same name and read
   // as the same report.
-  const kind = type === "dispense-history" ? parseDispenseKind(params.get("kind")) : null;
-  const filename = `${type}${kind ? `-${kind}` : ""}-${new Date().toISOString().slice(0, 10)}`;
-  const title = REPORT_TITLES[type] + (kind ? ` — ${DISPENSE_KIND_LABELS[kind]}` : "");
+  // สองรายงานนี้ส่งออกได้ชนิดละไฟล์ — ถ้าไม่ติดชื่อชนิดไว้ ทั้งสามไฟล์จะโหลดมาชื่อเดียวกันและ
+  // อ่านเป็นรายงานเดียวกัน
+  const kind = type === "dispense-history" || type === "usage-by-subject"
+    ? parseDispenseKind(params.get("kind"))
+    : null;
+  // เหตุผลเดียวกันกับ kind: มูลค่าคงคลังส่งออกได้สองฝั่ง ชื่อไฟล์กับหัวเรื่องต้องบอกว่าฝั่งไหน
+  const side = type === "stock-balance" ? SIDE_LABELS[params.get("side") ?? ""] ?? null : null;
+  const segment = type === "damaged-assets" ? DAMAGE_SEGMENTS[params.get("status") ?? ""] ?? null : null;
+  const suffix = kind ? `-${kind}` : side ? `-${params.get("side")}` : segment ? `-${segment.slug}` : "";
+  const filename = `${type}${suffix}-${new Date().toISOString().slice(0, 10)}`;
+  const title = REPORT_TITLES[type]
+    + (kind ? ` — ${DISPENSE_KIND_LABELS[kind]}` : side ? ` — ${side}` : segment ? ` — ${segment.label}` : "");
 
   if (format === "xlsx") return toXlsx(data, filename, type);
   return await toPdf(data, filename, title);

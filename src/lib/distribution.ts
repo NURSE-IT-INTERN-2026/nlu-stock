@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { locationLabel } from "@/lib/constants";
+import { locationLabel, recipientLabel } from "@/lib/constants";
 import { damagedQtyOf } from "@/lib/stock";
 import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 
@@ -90,14 +90,14 @@ export async function getItemDistribution(itemId: string): Promise<DistributionR
   // Loans (BORROW) are custody, not a place — one row per open loan, named after the person.
   // They stay separate from the location rows because "อยู่กับ อ.สมชาย" answers a different
   // question than "อยู่ห้อง 402", even though both explain the same missing units.
-  // Explicit OR, never `loanType: { not: "INUSE" }` — that compiles to a NULL-unsafe
-  // `!= 'INUSE'` which silently drops every legacy row, and legacy null IS a borrow
-  // (schema.prisma on DispenseRecord.loanType). Same trap as api/returns/route.ts.
+  // BORROW named outright: นำไปใช้งาน is a place (its own rows below) and เบิกใช้ never comes
+  // back, so neither is custody. Same rule as api/returns/route.ts.
   const loans = await prisma.dispenseRecord.findMany({
-    where: { itemId, returnedAt: null, OR: [{ loanType: null }, { loanType: "BORROW" }] },
+    where: { itemId, returnedAt: null, loanType: "BORROW" },
     select: {
       quantity: true, resolvedQty: true, dispensedAt: true, dueAt: true,
-      recipient: true, staff: { select: { name: true } },
+      recipient: true, usageType: true, courseCode: true, usageNote: true, notes: true,
+      staff: { select: { name: true } },
     },
     orderBy: { dispensedAt: "asc" },
   });
@@ -105,7 +105,10 @@ export async function getItemDistribution(itemId: string): Promise<DistributionR
   const borrowerRows: DistributionRow[] = loans
     .map((l) => ({
       kind: "borrower" as const,
-      label: l.recipient?.trim() || l.staff.name,
+      // The row is named by its เหตุผล now (lib/constants recipientLabel) — "อยู่กับ 578101 การพยาบาลพื้นฐาน".
+      // Falls back to the staff who filed it: a row with no usage at all still needs a name
+      // to chase, and that person is the one who signed the stock out.
+      label: recipientLabel(l) ?? l.staff.name,
       qty: l.quantity - l.resolvedQty,
       state: "ON_LOAN" as const,
       since: l.dispensedAt,

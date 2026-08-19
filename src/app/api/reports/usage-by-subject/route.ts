@@ -1,39 +1,73 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
-import { groupUsageBySubject } from "@/lib/usage-by-subject";
+import { groupUsageBySubject, groupInUseByLocation } from "@/lib/usage-by-subject";
+import { parseDispenseKind } from "@/lib/dispense-kind";
+import { kindWhere } from "@/lib/dispense-kind-where";
 
+/**
+ * สถิติการใช้งาน แยกตามชนิดการออกจากคลัง.
+ *
+ * เดิม route นี้ไม่กรอง kind เลย ยอด "รายวิชา" จึงเป็นเบิกใช้บวกยืมรวมกัน — และในคลังนี้ยืมคือ
+ * 65% ของทุกแถว แปลว่าตัวเลขที่คนอ่านใต้หัวข้อ "สถิติการใช้งาน" ส่วนใหญ่ไม่ใช่การเบิกใช้อย่างที่
+ * ชื่อสื่อ. ตัวนับ "ยังไม่ระบุการใช้งาน" ก็นับแถว INUSE ทุกแถวไปด้วย ทั้งที่ นำไปใช้งาน ไม่ต้อง
+ * ระบุการใช้งานโดยเจตนา (validators/dispense) — การ์ดจึงอ่านเหมือนคนกรอกข้อมูลตกหล่นทั้งที่ไม่ใช่.
+ *
+ * kindWhere ตัวเดียวกับที่ tab ออกจากคลังใช้ เพื่อให้สองหน้าไม่มีวันนับ "ยืม" คนละชุดกัน.
+ */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
 
   const params = getSearchParams(request);
+  const kind = parseDispenseKind(params.get("kind"));
   const dateFrom = params.get("dateFrom") || undefined;
   const dateTo = params.get("dateTo") || undefined;
   const categoryId = params.get("categoryId") || undefined;
 
-  const where: Record<string, unknown> = {};
+  const filters: Record<string, unknown>[] = [kindWhere(kind)];
   if (dateFrom || dateTo) {
-    where.dispensedAt = {
-      ...(dateFrom && { gte: new Date(dateFrom) }),
-      ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
-    };
+    filters.push({
+      dispensedAt: {
+        ...(dateFrom && { gte: new Date(dateFrom) }),
+        ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
+      },
+    });
   }
-  if (categoryId) {
-    where.item = { categoryId };
+  // AND, ไม่ใช่ spread: kindWhere ถือคีย์ `item` ของตัวเองอยู่แล้ว การเขียน where.item ทับจะลบ
+  // เงื่อนไข dispenseType ของ kind ทิ้งเงียบๆ แล้วทุก segment จะกลับไปนับชุดเดียวกันหมด
+  if (categoryId) filters.push({ item: { categoryId } });
+
+  const where = { AND: filters };
+
+  // นำไปใช้งานจัดกลุ่มตามห้อง ไม่ใช่ตามวิชา — ดูเหตุผลที่ groupInUseByLocation
+  if (kind === "inuse") {
+    const rows = await groupInUseByLocation(where);
+    const unlocated = rows.find((r) => r.label === "ไม่ระบุสถานที่");
+    return json({
+      rows,
+      summary: {
+        subjects: rows.filter((r) => r !== unlocated).length,
+        records: rows.reduce((s, r) => s + r.records, 0),
+        units: rows.reduce((s, r) => s + r.totalQuantity, 0),
+        unspecifiedRecords: unlocated?.records ?? 0,
+      },
+    });
   }
 
   const data = await groupUsageBySubject(where);
 
   // เบิกที่ไม่ได้ระบุการใช้งาน — ต้องอยู่ในรายงานด้วย ไม่งั้นยอดรวมไม่เท่ากับจำนวนที่เบิกจริง
-  // และไม่มีใครเห็นว่ามีของหายไปจากสถิติเท่าไร.
+  // และไม่มีใครเห็นว่ามีของหายไปจากสถิติเท่าไร. กรอง kind แล้วตัวนับนี้จึงหมายถึงการกรอกตกหล่น
+  // จริงๆ ไม่ใช่แถว INUSE ที่ไม่ต้องกรอกอยู่แล้ว.
+  const noTypeWhere = { AND: [...filters, { usageType: null }] };
   const [noTypeAgg, noTypeItems] = await Promise.all([
     prisma.dispenseRecord.aggregate({
       _sum: { quantity: true },
       _count: { _all: true },
-      where: { ...where, usageType: null },
+      where: noTypeWhere,
     }),
-    prisma.dispenseRecord.groupBy({ by: ["itemId"], where: { ...where, usageType: null } }),
+    prisma.dispenseRecord.groupBy({ by: ["itemId"], where: noTypeWhere }),
   ]);
 
   if (noTypeAgg._count._all > 0) {
@@ -54,5 +88,9 @@ export async function GET(request: NextRequest) {
     unspecifiedRecords: noTypeAgg._count._all,
   };
 
-  return json({ rows: data, summary });
+  // การ์ดสัดส่วนรายวิชา — Notion ขอแยกออกมาอีกใบจากภาพรวม รายวิชา/กิจกรรม/อื่นๆ. คิดจากแถวชุด
+  // เดียวกับตาราง เพื่อไม่ให้สองการ์ดบนหน้าเดียวกันเถียงกันเรื่องยอดของวิชาเดียวกัน.
+  const courses = data.filter((r) => r.usageType === "COURSE" && r.courseCode);
+
+  return json({ rows: data, courses, summary });
 }

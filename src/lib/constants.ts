@@ -38,8 +38,13 @@ export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
 // One DispenseRecord is three different real events depending on the item's dispenseType
 // and loanType, so they get three separate types here — calling all of them "เบิก" told a
 // reader nothing about whether the stock is coming back.
+// ซ่อม is its own pair of events, not a flavour of เปลี่ยนสถานะ / ซ่อมบำรุง: a repair trip is the
+// thing staff look for in the history, and it reads the same whether the unit is a tracked piece
+// (sub-item status log) or qty stock (a ชำรุด booking). REPAIR_RETURN also splits ซ่อมแซม
+// (CORRECTIVE) out of บำรุงรักษา (PREVENTIVE) — same split the reports already make.
 export type TimelineEventType =
   | "DISPENSE" | "INUSE" | "BORROW" | "RETURN" | "RECEIVE" | "ADJUSTMENT"
+  | "DAMAGE_REPORT" | "REPAIR_SENT" | "REPAIR_RETURN"
   | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
 
 export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
@@ -49,8 +54,13 @@ export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   RETURN: "รับคืน",
   RECEIVE: "รับเข้า",
   ADJUSTMENT: "ปรับสต๊อก",
+  DAMAGE_REPORT: "แจ้งชำรุด",
+  REPAIR_SENT: "ส่งซ่อม",
+  // The chip is the bucket ("ของกลับเข้าคลัง"); what came back and from where is the
+  // รายการ cell's job — it spells out "รับคืนจากซ่อม" there.
+  REPAIR_RETURN: "รับคืน",
   STATUS_CHANGE: "เปลี่ยนสถานะ",
-  MAINTENANCE: "ซ่อมบำรุง",
+  MAINTENANCE: "บำรุงรักษา",
   LOCATION_CHANGE: "ย้ายที่ตั้ง",
 };
 
@@ -81,15 +91,66 @@ export const USAGE_TYPE_OPTIONS = [
   { value: "OTHER", label: "อื่นๆ" },
 ] as const;
 
+/**
+ * เหตุผล = สิ่งที่ของถูกเบิกไปทำ. There is no ผู้รับ field, and no ผู้รับ column anywhere in
+ * the app any more: staff monitor stock by what it was used for, not by whose name is on it.
+ *
+ * The cart used to ask "ผู้รับ" on top of the usage block, and the two answers were the same
+ * answer twice: a draw for รายวิชา is received by that course, a กิจกรรม by that activity, and
+ * อื่นๆ already asks "เอาไปทำอะไร / ใครขอ". So the field is gone from the cart and every
+ * เหตุผล label in the app is derived from the usage instead.
+ *
+ * `recipient` is still read first — the column stays for the rows written before this, where
+ * someone deliberately typed a name. New rows leave it null and fall through to the usage.
+ */
+export function recipientLabel(r: {
+  recipient?: string | null;
+  usageType?: string | null;
+  courseCode?: string | null;
+  usageNote?: string | null;
+  notes?: string | null;
+}): string | null {
+  if (r.recipient?.trim()) return r.recipient.trim();
+  // รหัสวิชา + ชื่อวิชา snapshot — the code alone is not something anyone reads as a reason.
+  if (r.usageType === "COURSE") {
+    return [r.courseCode?.trim(), r.usageNote?.trim()].filter(Boolean).join(" ") || null;
+  }
+  // กิจกรรม / อื่นๆ write their line into usageNote too, so the reason lives in one column for
+  // every usage type — that is what lets lib/usage-by-subject tell one activity from another.
+  // `notes` stays as the fallback for rows written before that: their text is still the reason,
+  // it just landed in the wrong column, and a migration to move it is not worth its own risk.
+  return r.usageNote?.trim() || stripLegacyRoomNote(r.notes) || null;
+}
+
+/**
+ * นำไปใช้งาน used to fold the destination room into notes as "ห้องที่ตั้ง: X", back when
+ * locationId could come back null (see item-detail-shell roomFromNotes, which still reads it
+ * to place those rows). The dialog stopped writing it once INUSE required a real Location.
+ *
+ * Those rows now sit under เหตุผล, one column away from a สถานที่ that says the same room —
+ * so the room half is dropped and only a genuine reason ("ยืมเล่นๆ | ห้องที่ตั้ง: …") survives.
+ * A row that was nothing but the room reads "—", which is honest: nobody ever gave a reason.
+ */
+export function stripLegacyRoomNote(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  return notes
+    .split("|")
+    .filter((part) => !/^\s*ห้องที่ตั้ง\s*:/.test(part))
+    .join("|")
+    .trim() || null;
+}
+
 // ─── Adjustment Reason ───
 
 export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   LOST: "สูญหาย",
-  DAMAGED_PENDING_REPAIR: "เสียหาย/ชำรุด",
+  DAMAGED_PENDING_REPAIR: "ชำรุด",
   COUNT_MISMATCH_SHORT: "นับแล้วขาด",
   COUNT_MISMATCH_OVER: "นับแล้วเกิน",
   DISPOSAL: "ตัดจำหน่าย",
   ASSEMBLY: "ประกอบเป็นชุด",
+  REPAIR_RETURN: "รับคืนจากซ่อม",
+  DAMAGE_CANCELLED: "ยกเลิกคำขอชำรุด",
   OTHER: "อื่นๆ",
 };
 

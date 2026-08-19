@@ -140,7 +140,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
       </div>
 
       <div className="rounded-md border overflow-x-auto">
-        <Table className="table-fixed">
+        <Table grid zebra className="table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead className="w-36 px-2">รหัสย่อย</TableHead>

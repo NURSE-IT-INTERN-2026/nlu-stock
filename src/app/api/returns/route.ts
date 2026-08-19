@@ -39,13 +39,11 @@ const ITEM_INCLUDE = {
 // permanently-open row as ค้าง and never clears.
 // This screen is for stock somebody owes back. นำไปใช้งาน (INUSE) owes nothing — it is
 // stationed in a room indefinitely and comes back through คืนเข้าคลัง, so no INUSE row of
-// any kind belongs here. null loanType = legacy BORROW.
-// (Explicit OR, never NOT/`not:` — those compile to NULL-unsafe SQL that drops the legacy rows.)
+// any kind belongs here. เบิกใช้ (CONSUME) owes nothing either — it never comes back at all.
+// Naming BORROW outright rather than excluding the other two: this screen should list what
+// somebody owes, so a value added later must opt in here, not arrive by default.
 const BORROWED_ONLY = {
-  OR: [
-    { loanType: null },
-    { loanType: "BORROW" as const },
-  ],
+  loanType: "BORROW",
 } satisfies Prisma.DispenseRecordWhereInput;
 export async function GET() {
   const auth = await requireAuth();

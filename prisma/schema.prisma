@@ -37,6 +37,11 @@ enum AdjustmentReason {
   COUNT_MISMATCH_OVER
   DISPOSAL
   ASSEMBLY
+  // The two ways an open ชำรุด booking closes and its units come back (lib/stock
+  // restoreDamagedQty). Both used to be booked as OTHER, which printed "อื่นๆ" over the row
+  // that puts repaired stock back — the one row where the reason is the whole point.
+  REPAIR_RETURN
+  DAMAGE_CANCELLED
   OTHER
 }
 
@@ -78,6 +83,10 @@ enum ReturnCondition {
 enum LoanType {
   BORROW
   INUSE
+  // เบิกใช้ — ของสิ้นเปลืองที่ออกไปแล้วไม่กลับ. เคยเขียนเป็น NULL ซึ่งทับความหมายกับ "แถวเก่า
+  // ก่อนมีคอลัมน์นี้" จนแยกไม่ออก และบังคับให้ทุก query ต้องเขียน OR [null, BORROW] กันแถวหาย
+  // (Prisma แปล `not: "INUSE"` เป็น SQL ที่ NULL-unsafe). ค่าจริงทำให้คอลัมน์เป็น NOT NULL ได้.
+  CONSUME
 }
 
 enum UsageType {
@@ -403,7 +412,7 @@ model DispenseRecord {
   // Lets the return screen show one card per loan instead of merging by item.
   loanGroupId     String?
   // null (legacy) treated as BORROW. INUSE records are excluded from the รับคืน/outstanding-loan screens.
-  loanType        LoanType?
+  loanType        LoanType
   dueAt           DateTime?
   returnProofUrls String[]         @default([]) // photos uploaded when the loan is returned
   recoveredAt     DateTime? // set when a return-as-LOST is reversed (เรียกคืน)
@@ -485,6 +494,7 @@ model StockAdjustment {
   repairSentAt  DateTime?
   repairVenue   RepairVenue?
   repairNote    String?
+  repairJobs    MaintenanceRecord[]
 
   @@index([itemId, adjustedAt])
   @@map("stock_adjustments")
@@ -508,6 +518,13 @@ model MaintenanceRecord {
   attachmentUrls    String[]
   nextMaintenanceAt DateTime?
   repairVenue       RepairVenue?
+  // The stock row this job wrote, for qty stock (a tracked piece uses subItemId instead):
+  // REPAIR_RETURN when the units came back, DISPOSAL when they were written off. Both rows
+  // describe one รับคืนจากซ่อม, so the item timeline prints the adjustment — which carries the
+  // qty and the balance — and folds this record's cost into it rather than repeating the
+  // event under two names.
+  adjustmentId      String?
+  adjustment        StockAdjustment?  @relation(fields: [adjustmentId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -530,6 +547,10 @@ model ItemStatusLog {
   imageUrl       String?
   repairVenue    RepairVenue?
   repairNote     String?
+  // How many units this row is about, when it is about a quantity rather than one piece —
+  // a qty ส่งซ่อม books 47 of 147 and the item's own status does not change. Null on every
+  // status transition of a whole item or a tracked piece, where the count is always 1.
+  qty            Int?
   // อาการที่ชำรุด for this repair trip. Set when the piece is sent for repair and again on
   // every แก้ข้อมูลการส่งซ่อม row, so a mistyped or incomplete symptom can be corrected
   // without overwriting the original log line — the newest non-null one is the current

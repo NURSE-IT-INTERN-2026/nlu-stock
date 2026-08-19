@@ -2,50 +2,49 @@
 
 import type { ComponentType } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DashboardTables } from "./dashboard-charts";
 import { DashboardScopeBar } from "./dashboard-scope-bar";
-import { ProfileSummaryWidget } from "./profile-summary-widget";
-import { AssetStatusChart } from "./asset-status-chart";
-import { MovementChart } from "./movement-chart";
+import { DashboardTables } from "./dashboard-charts";
+import { DispenseByUsageChart } from "./dispense-by-usage-chart";
 import { TopDispenseChart } from "./top-dispense-chart";
-import { UsageBySubjectChart } from "./usage-by-subject-chart";
-import { RepairStatusWidget } from "./repair-status-widget";
+import { TopCoursesChart } from "./top-courses-chart";
+import { LoanKpis, InUseKpis } from "./tab-kpis";
+import { FlowMonthlyChart } from "./flow-monthly-chart";
+import { LoanDurationChart } from "./loan-duration-chart";
+import { OutstandingLoansTable } from "./outstanding-loans-table";
+import { AssetStatusChart } from "./asset-status-chart";
+import { StationByRoomChart } from "./station-by-room-chart";
+import { InUseTable } from "./in-use-table";
+import { ProfileSummaryWidget } from "./profile-summary-widget";
 import { DashboardScopeProvider } from "@/hooks/use-dashboard-scope";
 import { parseScope, scopeQuery, type DashboardScope } from "@/lib/dashboard-scope";
-import type { DispenseType } from "@/generated/prisma/enums";
-import { useTopDispense, useUsageBySubject, useRepairStatus } from "@/hooks/use-dashboard-queries";
+import type { DispenseKind } from "@/lib/dispense-kind";
+import { useTopDispense } from "@/hooks/use-dashboard-queries";
 
 function ChartError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex h-[320px] flex-col items-center justify-center gap-2 rounded-2xl border bg-card">
       <p className="text-sm text-destructive">{message}</p>
-      <Button variant="outline" size="sm" onClick={onRetry}>โหลดใหม่</Button>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-secondary"
+      >
+        โหลดใหม่
+      </button>
     </div>
   );
 }
 
-function TopDispenseWidget() {
+// TopDispenseChart takes rows, not a scope — the fetch lives here so the same ranked list
+// serves all three tabs, each scoped to its own kind by the provider it sits under. `verb`
+// is what makes the heading true per tab: the ยืม tab counts loans, not เบิก.
+function TopDispenseWidget({ verb }: { verb: string }) {
   const { data, isLoading, error, refetch } = useTopDispense();
   if (isLoading) return <Skeleton className="h-[320px] w-full rounded-2xl" />;
   if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
-  return <TopDispenseChart data={data ?? []} />;
-}
-
-function UsageBySubjectWidget() {
-  const { data, isLoading, error, refetch } = useUsageBySubject();
-  if (isLoading) return <Skeleton className="h-[320px] w-full rounded-2xl" />;
-  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
-  return <UsageBySubjectChart data={data ?? []} />;
-}
-
-function RepairStatusPanel() {
-  const { data, isLoading, error, refetch } = useRepairStatus();
-  if (isLoading) return <Skeleton className="h-[240px] w-full rounded-2xl" />;
-  if (error) return <ChartError message={error.message} onRetry={() => refetch()} />;
-  return <RepairStatusWidget data={data ?? { damaged: 0, underRepair: 0 }} />;
+  return <TopDispenseChart data={data ?? []} verb={verb} />;
 }
 
 function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
@@ -57,74 +56,94 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle: string }
   );
 }
 
-// One tab per DispenseType, because that is what decides which number means anything:
-// a CONSUMABLE has flow and no per-piece status, an ITEM has per-piece status and no
-// meaningful qty flow. Mixing all three into one page meant every widget was two-thirds
-// noise — an asset-status pie counting สำลี alongside เครื่องวัดความดัน.
+// One tab per DispenseKind, because that is what decides which number means anything:
+// เบิกใช้ never comes back so it has flow but no "ยังไม่คืน", ยืม has a due date and someone
+// to chase, นำไปใช้งาน has a room and no due date at all. Mixing all three into one page meant
+// every widget was two-thirds noise. The kind axis is lib/dispense-kind's, reused so /reports
+// and the dashboard can never disagree on what "ยืม" counts.
 //
-// No "ต้องดำเนินการ" section here on purpose. Every list that lived there (ใกล้หมด,
-// คืนเกินกำหนด, เกินกำหนดซ่อมบำรุง) was a read-only top-5 whose predicate the routes
-// themselves described as "same predicate as getAlertCounts" — /alerts renders the same
-// rows with filters, pagination and panels that actually close the work. งานซ่อมที่กำลัง
-// ดำเนินการ was the one non-duplicate, and /receive already owns it (SubItemStatusPanel
-// status="UNDER_REPAIR"). DashboardAlertBar above the tabs carries the counts.
+// No "ต้องดำเนินการ" section on purpose: every list that lived there (ใกล้หมด, คืนเกินกำหนด,
+// เกินกำหนดซ่อมบำรุง) is a read-only top-5 whose predicate is "same as getAlertCounts" —
+// DashboardAlertBar above the tabs carries the counts and /alerts closes the work.
 const TABS = [
-  { type: "CONSUMABLE", label: "สิ้นเปลือง" },
-  { type: "COUNT", label: "นับจำนวน" },
-  { type: "ITEM", label: "ครุภัณฑ์รายชิ้น" },
-] as const satisfies ReadonlyArray<{ type: DispenseType; label: string }>;
+  { kind: "consume", label: "สิ้นเปลือง" },
+  { kind: "borrow", label: "สถิติการยืม" },
+  { kind: "inuse", label: "สถิติการนำไปใช้งาน" },
+] as const satisfies ReadonlyArray<{ kind: DispenseKind; label: string }>;
 
-// Consumable and Count render the same shape — a lone SectionHeading divides nothing, so
-// neither carries one; ItemPanel keeps its two because there it separates real groups.
-function ConsumablePanel() {
+// เบิกใช้: flow and รายวิชา, the two questions a consumable answers.
+function ConsumePanel() {
   return (
     <div className="flex flex-col gap-4">
-      <MovementChart />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        <TopDispenseWidget />
-        <UsageBySubjectWidget />
+      <DispenseByUsageChart />
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+        <TopDispenseWidget verb="เบิก" />
+        <TopCoursesChart />
       </div>
       <DashboardTables />
     </div>
   );
 }
 
-function CountPanel() {
+// ยืม: the loop — ออกไปเท่าไร กลับมาเท่าไร นานแค่ไหน ค้างอะไรอยู่. KPIs count things, the flow
+// and the histogram count events, and the worklist is what someone acts on today.
+function BorrowPanel() {
   return (
     <div className="flex flex-col gap-4">
-      <MovementChart />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        <TopDispenseWidget />
-        <UsageBySubjectWidget />
+      <LoanKpis />
+      <FlowMonthlyChart
+        title="แนวโน้มการยืม-คืน"
+        hint="ยืมออกเทียบกับคืนเข้า ย้อนหลัง 1 ปี (ครั้ง)"
+        outLabel="ยืมออก"
+        backLabel="คืนเข้า"
+        gapLabel="ค้างสะสม"
+      />
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+        <TopDispenseWidget verb="ยืม" />
+        <LoanDurationChart />
       </div>
-      <DashboardTables />
+      <OutstandingLoansTable />
+      <TopCoursesChart />
     </div>
   );
 }
 
-function ItemPanel() {
+// นำไปใช้งาน: สถานะ and ที่ตั้ง, not flow of qty — a durable is drawn once and lives somewhere
+// for a term. สถานะรายชิ้น leads (donut), then where it went and what for.
+function InUsePanel() {
   return (
     <div className="flex flex-col gap-4">
-      <SectionHeading title="สถานะรายชิ้น" subtitle="ชิ้นงานทั้งหมดอยู่ในสถานะไหน" />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+      <InUseKpis />
+      {/* Full width, alone: the 260px trend is the tallest widget on the tab, so anything
+          beside it stretches to its height and shows a band of empty space. */}
+      <FlowMonthlyChart
+        title="แนวโน้มการนำไปใช้งาน-นำกลับ"
+        hint="นำออกใช้งานเทียบกับนำกลับคลัง ย้อนหลัง 1 ปี (ครั้ง)"
+        outLabel="นำออก"
+        backLabel="นำกลับ"
+        gapLabel="ค้างสะสม"
+      />
+      <SectionHeading title="สถานะและที่ตั้ง" subtitle="ชิ้นงานอยู่ในสถานะไหน และกระจายอยู่ห้องไหน" />
+      {/* items-start, not stretch: the donut card is the one thing here that must not grow to
+          a neighbour's height — a stretched card spreads its five legend rows down a blank
+          column. The two list cards below pair off instead, where equal row counts make them
+          match on their own. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <AssetStatusChart />
-        <RepairStatusPanel />
+        <StationByRoomChart />
       </div>
-
-      <SectionHeading title="การใช้งาน" subtitle="ชิ้นที่ถูกยืมบ่อยและใช้ในวิชาไหน" />
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        <TopDispenseWidget />
-        <UsageBySubjectWidget />
+        <InUseTable />
+        <TopDispenseWidget verb="นำไปใช้งาน" />
       </div>
-      <DashboardTables />
     </div>
   );
 }
 
-const PANELS: Record<DispenseType, ComponentType> = {
-  CONSUMABLE: ConsumablePanel,
-  COUNT: CountPanel,
-  ITEM: ItemPanel,
+const PANELS: Record<DispenseKind, ComponentType> = {
+  consume: ConsumePanel,
+  borrow: BorrowPanel,
+  inuse: InUsePanel,
 };
 
 export function DashboardBody() {
@@ -132,12 +151,11 @@ export function DashboardBody() {
   const searchParams = useSearchParams();
 
   // The URL is the only state: a refresh, a back button or a shared link all land on the
-  // same tab and the same filter. The old Tabs kept theirs in useState, so every refresh
-  // snapped back to the first one.
-  const parsed = parseScope(new URLSearchParams(searchParams.toString()));
-  const type: DispenseType = parsed.type ?? "CONSUMABLE";
-  const scope: DashboardScope = { ...parsed, type };
-  const Panel = PANELS[type];
+  // same tab and the same filter. Keeping it in useState would snap every refresh back to
+  // the first tab.
+  const scope = parseScope(new URLSearchParams(searchParams.toString()));
+  const kind = scope.kind;
+  const Panel = PANELS[kind];
 
   const setScope = (next: DashboardScope) => {
     router.replace(`/${scopeQuery(next)}`, { scroll: false });
@@ -145,43 +163,42 @@ export function DashboardBody() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Unscoped on purpose: this is the map of the whole warehouse, and it is how you
-          pick which tab you actually want. */}
+      {/* Unscoped map of the whole warehouse, above the tabs on purpose: it is how you pick
+          which tab you actually want, so it cannot depend on the one you are on. */}
       <ProfileSummaryWidget />
 
-      <Tabs value={type} onValueChange={(v) => setScope({ type: v as DispenseType })}>
+      {/* Switching tab drops ประเภท/หมวดย่อย: a profile belongs to one kind's DispenseTypes,
+          so carrying it into another tab would filter to nothing. */}
+      <Tabs value={kind} onValueChange={(v) => setScope({ kind: v as DispenseKind })}>
         {/* The tab strip and its filters stay reachable while the panel below scrolls — the
             panels run several screens long and switching tab meant scrolling back up first.
-            Negative margins let the bar bleed to the edge of main's padding so the blur
-            covers what passes under it. */}
-        {/* Offsets match the layout's own sticky Header (h-16 / sm:h-20). From lg up `main`
+            Offsets match the layout's own sticky Header (h-16 / sm:h-20); from lg up `main`
             is the scroll container and the header sits outside it, so there the bar sticks to
             main's own top edge instead. */}
         <div className="sticky top-16 z-30 -mx-4 flex flex-col gap-2.5 border-b bg-background/85 px-4 py-2.5 backdrop-blur-md sm:top-20 sm:-mx-6 sm:px-6 lg:top-0 lg:flex-row lg:items-center lg:gap-4">
           {/* w-full, not w-fit: the three tabs split the bar evenly so each is a wide target
-              and the strip reads as the page's own segmented control rather than three chips
-              floating at the left edge. TabsTrigger already carries flex-1. */}
+              and the strip reads as the page's own segmented control. */}
           <TabsList className="w-full min-w-0">
             {TABS.map((t) => (
-              <TabsTrigger key={t.type} value={t.type} className="min-w-0 px-3.5">
+              <TabsTrigger key={t.kind} value={t.kind} className="min-w-0 px-3.5">
                 {t.label}
               </TabsTrigger>
             ))}
           </TabsList>
-          {/* shrink-0: without it the full-width TabsList squeezes the two selects until they
+          {/* shrink-0: without it the full-width TabsList squeezes the selects until they
               wrap onto a second line and the sticky bar grows a row. */}
           <div className="shrink-0">
             <DashboardScopeBar
-              type={type}
+              kind={kind}
               profileId={scope.profileId}
               categoryId={scope.categoryId}
-              onChange={(next) => setScope({ type, ...next })}
+              onChange={(next) => setScope({ kind, ...next })}
             />
           </div>
         </div>
 
         {TABS.map((t) => (
-          <TabsContent key={t.type} value={t.type} className="animate-fade-in">
+          <TabsContent key={t.kind} value={t.kind} className="animate-fade-in">
             {/* Only the active panel is mounted, so only its widgets fetch. */}
             <DashboardScopeProvider scope={scope}>
               <Panel />

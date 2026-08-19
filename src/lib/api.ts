@@ -121,7 +121,9 @@ export function searchCategories(q: string) {
 }
 
 export function getPublicCategories() {
-  return request<CategoryOption[]>("/api/categories");
+  // no-store: the dashboard scope picker must see a category the moment it is added,
+  // not a browser-cached list from before.
+  return request<CategoryOption[]>("/api/categories", { cache: "no-store" });
 }
 
 export function createCategory(data: { name: string; profileId: string; description?: string }) {
@@ -605,6 +607,9 @@ export interface OpenBorrow {
   resolvedQty: number;
   dispensedAt: string;
   usageType: string | null;
+  // เหตุผล is rendered from these three (lib/constants recipientLabel), not from `recipient` —
+  // that column only still carries a value on rows written before the cart dropped the field.
+  courseCode: string | null;
   usageNote: string | null;
   notes: string | null;
   recipient: string | null;
@@ -686,6 +691,8 @@ export interface PendingRepairDamage {
   repairSentAt: string | null;
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   repairNote: string | null;
+  /** รูปหลักฐานก่อนส่งซ่อม. */
+  imageEvidence: string | null;
   by: string;
   item: {
     id: string;
@@ -709,9 +716,18 @@ export function sendQtyDamageToRepair(data: {
   venue: "INTERNAL" | "EXTERNAL";
   repairNote: string;
   damageNote?: string;
+  imageEvidence?: string;
 }) {
   return request<{ ok: boolean }>("/api/repairs", {
     method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** ยกเลิกคำขอชำรุด on qty stock — puts the units back. SUPERADMIN only. */
+export function cancelQtyDamage(data: { adjustmentId: string; note: string }) {
+  return request<{ ok: boolean; qty: number }>("/api/repairs", {
+    method: "DELETE",
     body: JSON.stringify(data),
   });
 }
@@ -722,7 +738,12 @@ export interface InUseRecord {
   quantity: number;
   resolvedQty: number;
   dispensedAt: string;
+  // The recipientLabel inputs — see the select in api/dispense/in-use.
   notes: string | null;
+  usageType: string | null;
+  courseCode: string | null;
+  usageNote: string | null;
+  recipient: string | null;
   location: { id: string; building: string; floor: string; room: string; detail: string | null } | null;
   staff: { name: string };
   subItem: { id: string; subCode: string; name: string | null; serialNumber: string | null } | null;
@@ -739,8 +760,17 @@ export interface InUseRecord {
   };
 }
 
-export function getInUseRecords() {
-  return request<{ records: InUseRecord[] }>("/api/dispense/in-use");
+/**
+ * `scope` is optional and only its ประเภท/หมวดย่อย half is sent — the endpoint is นำไปใช้งาน
+ * by definition, so its `tab` would be noise (and, absent, would default the route to
+ * CONSUMABLE). Omitting scope keeps the whole-warehouse list /receive คืนเข้าคลัง needs.
+ */
+export function getInUseRecords(scope?: DashboardScope) {
+  const qs = new URLSearchParams();
+  if (scope?.profileId) qs.set("profileId", scope.profileId);
+  if (scope?.categoryId) qs.set("categoryId", scope.categoryId);
+  const q = qs.toString();
+  return request<{ records: InUseRecord[] }>(`/api/dispense/in-use${q ? `?${q}` : ""}`);
 }
 
 export function returnInUseRecord(
@@ -856,38 +886,27 @@ export function importRows(type: string, rows: Record<string, string>[]) {
 
 // ─── Dashboard ───
 
+// Every widget is scoped by the dashboard tab (DispenseKind — เบิกใช้ / ยืม / นำไปใช้งาน)
+// plus its optional ประเภท/หมวดย่อย filter. See lib/dashboard-scope.ts.
+const dash = (path: string, scope: DashboardScope) =>
+  request<unknown>(`/api/dashboard/${path}${scopeQuery(scope)}`);
+
+export const getDashboardTabSummary = (s: DashboardScope) => dash("tab-summary", s);
+export const getDashboardFlowMonthly = (s: DashboardScope) => dash("flow-monthly", s);
+export const getDashboardLoanDuration = (s: DashboardScope) => dash("loan-duration", s);
+export const getDashboardOutstandingLoans = (s: DashboardScope) => dash("outstanding-loans", s);
+export const getDashboardAssetStatus = (s: DashboardScope) => dash("asset-status", s);
+export const getDashboardDispenseByUsageMonthly = (s: DashboardScope) => dash("dispense-by-usage-monthly", s);
+export const getDashboardRecentDispense = (s: DashboardScope) => dash("recent-dispense", s);
+export const getDashboardRecentReceive = (s: DashboardScope) => dash("recent-receive", s);
+export const getDashboardTopDispense = (s: DashboardScope) => dash("top-dispense", s);
+export const getDashboardTopCourses = (s: DashboardScope) => dash("top-courses", s);
+export const getDashboardStationByRoom = (s: DashboardScope) => dash("station-by-room", s);
+
+// Unscoped: the whole-warehouse map above the tabs, grouped by CategoryProfile — it is how
+// you pick which tab to open, so it cannot itself depend on the current one.
 export function getDashboardProfileSummary() {
   return request<unknown[]>("/api/dashboard/profile-summary");
-}
-
-// Every widget below is scoped by the dashboard tab (DispenseType) plus its optional
-// ประเภท/หมวดย่อย filter — see lib/dashboard-scope.ts. Omitted scope = whole warehouse.
-export function getDashboardAssetStatus(scope?: DashboardScope) {
-  return request<unknown[]>(`/api/dashboard/asset-status${scopeQuery(scope)}`);
-}
-
-export function getDashboardMovementMonthly(scope?: DashboardScope) {
-  return request<unknown[]>(`/api/dashboard/movement-monthly${scopeQuery(scope)}`);
-}
-
-export function getDashboardRecentDispense(scope?: DashboardScope) {
-  return request<unknown[]>(`/api/dashboard/recent-dispense${scopeQuery(scope)}`);
-}
-
-export function getDashboardRecentReceive(scope?: DashboardScope) {
-  return request<unknown[]>(`/api/dashboard/recent-receive${scopeQuery(scope)}`);
-}
-
-export function getDashboardTopDispense(scope?: DashboardScope) {
-  return request<unknown[]>(`/api/dashboard/top-dispense${scopeQuery(scope)}`);
-}
-
-export function getDashboardUsageBySubject(scope?: DashboardScope) {
-  return request<unknown[]>(`/api/dashboard/usage-by-subject${scopeQuery(scope)}`);
-}
-
-export function getDashboardRepairStatus(scope?: DashboardScope) {
-  return request<unknown>(`/api/dashboard/repair-status${scopeQuery(scope)}`);
 }
 
 // ─── Reports ───

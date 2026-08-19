@@ -278,7 +278,7 @@ export function CategoriesTab() {
       </div>
 
       <div className="rounded-2xl border overflow-hidden bg-card shadow-sm">
-        <Table className="table-fixed">
+        <Table grid zebra className="table-fixed">
           <TableHeader sticky>
             <TableRow>
               <TableHead className="px-2">ชื่อหมวดหมู่</TableHead>

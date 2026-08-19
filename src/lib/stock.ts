@@ -221,12 +221,13 @@ export async function restoreDamagedQty(
   tx: TxClient,
   input: {
     adj: { id: string; itemId: string; lotId: string | null; previousQty: number; newQty: number; notes: string | null };
-    label: string;
+    /** Which door this is — it names the audit row so the history never has to read the note. */
+    reason: typeof AdjustmentReason.REPAIR_RETURN | typeof AdjustmentReason.DAMAGE_CANCELLED;
     note?: string | null;
     userId: string;
   },
-): Promise<number> {
-  const { adj, label, note, userId } = input;
+): Promise<{ qty: number; adjustmentId: string }> {
+  const { adj, reason, note, userId } = input;
   const qty = adj.previousQty - adj.newQty;
 
   await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
@@ -243,18 +244,23 @@ export async function restoreDamagedQty(
     if (!landed) await tx.item.update({ where: { id: adj.itemId }, data: { availableQty: { increment: qty } } });
   }
 
-  await tx.stockAdjustment.create({
+  // Returned to the caller so a repair job can point at the row that represents it in the
+  // item timeline — see MaintenanceRecord.adjustmentId.
+  const audit = await tx.stockAdjustment.create({
     data: {
       itemId: adj.itemId,
       delta: qty,
       previousQty: before.availableQty,
       newQty: before.availableQty + qty,
-      reason: AdjustmentReason.OTHER,
-      notes: `${label}${adj.notes ? ` (${adj.notes})` : ""}${note ? ` — ${note}` : ""}`,
+      reason,
+      // No "รับคืนจากซ่อม" prefix here — `reason` says that now, and the history prints it as
+      // the headline. The note carries only what a human typed: the original symptom, and
+      // whatever was said while closing it.
+      notes: [adj.notes, note].filter(Boolean).join(" — ") || null,
       adjustedBy: userId,
     },
   });
 
   await recomputeItemCounts(tx, adj.itemId);
-  return qty;
+  return { qty, adjustmentId: audit.id };
 }

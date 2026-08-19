@@ -246,7 +246,7 @@ export function ImportTab() {
           </CardHeader>
           <CardContent>
             <div className="rounded-md border overflow-x-auto">
-              <Table>
+              <Table grid zebra>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10 px-2">#</TableHead>
@@ -284,7 +284,7 @@ export function ImportTab() {
             </div>
             {result.errors.length > 0 && (
               <div className="rounded-md border">
-                <Table className="table-fixed">
+                <Table grid zebra className="table-fixed">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-20 px-2">แถว</TableHead>

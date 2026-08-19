@@ -7,7 +7,8 @@ import { ChartContainer } from "./chart-container";
 import { CountUp, Panel } from "./primitives";
 import { getDashboardAssetStatus } from "@/lib/api";
 import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
-import { useDashboardScope, scopeKey } from "@/hooks/use-dashboard-scope";
+import { useDashboardScope } from "@/hooks/use-dashboard-scope";
+import { scopeKey } from "@/lib/dashboard-scope";
 
 interface Row {
   status: string;
@@ -44,6 +45,9 @@ export function AssetStatusChart() {
 
   return (
     <Panel
+      // h-fit beats Panel's own h-full: the legend is five rows, and letting the card grow to
+      // a taller neighbour's height only spreads those five rows down a 300px column.
+      className="h-fit"
       title="สถานะครุภัณฑ์ & ของคงทน"
       hint={total > 0 ? `สัดส่วนสถานะรายชิ้น จากทั้งหมด ${total.toLocaleString("th-TH")} ชิ้น` : "สัดส่วนสถานะรายชิ้น"}
     >
@@ -66,9 +70,9 @@ export function AssetStatusChart() {
       ) : total === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">ยังไม่มีครุภัณฑ์แบบติดตามรายชิ้น</p>
       ) : (
-        <div className="grid flex-1 gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
-          <div className="relative mx-auto w-[180px]">
-            <ChartContainer height={180}>
+        <div className="grid flex-1 gap-5 sm:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="relative mx-auto w-[220px] self-center">
+            <ChartContainer height={220}>
               {({ width, height }) => (
                 <PieChart width={width} height={height}>
                   <Pie
@@ -77,8 +81,8 @@ export function AssetStatusChart() {
                     nameKey="label"
                     cx="50%"
                     cy="50%"
-                    innerRadius={58}
-                    outerRadius={82}
+                    innerRadius={72}
+                    outerRadius={102}
                     paddingAngle={2}
                     stroke="none"
                     isAnimationActive={false}
@@ -101,7 +105,7 @@ export function AssetStatusChart() {
             </div>
           </div>
 
-          <ul className="flex flex-col justify-between gap-1.5">
+          <ul className="flex flex-col justify-center gap-1.5">
             {rows.map((r) => (
               <li
                 key={r.status}

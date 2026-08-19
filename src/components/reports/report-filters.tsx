@@ -35,11 +35,14 @@ export interface FilterValues {
   categoryId?: string;
   locationId?: string;
   staffId?: string;
-  recipient?: string; // ออกจากคลัง: free-text ผู้รับ, contains-match (no id to select — it is typed at the cart)
+  // ออกจากคลัง: contains-match over the columns เหตุผล is rendered from (lib/constants
+  // recipientLabel) — รหัสวิชา, ชื่อวิชา, รายละเอียดการนำไปใช้, and the legacy typed name.
+  recipient?: string;
   usageType?: string;
   status?: string;
   loanStatus?: string; // ออกจากคลัง: "open" | "overdue" (export only — the tab drives it via `status`)
   kind?: string; // ออกจากคลัง: consume | borrow | inuse (export only — the segment drives it)
+  side?: string; // มูลค่าคงคลัง: consumable | durable (export only — the segment drives it)
   year?: string;
   maintenanceType?: string;
   from?: string; // status-log previousStatus (export only — not rendered)
@@ -52,7 +55,8 @@ export interface FilterConfig {
   categories?: boolean;
   locations?: boolean;
   staff?: boolean;
-  /** Free-text ผู้รับ box. Placeholder differs per kind — ยืม borrows to a person, นำไปใช้งาน to a room. */
+  /** Free-text เหตุผล box. The placeholder names what can be typed into it — "ค้นหาเหตุผล"
+   *  alone hides that a รหัสวิชา matches too, and รหัสวิชา is what people search by. */
   recipientSearch?: string;
   usageTypes?: boolean;
   statusOptions?: { value: string; label: string }[];
@@ -126,7 +130,7 @@ function FilterSelect({
 }
 
 /**
- * ผู้รับ is typed free-hand at the cart, so it gets a search box rather than a select.
+ * เหตุผล is typed free-hand at the cart, so it gets a search box rather than a select.
  * Debounced: the tab refetches on every filter change and a keystroke-per-request would put
  * one page-load of the whole ledger behind each letter.
  */

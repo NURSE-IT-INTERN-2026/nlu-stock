@@ -128,15 +128,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     } catch (e) { toast.error(e instanceof Error ? e.message : "คืนไม่สำเร็จ"); }
   };
 
-  const handleReturnQty = async () => {
-    const qty = prompt("ระบุจำนวนที่จะคืน");
-    if (!qty) return;
-    try {
-      await returnItem(item.id, { quantity: parseInt(qty) });
-      toast.success("คืนแล้ว"); onRefresh();
-    } catch (e) { toast.error(e instanceof Error ? e.message : "คืนไม่สำเร็จ"); }
-  };
-
   // Blank cycle = the profile default (3 months for consumables, 12 otherwise).
   const countCycle = countCycleFor(item.category.profile?.dispenseType ?? "COUNT", item.countCycleMonths);
 
@@ -312,11 +303,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               )}
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
-              {!item.trackIndividually && item.category.profile?.dispenseType !== "CONSUMABLE" && item.availableQty < item.totalQty && (
-                <Button variant="outline" className="sm:col-span-2" onClick={handleReturnQty}>
-                  <Undo2 className="h-4 w-4 mr-1" />คืนตามจำนวน
-                </Button>
-              )}
             </div>
             {qrBlock(false)}
           </div>
