@@ -73,3 +73,6 @@ doc/*.csv
 /uploads-test/
 .env.test
 .next-e2e/
+
+# DB dumps and the id lists kept for reverting a backfill — local recovery, not history
+/backups/
