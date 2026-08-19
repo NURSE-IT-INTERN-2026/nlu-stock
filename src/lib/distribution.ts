@@ -90,11 +90,10 @@ export async function getItemDistribution(itemId: string): Promise<DistributionR
   // Loans (BORROW) are custody, not a place — one row per open loan, named after the person.
   // They stay separate from the location rows because "อยู่กับ อ.สมชาย" answers a different
   // question than "อยู่ห้อง 402", even though both explain the same missing units.
-  // Explicit OR, never `loanType: { not: "INUSE" }` — that compiles to a NULL-unsafe
-  // `!= 'INUSE'` which silently drops every legacy row, and legacy null IS a borrow
-  // (schema.prisma on DispenseRecord.loanType). Same trap as api/returns/route.ts.
+  // BORROW named outright: นำไปใช้งาน is a place (its own rows below) and เบิกใช้ never comes
+  // back, so neither is custody. Same rule as api/returns/route.ts.
   const loans = await prisma.dispenseRecord.findMany({
-    where: { itemId, returnedAt: null, OR: [{ loanType: null }, { loanType: "BORROW" }] },
+    where: { itemId, returnedAt: null, loanType: "BORROW" },
     select: {
       quantity: true, resolvedQty: true, dispensedAt: true, dueAt: true,
       recipient: true, usageType: true, courseCode: true, usageNote: true, notes: true,

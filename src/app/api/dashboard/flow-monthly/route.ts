@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
 import { parseScope, scopeItemWhere, scopeDispenseWhere } from "@/lib/dashboard-scope-where";
+import { LoanType } from "@/generated/prisma/enums";
 
 const MONTH_LABELS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   const returnLink =
     scope.kind === "inuse"
       ? { dispenseRecord: { loanType: "INUSE" as const } }
-      : { OR: [{ dispenseRecordId: null }, { dispenseRecord: { OR: [{ loanType: null }, { loanType: "BORROW" as const }] } }] };
+      : { OR: [{ dispenseRecordId: null }, { dispenseRecord: { loanType: { in: [LoanType.BORROW, LoanType.CONSUME] } } }] };
 
   const [out, back] = await Promise.all([
     prisma.dispenseRecord.findMany({
