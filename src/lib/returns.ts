@@ -30,7 +30,12 @@ export function isLoanEdge(log: { previousStatus: ItemStatus; newStatus: ItemSta
 // there ("ปรับสต็อก: 71 → 76 บนชั้นวาง …") because nothing on the row distinguishes it — and
 // deliberately NOT on "ตรวจนับ: ตรงยอด …" / "ยืนยันพร้อมใช้งาน …", which have no adjustment
 // row of their own and would vanish from the history entirely.
-const ADJUST_MIRROR_REASON = /^(ปรับสต็อก|ตรวจนับ): \d+ → \d+/;
+//
+// The lot forms carry the lot number between the verb and the numbers ("แก้ยอด Lot L-001:
+// 5 → 3"), so a pattern anchored straight to the colon missed them and printed every lot
+// correction twice. What decides is the "A → B" that the adjustment row already shows, not
+// which of the three verbs wrote it — "ตรงยอด" has no such pair and stays visible.
+const ADJUST_MIRROR_REASON = /^(ปรับสต็อก|ตรวจนับ|แก้ยอด)( Lot .+)?: \d+ → \d+/;
 
 /**
  * Whether an item's ประวัติ should drop this status log as a duplicate.
