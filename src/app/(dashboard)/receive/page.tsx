@@ -493,8 +493,11 @@ function ReceiveContent() {
                       )}
                     </div>
 
-                    {isConsumable && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* ราคา/หน่วย ถามทุกประเภท — เดิมถามเฉพาะสิ้นเปลือง ครุภัณฑ์เลยไม่มีราคาให้
+                        มูลค่าคงคลัง/ค่าใช้จ่ายรายปีอ่านเลย (3 จาก 918 รายการเท่านั้นที่มีราคา).
+                        วันหมดอายุยังเป็นของสิ้นเปลืองอย่างเดียว. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {isConsumable && (
                         <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">วันหมดอายุ</Label>
                           <DatePicker
@@ -504,21 +507,23 @@ function ReceiveContent() {
                             className="h-8"
                           />
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">ราคา/หน่วย</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            inputMode="decimal"
-                            placeholder="-"
-                            value={row.unitCost}
-                            onChange={(e) => updateRow(row.id, { unitCost: e.target.value })}
-                            className="text-gray-900 h-8 text-sm"
-                          />
-                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          ราคา/หน่วย ({row.item.issueUnit.name})
+                        </Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="-"
+                          value={row.unitCost}
+                          onChange={(e) => updateRow(row.id, { unitCost: e.target.value })}
+                          className="text-gray-900 h-8 text-sm"
+                        />
                       </div>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
               );
