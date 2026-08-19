@@ -73,3 +73,50 @@ export async function groupUsageBySubject(where: Record<string, unknown>): Promi
     .map(({ items, ...r }) => ({ ...r, itemCount: items.size }))
     .sort((a, b) => b.totalQuantity - a.totalQuantity);
 }
+
+
+/**
+ * นำไปใช้งาน ไม่มีวิชาให้จัดกลุ่ม — station-in-room-dialog ถามแค่ห้อง และ validators/dispense
+ * ยกเว้น usageType ให้ INUSE โดยตั้งใจ (ห้องคือเหตุผลอยู่แล้ว). แกนที่แยกแถวพวกนี้ออกจากกันได้
+ * จริงจึงเป็นสถานที่ ไม่ใช่ usageType — จัดกลุ่มด้วย usageType จะได้แท่งเดียวที่ไม่บอกอะไร.
+ *
+ * รูปแถวเหมือน UsageBySubjectRow ทุกช่อง เพื่อให้ตาราง กราฟ และไฟล์ export ตัวเดียวกันรับได้
+ * ทั้งสามส่วนโดยไม่ต้องมีโค้ดคนละชุด.
+ */
+export async function groupInUseByLocation(where: Record<string, unknown>): Promise<UsageBySubjectRow[]> {
+  // itemId อยู่ในคีย์เพื่อจะนับชนิดพัสดุต่อห้องเท่านั้น แล้วยุบกลับเป็นห้องละแถวข้างล่าง
+  const groups = await prisma.dispenseRecord.groupBy({
+    by: ["locationId", "itemId"],
+    where,
+    _sum: { quantity: true },
+    _count: { _all: true },
+  });
+
+  const locationIds = [...new Set(groups.map((g) => g.locationId).filter((id): id is string => !!id))];
+  const locations = await prisma.location.findMany({
+    where: { id: { in: locationIds } },
+    select: { id: true, building: true, floor: true, room: true, detail: true },
+  });
+  const nameOf = new Map(
+    locations.map((l) => [l.id, [l.building, l.floor, l.room, l.detail].filter(Boolean).join(" / ")]),
+  );
+
+  const merged = new Map<string, UsageBySubjectRow & { items: Set<string> }>();
+  for (const g of groups) {
+    const key = g.locationId ?? "";
+    // แถวเก่าที่เขียนก่อน locationId ถูกบังคับ ยังต้องเห็นได้ ไม่งั้นยอดรวมไม่ตรงกับจำนวนที่นำออกจริง
+    const label = (g.locationId && nameOf.get(g.locationId)) || "ไม่ระบุสถานที่";
+    const row = merged.get(key) ?? {
+      usageType: null, courseCode: null, label,
+      totalQuantity: 0, records: 0, itemCount: 0, items: new Set<string>(),
+    };
+    row.totalQuantity += g._sum.quantity ?? 0;
+    row.records += g._count._all;
+    row.items.add(g.itemId);
+    merged.set(key, row);
+  }
+
+  return [...merged.values()]
+    .map(({ items, ...r }) => ({ ...r, itemCount: items.size }))
+    .sort((a, b) => b.totalQuantity - a.totalQuantity);
+}

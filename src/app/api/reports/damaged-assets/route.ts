@@ -6,6 +6,9 @@ import { effectiveCode } from "@/lib/constants";
 
 const DAMAGE_STATUSES: ItemStatus[] = ["DAMAGED", "UNDER_REPAIR", "DISPOSED", "LOST"];
 
+/** ตัดออกจากคลังถาวร — สองสถานะนี้เท่านั้นที่มี "มูลค่าที่เสียไป" ให้คิด */
+const WRITE_OFF_STATUSES: ItemStatus[] = ["DISPOSED", "LOST"];
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -17,7 +20,10 @@ export async function GET(request: NextRequest) {
   const dateFrom = params.get("dateFrom") || undefined;
   const dateTo = params.get("dateTo") || undefined;
 
-  const statuses: ItemStatus[] = status ? [status as ItemStatus] : DAMAGE_STATUSES;
+  // รับได้ทั้ง "DAMAGED" และ "DISPOSED,LOST" — หน้าจอแยกเป็นส่วนๆ และส่วนตัดจำหน่ายถือสองสถานะ
+  const asked = (status ?? "").split(",").filter((s) => DAMAGE_STATUSES.includes(s as ItemStatus)) as ItemStatus[];
+  // ค่าที่ส่งมาไม่รู้จักสักตัว → คืนทั้งหมด ไม่ใช่ `in: []` ที่แปลว่าไม่มีอะไรเลยแบบเงียบๆ
+  const statuses: ItemStatus[] = asked.length > 0 ? asked : DAMAGE_STATUSES;
 
   // A tracked item's damaged/lost pieces don't show in its aggregate status any more
   // (see deriveStatusFromSubItems), so match the pieces directly too — this report is
@@ -42,6 +48,10 @@ export async function GET(request: NextRequest) {
       },
     };
   }
+
+  // มูลค่าที่ตัดออกไป — ต้องนับจากทุกแถวที่เข้าเงื่อนไข ไม่ใช่แค่หน้าที่กำลังเปิด ไม่งั้นยอดรวม
+  // เปลี่ยนไปเรื่อยๆ ตามหน้าที่กด. คิดเฉพาะตอนที่ส่วนนั้นถูกเปิดจริง (ชำรุด/ส่งซ่อมไม่มีมูลค่าให้คิด)
+  const wantsWriteOff = statuses.some((s) => WRITE_OFF_STATUSES.includes(s));
 
   const [items, total, flatByStatus, subsByStatus] = await Promise.all([
     prisma.item.findMany({
@@ -82,6 +92,19 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
+  const writeOffPrices = wantsWriteOff
+    ? [
+        ...(await prisma.subItem.findMany({
+          where: { status: { in: statuses.filter((s) => WRITE_OFF_STATUSES.includes(s)) }, item: where },
+          select: { item: { select: { purchasePrice: true } } },
+        })).map((s) => s.item.purchasePrice),
+        ...(await prisma.item.findMany({
+          where: { ...where, status: { in: statuses.filter((s) => WRITE_OFF_STATUSES.includes(s)) }, subItems: { none: { status: { in: statuses } } } },
+          select: { purchasePrice: true },
+        })).map((i) => i.purchasePrice),
+      ]
+    : [];
+
   const byStatus: Record<string, number> = {};
   for (const g of [...flatByStatus, ...subsByStatus]) {
     byStatus[g.status] = (byStatus[g.status] ?? 0) + g._count;
@@ -93,7 +116,9 @@ export async function GET(request: NextRequest) {
     const locationLabel = [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail]
       .filter(Boolean)
       .join(" / ");
-    const base = { name: i.name, categoryName: i.category.name, location: locationLabel };
+    // ราคาเก็บที่ระดับรายการ ไม่ใช่รายชิ้น — ของที่ซื้อหลายรอบคนละราคา ระบบรู้ราคาเดียว
+    // ตัวเลขนี้จึงเป็น "ประมาณการ" เสมอ และหน้าจอต้องเขียนกำกับไว้ ไม่ใช่ยอดที่จ่ายจริงของชิ้นนั้น
+    const base = { name: i.name, categoryName: i.category.name, location: locationLabel, value: i.purchasePrice ?? null };
     const logFor = (subItemId: string | null) => i.statusLogs.find((l) => l.subItemId === subItemId);
 
     if (i.subItems.length > 0) {
@@ -132,6 +157,12 @@ export async function GET(request: NextRequest) {
       damaged: byStatus.DAMAGED ?? 0,
       underRepair: byStatus.UNDER_REPAIR ?? 0,
       writtenOff: (byStatus.DISPOSED ?? 0) + (byStatus.LOST ?? 0),
+      disposed: byStatus.DISPOSED ?? 0,
+      lost: byStatus.LOST ?? 0,
+      /** ประมาณการ: ราคาต่อชิ้นของรายการ × ชิ้นที่ตัดออก — ดูหมายเหตุที่ base ด้านบน */
+      writtenOffValue: writeOffPrices.reduce((sum: number, p) => sum + (p ?? 0), 0),
+      pricedWriteOffs: writeOffPrices.filter((p) => p !== null).length,
+      unpricedWriteOffs: writeOffPrices.filter((p) => p === null).length,
     },
   });
 }
