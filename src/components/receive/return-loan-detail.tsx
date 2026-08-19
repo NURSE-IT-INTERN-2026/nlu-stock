@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Check, Minus, Plus, Camera, X, Save, Loader2, Calendar, ChevronDown,
+  ArrowLeft, Check, Minus, Plus, Camera, X, Save, Loader2, Calendar, ChevronDown, MapPin,
 } from "lucide-react";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ import {
   type OpenBorrow, type ReturnCondition,
 } from "@/lib/api";
 import { KitSetContentsPicker } from "@/components/items/kit-sets-panel";
-import { effectiveCode, recipientLabel } from "@/lib/constants";
+import { effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
 export interface LoanGroup {
@@ -370,6 +370,14 @@ export function ReturnLoanDetail({
                     <div className="min-w-0 flex-1">
                       <h3 className="font-medium leading-tight truncate">{item.name}</h3>
                       <p className="text-xs text-muted-foreground font-mono">{item.code}</p>
+                      {/* Where the ปกติ pieces land. ที่ตั้งหลักคือทะเบียนใน ตั้งค่า and a return
+                          always goes there, so this is a statement, not a picker — the word
+                          "สถานที่จัดเก็บ" is spelled out because the other one, สถานที่ที่นำไปใช้งาน,
+                          means the opposite and the two used to be used interchangeably. */}
+                      <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="size-3 shrink-0 text-primary/80" />
+                        คืนเข้าสถานที่จัดเก็บ · {item.location ? locationLabel(item.location) : "ยังไม่ได้ตั้งสถานที่จัดเก็บ"}
+                      </p>
                     </div>
                     <ItemBadge records={rs} />
                   </div>

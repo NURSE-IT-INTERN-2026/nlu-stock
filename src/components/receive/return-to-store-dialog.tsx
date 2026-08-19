@@ -1,31 +1,25 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Loader2, PackageCheck, X, ArrowRight } from "lucide-react";
+import { Loader2, PackageCheck, X, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DIALOG_SHELL, DIALOG_BODY, Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { LocationCascadePicker, type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
 import { locationLabel } from "@/lib/constants";
 import { toast } from "sonner";
 import { returnInUseRecord, type InUseRecord } from "@/lib/api";
 
 /**
- * คืนเข้าคลัง for one นำไปใช้งาน record — and the place it goes back to is a choice.
+ * คืนเข้าคลัง for one นำไปใช้งาน record — back to the item's สถานที่จัดเก็บ, shown, not asked.
  *
- * นำไปใช้งาน overwrote where this stock lives on the way out, so the system genuinely does
- * not know where it belongs now; asking is the only honest option. The picker is seeded
- * with the item's registered location, which makes the ordinary case (it really is going
- * back to the storeroom) a single click. That default matters: a dialog that demands input
- * nobody wants to give is how the existing records ended up stationed in rooms called
- * "asad" and "mnmn".
- *
- * Picking anywhere else is a move, not a homecoming — the API closes this record and opens
- * a fresh นำไปใช้งาน one at the destination, so the stock stays accounted for by a record
- * rather than dissolving into an available total with no room attached.
+ * This dialog used to ask for a destination, and any answer but the registered location
+ * turned คืน into a move: the record closed and a fresh นำไปใช้งาน one opened there, so the
+ * stock never came back ว่าง. Two different acts behind one button. ที่ตั้งหลักคือทะเบียนใน
+ * ตั้งค่า — คืนคือกลับบ้าน, and taking it somewhere else is ย้ายที่ตั้ง afterwards, on its own
+ * screen. The location is printed here so whoever is holding the thing can see where it goes.
  */
 export function ReturnToStoreDialog({
   open, onOpenChange, record, onSaving, onSuccess,
@@ -39,38 +33,23 @@ export function ReturnToStoreDialog({
   const outstanding = record.quantity - record.resolvedQty;
   const isTracked = !!record.subItem;
 
-  const [locRef, setLocRef] = useState<LocationRef>({ kind: "none" });
   const [qty, setQty] = useState(outstanding);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
 
   const homeLabel = record.item.location ? locationLabel(record.item.location) : null;
-  // Comparing labels, not ids: the picker hands back a descriptor and only resolves to an
-  // id on submit, so this is what the notice can key off while the user is still choosing.
-  const isMove = locRef.kind === "ok" && !!homeLabel && locRef.name !== homeLabel;
 
-  const reset = () => { setLocRef({ kind: "none" }); setQty(outstanding); setNote(""); setShowErrors(false); };
-
-  const locError = locRef.kind === "ok" ? null : "เลือกสถานที่จัดเก็บ";
+  const reset = () => { setQty(outstanding); setNote(""); };
 
   const handleSubmit = async () => {
-    if (locRef.kind !== "ok") { setShowErrors(true); return; }
     setSubmitting(true);
     onSaving?.(true);
     try {
-      const destLocationId = await resolveLocationId(locRef);
-      if (!destLocationId) throw new Error("ไม่พบสถานที่ที่เลือก ลองใหม่อีกครั้ง");
-      const res = await returnInUseRecord(record.id, {
-        destLocationId,
+      await returnInUseRecord(record.id, {
         quantity: isTracked ? undefined : qty,
         note: note.trim() || null,
       });
-      toast.success(
-        res.moved
-          ? `ย้าย "${record.item.name}" ไปที่ ${locRef.name} แล้ว`
-          : `คืน "${record.item.name}" เข้าคลังแล้ว`,
-      );
+      toast.success(`คืน "${record.item.name}" เข้าคลังแล้ว`);
       reset();
       onOpenChange(false);
       onSuccess?.();
@@ -115,22 +94,20 @@ export function ReturnToStoreDialog({
           {/* Body */}
           <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
             <fieldset disabled={submitting} className="m-0 min-w-0 space-y-5 border-0">
+              {/* Where it goes back to, stated rather than chosen — see the note above.
+                  Printed even when the item has no registered location, so a blank ทะเบียน
+                  shows up here as something to fix instead of an empty row nobody notices. */}
               <div className="space-y-2">
-                <Label required>สถานที่จัดเก็บ</Label>
-                <LocationCascadePicker
-                  initialLocationId={record.item.locationId}
-                  onChange={setLocRef}
-                  restrictToExisting
-                />
-                {showErrors && locError && <FieldError>{locError}</FieldError>}
-                {/* Says out loud that this isn't a homecoming, before it is confirmed —
-                    the stock stays counted as ใช้งานอยู่, just in a different room. */}
-                {isMove && (
-                  <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                    <ArrowRight className="size-3.5 shrink-0 mt-px text-primary" />
-                    ไม่ใช่ที่ตั้งตามทะเบียน — บันทึกเป็นการย้ายไปตั้งใช้งานที่ {locRef.name} (ยังไม่นับเป็นของว่าง)
-                  </p>
-                )}
+                <Label>สถานที่จัดเก็บ</Label>
+                <div className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm">
+                  <MapPin className="size-4 shrink-0 mt-px text-primary" />
+                  <span className={homeLabel ? "text-foreground" : "text-muted-foreground"}>
+                    {homeLabel ?? "ยังไม่ได้ตั้งสถานที่จัดเก็บให้พัสดุนี้"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  คืนเข้าที่จัดเก็บตามทะเบียนเสมอ · ถ้าต้องการเก็บที่อื่นถาวร ให้คืนก่อน แล้วใช้ ย้ายที่ตั้ง ที่หน้าพัสดุ
+                </p>
               </div>
 
               {!isTracked && (
@@ -168,15 +145,11 @@ export function ReturnToStoreDialog({
             <Button variant="ghost" disabled={submitting} onClick={() => onOpenChange(false)}>ยกเลิก</Button>
             <Button disabled={submitting} onClick={() => void handleSubmit()}>
               {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              {isMove ? "ย้ายที่ตั้ง" : "คืนเข้าคลัง"}
+              คืนเข้าคลัง
             </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
   );
-}
-
-function FieldError({ children }: { children: ReactNode }) {
-  return <p role="alert" className="text-xs text-destructive">{children}</p>;
 }
