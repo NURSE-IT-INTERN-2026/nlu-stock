@@ -53,6 +53,24 @@ assert.equal(
   true,
   "แถวคู่ของปรับสต๊อกยังต้องซ่อน",
 );
+// Same event, lot-level: the lot number sits between the verb and the numbers, and the older
+// pattern anchored to the colon let all three of these through as second rows.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "AVAILABLE", reason: "แก้ยอด Lot L-001: 5 → 3 (-2) (เหตุผล:สูญหาย)" }),
+  true,
+  "แถวคู่ของแก้ยอดราย lot ต้องซ่อน",
+);
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "AVAILABLE", reason: "ตรวจนับ Lot RCV-20260819: 5 → 3 (-2) (เหตุผล:สูญหาย) (นับรอบถัดไป 19 ก.พ. 2570)" }),
+  true,
+  "แถวคู่ของตรวจนับราย lot ต้องซ่อน",
+);
+// A lot count that matched has no adjustment row either — same rule as the item-level one.
+assert.equal(
+  isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "AVAILABLE", reason: "ตรวจนับ Lot L-001: ตรงยอด 5" }),
+  false,
+  "ตรวจนับราย lot ที่ตรงยอดต้องขึ้นประวัติ",
+);
 // …but a count that moved nothing has no adjustment row to hide behind.
 assert.equal(
   isDuplicateOfLoanRow({ previousStatus: "AVAILABLE", newStatus: "AVAILABLE", reason: "ตรวจนับ: ตรงยอด 76 บนชั้นวาง" }),
