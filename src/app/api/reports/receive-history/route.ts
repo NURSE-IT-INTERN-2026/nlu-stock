@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     if (categoryId) where.item = { categoryId };
     if (staffId) where.receivedBy = staffId;
 
-    const [records, total, qty, byItem] = await Promise.all([
+    const [records, total, qty, byItem, unpriced] = await Promise.all([
       prisma.receiveRecord.findMany({
         where,
         include: {
@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
       // turn the page is worse than no counter.
       prisma.receiveRecord.aggregate({ _sum: { quantity: true }, where }),
       prisma.receiveRecord.groupBy({ by: ["itemId"], where }),
+      // ตัวเลขค่าใช้จ่ายรายปีมาจากช่องราคาของแถวพวกนี้ — ต้องเห็นว่ายังค้างกรอกอีกกี่ใบ
+      prisma.receiveRecord.count({ where: { ...where, unitCost: null } }),
     ]);
 
     const data = records.map((r) => ({
@@ -50,6 +52,9 @@ export async function GET(request: NextRequest) {
       itemName: r.item.name,
       category: r.item.category?.name ?? "—",
       quantity: r.quantity,
+      // null = ยังไม่ได้กรอกราคา; ตารางแก้ค่านี้ได้ในบรรทัด (PATCH api/receive/[id]) เพราะ
+      // ราคาส่วนใหญ่ในประวัติยังว่างอยู่ และนี่คือที่เดียวที่มองเห็นใบรับเข้าทีละใบ
+      unitCost: r.unitCost,
       lotNumber: r.lot?.lotNumber ?? "—",
       expiryDate: r.lot?.expiryDate?.toISOString() ?? null,
       receiverName: r.receiver.name,
@@ -62,7 +67,7 @@ export async function GET(request: NextRequest) {
       page,
       perPage,
       total,
-      summary: { records: total, units: qty._sum.quantity ?? 0, items: byItem.length },
+      summary: { records: total, units: qty._sum.quantity ?? 0, items: byItem.length, unpriced },
     });
   } catch (err) {
     console.error("receive-history error:", err);

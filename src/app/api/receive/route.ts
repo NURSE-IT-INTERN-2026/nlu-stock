@@ -4,6 +4,7 @@ import { requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { receiveRequestSchema } from "@/lib/validators";
 import { autoLotNumber, OPENING_LOT_NUMBER } from "@/lib/lot-code";
+import { syncItemPurchasePrice, syncLotUnitCost } from "@/lib/cost";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -102,22 +103,11 @@ export async function POST(req: NextRequest) {
           }
 
           if (existingLot) {
-            // Weighted-average unit cost when appending at a new price
-            let nextUnitCost = existingLot.unitCost;
-            if (ri.unitCost != null) {
-              const oldRemaining = existingLot.remainingQty;
-              const newRemaining = oldRemaining + ri.quantity;
-              nextUnitCost =
-                existingLot.unitCost != null && oldRemaining > 0
-                  ? (oldRemaining * existingLot.unitCost + ri.quantity * ri.unitCost) / newRemaining
-                  : ri.unitCost;
-            }
             await tx.lot.update({
               where: { id: existingLot.id },
               data: {
                 receivedQty: { increment: ri.quantity },
                 remainingQty: { increment: ri.quantity },
-                unitCost: nextUnitCost,
                 ...(ri.expiryDate && { expiryDate: new Date(ri.expiryDate) }),
               },
             });
@@ -130,11 +120,11 @@ export async function POST(req: NextRequest) {
                 expiryDate: ri.expiryDate ? new Date(ri.expiryDate) : null,
                 receivedQty: ri.quantity,
                 remainingQty: ri.quantity,
-                unitCost: ri.unitCost ?? null,
               },
             });
             lotId = newLot.id;
           }
+          // unitCost ไม่ได้เขียนตรงนี้ — ตั้งจากใบรับเข้าหลังสร้าง record (syncLotUnitCost)
         }
 
         // Tracked durables must supply exactly one sub-code per copy
@@ -179,17 +169,29 @@ export async function POST(req: NextRequest) {
           await recomputeItemCounts(tx, item.id);
         }
 
-        // Create ReceiveRecord
+        // Create ReceiveRecord. unitCost lands here for EVERY kind of พัสดุ, not just the
+        // consumables that get a lot — this row is what ค่าใช้จ่ายรายปี adds up, and a
+        // durable bought three times in a year has to count three times.
         const record = await tx.receiveRecord.create({
           data: {
             itemId: item.id,
             lotId,
             quantity: ri.quantity,
+            unitCost: ri.unitCost ?? null,
             receivedBy: auth.user.userId,
             notes: notes ?? undefined,
           },
         });
         ids.push(record.id);
+
+        // มูลค่าคงคลังตีราคาของคงทนจาก Item.purchasePrice และของสิ้นเปลืองจาก Lot.unitCost —
+        // ราคาที่เพิ่งกรอกจะไปไม่ถึงรายงานนั้นถ้าไม่ derive ใหม่ตรงนี้. ทั้งสองมาจากใบรับเข้า
+        // ชุดเดียวกัน จึงแก้ราคาย้อนหลังได้ (PATCH api/receive/[id]) แล้วตัวเลขตามทันเสมอ.
+        if (isConsumable) {
+          if (lotId) await syncLotUnitCost(tx, lotId);
+        } else if (ri.unitCost != null) {
+          await syncItemPurchasePrice(tx, item.id, record.receivedAt);
+        }
       }
 
       return ids;

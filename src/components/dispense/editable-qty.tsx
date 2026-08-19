@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
 
 /** Inline-editable quantity: click to type, clamps to [1, max]. */
 export function EditableQty({ value, max, unit, onChange }: {
@@ -14,7 +15,7 @@ export function EditableQty({ value, max, unit, onChange }: {
 
   if (editing) {
     return (
-      <input
+      <Input
         autoFocus
         type="number"
         min={1}
@@ -35,7 +36,9 @@ export function EditableQty({ value, max, unit, onChange }: {
             setEditing(false);
           }
         }}
-        className="w-14 h-6 text-center text-sm font-medium tabular-nums bg-transparent border-0 px-1 outline-none focus:ring-1 focus:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        // ผ่าน Input เพื่อให้ได้กติกาเดียวกับช่องตัวเลขอื่น (ห้ามติดลบ, ล้อเมาส์ไม่เปลี่ยนค่า);
+        // ลูกศรขึ้นลงถูกซ่อนที่ globals.css แล้ว ไม่ต้องมี utility ซ้ำตรงนี้
+        className="w-14 h-6 text-center text-sm font-medium tabular-nums bg-transparent border-0 px-1 outline-none focus:ring-1 focus:ring-ring"
       />
     );
   }
