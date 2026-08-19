@@ -84,7 +84,21 @@ assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101" }), true);
 assert.equal(ok({ ...cart, usageType: "COURSE", courseCode: "578101", usageNote: "การพยาบาลพื้นฐาน" }), true);
 // A course code tagging along on กิจกรรม is harmless — only COURSE requires one.
 assert.equal(ok({ ...cart, usageType: "ACTIVITY", usageNote: "กีฬาสี", courseCode: null }), true);
-// ตั้งใช้ในห้อง (station-in-room-dialog) sends no usageType at all — the rule must not catch it.
+// ตั้งใช้ในห้อง files as OTHER so no row is left without a usageType, but it never collects the
+// free-text line — its room is the reason. Without the INUSE arm of that refine, every
+// นำไปใช้งาน submitted from station-in-room-dialog would be rejected.
+assert.equal(
+  ok({ ...cart, usageType: "OTHER", usageNote: null, loanType: "INUSE", locationId: "loc-402" }),
+  true,
+  "นำไปใช้งานส่ง OTHER โดยไม่มีรายละเอียดได้",
+);
+// The exemption is scoped to INUSE only — a plain เบิก/ยืม picking อื่นๆ still owes the line.
+assert.equal(
+  ok({ ...cart, usageType: "OTHER", usageNote: null, loanType: "BORROW" }),
+  false,
+  "ยืมเลือกอื่นๆ ยังต้องระบุรายละเอียด",
+);
+// Rows written straight to the API without a usageType are still accepted for INUSE.
 assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true);
 
 // ── นำไปใช้งาน must name the room it moved stock to ──
@@ -113,7 +127,7 @@ assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true, "�
 // never be returned. One cart submits both kinds at once, so this is decided per line.
 const DUE = new Date("2026-08-18T00:00:00Z");
 
-assert.deepEqual(loanFields("CONSUMABLE", false, DUE), { loanType: null, dueAt: null }, "เบิกใช้ไม่ใช่การยืม");
+assert.deepEqual(loanFields("CONSUMABLE", false, DUE), { loanType: "CONSUME", dueAt: null }, "เบิกใช้ไม่ใช่การยืม");
 assert.deepEqual(loanFields("COUNT", false, DUE), { loanType: "BORROW", dueAt: DUE });
 assert.deepEqual(loanFields("ITEM", false, DUE), { loanType: "BORROW", dueAt: DUE });
 // นำไปใช้งาน is open-ended whatever the cart sent — the room is the record, not a due date.
@@ -121,7 +135,7 @@ assert.deepEqual(loanFields("ITEM", true, DUE), { loanType: "INUSE", dueAt: null
 assert.deepEqual(loanFields("COUNT", true, null), { loanType: "INUSE", dueAt: null });
 // INUSE never reaches a consumable (the dialog is durable-only) — if it ever does, เบิกใช้ wins:
 // a spent consumable has no room to sit in and no way back.
-assert.deepEqual(loanFields("CONSUMABLE", true, DUE), { loanType: null, dueAt: null });
+assert.deepEqual(loanFields("CONSUMABLE", true, DUE), { loanType: "CONSUME", dueAt: null });
 // ยืมไม่ระบุกำหนดคืนได้ — null dueAt is a loan without a deadline, not a เบิกใช้.
 assert.deepEqual(loanFields("COUNT", false, null), { loanType: "BORROW", dueAt: null });
 

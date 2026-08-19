@@ -51,8 +51,15 @@ export const dispenseRequestSchema = z.object({
   // กิจกรรม and อื่นๆ are only labels — the free-text line is what a reader of the history
   // actually learns from, so neither may be filed without it. Enforced here rather than in
   // the dialog alone: a bare "อื่นๆ" record explains nothing no matter which client wrote it.
+  //
+  // INUSE is exempt: นำไปใช้งาน files as OTHER so no row is left without a usageType, but it
+  // never asks a usage question — its required locationId is the line a reader learns from,
+  // and the history renders those rows as "ตั้งใช้ในห้อง <ห้อง>" off loanType, not off this note.
   .refine(
-    (d) => !(d.usageType === "ACTIVITY" || d.usageType === "OTHER") || !!d.usageNote?.trim(),
+    (d) =>
+      d.loanType === "INUSE" ||
+      !(d.usageType === "ACTIVITY" || d.usageType === "OTHER") ||
+      !!d.usageNote?.trim(),
     { path: ["usageNote"], message: "ระบุรายละเอียดการนำไปใช้" },
   )
   // Same reasoning one refine up: "รายวิชา" on its own tells a reader of the history
