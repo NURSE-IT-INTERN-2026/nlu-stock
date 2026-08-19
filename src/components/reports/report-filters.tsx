@@ -42,6 +42,7 @@ export interface FilterValues {
   status?: string;
   loanStatus?: string; // ออกจากคลัง: "open" | "overdue" (export only — the tab drives it via `status`)
   kind?: string; // ออกจากคลัง: consume | borrow | inuse (export only — the segment drives it)
+  side?: string; // มูลค่าคงคลัง: consumable | durable (export only — the segment drives it)
   year?: string;
   maintenanceType?: string;
   from?: string; // status-log previousStatus (export only — not rendered)

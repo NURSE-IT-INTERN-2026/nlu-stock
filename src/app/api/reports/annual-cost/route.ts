@@ -16,6 +16,10 @@ import { NextRequest } from "next/server";
  * in several batches counts only against the year of that single date. Fixing it needs a
  * per-receipt price on durables, not a change here.
  */
+
+/** แกนของกราฟรายเดือน — เดือนไทยแบบสั้น เรียง ม.ค.→ธ.ค. ตามปีปฏิทินที่ route นี้ใช้ */
+const MONTH_LABELS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
@@ -131,23 +135,19 @@ export async function GET(request: NextRequest) {
   const totalPurchase = purchaseData.reduce((s, p) => s + p.amount, 0);
   const totalRepair = repairData.reduce((s, r) => s + r.cost, 0);
 
-  // Group by category for chart
-  const categoryMap = new Map<string, { totalPurchase: number; totalRepair: number }>();
-  for (const p of purchaseData) {
-    const entry = categoryMap.get(p.categoryName) ?? { totalPurchase: 0, totalRepair: 0 };
-    entry.totalPurchase += p.amount;
-    categoryMap.set(p.categoryName, entry);
-  }
+  // ซ่อมแซม (CORRECTIVE) กับ ตรวจบำรุงตามรอบ (PREVENTIVE) เป็นคนละก้อนงบในสายตาคนอ่าน —
+  // ก้อนหนึ่งคือเงินที่ต้องจ่ายเพราะของพัง อีกก้อนคือเงินที่ตั้งใจจ่ายเพื่อไม่ให้พัง. รวมเป็น
+  // "ค่าซ่อมบำรุง" ก้อนเดียวแบบเดิมทำให้ดูไม่ออกว่าปีนี้คลังกำลังตามแก้ปัญหาหรือดูแลเชิงป้องกัน.
+  const byMonth = MONTH_LABELS.map((month) => ({ month, purchase: 0, corrective: 0, preventive: 0 }));
+  for (const p of purchaseData) byMonth[new Date(p.date).getMonth()].purchase += p.amount;
   for (const r of repairData) {
-    const entry = categoryMap.get(r.categoryName) ?? { totalPurchase: 0, totalRepair: 0 };
-    entry.totalRepair += r.cost;
-    categoryMap.set(r.categoryName, entry);
+    const bucket = byMonth[new Date(r.performedAt).getMonth()];
+    if (r.type === "CORRECTIVE") bucket.corrective += r.cost;
+    else bucket.preventive += r.cost;
   }
 
-  const byCategory = Array.from(categoryMap.entries()).map(([categoryName, vals]) => ({
-    categoryName,
-    ...vals,
-  }));
+  const correctiveRepairs = repairData.filter((r) => r.type === "CORRECTIVE");
+  const preventiveRepairs = repairData.filter((r) => r.type !== "CORRECTIVE");
 
   return json({
     year,
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
     repairs: repairData,
     totalPurchase,
     totalRepair,
-    byCategory,
+    byMonth,
     summary: {
       totalPurchase,
       totalRepair,
@@ -163,6 +163,10 @@ export async function GET(request: NextRequest) {
       consumablePurchase: purchaseData.filter((p) => p.kind === "CONSUMABLE").reduce((s, p) => s + p.amount, 0),
       purchaseCount: purchaseData.length,
       repairCount: repairData.length,
+      correctiveCost: correctiveRepairs.reduce((s, r) => s + r.cost, 0),
+      correctiveCount: correctiveRepairs.length,
+      preventiveCost: preventiveRepairs.reduce((s, r) => s + r.cost, 0),
+      preventiveCount: preventiveRepairs.length,
       unpricedPurchases: unpricedItems + unpricedLots,
       unpricedRepairs,
     },
