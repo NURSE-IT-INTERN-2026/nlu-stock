@@ -783,9 +783,9 @@ export function getInUseRecords(scope?: DashboardScope) {
 
 export function returnInUseRecord(
   recordId: string,
-  body: { destLocationId: string; quantity?: number; note?: string | null },
+  body: { quantity?: number; note?: string | null },
 ) {
-  return request<{ success: boolean; quantity: number; moved: boolean }>(
+  return request<{ success: boolean; quantity: number }>(
     `/api/dispense/in-use/${recordId}/return`,
     { method: "POST", body: JSON.stringify(body) },
   );
