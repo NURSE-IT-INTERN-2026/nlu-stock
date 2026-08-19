@@ -42,8 +42,7 @@ export function TopCoursesChart() {
           </div>
         </div>
       ) : (
-        <>
-          <ol className="flex flex-1 flex-col gap-3.5">
+        <ol className="flex flex-1 flex-col gap-3.5">
             {rows.map((r, i) => (
               <li key={r.courseCode}>
                 <div className="mb-1.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
@@ -65,16 +64,7 @@ export function TopCoursesChart() {
                 </div>
               </li>
             ))}
-          </ol>
-          {/* กิจกรรม, อื่นๆ, ตั้งใช้ในห้อง and รายวิชาที่ไม่มีรหัส are not bars here. Saying so
-              is the difference between a subject ranking and a total that quietly disagrees
-              with every other เบิก number in the app. */}
-          {excluded > 0 && (
-            <p className="mt-3.5 border-t pt-2.5 text-xs text-muted-foreground">
-              ไม่นับอีก {excluded.toLocaleString("th-TH")} ครั้งที่ไม่ได้ระบุรายวิชา
-            </p>
-          )}
-        </>
+        </ol>
       )}
     </Panel>
   );

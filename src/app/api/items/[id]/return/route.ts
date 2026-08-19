@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError } from "@/lib/api-utils";
-import { recomputeItemCounts } from "@/lib/stock";
+import { holdsTotalQty, recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn, logReturn, type ReturnStatus } from "@/lib/returns";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
@@ -72,22 +72,26 @@ export async function POST(
           // Returned to usable stock
           await tx.item.update({ where: { id: itemId }, data: { availableQty: { increment: qty } } });
         } else {
-          // Written off (lost / damaged): remove from total, log a stock adjustment.
+          // Came back unusable. สูญหาย leaves the institution → totalQty follows it down;
+          // ชำรุด is parked, still owned, and stays on the books until รับคืนจากส่งซ่อม hands
+          // it back (lib/stock holdsTotalQty — the same rule the แจ้งชำรุด tile obeys).
+          // Either way the units never re-enter availableQty, so the booking is measured on
+          // availableQty, which is exactly what restoreDamagedQty increments when it closes.
           const reason = status === "LOST" ? AdjustmentReason.LOST : AdjustmentReason.DAMAGED_PENDING_REPAIR;
-          await tx.item.update({ where: { id: itemId }, data: { totalQty: { decrement: qty } } });
+          if (!holdsTotalQty(reason)) {
+            await tx.item.update({ where: { id: itemId }, data: { totalQty: { decrement: qty } } });
+          }
           await tx.stockAdjustment.create({
             data: {
               itemId,
               delta: -qty,
-              previousQty: item.totalQty,
-              newQty: item.totalQty - qty,
+              previousQty: item.availableQty + qty,
+              newQty: item.availableQty,
               reason,
               notes: note,
               adjustedBy: auth.user.userId,
             },
           });
-          // ponytail: no repair queue for COUNT stock — without per-piece identity there is
-          // nothing to send to a shop or receive back. The StockAdjustment above is the record.
         }
 
         // One row per act of returning, not per loan — คืน 3 แล้วค่อยคืน 7 leaves two rows.

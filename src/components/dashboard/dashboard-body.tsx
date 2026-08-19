@@ -76,7 +76,7 @@ function ConsumePanel() {
   return (
     <div className="flex flex-col gap-4">
       <DispenseByUsageChart />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <TopDispenseWidget verb="เบิก" />
         <TopCoursesChart />
       </div>
@@ -98,7 +98,7 @@ function BorrowPanel() {
         backLabel="คืนเข้า"
         gapLabel="ค้างสะสม"
       />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <TopDispenseWidget verb="ยืม" />
         <LoanDurationChart />
       </div>
@@ -114,23 +114,28 @@ function InUsePanel() {
   return (
     <div className="flex flex-col gap-4">
       <InUseKpis />
-      <SectionHeading title="สถานะและความเคลื่อนไหว" subtitle="ชิ้นงานอยู่ในสถานะไหน และออก-กลับกี่ครั้ง" />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+      {/* Full width, alone: the 260px trend is the tallest widget on the tab, so anything
+          beside it stretches to its height and shows a band of empty space. */}
+      <FlowMonthlyChart
+        title="แนวโน้มการนำไปใช้งาน-นำกลับ"
+        hint="นำออกใช้งานเทียบกับนำกลับคลัง ย้อนหลัง 1 ปี (ครั้ง)"
+        outLabel="นำออก"
+        backLabel="นำกลับ"
+        gapLabel="ค้างสะสม"
+      />
+      <SectionHeading title="สถานะและที่ตั้ง" subtitle="ชิ้นงานอยู่ในสถานะไหน และกระจายอยู่ห้องไหน" />
+      {/* items-start, not stretch: the donut card is the one thing here that must not grow to
+          a neighbour's height — a stretched card spreads its five legend rows down a blank
+          column. The two list cards below pair off instead, where equal row counts make them
+          match on their own. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <AssetStatusChart />
-        <FlowMonthlyChart
-          title="แนวโน้มการนำไปใช้งาน-นำกลับ"
-          hint="นำออกใช้งานเทียบกับนำกลับคลัง ย้อนหลัง 1 ปี (ครั้ง)"
-          outLabel="นำออก"
-          backLabel="นำกลับ"
-          gapLabel="ค้างสะสม"
-        />
-      </div>
-      <SectionHeading title="ตอนนี้อยู่ที่ไหน" subtitle="ของที่กระจายใช้งานอยู่ และชิ้นที่ถูกนำไปใช้บ่อย" />
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
         <StationByRoomChart />
+      </div>
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        <InUseTable />
         <TopDispenseWidget verb="นำไปใช้งาน" />
       </div>
-      <InUseTable />
     </div>
   );
 }

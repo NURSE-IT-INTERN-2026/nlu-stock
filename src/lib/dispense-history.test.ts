@@ -5,6 +5,7 @@ import assert from "node:assert";
 import { isDuplicateOfLoanRow, isLoanEdge, returnLocationUpdate } from "@/lib/returns";
 import { dispenseRequestSchema } from "@/lib/validators/dispense";
 import { recipientLabel } from "@/lib/constants";
+import { loanFields } from "@/lib/dispense-kind";
 import type { ItemStatus } from "@/generated/prisma/enums";
 
 // ── Loan edges are dropped: the เบิก / รับคืน row beside them already tells the story ──
@@ -105,6 +106,24 @@ assert.equal(ok({ ...cart, usageType: null, loanType: "BORROW" }), false, "null 
 // INUSE is the one exception, and not a loophole: its locationId is required (above), so the
 // room is the reason — dashboard-usage.ts files those rows under ตั้งใช้ในห้อง.
 assert.equal(ok({ ...cart, loanType: "INUSE", locationId: "loc-402" }), true, "นำไปใช้งานไม่ต้องเลือกการใช้งาน");
+
+// ── loanType/dueAt are the ต้องคืน columns, and เบิกใช้ must not fill them ──
+// A consumable used to file as BORROW carrying the cart's due date. Every loan query AND-s a
+// dispenseType filter, so nothing showed it — the row just claimed to be a loan that would
+// never be returned. One cart submits both kinds at once, so this is decided per line.
+const DUE = new Date("2026-08-18T00:00:00Z");
+
+assert.deepEqual(loanFields("CONSUMABLE", false, DUE), { loanType: null, dueAt: null }, "เบิกใช้ไม่ใช่การยืม");
+assert.deepEqual(loanFields("COUNT", false, DUE), { loanType: "BORROW", dueAt: DUE });
+assert.deepEqual(loanFields("ITEM", false, DUE), { loanType: "BORROW", dueAt: DUE });
+// นำไปใช้งาน is open-ended whatever the cart sent — the room is the record, not a due date.
+assert.deepEqual(loanFields("ITEM", true, DUE), { loanType: "INUSE", dueAt: null });
+assert.deepEqual(loanFields("COUNT", true, null), { loanType: "INUSE", dueAt: null });
+// INUSE never reaches a consumable (the dialog is durable-only) — if it ever does, เบิกใช้ wins:
+// a spent consumable has no room to sit in and no way back.
+assert.deepEqual(loanFields("CONSUMABLE", true, DUE), { loanType: null, dueAt: null });
+// ยืมไม่ระบุกำหนดคืนได้ — null dueAt is a loan without a deadline, not a เบิกใช้.
+assert.deepEqual(loanFields("COUNT", false, null), { loanType: "BORROW", dueAt: null });
 
 // ── Coming back from IN_USE clears the room นำไปใช้งาน stamped on the piece ──
 const HOME = "loc-home";

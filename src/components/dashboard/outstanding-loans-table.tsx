@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PackageCheck } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtDate, TH_DAY } from "@/lib/format";
 import { Panel, WidgetState } from "./primitives";
 import { useOutstandingLoans } from "@/hooks/use-dashboard-queries";
@@ -48,61 +49,59 @@ export function OutstandingLoansTable() {
         emptyTitle="ไม่มีของค้างคืน"
         emptyHint="ทุกอย่างที่ยืมออกไปกลับมาครบแล้ว"
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">รายการ</th>
-                <th className="px-4 py-2.5 font-medium">เหตุผล</th>
-                <th className="px-4 py-2.5 text-right font-medium">จำนวน</th>
-                <th className="px-4 py-2.5 font-medium">ครบกำหนด</th>
-                <th className="px-4 py-2.5 font-medium">สถานะ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  tabIndex={0}
-                  onClick={() => go(r.itemId)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      go(r.itemId);
-                    }
-                  }}
-                  aria-label={`${r.code} ${r.name}`}
-                  className="cursor-pointer border-b transition-colors last:border-0 hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{r.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {r.code} · ยืม {fmtDate(new Date(r.dispensedAt), TH_DAY)}
-                    </p>
-                  </td>
-                  {/* A loan filed before เหตุผล was required has nothing to show here, and an
-                      em dash is more honest than repeating the item name. */}
-                  <td className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{r.quantity.toLocaleString("th-TH")}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {r.dueAt ? fmtDate(new Date(r.dueAt), TH_DAY) : "ไม่กำหนด"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {r.overdueDays === null ? (
-                      <span className="inline-flex rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success-700 dark:text-success-200">
-                        ตามกำหนด
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-danger-700 dark:text-danger-400">
-                        เกิน {r.overdueDays.toLocaleString("th-TH")} วัน
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table grid zebra className="min-w-[640px]">
+          <TableHeader>
+            <TableRow className="bg-secondary/40">
+              <TableHead>รายการ</TableHead>
+              <TableHead>เหตุผล</TableHead>
+              <TableHead className="text-right">จำนวน</TableHead>
+              <TableHead>ครบกำหนด</TableHead>
+              <TableHead>สถานะ</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow
+                key={r.id}
+                tabIndex={0}
+                onClick={() => go(r.itemId)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    go(r.itemId);
+                  }
+                }}
+                aria-label={`${r.code} ${r.name}`}
+                className="cursor-pointer focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <TableCell className="h-auto py-2">
+                  <p className="font-medium">{r.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.code} · ยืม {fmtDate(new Date(r.dispensedAt), TH_DAY)}
+                  </p>
+                </TableCell>
+                {/* A loan filed before เหตุผล was required has nothing to show here, and an
+                    em dash is more honest than repeating the item name. */}
+                <TableCell className="text-muted-foreground">{r.reason ?? "—"}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">{r.quantity.toLocaleString("th-TH")}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {r.dueAt ? fmtDate(new Date(r.dueAt), TH_DAY) : "ไม่กำหนด"}
+                </TableCell>
+                <TableCell>
+                  {r.overdueDays === null ? (
+                    <span className="inline-flex rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success-700 dark:text-success-200">
+                      ตามกำหนด
+                    </span>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-danger-700 dark:text-danger-400">
+                      เกิน {r.overdueDays.toLocaleString("th-TH")} วัน
+                    </span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </WidgetState>
     </Panel>
   );

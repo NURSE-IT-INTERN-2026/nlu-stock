@@ -28,6 +28,25 @@ export const DISPENSE_KIND_LABELS: Record<DispenseKind, string> = {
   inuse: "นำไปใช้งาน",
 };
 
+/**
+ * The two loan columns, decided per line at write time (api/dispense).
+ *
+ * เบิกใช้ never comes back, so loanType and dueAt are not its columns to fill: a consumable
+ * used to file as BORROW with a due date, which reads as an open loan to anyone looking at
+ * the row. Nothing broke only because every loan query AND-s a dispenseType filter over it.
+ * null is what the rest of the app already treats as "not นำไปใช้งาน" (NOT_INUSE in
+ * dispense-kind-where matches null and BORROW alike), so writing null needs no reader change.
+ */
+export function loanFields(
+  dispenseType: string,
+  inRoom: boolean,
+  dueAt: Date | null,
+): { loanType: "BORROW" | "INUSE" | null; dueAt: Date | null } {
+  if (dispenseType === "CONSUMABLE") return { loanType: null, dueAt: null };
+  // นำไปใช้งาน is open-ended — a room, not a debt.
+  return { loanType: inRoom ? "INUSE" : "BORROW", dueAt: inRoom ? null : dueAt };
+}
+
 export function parseDispenseKind(v: string | null | undefined): DispenseKind {
   return (DISPENSE_KINDS as readonly string[]).includes(v ?? "")
     ? (v as DispenseKind)

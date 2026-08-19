@@ -7,7 +7,7 @@ import { recomputeItemCounts } from "@/lib/stock";
 import { isManualHold } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { ItemStatus } from "@/generated/prisma/enums";
-import { LoanType } from "@/generated/prisma/enums";
+import { loanFields } from "@/lib/dispense-kind";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -94,8 +94,9 @@ export async function POST(req: NextRequest) {
             notes: notes ?? undefined,
             locationId: locationId ?? undefined,
             loanGroupId,
-            loanType: inRoom ? LoanType.INUSE : LoanType.BORROW,
-            dueAt: dueAtDate ?? undefined,
+            // loanType/dueAt belong to the two ต้องคืน kinds only — see lib/dispense-kind.
+            // Decided per line, not per cart: one submit mixes สิ้นเปลือง with ต้องคืน.
+            ...loanFields(item.category.profile.dispenseType, inRoom, dueAtDate),
           },
         });
         ids.push(record.id);

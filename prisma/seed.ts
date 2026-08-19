@@ -140,9 +140,15 @@ async function main() {
   // Clean all tables (order matters for FK)
   const stripTrailingNum = (s: string) => s.replace(/\s*\(\d+\)\s*$/, "");
   await prisma.itemStatusLog.deleteMany();
+  await prisma.locationChangeLog.deleteMany();
   await prisma.maintenanceRecord.deleteMany();
   await prisma.stockAdjustment.deleteMany();
+  await prisma.returnRecord.deleteMany();
   await prisma.dispenseRecord.deleteMany();
+  await prisma.dispenseTemplateLine.deleteMany();
+  await prisma.dispenseTemplate.deleteMany();
+  await prisma.course.deleteMany();
+  await prisma.kitBom.deleteMany();
   await prisma.receiveRecord.deleteMany();
   await prisma.lot.deleteMany();
   await prisma.subItem.deleteMany();
@@ -713,6 +719,13 @@ async function main() {
   // ============================================================
   // Demo data for dashboard
   // ============================================================
+  // ponytail: SEED_DEMO=0 stops here — master data only, every history table empty,
+  // so a manual end-to-end test run reads its own rows and nothing else.
+  if (process.env.SEED_DEMO === "0") {
+    console.log("SEED_DEMO=0 — skipping demo transactions");
+    await prisma.$disconnect();
+    return;
+  }
   console.log("Creating demo transactions...");
   const now = new Date();
   const day = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
