@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Pagination } from "@/components/shared/pagination";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { FLOW, SectionTitle, type FlowTone } from "./primitives";
 import { cn } from "@/lib/utils";
@@ -98,40 +99,40 @@ export function MoveTable({
 
           {/* desktop: dense fixed table */}
           <div className="hidden flex-1 sm:block">
-            <table className="w-full table-fixed text-left">
-              <thead className="bg-secondary/25 text-[11px] font-bold text-muted-foreground">
-                <tr>
-                  <th className="w-[104px] px-4 py-2">วันที่</th>
-                  <th className="px-4 py-2">รายการ</th>
-                  <th className="w-[64px] px-3 py-2 text-right">จำนวน</th>
-                  <th className="w-[112px] px-4 py-2">{whoLabel}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y text-sm">
+            <Table grid zebra className="table-fixed">
+              <TableHeader>
+                <TableRow className="bg-secondary/40">
+                  <TableHead className="w-[104px]">วันที่</TableHead>
+                  <TableHead>รายการ</TableHead>
+                  <TableHead className="w-[64px] text-right">จำนวน</TableHead>
+                  <TableHead className="w-[112px]">{whoLabel}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {sliced.map((r) => (
-                  <tr
+                  <TableRow
                     key={r.id}
                     tabIndex={0}
                     onClick={() => go(r.itemId)}
                     onKeyDown={(e) => onKeyDown(e, r.itemId)}
                     aria-label={`${r.code} ${r.name}, ${r.qty} ชิ้น`}
-                    className="cursor-pointer transition-colors hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="cursor-pointer focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
-                    <td className="px-4 py-2 text-[11px] whitespace-nowrap tabular-nums text-muted-foreground">
+                    <TableCell className="text-[11px] tabular-nums text-muted-foreground">
                       {r.date}
-                    </td>
-                    <td className="px-4 py-2">
+                    </TableCell>
+                    <TableCell className="h-auto py-1.5">
                       <p className="truncate font-medium">{r.name}</p>
                       <p className="truncate text-[11px] text-muted-foreground">
                         {[r.code, r.kind].filter(Boolean).join(" · ")}
                       </p>
-                    </td>
-                    <td className={cn("px-3 py-2 text-right", qtyCls)}>{r.qty}</td>
-                    <td className="truncate px-4 py-2 text-xs text-muted-foreground">{r.who}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className={cn("text-right", qtyCls)}>{r.qty}</TableCell>
+                    <TableCell className="truncate text-xs text-muted-foreground">{r.who}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           <div className="mt-auto border-t bg-secondary/25 px-2">

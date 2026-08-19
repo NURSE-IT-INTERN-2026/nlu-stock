@@ -25,7 +25,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{
  *
  * Only closed loans are on the chart — an open one climbs a bucket every night with nothing
  * having happened, which would make the last bar grow on its own and read as behaviour
- * changing. The open ones get their own line under the chart instead of being hidden.
+ * changing. Open loans are counted on the ค้างยังไม่คืน KPI instead.
  */
 export function LoanDurationChart() {
   const { data, isLoading, error, refetch } = useLoanDuration();
@@ -73,11 +73,6 @@ export function LoanDurationChart() {
             )}
           </ChartContainer>
         </div>
-        {data && data.stillOut > 0 && (
-          <p className="mt-3 border-t pt-2.5 text-xs text-muted-foreground">
-            ไม่นับอีก {data.stillOut.toLocaleString("th-TH")} ครั้งที่ยังไม่คืน — ยังไม่มีระยะเวลา
-          </p>
-        )}
       </WidgetState>
     </Panel>
   );
