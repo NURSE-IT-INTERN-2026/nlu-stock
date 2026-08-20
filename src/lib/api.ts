@@ -862,7 +862,12 @@ export function uploadFile(formData: FormData) {
     body: formData,
     headers: { "ngrok-skip-browser-warning": "any" },
   }).then(async (res) => {
-    if (!res.ok) throw new ApiError(res.status, "Upload failed");
+    if (!res.ok) {
+      // The endpoint says exactly why it refused (wrong type, too big, bytes disagree with the
+      // declared type); a hardcoded "Upload failed" here would swallow all of it.
+      const body = await res.json().catch(() => null);
+      throw new ApiError(res.status, body?.error || "อัปโหลดไม่สำเร็จ");
+    }
     return res.json() as Promise<{ url: string }>;
   });
 }

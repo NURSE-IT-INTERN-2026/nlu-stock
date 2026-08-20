@@ -3,7 +3,9 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { uploadFile } from "@/lib/api";
+import { EVIDENCE_ACCEPT } from "@/lib/uploads";
 
 interface FileUploadProps {
   value: string | null;
@@ -13,7 +15,7 @@ interface FileUploadProps {
   variant?: "button" | "zone";
 }
 
-export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "อัปโหลดไฟล์", variant = "button" }: FileUploadProps) {
+export function FileUpload({ value, onChange, accept = EVIDENCE_ACCEPT, label = "อัปโหลดไฟล์", variant = "button" }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -28,7 +30,7 @@ export function FileUpload({ value, onChange, accept = "image/*,.pdf", label = "
       const { url } = await uploadFile(formData);
       onChange(url);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Upload failed");
+      toast.error(err instanceof Error ? err.message : "อัปโหลดไม่สำเร็จ");
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";

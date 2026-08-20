@@ -24,6 +24,7 @@ import { Loader2, MapPin, Pencil, RotateCcw, Search, Send, Undo2, Wrench } from 
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { cancelQtyDamage, getPendingRepairDamage, getSubItemsByStatus, sendQtyDamageToRepair, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
+import { EVIDENCE_ACCEPT } from "@/lib/uploads";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUpload } from "@/components/shared/file-upload";
 import { useSession } from "@/components/layout/auth-guard";
@@ -295,7 +296,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
       {withPhoto && (
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-          <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+          <FileUpload value={photoUrl} onChange={setPhotoUrl} accept={EVIDENCE_ACCEPT} label="อัปโหลดรูป" />
         </div>
       )}
     </>
@@ -672,7 +673,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-                  <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+                  <FileUpload value={photoUrl} onChange={setPhotoUrl} accept={EVIDENCE_ACCEPT} label="อัปโหลดรูป" />
                 </div>
               </div>
             )}

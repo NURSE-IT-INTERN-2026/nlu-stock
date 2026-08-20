@@ -19,6 +19,7 @@ import { FileUpload } from "@/components/shared/file-upload";
 import { STATUS_LABELS, effectiveCode, type ItemStatus } from "@/lib/constants";
 import { updateItemStatus } from "@/lib/api";
 
+import { EVIDENCE_ACCEPT } from "@/lib/uploads";
 interface SubItemOption {
   id: string;
   subCode: string;
@@ -179,7 +180,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
               <FileUpload
                 value={imageUrl}
                 onChange={setImageUrl}
-                accept="image/*"
+                accept={EVIDENCE_ACCEPT}
                 label="อัปโหลดรูปภาพ"
               />
             </div>
