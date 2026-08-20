@@ -5,7 +5,7 @@ import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
-import { writeOffValue } from "@/lib/cost";
+import { writeOffValue, stockValueRows } from "@/lib/cost";
 import { ItemStatus } from "@/generated/prisma/enums";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
@@ -208,54 +208,38 @@ const SIDE_LABELS: Record<string, string> = {
 async function fetchReportData(type: ReportType, params: URLSearchParams) {
   switch (type) {
     case "stock-balance": {
-      const where: Record<string, unknown> = { isActive: true };
+      const where: Prisma.ItemWhereInput = { isActive: true };
       const categoryId = params.get("categoryId");
       const profileId = params.get("profileId");
       if (categoryId) where.categoryId = categoryId;
       else if (profileId) where.category = { profileId };
 
-      const items = await prisma.item.findMany({
-        where,
-        include: {
-          lots: { select: { remainingQty: true, unitCost: true } },
-          category: { include: { profile: { select: { dispenseType: true } } } },
-          issueUnit: { select: { name: true } },
-        },
-        orderBy: { code: "asc" },
-      });
-
       // หน้าจอแยกสิ้นเปลืองกับคงทนคนละฝั่ง ไฟล์จึงต้องแยกตาม — ไม่งั้นกด export จากฝั่งหนึ่ง
       // แล้วได้ทั้งคลัง ซึ่งยอดรวมท้ายไฟล์ไม่ตรงกับการ์ดที่คนกดปุ่มเพิ่งอ่าน.
       const side = params.get("side");
+      const rows = await stockValueRows(prisma, where);
       const scoped = side
-        ? items.filter((it) => (it.category.profile?.dispenseType === "CONSUMABLE") === (side === "consumable"))
-        : items;
+        ? rows.filter((r) => (r.dispenseType === "CONSUMABLE") === (side === "consumable"))
+        : rows;
 
-      return scoped.map((it) => {
-        const isConsumable = it.category.profile?.dispenseType === "CONSUMABLE";
-        let value = 0;
-        let unitCost: number | null = null;
-        if (isConsumable) {
-          let totalRemaining = 0;
-          for (const lot of it.lots) {
-            totalRemaining += lot.remainingQty;
-            value += lot.remainingQty * (lot.unitCost ?? 0);
-          }
-          if (totalRemaining > 0 && value > 0) unitCost = value / totalRemaining;
-        } else {
-          unitCost = it.purchasePrice ?? null;
-          value = it.availableQty * (it.purchasePrice ?? 0);
-        }
-        return {
-          รหัส: it.code,
-          ชื่อ: it.name,
-          หมวด: it.category.name,
-          "คงเหลือ": it.availableQty,
-          หน่วย: it.issueUnit.name,
-          "ราคา/หน่วย": unitCost ?? "",
-          "มูลค่ารวม": value,
-        };
-      });
+      // หัวคอลัมน์ของที่ออกไปแล้วต่างกันคนละฝั่ง เพราะมันคนละเรื่อง: สิ้นเปลืองคือของที่เบิกไปใช้
+      // ตามปกติ ส่วนคงทนคือของที่หายไปจากคลังถาวร. ใช้หัวเดียวกันจะอ่านผิดทันที.
+      const usedQtyHeader = side === "durable" ? "ตัดจำหน่าย/สูญหาย (ชิ้น)" : "เบิกไปใช้";
+      const usedValueHeader = side === "durable" ? "มูลค่าที่เสียไป" : "มูลค่าที่ใช้ไป";
+
+      return scoped.map((r) => ({
+        รหัส: r.code,
+        ชื่อ: r.name,
+        หมวด: r.categoryName,
+        "คงเหลือ": r.availableQty,
+        หน่วย: r.unitName,
+        "ราคา/หน่วย": r.unitCost ?? "",
+        "มูลค่ารวม": r.value,
+        [usedQtyHeader]: r.usedQty,
+        [usedValueHeader]: r.usedValue,
+        "ที่มาของราคา": r.usedQty === 0 ? "" : r.usedExact ? "ยอดจ่ายจริง" : "ประมาณการ",
+        "หน่วยที่ไม่มีราคา": r.usedUnpricedQty,
+      }));
     }
 
     // One sheet per ชนิดการออกจากคลัง, matching the segment on screen column for column —
