@@ -24,6 +24,10 @@ interface Row {
   unitName: string;
   unitCost: number | null;
   value: number;
+  usedQty: number;
+  usedValue: number;
+  usedExact: boolean;
+  usedUnpricedQty: number;
 }
 
 const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -32,12 +36,32 @@ const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionD
 // "ทรัพย์สินที่ถืออยู่กี่บาท" — ยอดรวมของสองอย่างนี้บวกกันแล้วไม่ได้แปลว่าอะไร จึงแยกฝั่งกันดู.
 // COUNT (ยืม-คืน) กับ ITEM (รายชิ้น) อยู่ฝั่งเดียวกัน: ทั้งคู่คือของที่ไม่หมดไปเมื่อใช้.
 const SIDES = {
-  consumable: { label: "สิ้นเปลือง", token: "issue" as const, empty: "ไม่พบพัสดุสิ้นเปลืองตามตัวกรอง" },
-  durable: { label: "คงทน + ครุภัณฑ์", token: "value" as const, empty: "ไม่พบพัสดุคงทนตามตัวกรอง" },
+  consumable: {
+    label: "สิ้นเปลือง",
+    token: "issue" as const,
+    empty: "ไม่พบพัสดุสิ้นเปลืองตามตัวกรอง",
+    // ของสิ้นเปลืองออกจากคลังแล้วไม่กลับ — "ใช้ไป" คือปลายทางปกติของมัน ไม่ใช่ความเสียหาย
+    usedQtyHeader: "เบิกไปใช้",
+    usedValueHeader: "มูลค่าที่ใช้ไป",
+    usedCardLabel: "ใช้ไปแล้ว",
+    usedCardToken: "issue" as const,
+    usedUnit: "รายการเบิก",
+  },
+  durable: {
+    label: "คงทน + ครุภัณฑ์",
+    token: "value" as const,
+    empty: "ไม่พบพัสดุคงทนตามตัวกรอง",
+    // คงทนที่ออกจากคลังถาวรคือของที่เสียไปจริง — ชำรุดไม่นับ ของที่ยังพังอยู่ยังไม่ได้หายไปไหน
+    usedQtyHeader: "ตัดจำหน่าย/สูญหาย",
+    usedValueHeader: "มูลค่าที่เสียไป",
+    usedCardLabel: "ตัดจำหน่าย/สูญหาย",
+    usedCardToken: "repair" as const,
+    usedUnit: "ชิ้น",
+  },
 };
 type Side = keyof typeof SIDES;
 
-const columns: Column<Row>[] = [
+const buildColumns = (spec: (typeof SIDES)[Side]): Column<Row>[] => [
   { key: "code", header: "รหัสพัสดุ" },
   { key: "name", header: "รายการพัสดุ" },
   { key: "categoryName", header: "หมวดหมู่" },
@@ -57,6 +81,21 @@ const columns: Column<Row>[] = [
     header: "มูลค่ารวม",
     className: "text-right",
     render: (r) => (r.value > 0 ? baht(r.value) : "—"),
+  },
+  {
+    key: "usedQty",
+    header: spec.usedQtyHeader,
+    className: "text-right",
+    render: (r) => (r.usedQty > 0 ? r.usedQty.toLocaleString() : "—"),
+  },
+  {
+    key: "usedValue",
+    header: spec.usedValueHeader,
+    className: "text-right",
+    // ≈ เป็นคำเดียวกับที่ tab ตัดจำหน่ายใช้ — ตีจากราคาเฉลี่ยของรายการ ไม่ใช่ยอดที่จ่ายจริง
+    // ของหน่วยนั้น. แถวที่มีบางหน่วยไม่มีราคาเลยจะติด ≈ ด้วย เพราะยอดที่เห็นต่ำกว่าของจริง.
+    render: (r) =>
+      r.usedValue > 0 ? `${r.usedExact ? "" : "≈ "}${baht(r.usedValue)}` : r.usedQty > 0 ? "—" : "",
   },
 ];
 
@@ -90,6 +129,12 @@ export function StockBalanceTab() {
       itemsWithoutCost: data.filter((r) => r.unitCost === null).length,
       // ราคายังไม่ครบเป็นเรื่องปกติของคลังนี้ ตัวหารนี้คือสิ่งเดียวที่บอกว่ายอดข้างบนครอบคลุมแค่ไหน
       pricedInStock: inStock.filter((r) => r.unitCost !== null).length,
+      usedQty: data.reduce((s, r) => s + r.usedQty, 0),
+      usedValue: data.reduce((s, r) => s + r.usedValue, 0),
+      // หน่วยที่ไม่มีราคาเลยไม่ได้อยู่ในยอด — การ์ดต้องบอกให้รู้ ไม่งั้นยอดที่ต่ำกว่าจริงจะถูกอ่าน
+      // ว่าครบแล้ว. ต่างจาก ≈ ที่แปลว่ามีราคาแต่เป็นราคาเฉลี่ย.
+      usedUnpricedQty: data.reduce((s, r) => s + r.usedUnpricedQty, 0),
+      usedInexact: data.some((r) => r.usedQty > 0 && !r.usedExact),
     };
   }, [data]);
 
@@ -109,6 +154,8 @@ export function StockBalanceTab() {
   }, [data]);
 
   const priced = summary.pricedInStock;
+  const columns = useMemo(() => buildColumns(spec), [spec]);
+  const usedPricedQty = summary.usedQty - summary.usedUnpricedQty;
 
   return (
     <div className="space-y-4">
@@ -116,7 +163,7 @@ export function StockBalanceTab() {
         token={spec.token}
         icon={Boxes}
         title="มูลค่าคงคลัง"
-        subtitle="ของที่เหลืออยู่คิดเป็นเงินเท่าไร แยกสิ้นเปลืองกับคงทน — และยังขาดราคาอีกกี่รายการ"
+        subtitle="ของที่เหลืออยู่กับของที่ออกไปแล้วคิดเป็นเงินเท่าไร แยกสิ้นเปลืองกับคงทน — และยังขาดราคาอีกกี่รายการ"
       />
 
       {/* ฝั่งเป็น state ในหน้านี้เอง ไม่ขึ้น URL: ?kind= ถูก tab ออกจากคลังจองไว้แล้ว และทุก tab
@@ -160,6 +207,21 @@ export function StockBalanceTab() {
             value: summary.totalAvailableItems.toLocaleString(),
             hint: `จาก${spec.label} ${data.length.toLocaleString()} รายการ`,
             token: "stockin",
+          },
+          {
+            label: spec.usedCardLabel,
+            // เหมือนการ์ดคงเหลือ: ไม่มีหน่วยไหนรู้ราคาเลยก็ไม่มียอดให้รายงาน — ฿0 จะอ่านว่าไม่เสียอะไร
+            value:
+              usedPricedQty > 0
+                ? `${summary.usedInexact ? "≈ " : ""}${baht(summary.usedValue)}`
+                : "—",
+            token: usedPricedQty > 0 ? spec.usedCardToken : undefined,
+            hint:
+              summary.usedQty === 0
+                ? `ยังไม่มีรายการ`
+                : usedPricedQty > 0
+                  ? `คิดจาก ${usedPricedQty.toLocaleString()} จาก ${summary.usedQty.toLocaleString()} ${spec.usedUnit}`
+                  : `ยังไม่รู้ราคาสักหน่วย (0 จาก ${summary.usedQty.toLocaleString()} ${spec.usedUnit})`,
           },
           {
             label: "ยังไม่ระบุราคา",
