@@ -158,14 +158,16 @@ export function ProfilesTab() {
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
+    const { id } = deleteTarget;
+    // ponytail: close the dialog before awaiting so the button can't be double-fired on a slow request.
+    setDeleteTarget(null);
     try {
-      await deleteProfile(deleteTarget.id);
+      await deleteProfile(id);
       toast.success("ลบประเภทสำเร็จ");
       fetchProfiles();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
-    setDeleteTarget(null);
   }
 
   if (loading) {
