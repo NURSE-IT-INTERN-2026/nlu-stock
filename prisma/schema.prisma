@@ -499,7 +499,7 @@ model StockAdjustment {
   notes         String?
   adjustedBy    String
   adjuster      User             @relation(fields: [adjustedBy], references: [id])
-  imageEvidence String?
+  imageEvidenceUrls String[]      @default([])
   adjustedAt    DateTime         @default(now())
   recoveredAt   DateTime? // set when a LOST adjustment is reversed (เรียกคืน) or a repair is closed
 
@@ -561,7 +561,7 @@ model ItemStatusLog {
   reason         String?
   changedBy      String
   changer        User         @relation(fields: [changedBy], references: [id])
-  imageUrl       String?
+  imageUrls      String[]     @default([])
   repairVenue    RepairVenue?
   repairNote     String?
   // How many units this row is about, when it is about a quantity rather than one piece —

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AdjustmentReason, ItemStatus, RepairVenue } from "@/generated/prisma/enums";
 
+import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
   name: z.string().min(1, "Name is required").max(200),
@@ -49,7 +50,7 @@ export const stockAdjustSchema = z.object({
   stockCount: z.boolean().optional(),
   reason: z.nativeEnum(AdjustmentReason).optional(),
   notes: z.string().max(500).optional().nullable(),
-  imageEvidence: z.string().optional().nullable(),
+  imageEvidenceUrls: z.array(z.string()).max(MAX_EVIDENCE_FILES).default([]),
 }).refine((d) => d.stockCount || d.shelfCount != null || (d.lotId != null && d.lotCount != null), {
   message: "Either shelfCount or (lotId + lotCount) is required",
 }).refine((d) => d.stockCount || d.reason != null, {
@@ -60,7 +61,7 @@ export const statusChangeSchema = z.object({
   newStatus: z.nativeEnum(ItemStatus),
   subItemId: z.string().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
+  imageUrls: z.array(z.string()).max(MAX_EVIDENCE_FILES).default([]),
   repairVenue: z.nativeEnum(RepairVenue).optional().nullable(),
   repairNote: z.string().max(500).optional().nullable(),
   // อาการที่ชำรุด carried on the repair rows so it can be corrected mid-trip.
@@ -77,5 +78,5 @@ export const bulkSubItemStatusSchema = z.object({
   subItemIds: z.array(z.string().min(1)).min(1, "เลือกอย่างน้อย 1 ชิ้น"),
   newStatus: z.nativeEnum(ItemStatus),
   notes: z.string().max(500).optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
+  imageUrls: z.array(z.string()).max(MAX_EVIDENCE_FILES).default([]),
 });

@@ -5,7 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { uploadFile } from "@/lib/api";
-import { EVIDENCE_ACCEPT } from "@/lib/uploads";
+import { EVIDENCE_ACCEPT, MAX_EVIDENCE_FILES } from "@/lib/uploads";
+
+export const isImageUrl = (url: string) => /\.(jpg|jpeg|png|webp)$/i.test(url);
+export const isPdfUrl = (url: string) => /\.pdf$/i.test(url);
+
+/** One file, one request. The endpoint takes them one at a time and says why when it refuses. */
+async function putFile(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { url } = await uploadFile(formData);
+  return url;
+}
 
 interface FileUploadProps {
   value: string | null;
@@ -25,10 +36,7 @@ export function FileUpload({ value, onChange, accept = EVIDENCE_ACCEPT, label = 
   async function uploadSingle(file: File) {
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const { url } = await uploadFile(formData);
-      onChange(url);
+      onChange(await putFile(file));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "อัปโหลดไม่สำเร็จ");
     } finally {
@@ -139,6 +147,119 @@ export function FileUpload({ value, onChange, accept = EVIDENCE_ACCEPT, label = 
           {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
           {uploading ? "กำลังอัปโหลด..." : label}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+
+interface FileUploadListProps {
+  value: string[];
+  onChange: (urls: string[]) => void;
+  accept?: string;
+  label?: string;
+  max?: number;
+}
+
+/**
+ * หลักฐานแนบ — up to `max` files per field, รูป and PDF mixed.
+ *
+ * Uploads run one at a time and each result is kept on its own: a batch of five where the
+ * third is refused leaves the other four attached and names the one that failed. Rolling the
+ * batch back would mean deleting files already written to disk and making someone re-pick all
+ * five because one was wrong.
+ */
+export function FileUploadList({
+  value,
+  onChange,
+  accept = EVIDENCE_ACCEPT,
+  label = "แนบไฟล์",
+  max = MAX_EVIDENCE_FILES,
+}: FileUploadListProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const room = max - value.length;
+
+  async function addFiles(fileList: FileList | null) {
+    const picked = Array.from(fileList ?? []);
+    if (picked.length === 0) return;
+    const files = picked.slice(0, room);
+    if (picked.length > room) toast.error(`แนบได้สูงสุด ${max} ไฟล์`);
+
+    setUploading(true);
+    const added: string[] = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        added.push(await putFile(file));
+      } catch (err) {
+        failed.push(file.name);
+        toast.error(`${file.name}: ${err instanceof Error ? err.message : "อัปโหลดไม่สำเร็จ"}`);
+      }
+    }
+    setUploading(false);
+    if (inputRef.current) inputRef.current.value = "";
+    if (added.length > 0) onChange([...value, ...added]);
+    // Only worth saying when some of a batch survived; a single failure already has its toast.
+    if (failed.length > 0 && added.length > 0) {
+      toast.success(`อัปโหลดสำเร็จ ${added.length} จาก ${files.length} ไฟล์`);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {value.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {value.map((url, i) => (
+            <li key={url} className="relative">
+              <button
+                type="button"
+                className="absolute -top-1.5 -right-1.5 z-10 rounded-full border border-border bg-background p-0.5 text-muted-foreground shadow-sm transition-colors hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => onChange(value.filter((u) => u !== url))}
+                aria-label="ลบไฟล์"
+              >
+                <X className="h-3 w-3" />
+              </button>
+              {isImageUrl(url) ? (
+                <img src={url} alt={`หลักฐาน ${i + 1}`} className="size-16 rounded-md border border-border object-cover" />
+              ) : (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex size-16 flex-col items-center justify-center gap-0.5 rounded-md border border-border bg-muted/30 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                >
+                  <FileText className="h-4 w-4" />
+                  {isPdfUrl(url) ? "PDF" : "ไฟล์"}
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        multiple
+        className="hidden"
+        disabled={uploading || room <= 0}
+        onChange={(e) => addFiles(e.target.files)}
+      />
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-card"
+          disabled={uploading || room <= 0}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+          {uploading ? "กำลังอัปโหลด..." : label}
+        </Button>
+        <span className="text-[11px] text-muted-foreground">
+          {value.length}/{max} · รูปหรือ PDF
+        </span>
       </div>
     </div>
   );
