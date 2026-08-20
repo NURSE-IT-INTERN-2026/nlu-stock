@@ -330,14 +330,16 @@ export function LocationsTab() {
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
+    const { id } = deleteTarget;
+    // ponytail: close the dialog before awaiting so the button can't be double-fired on a slow request.
+    setDeleteTarget(null);
     try {
-      await deleteLocation(deleteTarget.id);
+      await deleteLocation(id);
       toast.success("ลบสถานที่สำเร็จ");
       fetchLocations();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
-    setDeleteTarget(null);
   }
 
   if (loading) return (
