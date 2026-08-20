@@ -190,11 +190,10 @@ export async function POST(req: NextRequest) {
         // มูลค่าคงคลังตีราคาของคงทนจาก Item.purchasePrice และของสิ้นเปลืองจาก Lot.unitCost —
         // ราคาที่เพิ่งกรอกจะไปไม่ถึงรายงานนั้นถ้าไม่ derive ใหม่ตรงนี้. ทั้งสองมาจากใบรับเข้า
         // ชุดเดียวกัน จึงแก้ราคาย้อนหลังได้ (PATCH api/receive/[id]) แล้วตัวเลขตามทันเสมอ.
-        if (isConsumable) {
-          if (lotId) await syncLotUnitCost(tx, lotId);
-        } else if (ri.unitCost != null) {
-          await syncItemPurchasePrice(tx, item.id, record.receivedAt);
-        }
+        if (isConsumable && lotId) await syncLotUnitCost(tx, lotId);
+        // Item.purchasePrice is derived for every kind, not just คงทน: it is the fallback
+        // ราคาต่อหน่วย for consumable stock that has no lot to price it (most of them).
+        if (ri.unitCost != null) await syncItemPurchasePrice(tx, item.id, record.receivedAt);
       }
 
       return ids;

@@ -48,11 +48,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       // เหมือน POST เป๊ะ: ราคาอยู่ที่ใบรับเข้า ส่วน Item.purchasePrice / Lot.unitCost เป็นค่าที่
       // derive จากใบรับเข้าทั้งหมดของมัน — แก้ใบไหนก็ตาม ตัวเลขในรายงานตามทันทีโดยไม่ต้อง backfill.
-      if (record.item.category.profile?.dispenseType === "CONSUMABLE") {
-        if (record.lotId) await syncLotUnitCost(tx, record.lotId);
-      } else {
-        await syncItemPurchasePrice(tx, record.itemId, record.receivedAt);
+      if (record.item.category.profile?.dispenseType === "CONSUMABLE" && record.lotId) {
+        await syncLotUnitCost(tx, record.lotId);
       }
+      await syncItemPurchasePrice(tx, record.itemId, record.receivedAt);
 
       return row;
     });
