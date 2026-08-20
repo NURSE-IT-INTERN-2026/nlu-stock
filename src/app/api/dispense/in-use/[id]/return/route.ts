@@ -63,22 +63,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
 
       if (record.subItemId) {
-        await tx.subItem.update({
+        // Read the piece instead of assuming IN_USE. แจ้งชำรุด/สูญหาย from the detail page
+        // closes the open record on its way through (closeOpenLoan), so a piece reaching here
+        // should still be IN_USE — but this used to hardcode previousStatus: IN_USE and
+        // overwrite status: AVAILABLE regardless, which on a piece that had drifted wrote a
+        // history line that never happened and quietly resurrected สูญหาย stock as available.
+        // Now the record closes either way, and the piece's status only moves when it really
+        // is the one this endpoint is entitled to move.
+        const sub = await tx.subItem.findUnique({
           where: { id: record.subItemId },
-          // null, not the item's own id — "wherever the spec lives", the convention the
-          // whole app reads through (see returnLocationUpdate in lib/returns.ts).
-          data: { status: ItemStatus.AVAILABLE, locationId: null },
+          select: { status: true },
         });
-        await tx.itemStatusLog.create({
-          data: {
-            itemId: record.itemId,
-            subItemId: record.subItemId,
-            previousStatus: ItemStatus.IN_USE,
-            newStatus: ItemStatus.AVAILABLE,
-            reason: note ? `คืนเข้าคลัง (${note})` : "คืนเข้าคลัง",
-            changedBy: auth.user.userId,
-          },
-        });
+        if (sub?.status === ItemStatus.IN_USE) {
+          await tx.subItem.update({
+            where: { id: record.subItemId },
+            // null, not the item's own id — "wherever the spec lives", the convention the
+            // whole app reads through (see returnLocationUpdate in lib/returns.ts).
+            data: { status: ItemStatus.AVAILABLE, locationId: null },
+          });
+          await tx.itemStatusLog.create({
+            data: {
+              itemId: record.itemId,
+              subItemId: record.subItemId,
+              previousStatus: ItemStatus.IN_USE,
+              newStatus: ItemStatus.AVAILABLE,
+              reason: note ? `คืนเข้าคลัง (${note})` : "คืนเข้าคลัง",
+              changedBy: auth.user.userId,
+            },
+          });
+        }
       } else {
         await tx.item.update({
           where: { id: record.itemId },
