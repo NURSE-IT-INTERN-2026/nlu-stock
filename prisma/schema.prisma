@@ -609,6 +609,12 @@ model LocationChangeLog {
 model Course {
   code     String   @id // รหัสวิชา
   name     String? // title_long_th from the registrar; null until first resolved
+  // open_status on the registrar's newest revision of this course: false = retired. Retired
+  // rows are kept, not deleted — a dispense filed years ago still names its course from here
+  // — but lib/courses listCourses hides them, so nobody can file a new draw against a course
+  // that is no longer taught. Defaults true: a course the registrar has no bulletin for
+  // (real: 578101) is still in the faculty catalogue and must stay pickable.
+  open     Boolean  @default(true)
   syncedAt DateTime @default(now()) @updatedAt
 
   @@map("courses")
