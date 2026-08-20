@@ -27,7 +27,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
 
   const itemCount = await prisma.item.count({ where: { locationId: id } });
-  if (itemCount > 0) return error("Cannot delete location with items");
+  if (itemCount > 0) return error("ลบไม่ได้เนื่องจากสถานที่นี้มีพัสดุอยู่", 409);
 
   try {
     await prisma.location.delete({ where: { id } });
