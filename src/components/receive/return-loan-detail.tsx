@@ -32,6 +32,7 @@ import { KitSetContentsPicker } from "@/components/items/kit-sets-panel";
 import { effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
+import { EVIDENCE_ACCEPT } from "@/lib/uploads";
 export interface LoanGroup {
   key: string;
   records: OpenBorrow[];
@@ -456,7 +457,7 @@ export function ReturnLoanDetail({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept={EVIDENCE_ACCEPT}
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -623,7 +624,7 @@ function TrackedRows({
                           แนบรูป
                           <input
                             type="file"
-                            accept="image/*"
+                            accept={EVIDENCE_ACCEPT}
                             multiple
                             className="hidden"
                             onChange={(e) => { onUpload(r.id, e.target.files); e.target.value = ""; }}

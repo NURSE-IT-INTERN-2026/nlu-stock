@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { uploadFile, updateItem } from "@/lib/api";
 
+import { IMAGE_ACCEPT } from "@/lib/uploads";
 // 1 cover + 2 extras. Existing items that already hold more are not rewritten —
 // the surplus is simply not rendered, and the next save trims it.
 const MAX_IMAGES = 3;
@@ -158,7 +159,7 @@ export function ItemDetailMedia({ item, canAct, onRefresh, onSave }: Props) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={IMAGE_ACCEPT}
             multiple
             className="hidden"
             onChange={(e) => addFiles(e.target.files)}

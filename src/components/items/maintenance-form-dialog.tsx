@@ -27,6 +27,7 @@ import { createMaintenance, searchDispenseItems } from "@/lib/api";
 import { MAINT_RESULT_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+import { EVIDENCE_ACCEPT } from "@/lib/uploads";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -373,7 +374,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               <FileUpload
                 value={attachmentUrl}
                 onChange={setAttachmentUrl}
-                accept="image/*,.pdf"
+                accept={EVIDENCE_ACCEPT}
                 label="แนบเอกสาร"
               />
             </div>
