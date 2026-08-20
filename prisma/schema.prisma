@@ -615,7 +615,14 @@ model Course {
   // that is no longer taught. Defaults true: a course the registrar has no bulletin for
   // (real: 578101) is still in the faculty catalogue and must stay pickable.
   open     Boolean  @default(true)
-  syncedAt DateTime @default(now()) @updatedAt
+  // When the faculty catalogue last confirmed this code — written only by the catalogue
+  // refresh in lib/courses, which is what the 24h TTL is actually asking about. Deliberately
+  // NOT @updatedAt: any other write (resolving one course's title on demand) would bump it,
+  // and since the TTL reads MAX(syncedAt) across the table, one such row is enough to make
+  // the whole catalogue look fresh and defer the refresh — indefinitely, if that course is
+  // picked daily. The refresh is what keeps `open` and renamed titles current, so it must
+  // not be something ordinary use can hold off.
+  syncedAt DateTime @default(now())
 
   @@map("courses")
 }
