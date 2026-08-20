@@ -93,7 +93,7 @@ interface SiblingRow {
   location: LocationType | null;
   dispenseRecords: DispenseRecord[];
 }
-interface StatusLog { id: string; previousStatus: ItemStatus; newStatus: ItemStatus; reason: string | null; changedAt: string; imageUrl: string | null; repairVenue: "INTERNAL" | "EXTERNAL" | null; changer: { name: string } }
+interface StatusLog { id: string; previousStatus: ItemStatus; newStatus: ItemStatus; reason: string | null; changedAt: string; imageUrls: string[]; repairVenue: "INTERNAL" | "EXTERNAL" | null; changer: { name: string } }
 interface MaintenanceRecord { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }
 interface SubItemData {
   id: string; subCode: string; name: string | null; status: ItemStatus;

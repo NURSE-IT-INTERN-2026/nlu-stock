@@ -4,6 +4,7 @@ import { requireAdmin, requireAuth, requireSuperAdmin, handleError } from "@/lib
 import { restoreDamagedQty } from "@/lib/stock";
 import { AdjustmentReason, RepairVenue } from "@/generated/prisma/enums";
 
+import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 // The qty half of the repair lifecycle. A tracked piece walks ชำรุด → ส่งซ่อม → รับคืน on
 // sub_items.status; non-tracked stock has no row there, so its แจ้งชำรุด booking (a
 // StockAdjustment, reason DAMAGED_PENDING_REPAIR, recoveredAt null) carries the same three
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
       repairSentAt: true,
       repairVenue: true,
       repairNote: true,
-      imageEvidence: true,
+      imageEvidenceUrls: true,
       adjuster: { select: { name: true } },
       item: {
         select: {
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
       repairSentAt: r.repairSentAt?.toISOString() ?? null,
       repairVenue: r.repairVenue,
       repairNote: r.repairNote,
-      imageEvidence: r.imageEvidence,
+      imageEvidenceUrls: r.imageEvidenceUrls,
       by: r.adjuster.name,
       item: r.item,
     })),
@@ -83,7 +84,9 @@ export async function POST(req: NextRequest) {
   const venue = body?.venue as string | undefined;
   const repairNote = (body?.repairNote as string | undefined)?.trim() || null;
   const damageNote = (body?.damageNote as string | undefined)?.trim() || null;
-  const imageEvidence = (body?.imageEvidence as string | undefined) || null;
+  const imageEvidenceUrls = Array.isArray(body?.imageEvidenceUrls)
+    ? (body.imageEvidenceUrls as string[]).slice(0, MAX_EVIDENCE_FILES)
+    : [];
 
   if (!adjustmentId || !venue || !Object.keys(RepairVenue).includes(venue) || !repairNote) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
@@ -109,7 +112,9 @@ export async function POST(req: NextRequest) {
           // The symptom is editable: the first แจ้งชำรุด is usually written before anyone has
           // looked at the thing properly. Blank leaves what's on record.
           ...(damageNote ? { notes: damageNote } : {}),
-          ...(imageEvidence ? { imageEvidence } : {}),
+          // Only a non-empty pick replaces what is on record: [] is what an edit dialog
+          // sends when nobody touched the attachments, and it is truthy.
+          ...(imageEvidenceUrls.length > 0 ? { imageEvidenceUrls } : {}),
           // Stamped once — an edit is still the same trip.
           ...(isEdit ? {} : { repairSentAt: new Date() }),
         },
@@ -140,7 +145,9 @@ export async function POST(req: NextRequest) {
           repairVenue: venue as RepairVenue,
           repairNote,
           damageNote: damageNote ?? adj.notes,
-          imageUrl: imageEvidence ?? undefined,
+          // No attachment here on purpose: the booking above owns the evidence for qty stock,
+          // and the same photo living in two tables invites the question of which one is real.
+          // A tracked piece has no booking, so its own log row keeps its imageUrls.
         },
       });
 

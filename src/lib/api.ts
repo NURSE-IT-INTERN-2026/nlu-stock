@@ -574,7 +574,7 @@ export function adjustStock(
     stockCount?: boolean;
     reason?: string;
     notes?: string | null;
-    imageEvidence?: string | null;
+    imageEvidenceUrls?: string[];
   },
 ) {
   return request<unknown>(`/api/items/${itemId}/adjust`, {
@@ -585,7 +585,7 @@ export function adjustStock(
 
 export function updateItemStatus(
   itemId: string,
-  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrl?: string | null; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null; damageNote?: string | null },
+  data: { newStatus: string; subItemId?: string | null; notes?: string | null; imageUrls?: string[]; repairVenue?: "INTERNAL" | "EXTERNAL" | null; repairNote?: string | null; damageNote?: string | null },
 ) {
   return request<unknown>(`/api/items/${itemId}/status`, {
     method: "POST",
@@ -699,8 +699,8 @@ export interface PendingRepairDamage {
   repairSentAt: string | null;
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   repairNote: string | null;
-  /** รูปหลักฐานก่อนส่งซ่อม. */
-  imageEvidence: string | null;
+  /** รูปหลักฐานก่อนส่งซ่อม + เอกสารประกอบ. */
+  imageEvidenceUrls: string[];
   by: string;
   item: {
     id: string;
@@ -724,7 +724,7 @@ export function sendQtyDamageToRepair(data: {
   venue: "INTERNAL" | "EXTERNAL";
   repairNote: string;
   damageNote?: string;
-  imageEvidence?: string;
+  imageEvidenceUrls?: string[];
 }) {
   return request<{ ok: boolean }>("/api/repairs", {
     method: "POST",

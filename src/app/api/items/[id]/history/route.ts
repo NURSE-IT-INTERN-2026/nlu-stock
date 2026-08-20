@@ -34,6 +34,8 @@ type TimelineEvent = {
   change?: { from: number; to: number } | null;
   // ค่าซ่อม, folded in from the MaintenanceRecord that closed the same trip. Dialog only.
   cost?: number | null;
+  // หลักฐานแนบ — รูปอาการเสีย, ใบเสนอราคา, เอกสารรับคืน. Dialog only; the table stays text.
+  attachments?: string[];
   details: Record<string, unknown>;
 };
 
@@ -94,7 +96,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const events: TimelineEvent[] = [];
   // adjustment id → ค่าซ่อม of the job that closed it; merged in once both queries have run.
-  const repairJobs = new Map<string, number | null>();
+  const repairJobs = new Map<string, { cost: number | null; attachments: string[] }>();
 
   const itemLevel = !subItemId;
   const fetchDispense = !lost;
@@ -252,6 +254,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             notes: r.notes ?? "",
             change: lost ? null : { from: r.previousQty, to: r.newQty },
             user: r.adjuster.name,
+            attachments: r.imageEvidenceUrls,
             details: lost
               ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
               : { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
@@ -311,6 +314,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             sameStatus ? null : r.reason,
           ),
           user: r.changer.name,
+          attachments: r.imageUrls,
           details: lost
             ? { source: "PIECE", subCode: r.subItem?.subCode ?? null, reason: r.reason, recoveredAt: r.recoveredAt }
             : { previousStatus: r.previousStatus, newStatus: r.newStatus, subItemId: r.subItemId, repairVenue: r.repairVenue },
@@ -332,7 +336,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           // the fuller row (qty, balance, the closing note), so it keeps the line and this
           // record hands over the one thing it alone knows: what the repair cost.
           if (r.adjustmentId) {
-            repairJobs.set(r.adjustmentId, r.cost);
+            repairJobs.set(r.adjustmentId, { cost: r.cost, attachments: r.attachmentUrls });
             continue;
           }
           events.push({
@@ -353,6 +357,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             subtitle: MAINT_RESULT_LABELS[r.result] ?? r.result,
             notes: r.issue ?? "",
             user: r.performer.name,
+            attachments: r.attachmentUrls,
             details: { type: r.type, result: r.result, cost: r.cost, issue: r.issue },
           });
         }
@@ -388,7 +393,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   await Promise.all(queries);
 
   for (const e of events) {
-    if (repairJobs.has(e.id)) e.cost = repairJobs.get(e.id) ?? null;
+    const job = repairJobs.get(e.id);
+    if (job) {
+      e.cost = job.cost;
+      // The closing paperwork belongs to the row that shows the trip, not to a record the
+      // timeline deliberately does not print.
+      if (job.attachments.length > 0) e.attachments = [...(e.attachments ?? []), ...job.attachments];
+    }
   }
 
   events.sort((a, b) => b.date.getTime() - a.date.getTime());

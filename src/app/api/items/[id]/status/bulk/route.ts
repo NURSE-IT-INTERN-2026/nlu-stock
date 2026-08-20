@@ -63,7 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           newStatus: data.newStatus,
           reason: data.notes || `ปรับสถานะเป็น ${STATUS_LABELS[data.newStatus] ?? data.newStatus}`,
           changedBy: auth.user.userId,
-          imageUrl: data.imageUrl,
+          imageUrls: data.imageUrls,
         },
       });
       await closeOpenLoan(tx, {

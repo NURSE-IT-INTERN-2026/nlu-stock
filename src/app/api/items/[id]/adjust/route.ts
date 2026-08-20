@@ -105,7 +105,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           reason,
           notes: data.notes,
           adjustedBy: auth.user.userId,
-          imageEvidence: data.imageEvidence,
+          imageEvidenceUrls: data.imageEvidenceUrls,
         },
       });
       await tx.item.update({ where: { id }, data: { availableQty: newAvailable, ...countStamp } });
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         reason,
         notes: data.notes,
         adjustedBy: auth.user.userId,
-        imageEvidence: data.imageEvidence,
+        imageEvidenceUrls: data.imageEvidenceUrls,
       },
     });
 
