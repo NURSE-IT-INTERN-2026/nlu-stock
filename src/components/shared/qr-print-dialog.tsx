@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import {
+  DIALOG_SHELL,
+  DIALOG_BODY,
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -155,12 +159,16 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      {/* Fixed, not fit: ขนาดป้าย writes an inline width on every preview tile, so the
+          flex-wrap grid rewraps and the box would jump under the cursor. */}
+      <DialogContent className={cn(DIALOG_SHELL, "sm:max-w-2xl")}>
+        <DialogHeader className="shrink-0">
           <DialogTitle>พิมพ์ป้าย QR</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        {/* Size + count stay above the scroll area — with 30 labels the user should not
+            have to scroll back to the top to change the size. */}
+        <div className="shrink-0 space-y-4">
           <div className="space-y-1.5">
             <Label>ขนาดป้าย</Label>
             <Select value={size} onValueChange={(v) => setSize(v as LabelSize)}>
@@ -178,11 +186,11 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
           <p className="text-sm text-muted-foreground">
             จะพิมพ์ {items.length} ป้าย
           </p>
+        </div>
 
-          {/* Preview grid */}
-          <div
-            className="flex flex-wrap gap-3 border rounded-md p-4 bg-muted/30 max-h-[55vh] overflow-y-auto"
-          >
+        {/* Preview grid */}
+        <div className={cn(DIALOG_BODY, "px-1")}>
+          <div className="flex flex-wrap gap-3 rounded-md border bg-muted/30 p-4">
             {items.map((item) => (
               <div
                 key={item.code}
@@ -208,11 +216,14 @@ export function QrPrintDialog({ open, onClose, items }: Props) {
             ))}
           </div>
 
+        </div>
+
+        <DialogFooter className="shrink-0">
           <Button className="w-full" onClick={handlePrint} disabled={items.length === 0}>
             <Printer className="h-4 w-4 mr-1" />
             พิมพ์ป้าย
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

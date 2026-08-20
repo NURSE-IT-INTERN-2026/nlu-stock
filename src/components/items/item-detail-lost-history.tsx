@@ -17,7 +17,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { effectiveCode } from "@/lib/constants";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { DIALOG_SHELL_FIT, DIALOG_BODY, Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface LostEvent {
   id: string;
@@ -197,14 +197,15 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
         <DialogContent showCloseButton={false} className="max-w-[calc(100%-2rem)] sm:max-w-[420px] gap-0 overflow-hidden p-0 sm:rounded-2xl">
           <DialogTitle className="sr-only">เรียกคืนของสูญหาย</DialogTitle>
           <DialogDescription className="sr-only">ยืนยันเรียกคืนกลับเป็นพร้อมใช้งาน</DialogDescription>
-          <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+          <div className={DIALOG_SHELL_FIT}>
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success-700"><Undo2 className="h-4 w-4" /></div>
               <div><p className="text-base font-semibold text-foreground">เรียกคืนของสูญหาย</p><p className="text-xs text-muted-foreground">กลับเป็นพร้อมใช้งาน</p></div>
             </div>
             <button type="button" disabled={recovering} onClick={() => closeRecover()} className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"><X className="h-4 w-4" /></button>
           </div>
-          <div className="bg-secondary/40 px-6 py-6 space-y-3">
+          <div className={cn(DIALOG_BODY, "space-y-3 bg-secondary/40 px-6 py-6")}>
             {recoverTarget && (() => {
               const r = rowOf(recoverTarget);
               const meta = SOURCE_META[r.src] ?? SOURCE_META.PIECE;
@@ -228,11 +229,12 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
               <span>ของจะกลับเข้าสต็อกพร้อมใช้งาน การเรียกคืนบันทึกเข้าประวัติ ไม่สามารถย้อนได้</span>
             </div>
           </div>
-          <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-card px-6 py-4">
             <Button variant="outline" onClick={() => closeRecover()} disabled={recovering}>ยกเลิก</Button>
             <Button onClick={() => void doRecover()} disabled={recovering}>
               {recovering && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}ยืนยันเรียกคืน
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
