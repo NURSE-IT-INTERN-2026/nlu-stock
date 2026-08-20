@@ -38,7 +38,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
 
   const subCount = await prisma.categoryType.count({ where: { profileId: id } });
-  if (subCount > 0) return error("ลบไม่ได้เพราะประเภทนี้มีหมวดหมู่ย่อย", 409);
+  if (subCount > 0) return error("ลบไม่ได้เนื่องจากประเภทนี้มีหมวดหมู่ย่อย", 409);
 
   try {
     await prisma.categoryProfile.delete({ where: { id } });

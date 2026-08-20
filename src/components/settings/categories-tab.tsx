@@ -169,14 +169,16 @@ export function CategoriesTab() {
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
+    const { id } = deleteTarget;
+    // ponytail: close the dialog before awaiting so the button can't be double-fired on a slow request.
+    setDeleteTarget(null);
     try {
-      await deleteCategory(deleteTarget.id);
+      await deleteCategory(id);
       toast.success("ลบหมวดหมู่สำเร็จ");
       fetchCategories();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
-    setDeleteTarget(null);
   }
 
   const filtered = filterProfile === "ALL" ? categories : categories.filter((c) => c.profile?.id === filterProfile);
