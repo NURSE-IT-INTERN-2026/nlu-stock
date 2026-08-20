@@ -23,7 +23,7 @@ import { useCart, useCartLineActions, buildCartItem } from "@/components/dispens
 import { EditableQty } from "@/components/dispense/editable-qty";
 import { Loader2, Minus, Plus, Trash2, ShoppingBasket, MapPin, Package, Repeat, Bookmark, FolderOpen, AlertTriangle } from "lucide-react";
 import { ItemThumb } from "@/components/shared/item-thumb";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DIALOG_SHELL, DIALOG_SHELL_FIT, DIALOG_BODY, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { USAGE_TYPE_OPTIONS, locationLabel, effectiveCode, CONDITION_LABELS } from "@/lib/constants";
 import { createDispense, getDispenseTemplates, getDispenseTemplate, createDispenseTemplate, getCourses, getCourseName, type TemplateSummary, type CourseOption } from "@/lib/api";
@@ -245,15 +245,15 @@ export default function ConfirmDispensePage() {
 
       {/* Load a template into the cart */}
       <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
-          <DialogHeader>
+        <DialogContent className={cn(DIALOG_SHELL_FIT, "max-w-[calc(100%-2rem)] sm:max-w-sm")}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>โหลดเทมเพลต</DialogTitle>
             <DialogDescription>เลือกเทมเพลตเพื่อเติมพัสดุลงตะกร้า (lot/ชิ้นจะเลือกจากสต็อกปัจจุบัน)</DialogDescription>
           </DialogHeader>
           {templates.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีเทมเพลต</p>
           ) : (
-            <div className="max-h-72 space-y-1 overflow-y-auto">
+            <div className={cn(DIALOG_BODY, "space-y-1")}>
               {templates.map((t) => (
                 <button
                   key={t.id}
@@ -553,8 +553,12 @@ export default function ConfirmDispensePage() {
 
       {/* ── Dispense form dialog (form entry + final checkpoint merged) ── */}
       <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
-        <DialogContent showCloseButton={false} className="max-w-[calc(100%-2rem)] sm:max-w-lg">
-          <DialogHeader>
+        {/* Fixed height, not fit: usageType swaps whole blocks in and out (รายวิชา,
+            กิจกรรม, กำหนดคืน) while the dialog is open, and it used to have no lock
+            at all — at 700px tall the ยืนยันเบิก button sat off-screen with nothing
+            to scroll. */}
+        <DialogContent showCloseButton={false} className={cn(DIALOG_SHELL, "max-w-[calc(100%-2rem)] sm:max-w-lg")}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>ข้อมูลการเบิก-ยืม</DialogTitle>
             <DialogDescription>กรอกข้อมูลก่อนยืนยัน — กดยืนยันแล้วจะตัดสต็อกทันที</DialogDescription>
             <p className="text-xs text-muted-foreground">
@@ -564,6 +568,7 @@ export default function ConfirmDispensePage() {
             </p>
           </DialogHeader>
           <form
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(e) => {
               e.preventDefault();
               handleSubmit();
@@ -575,6 +580,7 @@ export default function ConfirmDispensePage() {
               }
             }}
           >
+            <div className={cn(DIALOG_BODY, "px-1")}>
             <fieldset disabled={submitting} className="m-0 min-w-0 space-y-4 border-0">
               {showErrors && !canConfirm && (
                 <p role="status" aria-live="polite" className="text-xs text-destructive">
@@ -686,7 +692,8 @@ export default function ConfirmDispensePage() {
             <p className="mt-4 mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
               กดยืนยันแล้วจะตัดสต็อกทันที ไม่สามารถย้อนกลับได้ (หากเบิกผิด ใช้การคืนพัสดุ)
             </p>
-            <DialogFooter>
+            </div>
+            <DialogFooter className="shrink-0">
               <Button variant="outline" onClick={() => setFormDialogOpen(false)}>ยกเลิก</Button>
               <Button type="submit" variant="destructive" disabled={submitting}>
                 {submitting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}

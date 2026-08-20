@@ -9,8 +9,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  DIALOG_SHELL, DIALOG_BODY,
   Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, DialogHeader,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -204,13 +206,19 @@ export function TemplatesTab() {
 
       {/* Editor */}
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
-          <DialogHeader>
+        {/* Fixed height, not fit: lines are added and removed while the dialog is
+            open, and a box that grows a row taller on every ค้นหา hit is the jump
+            the feedback was about. */}
+        <DialogContent className={cn(DIALOG_SHELL, "max-w-[calc(100%-2rem)] sm:max-w-lg")}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editingId ? "แก้ไขเทมเพลต" : "สร้างเทมเพลต"}</DialogTitle>
             <DialogDescription>เก็บเฉพาะพัสดุ + จำนวน — lot/ชิ้นจะเลือกจากสต็อกตอนโหลดเข้าตะกร้า</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          {/* Name + search sit above the scroll area, not inside it: the hits panel is
+              absolutely positioned, and a scrolling parent would clip it — scrolling to
+              reach the last result would drag the search box along with it. */}
+          <div className="shrink-0 space-y-4">
             <Input
               placeholder="ชื่อเทมเพลต เช่น ชุดเบิกประจำห้องแล็บ"
               value={name}
@@ -245,12 +253,14 @@ export function TemplatesTab() {
                 </div>
               )}
             </div>
+          </div>
 
-            {/* lines */}
+          {/* lines */}
+          <div className={DIALOG_BODY}>
             {lines.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีรายการ — ค้นหาด้านบนเพื่อเพิ่ม</p>
             ) : (
-              <div className="max-h-64 space-y-1 overflow-y-auto">
+              <div className="space-y-1">
                 {lines.map((l) => (
                   <div key={l.itemId} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5">
                     <div className="min-w-0 flex-1">
@@ -281,7 +291,7 @@ export function TemplatesTab() {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setEditorOpen(false)}>ยกเลิก</Button>
             <Button onClick={() => void handleSave()} disabled={saving}>บันทึก</Button>
           </DialogFooter>

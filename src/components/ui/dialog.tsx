@@ -18,6 +18,9 @@ import { XIcon } from "lucide-react"
  * open: a mode switch, conditional fields, a wizard step, a tab. The box keeps
  * its size and the scroll position moves instead of the dialog.
  *
+ * DIALOG_SHELL_ROW — the same fixed height for a dialog laid out side by side
+ * (sidebar + body) instead of stacked. Same number, one place.
+ *
  * DIALOG_SHELL_FIT — natural height, capped so it can never outgrow a short
  * viewport. For dialogs that cannot change shape while open. Forcing 36rem
  * around four inputs would only add dead space, and there is nothing to jump.
@@ -28,6 +31,7 @@ import { XIcon } from "lucide-react"
  * they fight, and the loser clips.
  */
 const DIALOG_SHELL = "flex h-[min(85vh,36rem)] flex-col overflow-hidden"
+const DIALOG_SHELL_ROW = "flex h-[min(85vh,36rem)] w-full overflow-hidden"
 const DIALOG_SHELL_FIT = "flex max-h-[85vh] flex-col overflow-hidden"
 const DIALOG_BODY = "min-h-0 flex-1 overflow-y-auto"
 
@@ -172,6 +176,7 @@ function DialogDescription({
 
 export {
   DIALOG_SHELL,
+  DIALOG_SHELL_ROW,
   DIALOG_SHELL_FIT,
   DIALOG_BODY,
   Dialog,

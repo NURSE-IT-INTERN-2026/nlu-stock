@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  DIALOG_SHELL,
+  DIALOG_BODY,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Camera, Keyboard } from "lucide-react";
@@ -95,8 +98,9 @@ export function QrScanner({ open, onClose, onScan }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      {/* Fixed: the body swaps between a 300px camera and the manual-code form. */}
+      <DialogContent className={cn(DIALOG_SHELL, "sm:max-w-md")}>
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center justify-between">
             สแกน QR Code
             <Button
@@ -110,6 +114,7 @@ export function QrScanner({ open, onClose, onScan }: Props) {
           </DialogTitle>
         </DialogHeader>
 
+        <div className={cn(DIALOG_BODY, "px-1")}>
         {manualMode ? (
           <div className="space-y-3">
             <Input
@@ -134,6 +139,7 @@ export function QrScanner({ open, onClose, onScan }: Props) {
             </p>
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );

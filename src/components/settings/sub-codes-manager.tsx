@@ -11,12 +11,14 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  DIALOG_SHELL_FIT, DIALOG_BODY,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
 import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
 
@@ -181,11 +183,11 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
 
       {/* Edit/Create Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-lg")}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editing ? `แก้ไข ${editing.name || editing.subCode}` : "เพิ่มรหัสย่อย"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY, "space-y-4 px-1")}>
             {!editing && (
               <div>
                 <Label>รหัสย่อย</Label>
@@ -220,7 +222,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>ยกเลิก</Button>
             <Button onClick={handleSave} disabled={!editing && !editForm.subCode}>
               {editing ? "บันทึก" : "สร้าง"}
@@ -231,11 +233,11 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
 
       {/* Batch Generate Dialog */}
       <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-lg")}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>สร้างรหัสย่อยเป็นชุด</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY, "space-y-4 px-1")}>
             <div>
               <Label>คำนำหน้า</Label>
               <Input value={batchForm.prefix} onChange={(e) => setBatchForm({ ...batchForm, prefix: e.target.value })} />
@@ -251,12 +253,14 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               </div>
             </div>
             <Separator />
-            <p className="text-sm text-muted-foreground">
+            {/* Two lines' worth reserved: a long คำนำหน้า wraps this line, and in a
+                fit-height dialog that would grow the box while the user is typing. */}
+            <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
               จะสร้าง {Math.max(0, batchForm.endNumber - batchForm.startNumber + 1)} รหัสย่อย:
               {" "}{batchForm.prefix}{String(batchForm.startNumber).padStart(String(batchForm.endNumber).length, "0")} — {batchForm.prefix}{batchForm.endNumber}
             </p>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>ยกเลิก</Button>
             <Button onClick={handleBatchCreate} disabled={batchForm.endNumber < batchForm.startNumber}>สร้าง</Button>
           </DialogFooter>
