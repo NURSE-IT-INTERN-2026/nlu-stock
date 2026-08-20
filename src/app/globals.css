@@ -404,3 +404,22 @@
 .cn-toast[data-type="warning"]::before { background: var(--warning); }
 .cn-toast[data-type="info"] [data-icon] { color: var(--info, var(--foreground)); }
 
+/* Close button. Sonner's default parks it on the top-LEFT corner with a translate(-35%,-35%)
+   overhang — that collides with the 4px accent bar and .cn-toast's overflow:hidden clips it.
+   Tuck it fully inside on the right instead.
+   ponytail: !important because sonner injects its own stylesheet at runtime, so source order
+   (and therefore any equal-specificity selector) isn't ours to win. */
+.cn-toast [data-close-button] {
+  left: unset !important;
+  right: 6px !important;
+  top: 6px !important;
+  transform: none !important;
+  border-color: var(--border) !important;
+  color: var(--muted-foreground) !important;
+  background: var(--popover) !important;
+}
+.cn-toast [data-close-button]:hover {
+  color: var(--foreground) !important;
+}
+/* Keep long text off the button. */
+.cn-toast [data-content] { padding-right: 1.25rem; }
