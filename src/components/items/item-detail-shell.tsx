@@ -415,7 +415,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                 <ItemDetailMedia item={{ id: item.id, imageUrl: item.imageUrl, images: item.images }} canAct={!!canAct} onRefresh={fetchItem} />
               )}
               {tab === "history" && <ItemDetailHistory itemId={item.id} canEdit={canAct} />}
-              {tab === "lost" && <ItemDetailLostHistory itemId={item.id} itemCode={item.code} isMulti={isMulti} onSuccess={fetchItem} />}
+              {tab === "lost" && <ItemDetailLostHistory itemId={item.id} itemCode={item.code} isMulti={isMulti} canAct={canAct} onSuccess={fetchItem} />}
               {tab === "maintenance" && (
                 <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} showAssetInfo={!!item.category.profile?.assetTracking} onRecordMaintenance={() => setMaintOpen(true)} />
               )}
@@ -451,7 +451,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   onUndoDispose={(row) => { setStatusAction("AVAILABLE"); setStatusTarget({ id: row.id, subCode: row.subCode, status: row.status }); }}
                 />
               )}
-              {tab === "lost" && <ItemDetailLostHistory itemId={sub.item.id} itemCode={sub.item.code} isMulti={isMulti} onSuccess={fetchSub} />}
+              {tab === "lost" && <ItemDetailLostHistory itemId={sub.item.id} itemCode={sub.item.code} isMulti={isMulti} canAct={canAct} onSuccess={fetchSub} />}
               {tab === "history" && <ItemDetailHistory itemId={sub.item.id} subItemId={sub.id} canEdit={canAct} />}
               {tab === "maintenance" && (
                 <PieceMaintenance sub={sub} canAct={canAct} onRecord={() => setMaintOpen(true)} />

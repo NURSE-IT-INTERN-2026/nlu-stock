@@ -41,7 +41,7 @@ const SOURCE_META: Record<string, { label: string; cls: string }> = {
 
 const fmtDT = (s: string) => fmtDate(s, TH_DATETIME);
 
-export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: { itemId: string; itemCode: string; isMulti: boolean; onSuccess?: () => void }) {
+export function ItemDetailLostHistory({ itemId, itemCode, isMulti, canAct, onSuccess }: { itemId: string; itemCode: string; isMulti: boolean; canAct: boolean; onSuccess?: () => void }) {
   const isMobile = useIsMobile();
   const perPage = PAGE_SIZE.DEFAULT;
 
@@ -129,13 +129,15 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
                 <p className="text-[11px] text-muted-foreground mt-1 inline-flex items-center gap-1">
                   <User2 className="size-3" /> by {e.user}
                 </p>
-                <div className="mt-2 flex justify-end">
-                  {e.details?.recoveredAt ? (
-                    <Badge variant="secondary" className="text-[10px]">เรียกคืนแล้ว</Badge>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => setRecoverTarget(e)}><Undo2 className="size-3.5 mr-1" />เรียกคืน</Button>
-                  )}
-                </div>
+                {(canAct || e.details?.recoveredAt) && (
+                  <div className="mt-2 flex justify-end">
+                    {e.details?.recoveredAt ? (
+                      <Badge variant="secondary" className="text-[10px]">เรียกคืนแล้ว</Badge>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setRecoverTarget(e)}><Undo2 className="size-3.5 mr-1" />เรียกคืน</Button>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -171,9 +173,9 @@ export function ItemDetailLostHistory({ itemId, itemCode, isMulti, onSuccess }: 
                   <TableCell className="text-right">
                     {e.details?.recoveredAt ? (
                       <Badge variant="secondary" className="text-[10px]">เรียกคืนแล้ว</Badge>
-                    ) : (
+                    ) : canAct ? (
                       <Button size="sm" variant="outline" onClick={() => setRecoverTarget(e)}><Undo2 className="size-3.5 mr-1" />เรียกคืน</Button>
-                    )}
+                    ) : null}
                   </TableCell>
                 </TableRow>
               );
