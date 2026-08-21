@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
+import { MAINT_RESULT_LABELS, labelFor, type MaintenanceResult } from "@/lib/constants";
 
 import { AttachmentList } from "@/components/shared/attachment-list";
 interface MaintenanceRecord {
@@ -56,6 +56,13 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
     [item.nextMaintenanceDate],
   );
 
+  // ตรวจบำรุงตามรอบ กับ ซ่อมเมื่อพัง เป็นคนละงานบนของชิ้นเดียวกัน — คนละเหตุ คนละงบ คนละใบเสร็จ.
+  // One list holding both meant a ใบเสร็จค่าซ่อม sat under a heading that says บำรุงรักษา, and no
+  // reader could tell which case a bill belonged to. The column has always known (a CORRECTIVE
+  // record only ever comes out of รับคืนจากซ่อม); only the screen was pretending otherwise.
+  const corrective = maintenanceRecords.filter((r) => r.type === "CORRECTIVE");
+  const preventive = maintenanceRecords.filter((r) => r.type !== "CORRECTIVE");
+
   // The records arrive as props from a server render. แนบเพิ่ม answers with the array as it now
   // stands, so the row shows that instead of the stale prop — cheaper and steadier than pushing
   // a router.refresh() through the whole detail page for one thumbnail.
@@ -105,7 +112,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
           value={item.nextMaintenanceDate ? fmtDate(item.nextMaintenanceDate, TH_DATE) : "—"}
           icon={CalendarDays}
         />
-        <StatCard label="จำนวนการซ่อมบำรุง" value={`${maintenanceRecords.length} ครั้ง`} icon={Wrench} />
+        <StatCard label="ตรวจบำรุง / ซ่อมแซม" value={`${preventive.length} / ${corrective.length} ครั้ง`} icon={Wrench} />
         <StatCard label="สถานะ" value={maintStatus.label} icon={ShieldAlert} tone={statusTone} />
       </div>
 
@@ -137,58 +144,96 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
         </dl>
       </div>
 
-      {/* ── Maintenance history ── */}
-      <div className="p-4 sm:p-5">
-        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ประวัติการซ่อมบำรุง</div>
-        {maintenanceRecords.length === 0 ? (
-          <p className="text-center py-8 text-sm text-muted-foreground">ยังไม่มีประวัติการซ่อมบำรุง</p>
-        ) : (
-          <ul className="space-y-3">
-            {maintenanceRecords.map((rec) => (
-              <li
-                key={rec.id}
-                className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20"
-              >
-                <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
-                  <Wrench className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-                      <CalendarDays className="size-3" />
-                      {fmtDate(rec.performedAt, TH_DATE)}
-                    </span>
-                    <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">
-                      {labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}
-                    </span>
-                    <span className={cn(
-                      "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
-                      rec.result === "AVAILABLE"
-                        ? "bg-success/10 text-success-700 border-success/20"
-                        : "bg-primary/10 text-primary border-primary/20",
-                    )}>
-                      {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
-                    </span>
-                  </div>
-                  {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
-                  {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
-                  </div>
-                  <AttachmentList
-                    urls={edited[rec.id] ?? rec.attachmentUrls}
-                    className="mt-1.5"
-                    target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
-                    canEdit={canAct}
-                    onChange={(urls) => setEdited((m) => ({ ...m, [rec.id]: urls }))}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      {/* ── History, one section per case ──
+          Both sections render even when empty: a missing ซ่อมแซม heading is what made people
+          hunt for a bill that was filed under บำรุงรักษา all along. */}
+      <div className="p-4 sm:p-5 space-y-6">
+        <MaintGroup
+          title="ตรวจบำรุงตามรอบ"
+          empty="ยังไม่มีประวัติตรวจบำรุงตามรอบ"
+          records={preventive}
+          canAct={canAct}
+          edited={edited}
+          onEdited={setEdited}
+        />
+        <MaintGroup
+          title="ซ่อมแซม"
+          empty="ยังไม่มีประวัติซ่อมแซม"
+          records={corrective}
+          canAct={canAct}
+          edited={edited}
+          onEdited={setEdited}
+        />
       </div>
     </section>
+  );
+}
+
+/** One case's history. The ประเภท chip is gone from the rows — the heading is the ประเภท now,
+ *  and repeating it on every row was the noise that made the two cases look like one list. */
+function MaintGroup({ title, empty, records, canAct, edited, onEdited }: {
+  title: string;
+  empty: string;
+  records: MaintenanceRecord[];
+  canAct: boolean;
+  edited: Record<string, string[]>;
+  onEdited: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+}) {
+  const spend = records.reduce((sum, r) => sum + (r.cost ?? 0), 0);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{title}</span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">
+          {records.length} ครั้ง{spend > 0 ? ` · ฿${spend.toLocaleString()}` : ""}
+        </span>
+      </div>
+      {records.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="space-y-3">
+          {records.map((rec) => (
+            <li
+              key={rec.id}
+              className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20"
+            >
+              <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
+                <Wrench className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                    <CalendarDays className="size-3" />
+                    {fmtDate(rec.performedAt, TH_DATE)}
+                  </span>
+                  <span className={cn(
+                    "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
+                    rec.result === "AVAILABLE"
+                      ? "bg-success/10 text-success-700 border-success/20"
+                      : "bg-primary/10 text-primary border-primary/20",
+                  )}>
+                    {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
+                  </span>
+                </div>
+                {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
+                {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
+                </div>
+                <AttachmentList
+                  urls={edited[rec.id] ?? rec.attachmentUrls}
+                  className="mt-1.5"
+                  target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
+                  canEdit={canAct}
+                  onChange={(urls) => onEdited((m) => ({ ...m, [rec.id]: urls }))}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
