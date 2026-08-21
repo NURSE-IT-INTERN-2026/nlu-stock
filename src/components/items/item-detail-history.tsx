@@ -378,7 +378,10 @@ function EventDetailDialog({ event, unit, canEdit, attachOverride, onAttachChang
                             onChange={(urls) => onAttachChange(attachKey(g), urls)}
                           />
                         ) : (
-                          <AttachmentList key={attachKey(g)} urls={g.urls} />
+                          <div key={attachKey(g)} className="space-y-1.5 border-t border-dashed border-border pt-2">
+                            <p className="text-[11px] text-muted-foreground">ไฟล์จากใบส่งซ่อมของรายการนี้ — แก้ได้ที่แท็บบำรุงรักษา</p>
+                            <AttachmentList urls={g.urls} />
+                          </div>
                         ),
                       )}
                     </div>
