@@ -4,7 +4,6 @@ import { requireAdmin, requireAuth, requireSuperAdmin, handleError } from "@/lib
 import { restoreDamagedQty } from "@/lib/stock";
 import { AdjustmentReason, RepairVenue } from "@/generated/prisma/enums";
 
-import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 // The qty half of the repair lifecycle. A tracked piece walks ชำรุด → ส่งซ่อม → รับคืน on
 // sub_items.status; non-tracked stock has no row there, so its แจ้งชำรุด booking (a
 // StockAdjustment, reason DAMAGED_PENDING_REPAIR, recoveredAt null) carries the same three
@@ -84,9 +83,6 @@ export async function POST(req: NextRequest) {
   const venue = body?.venue as string | undefined;
   const repairNote = (body?.repairNote as string | undefined)?.trim() || null;
   const damageNote = (body?.damageNote as string | undefined)?.trim() || null;
-  const imageEvidenceUrls = Array.isArray(body?.imageEvidenceUrls)
-    ? (body.imageEvidenceUrls as string[]).slice(0, MAX_EVIDENCE_FILES)
-    : [];
 
   if (!adjustmentId || !venue || !Object.keys(RepairVenue).includes(venue) || !repairNote) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
@@ -112,9 +108,10 @@ export async function POST(req: NextRequest) {
           // The symptom is editable: the first แจ้งชำรุด is usually written before anyone has
           // looked at the thing properly. Blank leaves what's on record.
           ...(damageNote ? { notes: damageNote } : {}),
-          // Only a non-empty pick replaces what is on record: [] is what an edit dialog
-          // sends when nobody touched the attachments, and it is truthy.
-          ...(imageEvidenceUrls.length > 0 ? { imageEvidenceUrls } : {}),
+          // No imageEvidenceUrls here. This route used to take the whole array and overwrite it,
+          // which meant an edit that sent only the new files silently destroyed the originals and
+          // an empty array could never clear one. หลักฐาน on an existing record now goes through
+          // POST /api/attachments — one path, appending rather than replacing, and audited.
           // Stamped once — an edit is still the same trip.
           ...(isEdit ? {} : { repairSentAt: new Date() }),
         },

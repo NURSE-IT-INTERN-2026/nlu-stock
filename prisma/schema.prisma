@@ -114,6 +114,7 @@ model User {
   locationChanges    LocationChangeLog[]
   dispenseTemplates  DispenseTemplate[]
   returnRecords      ReturnRecord[]
+  attachmentChanges  AttachmentLog[]
 
   @@map("users")
 }
@@ -532,7 +533,7 @@ model MaintenanceRecord {
   issue             String?
   description       String?
   cost              Float?
-  attachmentUrls    String[]
+  attachmentUrls    String[]          @default([])
   nextMaintenanceAt DateTime?
   repairVenue       RepairVenue?
   // The stock row this job wrote, for qty stock (a tracked piece uses subItemId instead):
@@ -599,6 +600,34 @@ model LocationChangeLog {
   @@index([itemId, changedAt])
   @@map("location_change_logs")
 }
+
+// --- Attachment Log (audit trail for แนบไฟล์ย้อนหลัง) ---
+// Evidence attached at the moment a record is written leaves no row here — the record's own
+// createdAt/changedBy already says who filed it and when. This table exists for the files that
+// arrived afterwards, because a photo added three weeks later carries different weight from one
+// taken at the scene, and for removals, because หลักฐาน that can vanish without a trace is not
+// หลักฐาน. Absence of a row therefore proves nothing about legacy data — the UI badges what it
+// finds and stays silent otherwise.
+//
+// recordType/recordId is polymorphic across the three tables that own evidence arrays
+// (see ATTACH_TARGETS in src/lib/attachments.ts); no FK is possible, so a hard-deleted parent
+// leaves orphan rows. Nothing joins back from here, so they are invisible rather than harmful.
+// REMOVE rows keep the url on purpose: the file itself is never deleted from disk, so a wrong
+// delete is undone by putting the url back.
+model AttachmentLog {
+  id         String   @id @default(cuid())
+  recordType String
+  recordId   String
+  url        String
+  action     String // "ADD" | "REMOVE"
+  byId       String
+  by         User     @relation(fields: [byId], references: [id])
+  at         DateTime @default(now())
+
+  @@index([recordType, recordId, at])
+  @@map("attachment_logs")
+}
+
 
 // --- Course cache (CMU รายวิชา) ---
 // Read-through mirror of two APIs owned by other faculties: the course code list from

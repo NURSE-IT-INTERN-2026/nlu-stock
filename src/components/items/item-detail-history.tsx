@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
 import { AttachmentList } from "@/components/shared/attachment-list";
+import type { AttachRecordType } from "@/lib/attachments";
 interface TimelineEvent {
   id: string;
   type: TimelineEventType;
@@ -36,8 +37,9 @@ interface TimelineEvent {
   change?: { from: number; to: number } | null;
   // Only on a รับคืนจากซ่อม row, folded in from the repair job that closed the trip.
   cost?: number | null;
-  // หลักฐานแนบของกิจกรรมนั้น — dialog only, the table stays text.
-  attachments?: string[];
+  // หลักฐานแนบของกิจกรรมนั้น — dialog only, the table stays text. Grouped by the record that
+  // owns the array so the dialog can write back; a รับคืนจากซ่อม row carries two groups.
+  attachments?: AttachGroup[];
 }
 
 // Movement types lead with colour (stock left / stock came back); the three that don't touch
@@ -72,13 +74,17 @@ const CHIP_ORDER: TimelineEventType[] = [
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */
 type Counts = Partial<Record<TimelineEventType, { n: number; qty: number | null }>>;
 
+type AttachGroup = { recordType: AttachRecordType; recordId: string; urls: string[] };
+
 interface Props {
   itemId: string;
   /** Scope to one tracked copy. Item-level events (รับเข้า/ปรับสต๊อก/ย้ายที่ตั้ง) drop out. */
   subItemId?: string;
+  /** ADMIN/SUPERADMIN — whether the detail dialog may แนบเพิ่ม/ลบ หลักฐาน on a past event. */
+  canEdit?: boolean;
 }
 
-export function ItemDetailHistory({ itemId, subItemId }: Props) {
+export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props) {
   const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState<TimelineEventType | "">("");
   const [counts, setCounts] = useState<Counts>({});
@@ -106,6 +112,11 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
   const {
     items: events, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<TimelineEvent>({ fetchPage, pageSize: perPage, isMobile });
+
+  // แนบเพิ่ม/ลบ answers with the record's array as it now stands. Keeping those answers here —
+  // keyed by the record, not by the timeline row — means they survive closing the dialog, paging,
+  // and filtering, without a refetch of seven tables to repaint one thumbnail.
+  const [attachOverride, setAttachOverride] = useState<Record<string, string[]>>({});
 
   // Every chip counts events, never units. The word "รายการ" is dropped from each pill — the
   // caption above already frames these as counts, so a bare number reads compact and premium
@@ -282,14 +293,38 @@ export function ItemDetailHistory({ itemId, subItemId }: Props) {
         </div>
       )}
 
-      <EventDetailDialog event={selected} unit={unit} onClose={() => setSelected(null)} />
+      <EventDetailDialog
+        event={selected}
+        unit={unit}
+        canEdit={canEdit}
+        attachOverride={attachOverride}
+        onAttachChange={(key, urls) => setAttachOverride((m) => ({ ...m, [key]: urls }))}
+        onClose={() => setSelected(null)}
+      />
     </section>
   );
 }
 
 // The table answers "ใครทำอะไร กี่ชิ้น เมื่อไหร่"; everything quieter — the balance change, the
 // supporting context, the free-text note — lives here so it never crowds the row.
-function EventDetailDialog({ event, unit, onClose }: { event: TimelineEvent | null; unit: string; onClose: () => void }) {
+const attachKey = (g: { recordType: AttachRecordType; recordId: string }) => `${g.recordType}:${g.recordId}`;
+
+function EventDetailDialog({ event, unit, canEdit, attachOverride, onAttachChange, onClose }: {
+  event: TimelineEvent | null;
+  unit: string;
+  canEdit: boolean;
+  attachOverride: Record<string, string[]>;
+  onAttachChange: (key: string, urls: string[]) => void;
+  onClose: () => void;
+}) {
+  // groups[0] is the record this timeline row IS; anything after it was folded in from a second
+  // record telling the same event (a qty รับคืนจากซ่อม carries the closing MaintenanceRecord).
+  // Only the first is editable — two identical "แนบเพิ่ม" buttons on one row is a choice nobody
+  // can make, and the folded-in record is editable on its own บำรุงรักษา tab anyway. A folded-in
+  // group with no files has nothing to say here, so it does not render at all.
+  const all = (event?.attachments ?? []).map((g) => ({ ...g, urls: attachOverride[attachKey(g)] ?? g.urls }));
+  const groups = all.filter((g, i) => i === 0 || g.urls.length > 0);
+
   return (
     <Dialog open={!!event} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-md")}>
@@ -326,8 +361,29 @@ function EventDetailDialog({ event, unit, onClose }: { event: TimelineEvent | nu
                 />
               )}
               {event.notes && <DetailRow label="หมายเหตุ" value={<span className="whitespace-pre-wrap">{event.notes}</span>} />}
-              {event.attachments && event.attachments.length > 0 && (
-                <DetailRow label="หลักฐานแนบ" value={<AttachmentList urls={event.attachments} />} />
+              {/* The row shows up whenever the event owns an evidence column — an empty one is
+                  where แนบเพิ่ม lives. With nothing attached and no right to attach, it stays hidden. */}
+              {groups.length > 0 && (groups.some((g) => g.urls.length > 0) || canEdit) && (
+                <DetailRow
+                  label="หลักฐานแนบ"
+                  value={
+                    <div className="space-y-2">
+                      {groups.map((g, i) =>
+                        i === 0 ? (
+                          <AttachmentList
+                            key={attachKey(g)}
+                            urls={g.urls}
+                            target={{ recordType: g.recordType, recordId: g.recordId }}
+                            canEdit={canEdit}
+                            onChange={(urls) => onAttachChange(attachKey(g), urls)}
+                          />
+                        ) : (
+                          <AttachmentList key={attachKey(g)} urls={g.urls} />
+                        ),
+                      )}
+                    </div>
+                  }
+                />
               )}
               <DetailRow
                 label="ผู้ดำเนินการ"

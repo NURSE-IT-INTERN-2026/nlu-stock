@@ -35,6 +35,7 @@ import type { OpenDamage } from "@/components/items/item-detail-overview";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
+import { AttachmentList } from "@/components/shared/attachment-list";
 import { ItemDetailLostHistory } from "@/components/items/item-detail-lost-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
 import { StockAdjustmentDialog } from "@/components/items/stock-adjustment-dialog";
@@ -413,7 +414,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
               {tab === "media" && (
                 <ItemDetailMedia item={{ id: item.id, imageUrl: item.imageUrl, images: item.images }} canAct={!!canAct} onRefresh={fetchItem} />
               )}
-              {tab === "history" && <ItemDetailHistory itemId={item.id} />}
+              {tab === "history" && <ItemDetailHistory itemId={item.id} canEdit={canAct} />}
               {tab === "lost" && <ItemDetailLostHistory itemId={item.id} itemCode={item.code} isMulti={isMulti} onSuccess={fetchItem} />}
               {tab === "maintenance" && (
                 <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} showAssetInfo={!!item.category.profile?.assetTracking} onRecordMaintenance={() => setMaintOpen(true)} />
@@ -451,7 +452,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                 />
               )}
               {tab === "lost" && <ItemDetailLostHistory itemId={sub.item.id} itemCode={sub.item.code} isMulti={isMulti} onSuccess={fetchSub} />}
-              {tab === "history" && <ItemDetailHistory itemId={sub.item.id} subItemId={sub.id} />}
+              {tab === "history" && <ItemDetailHistory itemId={sub.item.id} subItemId={sub.id} canEdit={canAct} />}
               {tab === "maintenance" && (
                 <PieceMaintenance sub={sub} canAct={canAct} onRecord={() => setMaintOpen(true)} />
               )}
@@ -1063,6 +1064,9 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
 
 // ── Piece maintenance tab ──
 function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct: boolean; onRecord: () => void }) {
+  // Same override trick as the parent item's tab: แนบเพิ่ม answers with the new array, and the
+  // row shows that rather than the prop the page was rendered with.
+  const [edited, setEdited] = useState<Record<string, string[]>>({});
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button onClick={onRecord}><Wrench className="h-4 w-4 mr-1.5" />บันทึกการบำรุงรักษา</Button> : undefined} />
@@ -1098,11 +1102,15 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
                   {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
                   {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
                   <div className="text-xs text-muted-foreground mt-0.5">โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}</div>
-                  {rec.attachmentUrls.length > 0 && (
-                    <div className="flex gap-2 mt-1.5">
-                      {rec.attachmentUrls.map((url, i) => (<a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">{url.endsWith(".pdf") ? `PDF ${i + 1}` : `รูป ${i + 1}`}</a>))}
-                    </div>
-                  )}
+                  {/* Was a row of bare underlined links — the same หลักฐาน as everywhere else,
+                      shown differently for no reason and with no way to add to it. */}
+                  <AttachmentList
+                    urls={edited[rec.id] ?? rec.attachmentUrls}
+                    className="mt-1.5"
+                    target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
+                    canEdit={canAct}
+                    onChange={(urls) => setEdited((m) => ({ ...m, [rec.id]: urls }))}
+                  />
                 </div>
               </li>
             ))}
