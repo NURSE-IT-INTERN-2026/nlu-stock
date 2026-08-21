@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound, error, forbidden, parseBody } from "@/lib/api-utils";
-import { canManageStock } from "@/lib/roles";
+import { requireAuth, requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { locationLabel } from "@/lib/constants";
 import { getItemDistribution } from "@/lib/distribution";
 import { z } from "zod";
@@ -86,7 +85,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(request);
+  // Every field here (media + location move) is admin-only in the UI — gate at the door
+  // like the sibling routes instead of relying on middleware's EXECUTIVE write-deny.
+  const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -94,11 +95,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (parseError) return parseError;
   if (!data) return error("No data");
   const { imageUrl, images, locationId } = data;
-
-  // #1 location move is privileged — stock roles only (matches UI canMove).
-  if (locationId !== undefined && !canManageStock(auth.user.role)) {
-    return forbidden();
-  }
 
   // Capture old location + validate target BEFORE update (#2 audit-after, #3 validate existence).
   let prev: { locationId: string | null; location: { building: string; floor: string; room: string; detail: string | null } | null } | null = null;
