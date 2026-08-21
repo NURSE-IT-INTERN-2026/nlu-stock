@@ -158,9 +158,8 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       : []),
   ];
 
-  // withPrint=false for staff — they get a พิมพ์ QR tile in the manage grid instead,
-  // and two identical buttons in one card is just noise.
-  const qrBlock = (withPrint: boolean) => (
+  // No print button here — printing is admin-only, via the พิมพ์ QR tile in the manage grid.
+  const qrBlock = (
     <div className="border-t border-border p-4 sm:p-5 grid grid-cols-[auto_1fr] gap-4 sm:gap-5 items-center bg-muted/20">
       <div className="size-20 sm:size-24 shrink-0 rounded-xl border border-border bg-card p-2 grid place-items-center">
         {qrDataUrl ? (
@@ -173,14 +172,6 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
         <div className="text-[11px] uppercase tracking-widest text-muted-foreground">QR code</div>
         <div className="text-sm text-muted-foreground mt-1 truncate">สแกนเพื่อค้นหาพัสดุ</div>
         <div className="font-mono text-sm font-semibold mt-0.5 truncate">{item.code}</div>
-        {withPrint && (
-          <button
-            onClick={() => setPrintOpen(true)}
-            className="inline-flex items-center gap-1.5 mt-2 text-xs px-2.5 py-1.5 rounded-md border border-border bg-card hover:bg-muted transition-colors"
-          >
-            <Printer className="size-3.5" /> พิมพ์
-          </button>
-        )}
       </div>
     </div>
   );
@@ -304,12 +295,12 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
             </div>
-            {qrBlock(false)}
+            {qrBlock}
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader title="QR code" />
-            {qrBlock(true)}
+            {qrBlock}
           </div>
         )}
       </section>

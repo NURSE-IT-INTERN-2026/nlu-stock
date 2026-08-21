@@ -906,8 +906,8 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
     { icon: Clock, label: "วันที่สร้าง", value: fmtDay(sub.createdAt) },
   ];
 
-  // withPrint=false for staff — they print from the พิมพ์ QR tile in the manage grid.
-  const qrBlock = (withPrint: boolean) => (
+  // No print button here — printing is admin-only, via the พิมพ์ QR tile in the manage grid.
+  const qrBlock = (
     <div className="border-t border-border p-4 sm:p-5 grid grid-cols-[auto_1fr] gap-4 sm:gap-5 items-center bg-muted/20">
       <div className="size-20 sm:size-24 shrink-0 rounded-xl border border-border bg-card p-2 grid place-items-center">
         {qrDataUrl ? <img src={qrDataUrl} alt={`QR for ${fullCode}`} className="size-full rounded-md" /> : <QrCode className="size-12 text-foreground animate-pulse" />}
@@ -916,14 +916,6 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
         <div className="text-[11px] uppercase tracking-widest text-muted-foreground">QR code</div>
         <div className="text-sm text-muted-foreground mt-1 truncate">สแกนเพื่อค้นหาพัสดุย่อย</div>
         <div className="font-mono text-sm font-semibold mt-0.5 truncate">{fullCode}</div>
-        {withPrint && (
-          <button
-            onClick={() => setPrintOpen(true)}
-            className="inline-flex items-center gap-1.5 mt-2 text-xs px-2.5 py-1.5 rounded-md border border-border bg-card hover:bg-muted transition-colors"
-          >
-            <Printer className="size-3.5" /> พิมพ์
-          </button>
-        )}
       </div>
     </div>
   );
@@ -969,12 +961,12 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
               <ActionTile icon={Printer} label="พิมพ์ QR Code" tone="default" onClick={() => setPrintOpen(true)} />
             </div>
-            {qrBlock(false)}
+            {qrBlock}
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader title="QR code" />
-            {qrBlock(true)}
+            {qrBlock}
           </div>
         )}
       </section>
