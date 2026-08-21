@@ -512,7 +512,9 @@ model StockAdjustment {
   repairSentAt  DateTime?
   repairVenue   RepairVenue?
   repairNote    String?
-  repairJobs    MaintenanceRecord[]
+  repairJobs    MaintenanceRecord[] @relation("TimelineRow")
+  // The jobs that closed THIS booking. One in practice — a trip ends once.
+  closedBy      MaintenanceRecord[] @relation("RepairBooking")
 
   @@index([itemId, adjustedAt])
   @@map("stock_adjustments")
@@ -542,7 +544,19 @@ model MaintenanceRecord {
   // qty and the balance — and folds this record's cost into it rather than repeating the
   // event under two names.
   adjustmentId      String?
-  adjustment        StockAdjustment?  @relation(fields: [adjustmentId], references: [id])
+  adjustment        StockAdjustment?  @relation("TimelineRow", fields: [adjustmentId], references: [id])
+  // Which แจ้งชำรุด booking this job closed, for qty stock. `adjustmentId` above points at the
+  // row this job WROTE (the รับคืน/ตัดจำหน่าย movement); this points at the row it CLOSED, which
+  // is where the trip's หลักฐาน has been accumulating since แจ้งชำรุด — the photos from ส่งซ่อม and
+  // from every แก้ข้อมูล edit. Without it the finished job cannot find its own evidence and the
+  // last row of a repair reads as if nothing was ever attached.
+  //
+  // Null on every row written before this column existed. Deliberately not backfilled: the pair
+  // can only be guessed from timestamps, and a guessed link presented as หลักฐานของงานนี้ is the
+  // exact failure this whole feature exists to prevent. Old trips keep their evidence on the
+  // แจ้งชำรุด row, where it always was.
+  repairBookingId   String?
+  repairBooking     StockAdjustment?  @relation("RepairBooking", fields: [repairBookingId], references: [id])
 
   createdAt DateTime @default(now())
 

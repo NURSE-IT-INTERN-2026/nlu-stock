@@ -128,11 +128,21 @@ export async function POST(
         if (adj.reason !== AdjustmentReason.DAMAGED_PENDING_REPAIR) throw new Error("ไม่ใช่รายการชำรุด");
         if (adj.recoveredAt) throw new Error("รับคืนแล้ว");
 
-        // The adjustment this job writes is the row the item timeline shows for it — the one
-        // that carries the qty and the balance. Pointing the record at it lets the timeline
-        // fold ค่าซ่อม into that row instead of printing the same รับคืนจากซ่อม twice.
+        // Two different adjustments, two different questions.
+        //   adjustmentId    — the row this job WROTE (รับคืน / ตัดจำหน่าย). It carries the qty and
+        //                     the balance, so the timeline prints it and folds ค่าซ่อม in rather
+        //                     than telling the same รับคืนจากซ่อม twice.
+        //   repairBookingId — the แจ้งชำรุด row this job CLOSED. That row has been collecting the
+        //                     trip's หลักฐาน since it opened (แจ้งชำรุด, ส่งซ่อม, and every
+        //                     แก้ข้อมูล edit), and it was the one thing the finished job could not
+        //                     point at: staff walk ส่งซ่อม → แก้ไข → รับคืน as one job, then open
+        //                     the last row and find it empty. `adj.id` is right here; it was
+        //                     simply being dropped.
         const timelineRow = async (adjustmentId: string) =>
-          tx.maintenanceRecord.update({ where: { id: rec.id }, data: { adjustmentId } });
+          tx.maintenanceRecord.update({
+            where: { id: rec.id },
+            data: { adjustmentId, repairBookingId: adj.id },
+          });
 
         if (data.result === "AVAILABLE") {
           const back = await restoreDamagedQty(tx, { adj, reason: AdjustmentReason.REPAIR_RETURN, note: data.description, userId: auth.user.userId });

@@ -309,6 +309,14 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
 // supporting context, the free-text note — lives here so it never crowds the row.
 const attachKey = (g: { recordType: AttachRecordType; recordId: string }) => `${g.recordType}:${g.recordId}`;
 
+// A รับคืนจากซ่อม row is one event told by three records. Which one a folded-in group came from
+// is the difference between "the bill" and "the photos of the damage", so the label says it.
+const FOLDED_LABEL: Record<AttachRecordType, string> = {
+  MaintenanceRecord: "ไฟล์จากใบส่งซ่อมของรายการนี้ — แก้ได้ที่แท็บบำรุงรักษา",
+  StockAdjustment: "ไฟล์ตอนแจ้งชำรุดและส่งซ่อม — แก้ได้ที่รายการแจ้งชำรุด",
+  ItemStatusLog: "ไฟล์จากการเปลี่ยนสถานะของรายการนี้",
+};
+
 function EventDetailDialog({ event, unit, canEdit, attachOverride, onAttachChange, onClose }: {
   event: TimelineEvent | null;
   unit: string;
@@ -378,9 +386,15 @@ function EventDetailDialog({ event, unit, canEdit, attachOverride, onAttachChang
                             onChange={(urls) => onAttachChange(attachKey(g), urls)}
                           />
                         ) : (
+                          // Folded in from another record of the same event. Read-only here and
+                          // labelled with where it came from, so "แนบเพิ่ม" is never ambiguous
+                          // about which record it would write to. The ประวัติ popover still works.
                           <div key={attachKey(g)} className="space-y-1.5 border-t border-dashed border-border pt-2">
-                            <p className="text-[11px] text-muted-foreground">ไฟล์จากใบส่งซ่อมของรายการนี้ — แก้ได้ที่แท็บบำรุงรักษา</p>
-                            <AttachmentList urls={g.urls} />
+                            <p className="text-[11px] text-muted-foreground">{FOLDED_LABEL[g.recordType]}</p>
+                            <AttachmentList
+                              urls={g.urls}
+                              target={{ recordType: g.recordType, recordId: g.recordId }}
+                            />
                           </div>
                         ),
                       )}
