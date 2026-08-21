@@ -26,6 +26,7 @@ import { cancelQtyDamage, getPendingRepairDamage, getSubItemsByStatus, sendQtyDa
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { FileUploadList } from "@/components/shared/file-upload";
+import { AttachmentList } from "@/components/shared/attachment-list";
 import { useSession } from "@/components/layout/auth-guard";
 
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -234,7 +235,6 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
         venue: venue as "INTERNAL" | "EXTERNAL",
         repairNote: repairNote.trim(),
         damageNote: damage.trim() || undefined,
-        imageEvidenceUrls: photoUrls,
       });
       toast.success(successMsg);
       reset();
@@ -263,7 +263,8 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
   };
 
   // ส่งซ่อม and แก้ข้อมูลส่งซ่อม collect the same three fields in the same order as the tracked
-  // dialogs; only the photo is ส่งซ่อม-only (evidence of the state it left in).
+  // dialogs, and both now carry the หลักฐาน — a photo that only existed on the way out could
+  // never be corrected, which is the gap this whole flow was the sole exception to.
   const repairFields = (withPhoto: boolean) => (
     <>
       <div className="space-y-2">
@@ -292,12 +293,20 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
         <Label className="text-xs text-muted-foreground" required>ส่งซ่อมที่</Label>
         <VenuePicker value={venue} onChange={setVenue} />
       </div>
-      {withPhoto && (
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-          <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" />
-        </div>
-      )}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">
+          {withPhoto ? "รูปหลักฐานก่อนส่ง (ถ้ามี)" : "หลักฐานแนบ"}
+        </Label>
+        {/* Writes onto the ชำรุด booking the moment a file lands, not when the dialog is
+            confirmed — the booking already exists (แจ้งชำรุด created it), and a picker that
+            holds files until submit is what made these photos unfixable afterwards. */}
+        <AttachmentList
+          urls={photoUrls}
+          target={{ recordType: "StockAdjustment", recordId: row.id }}
+          canEdit
+          onChange={setPhotoUrls}
+        />
+      </div>
     </>
   );
 

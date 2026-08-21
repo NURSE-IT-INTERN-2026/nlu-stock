@@ -21,6 +21,8 @@ import { getMaintenanceSummary, getReport } from "@/lib/api";
 import { toast } from "sonner";
 
 import { AttachmentList } from "@/components/shared/attachment-list";
+import { useSession } from "@/components/layout/auth-guard";
+import { canManageStock } from "@/lib/roles";
 // ── Types ──
 
 interface Summary {
@@ -87,6 +89,11 @@ function statusMeta(status: string) {
 // ── Page ──
 
 export default function MaintenancePage() {
+  const { user } = useSession();
+  const canEdit = canManageStock(user?.role ?? "");
+  // แนบเพิ่ม answers with the array as it now stands; the row shows that rather than the value
+  // the last report fetch happened to carry.
+  const [editedAttachments, setEditedAttachments] = useState<Record<string, string[]>>({});
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
   const [recentRecords, setRecentRecords] = useState<HistoryRow[]>([]);
@@ -410,7 +417,13 @@ export default function MaintenancePage() {
                     <span>·</span>
                     <span className="tabular-nums">{rec.cost > 0 ? `฿${rec.cost.toLocaleString()}` : "0.-"}</span>
                   </div>
-                  <AttachmentList urls={rec.attachmentUrls ?? []} className="mt-1.5" />
+                  <AttachmentList
+                    urls={editedAttachments[rec.id] ?? rec.attachmentUrls ?? []}
+                    className="mt-1.5"
+                    target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
+                    canEdit={canEdit}
+                    onChange={(urls) => setEditedAttachments((m) => ({ ...m, [rec.id]: urls }))}
+                  />
                 </div>
               ))}
             </div>

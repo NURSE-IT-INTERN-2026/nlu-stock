@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,11 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
     () => getMaintenanceStatus(item.nextMaintenanceDate),
     [item.nextMaintenanceDate],
   );
+
+  // The records arrive as props from a server render. แนบเพิ่ม answers with the array as it now
+  // stands, so the row shows that instead of the stale prop — cheaper and steadier than pushing
+  // a router.refresh() through the whole detail page for one thumbnail.
+  const [edited, setEdited] = useState<Record<string, string[]>>({});
 
   const statusTone: "success" | "warning" | "destructive" =
     maintStatus.variant === "destructive" ? "destructive" : maintStatus.variant === "secondary" ? "warning" : "success";
@@ -170,7 +175,13 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
                   <div className="text-xs text-muted-foreground mt-0.5">
                     โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
                   </div>
-                  <AttachmentList urls={rec.attachmentUrls} className="mt-1.5" />
+                  <AttachmentList
+                    urls={edited[rec.id] ?? rec.attachmentUrls}
+                    className="mt-1.5"
+                    target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
+                    canEdit={canAct}
+                    onChange={(urls) => setEdited((m) => ({ ...m, [rec.id]: urls }))}
+                  />
                 </div>
               </li>
             ))}

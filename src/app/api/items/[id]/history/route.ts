@@ -8,6 +8,7 @@ import { isDuplicateOfLoanRow } from "@/lib/returns";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
+import type { AttachRecordType } from "@/lib/attachments";
 
 // A history row as the table renders it. Three text fields, each with one job:
 //   note     — the bold title, the one thing worth scanning ("รับคืนจากซ่อม").
@@ -35,7 +36,14 @@ type TimelineEvent = {
   // ค่าซ่อม, folded in from the MaintenanceRecord that closed the same trip. Dialog only.
   cost?: number | null;
   // หลักฐานแนบ — รูปอาการเสีย, ใบเสนอราคา, เอกสารรับคืน. Dialog only; the table stays text.
-  attachments?: string[];
+  //
+  // Grouped by the record that owns the array rather than flattened, because the dialog can now
+  // write back: "แนบเพิ่ม" needs a table and an id, not just a list of urls. A รับคืนจากซ่อม row
+  // is the one event assembled from two records (the adjustment that moved the stock and the
+  // maintenance record that closed the trip), so it carries two groups and each edits its own.
+  // A group with no urls still ships — that is the empty state the แนบเพิ่ม button hangs off.
+  // Events with no evidence column of their own (รับเข้า, ย้ายที่) get no group and stay read-only.
+  attachments?: { recordType: AttachRecordType; recordId: string; urls: string[] }[];
   details: Record<string, unknown>;
 };
 
@@ -96,7 +104,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const events: TimelineEvent[] = [];
   // adjustment id → ค่าซ่อม of the job that closed it; merged in once both queries have run.
-  const repairJobs = new Map<string, { cost: number | null; attachments: string[] }>();
+  const repairJobs = new Map<string, { id: string; cost: number | null; attachments: string[] }>();
 
   const itemLevel = !subItemId;
   const fetchDispense = !lost;
@@ -254,7 +262,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             notes: r.notes ?? "",
             change: lost ? null : { from: r.previousQty, to: r.newQty },
             user: r.adjuster.name,
-            attachments: r.imageEvidenceUrls,
+            attachments: [{ recordType: "StockAdjustment", recordId: r.id, urls: r.imageEvidenceUrls }],
             details: lost
               ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
               : { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
@@ -314,7 +322,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             sameStatus ? null : r.reason,
           ),
           user: r.changer.name,
-          attachments: r.imageUrls,
+          attachments: [{ recordType: "ItemStatusLog", recordId: r.id, urls: r.imageUrls }],
           details: lost
             ? { source: "PIECE", subCode: r.subItem?.subCode ?? null, reason: r.reason, recoveredAt: r.recoveredAt }
             : { previousStatus: r.previousStatus, newStatus: r.newStatus, subItemId: r.subItemId, repairVenue: r.repairVenue },
@@ -336,7 +344,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           // the fuller row (qty, balance, the closing note), so it keeps the line and this
           // record hands over the one thing it alone knows: what the repair cost.
           if (r.adjustmentId) {
-            repairJobs.set(r.adjustmentId, { cost: r.cost, attachments: r.attachmentUrls });
+            repairJobs.set(r.adjustmentId, { id: r.id, cost: r.cost, attachments: r.attachmentUrls });
             continue;
           }
           events.push({
@@ -357,7 +365,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             subtitle: MAINT_RESULT_LABELS[r.result] ?? r.result,
             notes: r.issue ?? "",
             user: r.performer.name,
-            attachments: r.attachmentUrls,
+            attachments: [{ recordType: "MaintenanceRecord", recordId: r.id, urls: r.attachmentUrls }],
             details: { type: r.type, result: r.result, cost: r.cost, issue: r.issue },
           });
         }
@@ -397,8 +405,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (job) {
       e.cost = job.cost;
       // The closing paperwork belongs to the row that shows the trip, not to a record the
-      // timeline deliberately does not print.
-      if (job.attachments.length > 0) e.attachments = [...(e.attachments ?? []), ...job.attachments];
+      // timeline deliberately does not print. It keeps its own group: the files live on the
+      // maintenance record, so that is where an edit has to land.
+      e.attachments = [
+        ...(e.attachments ?? []),
+        { recordType: "MaintenanceRecord", recordId: job.id, urls: job.attachments },
+      ];
     }
   }
 

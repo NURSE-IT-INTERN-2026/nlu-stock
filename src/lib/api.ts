@@ -4,6 +4,7 @@
  */
 
 import { scopeQuery, type DashboardScope } from "@/lib/dashboard-scope";
+import type { AttachRecordType } from "@/lib/attachments";
 
 // ─── Error class ───
 
@@ -724,7 +725,6 @@ export function sendQtyDamageToRepair(data: {
   venue: "INTERNAL" | "EXTERNAL";
   repairNote: string;
   damageNote?: string;
-  imageEvidenceUrls?: string[];
 }) {
   return request<{ ok: boolean }>("/api/repairs", {
     method: "POST",
@@ -870,6 +870,35 @@ export function uploadFile(formData: FormData) {
     }
     return res.json() as Promise<{ url: string }>;
   });
+}
+
+/** หลักฐานแนบย้อนหลัง — แนบเพิ่ม/ลบ on a record that was written earlier. Returns the array as it
+ *  now stands, so the caller renders the server's answer rather than its own optimistic guess. */
+export function changeAttachments(data: {
+  recordType: AttachRecordType;
+  recordId: string;
+  add?: string[];
+  remove?: string[];
+}) {
+  return request<{ urls: string[] }>("/api/attachments", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export interface AttachmentLogEntry {
+  id: string;
+  url: string;
+  action: "ADD" | "REMOVE";
+  at: string;
+  by: string;
+}
+
+/** ประวัติไฟล์แนบ, fetched only when someone opens the popover. */
+export function getAttachmentLog(recordType: AttachRecordType, recordId: string) {
+  return request<{ entries: AttachmentLogEntry[] }>(
+    `/api/attachments?recordType=${recordType}&recordId=${encodeURIComponent(recordId)}`,
+  );
 }
 
 // ─── Maintenance ───
