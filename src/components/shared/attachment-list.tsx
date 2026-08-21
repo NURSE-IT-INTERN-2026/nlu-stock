@@ -188,7 +188,7 @@ export function AttachmentList({
                 </span>
               </>
             )}
-            <AttachmentLogPopover target={target} />
+            <AttachmentLogPopover target={target} hasFiles={urls.length > 0} />
           </div>
         )}
       </div>
@@ -242,9 +242,13 @@ export function AttachmentList({
  * log failed. It does not say the reverse — that an unlogged file was there from the start —
  * because every row written before this table existed is unlogged too.
  */
-function AttachmentLogPopover({ target }: { target: AttachTarget }) {
+function AttachmentLogPopover({ target, hasFiles }: { target: AttachTarget; hasFiles: boolean }) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<AttachmentLogEntry[] | null>(null);
+  // Distinct from "no entries". A failed fetch used to fall into the same empty state, which
+  // told the reader the evidence had never been touched — the one thing this popover exists to
+  // answer, answered wrongly, in the confident voice.
+  const [failed, setFailed] = useState(false);
 
   // Fetched on the open, not by an effect watching it: opening is the event, and a stale list
   // from the previous open would show for a frame before the new one lands.
@@ -252,9 +256,10 @@ function AttachmentLogPopover({ target }: { target: AttachTarget }) {
     setOpen(next);
     if (!next) return;
     setEntries(null);
+    setFailed(false);
     getAttachmentLog(target.recordType, target.recordId)
       .then((r) => setEntries(r.entries))
-      .catch(() => setEntries([]));
+      .catch(() => setFailed(true));
   }
 
   return (
@@ -273,10 +278,17 @@ function AttachmentLogPopover({ target }: { target: AttachTarget }) {
       />
       <PopoverContent align="start" className="w-80 p-3">
         <p className="mb-2 text-xs font-medium text-muted-foreground">ประวัติไฟล์แนบ</p>
-        {entries === null ? (
+        {failed ? (
+          <p className="text-xs text-destructive dark:text-danger-400">โหลดประวัติไม่สำเร็จ — ลองเปิดใหม่อีกครั้ง</p>
+        ) : entries === null ? (
           <p className="text-xs text-muted-foreground">กำลังโหลด...</p>
         ) : entries.length === 0 ? (
-          <p className="text-xs text-muted-foreground">แนบไว้ตั้งแต่ตอนบันทึก ยังไม่มีการแก้ไข</p>
+          // No log row means no edit after the record was written — which says nothing about
+          // files that were never there in the first place. Claiming "แนบไว้ตั้งแต่ตอนบันทึก" on
+          // an empty record asserts evidence that does not exist.
+          <p className="text-xs text-muted-foreground">
+            {hasFiles ? "แนบไว้ตั้งแต่ตอนบันทึก ยังไม่มีการแก้ไข" : "ยังไม่มีไฟล์แนบ"}
+          </p>
         ) : (
           <ul className="space-y-2">
             {entries.map((e) => (

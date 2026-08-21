@@ -104,7 +104,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const events: TimelineEvent[] = [];
   // adjustment id → ค่าซ่อม of the job that closed it; merged in once both queries have run.
-  const repairJobs = new Map<string, { id: string; cost: number | null; attachments: string[] }>();
+  const repairJobs = new Map<string, { id: string; cost: number | null; attachments: string[]; bookingId: string | null }>();
+  // adjustment id → its own หลักฐาน, so a closing row can reach the booking it closed without a
+  // second query. Every adjustment for this item is already loaded below.
+  const adjAttachments = new Map<string, string[]>();
 
   const itemLevel = !subItemId;
   const fetchDispense = !lost;
@@ -236,6 +239,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         orderBy: { adjustedAt: "desc" },
       }).then((records) => {
         for (const r of records) {
+          adjAttachments.set(r.id, r.imageEvidenceUrls);
           events.push({
             id: r.id,
             // Two reasons are events, not stock corrections: แจ้งชำรุด opens the repair flow, and
@@ -344,7 +348,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           // the fuller row (qty, balance, the closing note), so it keeps the line and this
           // record hands over the one thing it alone knows: what the repair cost.
           if (r.adjustmentId) {
-            repairJobs.set(r.adjustmentId, { id: r.id, cost: r.cost, attachments: r.attachmentUrls });
+            repairJobs.set(r.adjustmentId, { id: r.id, cost: r.cost, attachments: r.attachmentUrls, bookingId: r.repairBookingId });
             continue;
           }
           events.push({
@@ -411,6 +415,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ...(e.attachments ?? []),
         { recordType: "MaintenanceRecord", recordId: job.id, urls: job.attachments },
       ];
+      // …and the หลักฐาน the trip collected on its way out, which lives on the แจ้งชำรุด booking.
+      // Staff file ส่งซ่อม → แก้ไข → รับคืน as one job; without this the last row — the one they
+      // open when the job is done — shows none of the photos they attached along the way.
+      // Null on trips closed before repairBookingId existed; those keep their evidence on the
+      // แจ้งชำรุด row and this simply adds nothing.
+      const booking = job.bookingId ? adjAttachments.get(job.bookingId) : undefined;
+      if (booking && booking.length > 0) {
+        e.attachments.push({ recordType: "StockAdjustment", recordId: job.bookingId!, urls: booking });
+      }
     }
   }
 
