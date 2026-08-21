@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin, handleError } from "@/lib/api-utils";
 import { recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn } from "@/lib/returns";
 
+import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 // Per-row return condition chosen in the return detail view.
 const CONDITIONS = ["AVAILABLE", "DAMAGED", "LOST"] as const;
 type ReturnCondition = (typeof CONDITIONS)[number];
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const rawEntries = Array.isArray(body?.entries) ? body.entries : [];
   const overallNote = (body?.note as string | undefined)?.trim() || null;
-  const proofUrls = Array.isArray(body?.proofUrls) ? (body.proofUrls as string[]).filter(Boolean) : undefined;
+  const proofUrls = Array.isArray(body?.proofUrls) ? (body.proofUrls as string[]).filter(Boolean).slice(0, MAX_EVIDENCE_FILES) : undefined;
 
   if (rawEntries.length === 0) {
     return NextResponse.json({ error: "No entries" }, { status: 400 });

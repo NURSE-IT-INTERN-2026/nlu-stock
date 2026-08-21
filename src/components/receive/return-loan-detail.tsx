@@ -32,6 +32,7 @@ import { KitSetContentsPicker } from "@/components/items/kit-sets-panel";
 import { effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
+import { EVIDENCE_ACCEPT, MAX_EVIDENCE_FILES } from "@/lib/uploads";
 export interface LoanGroup {
   key: string;
   records: OpenBorrow[];
@@ -124,43 +125,43 @@ export function ReturnLoanDetail({
 
   const outstandingTotal = group.records.reduce((s, r) => s + outstandingOf(r), 0);
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      const urls: string[] = [];
-      for (const f of Array.from(files)) {
+  /**
+   * Uploads a pick one file at a time and keeps whatever got through: one refused file used to
+   * drop the whole batch, so a wrong-format fourth pick threw away three good photos and said
+   * only "อัปโหลดรูปไม่สำเร็จ". Returns the URLs that landed.
+   */
+  const uploadPick = async (files: FileList, room: number): Promise<string[]> => {
+    const picked = Array.from(files);
+    if (picked.length > room) toast.error(`แนบได้สูงสุด ${MAX_EVIDENCE_FILES} ไฟล์`);
+    const urls: string[] = [];
+    for (const f of picked.slice(0, room)) {
+      try {
         const fd = new FormData();
         fd.append("file", f);
         const { url } = await uploadFile(fd);
         urls.push(url);
+      } catch (err) {
+        toast.error(`${f.name}: ${err instanceof Error ? err.message : "อัปโหลดไม่สำเร็จ"}`);
       }
-      setProofs((p) => [...p, ...urls]);
-    } catch {
-      toast.error("อัปโหลดรูปไม่สำเร็จ");
-    } finally {
-      setUploading(false);
     }
+    return urls;
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    const urls = await uploadPick(files, MAX_EVIDENCE_FILES - proofs.length);
+    if (urls.length > 0) setProofs((p) => [...p, ...urls]);
+    setUploading(false);
   };
 
   // Per-SubItem evidence upload (required when condition ≠ ปกติ).
   const handleRowFiles = async (id: string, files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
-    try {
-      const urls: string[] = [];
-      for (const f of Array.from(files)) {
-        const fd = new FormData();
-        fd.append("file", f);
-        const { url } = await uploadFile(fd);
-        urls.push(url);
-      }
-      setRowPhotos((p) => ({ ...p, [id]: [...(p[id] ?? []), ...urls] }));
-    } catch {
-      toast.error("อัปโหลดรูปไม่สำเร็จ");
-    } finally {
-      setUploading(false);
-    }
+    const urls = await uploadPick(files, MAX_EVIDENCE_FILES - (rowPhotos[id]?.length ?? 0));
+    if (urls.length > 0) setRowPhotos((p) => ({ ...p, [id]: [...(p[id] ?? []), ...urls] }));
+    setUploading(false);
   };
   const removeRowPhoto = (id: string, index: number) =>
     setRowPhotos((p) => ({ ...p, [id]: (p[id] ?? []).filter((_, i) => i !== index) }));
@@ -456,7 +457,7 @@ export function ReturnLoanDetail({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept={EVIDENCE_ACCEPT}
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -623,7 +624,7 @@ function TrackedRows({
                           แนบรูป
                           <input
                             type="file"
-                            accept="image/*"
+                            accept={EVIDENCE_ACCEPT}
                             multiple
                             className="hidden"
                             onChange={(e) => { onUpload(r.id, e.target.files); e.target.value = ""; }}

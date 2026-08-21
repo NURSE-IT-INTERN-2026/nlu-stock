@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
-
-const MIME_MAP: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-  ".pdf": "application/pdf",
-};
+import { MIME_BY_EXT } from "@/lib/uploads";
 
 export async function GET(
   _request: NextRequest,
@@ -32,7 +25,7 @@ export async function GET(
   }
 
   const ext = "." + (path[path.length - 1]?.split(".").pop() ?? "").toLowerCase();
-  const contentType = MIME_MAP[ext] || "application/octet-stream";
+  const contentType = MIME_BY_EXT[ext] || "application/octet-stream";
   const buffer = await readFile(filePath);
 
   return new NextResponse(buffer, {

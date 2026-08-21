@@ -18,6 +18,7 @@ import { EVENT_TYPE_LABELS, type TimelineEventType } from "@/lib/constants";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
+import { AttachmentList } from "@/components/shared/attachment-list";
 interface TimelineEvent {
   id: string;
   type: TimelineEventType;
@@ -35,6 +36,8 @@ interface TimelineEvent {
   change?: { from: number; to: number } | null;
   // Only on a รับคืนจากซ่อม row, folded in from the repair job that closed the trip.
   cost?: number | null;
+  // หลักฐานแนบของกิจกรรมนั้น — dialog only, the table stays text.
+  attachments?: string[];
 }
 
 // Movement types lead with colour (stock left / stock came back); the three that don't touch
@@ -323,6 +326,9 @@ function EventDetailDialog({ event, unit, onClose }: { event: TimelineEvent | nu
                 />
               )}
               {event.notes && <DetailRow label="หมายเหตุ" value={<span className="whitespace-pre-wrap">{event.notes}</span>} />}
+              {event.attachments && event.attachments.length > 0 && (
+                <DetailRow label="หลักฐานแนบ" value={<AttachmentList urls={event.attachments} />} />
+              )}
               <DetailRow
                 label="ผู้ดำเนินการ"
                 value={

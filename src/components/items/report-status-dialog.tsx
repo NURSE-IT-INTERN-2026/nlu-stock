@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger,
 } from "@/components/ui/select";
 import { CheckCircle2, TriangleAlert, X } from "lucide-react";
-import { FileUpload } from "@/components/shared/file-upload";
+import { FileUploadList } from "@/components/shared/file-upload";
 import { STATUS_LABELS, effectiveCode, type ItemStatus } from "@/lib/constants";
 import { updateItemStatus } from "@/lib/api";
 
@@ -56,7 +56,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
     `${sub.name ? `${sub.name} · ` : ""}${fmtCode(sub.subCode)} (${STATUS_LABELS[sub.status] ?? sub.status})`;
   const [subItemId, setSubItemId] = useState("");
   const [notes, setNotes] = useState("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // When there is exactly one sub-item (e.g. opened from a specific piece's detail
@@ -69,7 +69,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
   function reset() {
     setSubItemId("");
     setNotes("");
-    setImageUrl(null);
+    setImageUrls([]);
   }
 
   async function handleSave() {
@@ -87,7 +87,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
         newStatus: status,
         subItemId: trackIndividually ? subItemId : null,
         notes: notes || null,
-        imageUrl: imageUrl || null,
+        imageUrls,
       });
       toast.success(`${meta.title}แล้ว`);
       onOpenChange(false);
@@ -175,13 +175,8 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
             </div>
 
             <div className="space-y-2">
-              <Label>รูปหลักฐาน</Label>
-              <FileUpload
-                value={imageUrl}
-                onChange={setImageUrl}
-                accept="image/*"
-                label="อัปโหลดรูปภาพ"
-              />
+              <Label>หลักฐานแนบ</Label>
+              <FileUploadList value={imageUrls} onChange={setImageUrls} label="แนบรูป/เอกสาร" />
             </div>
           </div>
 

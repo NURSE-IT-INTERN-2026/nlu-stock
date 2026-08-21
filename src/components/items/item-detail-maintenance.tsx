@@ -6,6 +6,7 @@ import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
 
+import { AttachmentList } from "@/components/shared/attachment-list";
 interface MaintenanceRecord {
   id: string;
   type: string;
@@ -169,15 +170,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
                   <div className="text-xs text-muted-foreground mt-0.5">
                     โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
                   </div>
-                  {rec.attachmentUrls.length > 0 && (
-                    <div className="flex gap-2 mt-1.5">
-                      {rec.attachmentUrls.map((url, i) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
-                          {url.endsWith(".pdf") ? `PDF ${i + 1}` : `รูป ${i + 1}`}
-                        </a>
-                      ))}
-                    </div>
-                  )}
+                  <AttachmentList urls={rec.attachmentUrls} className="mt-1.5" />
                 </div>
               </li>
             ))}

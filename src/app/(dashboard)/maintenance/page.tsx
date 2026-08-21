@@ -20,6 +20,7 @@ import { ExportButtons } from "@/components/reports/export-buttons";
 import { getMaintenanceSummary, getReport } from "@/lib/api";
 import { toast } from "sonner";
 
+import { AttachmentList } from "@/components/shared/attachment-list";
 // ── Types ──
 
 interface Summary {
@@ -408,18 +409,8 @@ export default function MaintenancePage() {
                     <span>ผู้บันทึก {rec.performer}</span>
                     <span>·</span>
                     <span className="tabular-nums">{rec.cost > 0 ? `฿${rec.cost.toLocaleString()}` : "0.-"}</span>
-                    {rec.attachmentUrls?.map((url, i) => (
-                      <a
-                        key={url}
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline underline-offset-2"
-                      >
-                        {url.toLowerCase().endsWith(".pdf") ? `PDF ${i + 1}` : `ไฟล์แนบ ${i + 1}`}
-                      </a>
-                    ))}
                   </div>
+                  <AttachmentList urls={rec.attachmentUrls ?? []} className="mt-1.5" />
                 </div>
               ))}
             </div>
