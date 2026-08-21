@@ -226,8 +226,30 @@ export function deleteLocation(id: string) {
 
 // ─── Units ───
 
+export interface UnitRow extends UnitOption {
+  _count?: { items: number; kitBomItems: number };
+}
+
 export function getUnits() {
-  return request<UnitOption[]>("/api/settings/units");
+  return request<UnitRow[]>("/api/settings/units");
+}
+
+export function createUnit(data: { name: string }) {
+  return request<UnitOption>("/api/settings/units", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateUnit(id: string, data: { name: string }) {
+  return request<UnitOption>(`/api/settings/units/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteUnit(id: string) {
+  return request<void>(`/api/settings/units/${id}`, { method: "DELETE" });
 }
 
 // ─── Quick-create item (ADMIN + STAFF) ───
