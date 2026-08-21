@@ -25,7 +25,7 @@ import { ItemThumb } from "@/components/shared/item-thumb";
 import { cancelQtyDamage, getPendingRepairDamage, getSubItemsByStatus, sendQtyDamageToRepair, updateItemStatus, type PendingRepairDamage, type SubItemByStatus } from "@/lib/api";
 import { effectiveCode, locationLabel } from "@/lib/constants";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
-import { FileUpload } from "@/components/shared/file-upload";
+import { FileUploadList } from "@/components/shared/file-upload";
 import { useSession } from "@/components/layout/auth-guard";
 
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -204,7 +204,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
   const [repairNote, setRepairNote] = useState("");
   const [damage, setDamage] = useState("");
   const [note, setNote] = useState("");
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const isRepair = status === "UNDER_REPAIR";
   const unit = row.item.issueUnit.name;
 
@@ -213,7 +213,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
     setRepairNote("");
     setDamage("");
     setNote("");
-    setPhotoUrl(null);
+    setPhotoUrls([]);
   };
 
   // Editing, not re-entering — and on the ส่งซ่อม step the symptom is already on the booking
@@ -222,7 +222,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
     setVenue(row.repairVenue ?? "");
     setRepairNote(row.repairNote ?? "");
     setDamage(row.notes ?? "");
-    setPhotoUrl(row.imageEvidence ?? null);
+    setPhotoUrls(row.imageEvidenceUrls);
     setOpen(true);
   };
 
@@ -234,7 +234,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
         venue: venue as "INTERNAL" | "EXTERNAL",
         repairNote: repairNote.trim(),
         damageNote: damage.trim() || undefined,
-        imageEvidence: photoUrl ?? undefined,
+        imageEvidenceUrls: photoUrls,
       });
       toast.success(successMsg);
       reset();
@@ -295,7 +295,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
       {withPhoto && (
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-          <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+          <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" />
         </div>
       )}
     </>
@@ -489,7 +489,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   // อาการที่ชำรุด as it stands for this trip — editable, because the first report is often
   // written before anyone has looked at the piece properly.
   const [damage, setDamage] = useState("");
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
   const isRepair = status === "UNDER_REPAIR";
   const isDamaged = status === "DAMAGED";
@@ -502,7 +502,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
     setNote("");
     setRepairNote("");
     setDamage("");
-    setPhotoUrl(null);
+    setPhotoUrls([]);
     setVenue("");
   };
 
@@ -524,7 +524,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
     save({
       newStatus: targetStatus,
       notes: isDamaged ? note.trim() : undefined,
-      imageUrl: isDamaged ? (photoUrl ?? undefined) : undefined,
+      imageUrls: isDamaged ? photoUrls : undefined,
       repairVenue: isDamaged && venue ? venue : undefined,
       repairNote: isDamaged ? repairNote.trim() : undefined,
       // The ส่งซ่อม note IS the symptom this trip is about — stamp it on the row so later
@@ -672,7 +672,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-                  <FileUpload value={photoUrl} onChange={setPhotoUrl} accept="image/*" label="อัปโหลดรูป" />
+                  <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" />
                 </div>
               </div>
             )}

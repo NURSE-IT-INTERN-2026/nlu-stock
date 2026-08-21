@@ -5,6 +5,7 @@ import { holdsTotalQty, recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn, logReturn, type ReturnStatus } from "@/lib/returns";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
+import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 const RETURN_STATUSES = ["AVAILABLE", "DAMAGED", "LOST"] as const;
 
 export async function POST(
@@ -25,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
   const status = rawStatus as ReturnStatus;
-  const proofUrls = Array.isArray(body.proofUrls) ? (body.proofUrls as string[]).filter(Boolean) : undefined;
+  const proofUrls = Array.isArray(body.proofUrls) ? (body.proofUrls as string[]).filter(Boolean).slice(0, MAX_EVIDENCE_FILES) : undefined;
 
   try {
     await prisma.$transaction(async (tx) => {

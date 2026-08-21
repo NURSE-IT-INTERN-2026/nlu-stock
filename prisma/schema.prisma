@@ -499,7 +499,7 @@ model StockAdjustment {
   notes         String?
   adjustedBy    String
   adjuster      User             @relation(fields: [adjustedBy], references: [id])
-  imageEvidence String?
+  imageEvidenceUrls String[]      @default([])
   adjustedAt    DateTime         @default(now())
   recoveredAt   DateTime? // set when a LOST adjustment is reversed (เรียกคืน) or a repair is closed
 
@@ -561,7 +561,7 @@ model ItemStatusLog {
   reason         String?
   changedBy      String
   changer        User         @relation(fields: [changedBy], references: [id])
-  imageUrl       String?
+  imageUrls      String[]     @default([])
   repairVenue    RepairVenue?
   repairNote     String?
   // How many units this row is about, when it is about a quantity rather than one piece —
@@ -609,7 +609,20 @@ model LocationChangeLog {
 model Course {
   code     String   @id // รหัสวิชา
   name     String? // title_long_th from the registrar; null until first resolved
-  syncedAt DateTime @default(now()) @updatedAt
+  // open_status on the registrar's newest revision of this course: false = retired. Retired
+  // rows are kept, not deleted — a dispense filed years ago still names its course from here
+  // — but lib/courses listCourses hides them, so nobody can file a new draw against a course
+  // that is no longer taught. Defaults true: a course the registrar has no bulletin for
+  // (real: 578101) is still in the faculty catalogue and must stay pickable.
+  open     Boolean  @default(true)
+  // When the faculty catalogue last confirmed this code — written only by the catalogue
+  // refresh in lib/courses, which is what the 24h TTL is actually asking about. Deliberately
+  // NOT @updatedAt: any other write (resolving one course's title on demand) would bump it,
+  // and since the TTL reads MAX(syncedAt) across the table, one such row is enough to make
+  // the whole catalogue look fresh and defer the refresh — indefinitely, if that course is
+  // picked daily. The refresh is what keeps `open` and renamed titles current, so it must
+  // not be something ordinary use can hold off.
+  syncedAt DateTime @default(now())
 
   @@map("courses")
 }

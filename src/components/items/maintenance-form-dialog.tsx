@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Search, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
-import { FileUpload } from "@/components/shared/file-upload";
+import { FileUploadList } from "@/components/shared/file-upload";
 import { createMaintenance, searchDispenseItems } from "@/lib/api";
 import { MAINT_RESULT_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -78,7 +78,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   const [cost, setCost] = useState("");
   // null = follow the auto-calculated date; a string = staff typed their own.
   const [nextOverride, setNextOverride] = useState<string | null>(null);
-  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   // ── Reset on open/close ──
@@ -144,7 +144,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
         // Override only — omitted means "server, apply the rule". Sending the previewed
         // value would fork the rule into the client again.
         nextMaintenanceAt: nextOverride || undefined,
-        attachmentUrls: attachmentUrl ? [attachmentUrl] : [],
+        attachmentUrls,
         subItemId: subItemId ?? undefined,
         adjustmentId: adjustmentId ?? undefined,
       });
@@ -164,7 +164,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
     setDescription("");
     setCost("");
     setNextOverride(null);
-    setAttachmentUrl(null);
+    setAttachmentUrls([]);
     setSelectedItemId(itemId ?? null);
     setSearchQuery("");
     setSearchResults([]);
@@ -370,12 +370,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
 
             <div className="space-y-2">
               <Label>เอกสารแนบ</Label>
-              <FileUpload
-                value={attachmentUrl}
-                onChange={setAttachmentUrl}
-                accept="image/*,.pdf"
-                label="แนบเอกสาร"
-              />
+              <FileUploadList value={attachmentUrls} onChange={setAttachmentUrls} label="แนบเอกสาร" />
             </div>
           </div>
 

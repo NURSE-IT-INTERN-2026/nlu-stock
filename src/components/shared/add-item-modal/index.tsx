@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  DIALOG_SHELL_ROW,
   DIALOG_BODY,
   Dialog,
   DialogContent,
@@ -558,7 +559,7 @@ export function AddItemModal({
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>
           <DialogDescription className="sr-only">{stepTitle}</DialogDescription>
-          <div className="relative flex h-[580px] w-full overflow-hidden">
+          <div className={cn("relative", DIALOG_SHELL_ROW)}>
             {renderSidebar()}
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
               {renderBody()}
