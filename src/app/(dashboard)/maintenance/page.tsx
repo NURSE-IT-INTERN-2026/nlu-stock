@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceType, type MaintenanceResult } from "@/lib/constants";
+import { MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceResult } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -96,7 +96,10 @@ export default function MaintenancePage() {
   const [editedAttachments, setEditedAttachments] = useState<Record<string, string[]>>({});
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
-  const [recentRecords, setRecentRecords] = useState<HistoryRow[]>([]);
+  // Two lists, not one sliced client-side: the API pages before it filters, so five mixed rows
+  // could be five ตรวจบำรุง and leave ซ่อมแซม looking empty when it is not.
+  const [recentPreventive, setRecentPreventive] = useState<HistoryRow[]>([]);
+  const [recentCorrective, setRecentCorrective] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [schedulePage, setSchedulePage] = useState(1);
   const [filter, setFilter] = useState<"all" | "overdue" | "due-soon">("all");
@@ -118,15 +121,17 @@ export default function MaintenancePage() {
     if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.locationId) params.locationId = filters.locationId;
     try {
-      const [sum, sched, hist] = await Promise.all([
+      const [sum, sched, preventive, corrective] = await Promise.all([
         getMaintenanceSummary(),
         getReport("maintenance-schedule", params) as Promise<{ items: ScheduleRow[] }>,
-        getReport("maintenance-history", { perPage: "5" }) as Promise<{ records: HistoryRow[] }>,
+        getReport("maintenance-history", { perPage: "5", maintenanceType: "PREVENTIVE" }) as Promise<{ records: HistoryRow[] }>,
+        getReport("maintenance-history", { perPage: "5", maintenanceType: "CORRECTIVE" }) as Promise<{ records: HistoryRow[] }>,
       ]);
       setSummary(sum);
       // ทั้งตาราง เรียงตามกำหนดบำรุงเก่า→ใหม่ (API sort ให้แล้ว)
       setScheduleItems(sched.items ?? []);
-      setRecentRecords(hist.records ?? []);
+      setRecentPreventive(preventive.records ?? []);
+      setRecentCorrective(corrective.records ?? []);
       setSchedulePage(1);
     } catch {
       if (!silent) toast.error("โหลดข้อมูลบำรุงรักษาไม่สำเร็จ");
@@ -367,10 +372,12 @@ export default function MaintenancePage() {
           {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. Count summary moved into the card footer above. */}
         </section>
 
-        {/* ── Recent records ── */}
+        {/* ── Recent records, one block per case ──
+            ตรวจบำรุงตามรอบ กับ ซ่อมเมื่อพัง เป็นคนละเรื่อง — the report route has grouped them by
+            type all along; this screen was the last place still stacking them into one list. */}
         <section>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">บันทึกการบำรุงรักษาล่าสุด</h2>
+            <h2 className="text-lg font-semibold">บันทึกล่าสุด</h2>
             <Link href="/reports?tab=maintenance-history" className="text-sm text-primary hover:underline">
               ดูทั้งหมดในรายงาน →
             </Link>
@@ -382,50 +389,24 @@ export default function MaintenancePage() {
                 <Skeleton key={i} className="h-20 w-full rounded-lg" />
               ))}
             </div>
-          ) : recentRecords.length === 0 ? (
-            <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-              ยังไม่มีบันทึกการซ่อมบำรุง
-            </div>
           ) : (
-            <div className="space-y-2">
-              {recentRecords.map((rec, idx) => (
-                <div
-                  key={rec.id}
-                  className={cn(
-                    "rounded-lg border bg-card p-3",
-                    idx % 2 === 1 && "bg-muted/20",
-                  )}
-                >
-                  <div className="mb-1 flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}
-                    </Badge>
-                    <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
-                      {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
-                    </Badge>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {fmtDate(rec.performedAt, TH_DATE)}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    <span className="mr-2 font-mono text-xs text-muted-foreground">{effectiveCode(rec.itemCode, rec.subCode, rec.subCount)}</span>
-                    <span className="font-medium">{rec.itemName}</span>
-                  </div>
-                  {rec.issue && <p className="mt-0.5 text-sm text-muted-foreground">{rec.issue}</p>}
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    <span>ผู้บันทึก {rec.performer}</span>
-                    <span>·</span>
-                    <span className="tabular-nums">{rec.cost > 0 ? `฿${rec.cost.toLocaleString()}` : "0.-"}</span>
-                  </div>
-                  <AttachmentList
-                    urls={editedAttachments[rec.id] ?? rec.attachmentUrls ?? []}
-                    className="mt-1.5"
-                    target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
-                    canEdit={canEdit}
-                    onChange={(urls) => setEditedAttachments((m) => ({ ...m, [rec.id]: urls }))}
-                  />
-                </div>
-              ))}
+            <div className="space-y-6">
+              <RecentGroup
+                title="ตรวจบำรุงตามรอบ"
+                empty="ยังไม่มีบันทึกตรวจบำรุงตามรอบ"
+                records={recentPreventive}
+                canEdit={canEdit}
+                edited={editedAttachments}
+                onEdited={setEditedAttachments}
+              />
+              <RecentGroup
+                title="ซ่อมแซม"
+                empty="ยังไม่มีบันทึกซ่อมแซม"
+                records={recentCorrective}
+                canEdit={canEdit}
+                edited={editedAttachments}
+                onEdited={setEditedAttachments}
+              />
             </div>
           )}
         </section>
@@ -442,6 +423,59 @@ export default function MaintenancePage() {
         maintenanceCycleMonths={dialogCycle}
         onSuccess={fetchData}
       />
+    </div>
+  );
+}
+
+/** One case's recent records. The ประเภท badge is gone from the rows — the heading is the
+ *  ประเภท now, and printing it again on every row is what made the two look like one list. */
+function RecentGroup({ title, empty, records, canEdit, edited, onEdited }: {
+  title: string;
+  empty: string;
+  records: HistoryRow[];
+  canEdit: boolean;
+  edited: Record<string, string[]>;
+  onEdited: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
+        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{title}</span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">{records.length} รายการล่าสุด</span>
+      </div>
+      {records.length === 0 ? (
+        <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{empty}</div>
+      ) : (
+        <div className="space-y-2">
+          {records.map((rec, idx) => (
+            <div key={rec.id} className={cn("rounded-lg border bg-card p-3", idx % 2 === 1 && "bg-muted/20")}>
+              <div className="mb-1 flex items-center gap-2">
+                <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
+                  {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground">{fmtDate(rec.performedAt, TH_DATE)}</span>
+              </div>
+              <div className="text-sm">
+                <span className="mr-2 font-mono text-xs text-muted-foreground">{effectiveCode(rec.itemCode, rec.subCode, rec.subCount)}</span>
+                <span className="font-medium">{rec.itemName}</span>
+              </div>
+              {rec.issue && <p className="mt-0.5 text-sm text-muted-foreground">{rec.issue}</p>}
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                <span>ผู้บันทึก {rec.performer}</span>
+                <span>·</span>
+                <span className="tabular-nums">{rec.cost > 0 ? `฿${rec.cost.toLocaleString()}` : "0.-"}</span>
+              </div>
+              <AttachmentList
+                urls={edited[rec.id] ?? rec.attachmentUrls ?? []}
+                className="mt-1.5"
+                target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
+                canEdit={canEdit}
+                onChange={(urls) => onEdited((m) => ({ ...m, [rec.id]: urls }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

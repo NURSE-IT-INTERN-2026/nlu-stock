@@ -23,8 +23,8 @@ import { lotDisplay } from "@/lib/lot-code";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import {
   STATUS_LABELS, locationLabel, formatSubCode, qrUrl, labelFor,
-  CONDITION_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
-  type MaintenanceType, type MaintenanceResult, type ItemStatus,
+  CONDITION_LABELS, MAINT_RESULT_LABELS,
+  type MaintenanceResult, type ItemStatus,
   USAGE_STATUS_ORDER, STATUS_PILLS, recipientLabel,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
@@ -1059,12 +1059,16 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
   // Same override trick as the parent item's tab: แนบเพิ่ม answers with the new array, and the
   // row shows that rather than the prop the page was rendered with.
   const [edited, setEdited] = useState<Record<string, string[]>>({});
+  // Same split as the parent item's tab, for the same reason: a ใบเสร็จค่าซ่อม filed under a
+  // heading that reads บำรุงรักษา is a bill nobody can find again.
+  const corrective = sub.maintenanceRecords.filter((r) => r.type === "CORRECTIVE");
+  const preventive = sub.maintenanceRecords.filter((r) => r.type !== "CORRECTIVE");
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button onClick={onRecord}><Wrench className="h-4 w-4 mr-1.5" />บันทึกการบำรุงรักษา</Button> : undefined} />
       <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
         <StatCard label="รอบถัดไป" value={sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.nextMaintenanceDate)} />
-        <StatCard label="จำนวนการซ่อมบำรุง" value={`${sub.maintenanceRecords.length} ครั้ง`} icon={Wrench} />
+        <StatCard label="ตรวจบำรุง / ซ่อมแซม" value={`${preventive.length} / ${corrective.length} ครั้ง`} icon={Wrench} />
         <StatCard label="สถานะปัจจุบัน" value={STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")} icon={ShieldAlert} tone={STATUS_META[sub.status]?.tone ?? "primary"} />
       </div>
       {/* Shown for every profile that reaches this tab — consumables never do. */}
@@ -1076,40 +1080,61 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
           <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"}</dd></div>
         </dl>
       </div>
-      <div className="p-4 sm:p-5">
-        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-3">ประวัติการซ่อมบำรุง</div>
-        {sub.maintenanceRecords.length === 0 ? (
-          <p className="text-center py-8 text-sm text-muted-foreground">ยังไม่มีประวัติการซ่อมบำรุง</p>
-        ) : (
-          <ul className="space-y-3">
-            {sub.maintenanceRecords.map((rec) => (
-              <li key={rec.id} className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20">
-                <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary"><Wrench className="size-4" /></div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><CalendarDays className="size-3" />{fmtDay(rec.performedAt)}</span>
-                    <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border bg-muted text-foreground border-border">{labelFor(MAINT_TYPE_LABELS, rec.type as MaintenanceType)}</span>
-                    <span className={cn("text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border", rec.result === "AVAILABLE" ? "bg-success/10 text-success-700 border-success/20" : "bg-primary/10 text-primary border-primary/20")}>{labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}</span>
-                  </div>
-                  {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
-                  {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
-                  <div className="text-xs text-muted-foreground mt-0.5">โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}</div>
-                  {/* Was a row of bare underlined links — the same หลักฐาน as everywhere else,
-                      shown differently for no reason and with no way to add to it. */}
-                  <AttachmentList
-                    urls={edited[rec.id] ?? rec.attachmentUrls}
-                    className="mt-1.5"
-                    target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
-                    canEdit={canAct}
-                    onChange={(urls) => setEdited((m) => ({ ...m, [rec.id]: urls }))}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      {/* One section per case, both always rendered — see ItemDetailMaintenance. */}
+      <div className="p-4 sm:p-5 space-y-6">
+        <PieceMaintGroup title="ตรวจบำรุงตามรอบ" empty="ยังไม่มีประวัติตรวจบำรุงตามรอบ" records={preventive} canAct={canAct} edited={edited} onEdited={setEdited} />
+        <PieceMaintGroup title="ซ่อมแซม" empty="ยังไม่มีประวัติซ่อมแซม" records={corrective} canAct={canAct} edited={edited} onEdited={setEdited} />
       </div>
     </section>
+  );
+}
+
+function PieceMaintGroup({ title, empty, records, canAct, edited, onEdited }: {
+  title: string;
+  empty: string;
+  records: SubItemData["maintenanceRecords"];
+  canAct: boolean;
+  edited: Record<string, string[]>;
+  onEdited: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+}) {
+  const spend = records.reduce((sum, r) => sum + (r.cost ?? 0), 0);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{title}</span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">{records.length} ครั้ง{spend > 0 ? ` · ฿${spend.toLocaleString()}` : ""}</span>
+      </div>
+      {records.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="space-y-3">
+          {records.map((rec) => (
+            <li key={rec.id} className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20">
+              <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary"><Wrench className="size-4" /></div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><CalendarDays className="size-3" />{fmtDay(rec.performedAt)}</span>
+                  <span className={cn("text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border", rec.result === "AVAILABLE" ? "bg-success/10 text-success-700 border-success/20" : "bg-primary/10 text-primary border-primary/20")}>{labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}</span>
+                </div>
+                {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
+                {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
+                <div className="text-xs text-muted-foreground mt-0.5">โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}</div>
+                {/* Was a row of bare underlined links — the same หลักฐาน as everywhere else,
+                    shown differently for no reason and with no way to add to it. */}
+                <AttachmentList
+                  urls={edited[rec.id] ?? rec.attachmentUrls}
+                  className="mt-1.5"
+                  target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
+                  canEdit={canAct}
+                  onChange={(urls) => onEdited((m) => ({ ...m, [rec.id]: urls }))}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
