@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "motion/react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X } from "lucide-react";
+import { ClipboardList, History, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MAINT_RESULT_LABELS, labelFor, effectiveCode, type MaintenanceResult } from "@/lib/constants";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -20,9 +21,10 @@ import { ExportButtons } from "@/components/reports/export-buttons";
 import { getMaintenanceSummary, getReport } from "@/lib/api";
 import { toast } from "sonner";
 
-import { AttachmentList } from "@/components/shared/attachment-list";
 import { useSession } from "@/components/layout/auth-guard";
 import { canManageStock } from "@/lib/roles";
+import { usePageHeader } from "@/components/layout/page-header-context";
+import { RecentMaintenanceRecords } from "@/components/maintenance/recent-records";
 // ── Types ──
 
 interface Summary {
@@ -46,22 +48,6 @@ interface ScheduleRow {
   maintenanceCycleMonths: number;
   maintenanceStatus: string;
   subItemStatus: string | null;
-}
-
-interface HistoryRow {
-  id: string;
-  itemCode: string;
-  itemName: string;
-  subCode: string | null;
-  subCount: number;
-  categoryName: string;
-  type: string;
-  result: string;
-  issue: string;
-  cost: number;
-  attachmentUrls: string[];
-  performer: string;
-  performedAt: string;
 }
 
 // ── Helpers ──
@@ -88,18 +74,45 @@ function statusMeta(status: string) {
 
 // ── Page ──
 
+// ภาพรวม (กำหนดการตามรอบ) · ประวัติ (รอบที่ทำไปแล้ว). Both halves of ONE question: อะไรถึงรอบ
+// บำรุงรักษาเมื่อไหร่. ของพัง/ค้างซ่อมเป็นคนละคำถาม และอยู่ที่ /repairs — เอามาปนกันแล้วผู้ใช้ที่มา
+// ด้วย intent เดียวต้องอ่านผ่านอีก intent หนึ่งทุกครั้ง.
+type MaintTab = "overview" | "history";
+
+const MAINT_TABS = [
+  { value: "overview", label: "ภาพรวม", icon: ClipboardList },
+  { value: "history", label: "ประวัติการบำรุงรักษา", icon: History },
+] as const;
+
 export default function MaintenancePage() {
+  return (
+    <Suspense>
+      <MaintenanceShell />
+    </Suspense>
+  );
+}
+
+function MaintenanceShell() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawTab = searchParams.get("tab");
+  const tab: MaintTab = MAINT_TABS.some((t) => t.value === rawTab) ? (rawTab as MaintTab) : "overview";
+  const changeTab = (value: MaintTab) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", value);
+    router.replace(`/maintenance?${params.toString()}`, { scroll: false });
+  };
+  const { setDetail } = usePageHeader();
+  const activeLabel = MAINT_TABS.find((t) => t.value === tab)?.label;
+  useEffect(() => {
+    setDetail(activeLabel ?? null);
+    return () => setDetail(null);
+  }, [activeLabel, setDetail]);
+
   const { user } = useSession();
   const canEdit = canManageStock(user?.role ?? "");
-  // แนบเพิ่ม answers with the array as it now stands; the row shows that rather than the value
-  // the last report fetch happened to carry.
-  const [editedAttachments, setEditedAttachments] = useState<Record<string, string[]>>({});
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
-  // Two lists, not one sliced client-side: the API pages before it filters, so five mixed rows
-  // could be five ตรวจบำรุง and leave ซ่อมแซม looking empty when it is not.
-  const [recentPreventive, setRecentPreventive] = useState<HistoryRow[]>([]);
-  const [recentCorrective, setRecentCorrective] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [schedulePage, setSchedulePage] = useState(1);
   const [filter, setFilter] = useState<"all" | "overdue" | "due-soon">("all");
@@ -121,17 +134,13 @@ export default function MaintenancePage() {
     if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.locationId) params.locationId = filters.locationId;
     try {
-      const [sum, sched, preventive, corrective] = await Promise.all([
+      const [sum, sched] = await Promise.all([
         getMaintenanceSummary(),
         getReport("maintenance-schedule", params) as Promise<{ items: ScheduleRow[] }>,
-        getReport("maintenance-history", { perPage: "5", maintenanceType: "PREVENTIVE" }) as Promise<{ records: HistoryRow[] }>,
-        getReport("maintenance-history", { perPage: "5", maintenanceType: "CORRECTIVE" }) as Promise<{ records: HistoryRow[] }>,
       ]);
       setSummary(sum);
       // ทั้งตาราง เรียงตามกำหนดบำรุงเก่า→ใหม่ (API sort ให้แล้ว)
       setScheduleItems(sched.items ?? []);
-      setRecentPreventive(preventive.records ?? []);
-      setRecentCorrective(corrective.records ?? []);
       setSchedulePage(1);
     } catch {
       if (!silent) toast.error("โหลดข้อมูลบำรุงรักษาไม่สำเร็จ");
@@ -173,7 +182,37 @@ export default function MaintenancePage() {
 
   return (
     <div className="flex flex-col">
-      <div className="space-y-4 sm:space-y-8 pb-4">
+      {/* ── Tabs ── */}
+      <div className="border-b mb-4 sm:mb-6 -mx-4 px-4 sm:-mx-6 sm:px-6">
+        <nav className="flex gap-1 -mb-px overflow-x-auto">
+          {MAINT_TABS.map(({ value, label, icon: Icon }) => {
+            const isActive = tab === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => changeTab(value)}
+                className={cn(
+                  "relative flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium transition-colors",
+                  isActive ? "text-primary" : "text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+                {isActive && (
+                  <motion.span
+                    layoutId="maintenance-tab"
+                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                    className="absolute -bottom-[2px] left-0 right-0 h-0.5 bg-primary"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className={cn("space-y-4 sm:space-y-8 pb-4", tab !== "overview" && "hidden")}>
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <DashboardMetricCard
@@ -372,43 +411,19 @@ export default function MaintenancePage() {
           {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. Count summary moved into the card footer above. */}
         </section>
 
-        {/* ── Recent records, one block per case ──
-            ตรวจบำรุงตามรอบ กับ ซ่อมเมื่อพัง เป็นคนละเรื่อง — the report route has grouped them by
-            type all along; this screen was the last place still stacking them into one list. */}
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">บันทึกล่าสุด</h2>
-            <Link href="/reports?tab=maintenance-history" className="text-sm text-primary hover:underline">
-              ดูทั้งหมดในรายงาน →
-            </Link>
-          </div>
+      </div>
 
-          {loading ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <RecentGroup
-                title="ตรวจบำรุงตามรอบ"
-                empty="ยังไม่มีบันทึกตรวจบำรุงตามรอบ"
-                records={recentPreventive}
-                canEdit={canEdit}
-                edited={editedAttachments}
-                onEdited={setEditedAttachments}
-              />
-              <RecentGroup
-                title="ซ่อมแซม"
-                empty="ยังไม่มีบันทึกซ่อมแซม"
-                records={recentCorrective}
-                canEdit={canEdit}
-                edited={editedAttachments}
-                onEdited={setEditedAttachments}
-              />
-            </div>
-          )}
+      <div className={cn("space-y-4 sm:space-y-8 pb-4", tab !== "history" && "hidden")}>
+        {/* ตรวจบำรุงตามรอบ only. ซ่อมแซม is filed as a MaintenanceRecord too (CORRECTIVE), but it
+            answers the other page's question and is listed at /repairs?tab=history. */}
+        <section>
+          <h2 className="mb-4 text-lg font-semibold">บันทึกล่าสุด</h2>
+          <RecentMaintenanceRecords
+            type="PREVENTIVE"
+            title="ตรวจบำรุงตามรอบ"
+            empty="ยังไม่มีบันทึกตรวจบำรุงตามรอบ"
+            canEdit={canEdit}
+          />
         </section>
       </div>
 
@@ -427,55 +442,3 @@ export default function MaintenancePage() {
   );
 }
 
-/** One case's recent records. The ประเภท badge is gone from the rows — the heading is the
- *  ประเภท now, and printing it again on every row is what made the two look like one list. */
-function RecentGroup({ title, empty, records, canEdit, edited, onEdited }: {
-  title: string;
-  empty: string;
-  records: HistoryRow[];
-  canEdit: boolean;
-  edited: Record<string, string[]>;
-  onEdited: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
-        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{title}</span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{records.length} รายการล่าสุด</span>
-      </div>
-      {records.length === 0 ? (
-        <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{empty}</div>
-      ) : (
-        <div className="space-y-2">
-          {records.map((rec, idx) => (
-            <div key={rec.id} className={cn("rounded-lg border bg-card p-3", idx % 2 === 1 && "bg-muted/20")}>
-              <div className="mb-1 flex items-center gap-2">
-                <Badge variant={rec.result === "AVAILABLE" ? "default" : "secondary"} className="text-xs">
-                  {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
-                </Badge>
-                <span className="ml-auto text-xs text-muted-foreground">{fmtDate(rec.performedAt, TH_DATE)}</span>
-              </div>
-              <div className="text-sm">
-                <span className="mr-2 font-mono text-xs text-muted-foreground">{effectiveCode(rec.itemCode, rec.subCode, rec.subCount)}</span>
-                <span className="font-medium">{rec.itemName}</span>
-              </div>
-              {rec.issue && <p className="mt-0.5 text-sm text-muted-foreground">{rec.issue}</p>}
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                <span>ผู้บันทึก {rec.performer}</span>
-                <span>·</span>
-                <span className="tabular-nums">{rec.cost > 0 ? `฿${rec.cost.toLocaleString()}` : "0.-"}</span>
-              </div>
-              <AttachmentList
-                urls={edited[rec.id] ?? rec.attachmentUrls ?? []}
-                className="mt-1.5"
-                target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
-                canEdit={canEdit}
-                onChange={(urls) => onEdited((m) => ({ ...m, [rec.id]: urls }))}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

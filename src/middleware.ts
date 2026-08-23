@@ -19,6 +19,7 @@ const routeRules: RouteRule[] = [
   { path: "/settings", allowedRoles: ["SUPERADMIN"] },
   { path: "/receive", allowedRoles: STOCK_ROLES },
   { path: "/maintenance", allowedRoles: STOCK_ROLES },
+  { path: "/repairs", allowedRoles: STOCK_ROLES },
 ];
 
 // The ONLY writes an EXECUTIVE may perform: เบิก/ยืม and its cart templates.

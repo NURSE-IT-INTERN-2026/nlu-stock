@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Truck,
   Wrench,
+  Hammer,
   BarChart3,
   Settings,
   ChevronLeft,
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/dispense", label: "เบิก-ยืมพัสดุ", icon: ShoppingCart },
   { href: "/receive", label: "รับเข้า-คืนพัสดุ", icon: Truck, stockOnly: true },
   { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench, stockOnly: true },
+  { href: "/repairs", label: "ซ่อมแซม", icon: Hammer, stockOnly: true },
   { href: "/reports", label: "รายงาน & สถิติ", icon: BarChart3 },
   { href: "/settings", label: "ตั้งค่า", icon: Settings, superOnly: true },
 ];

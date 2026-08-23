@@ -64,6 +64,37 @@ function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | "";
   );
 }
 
+// The two stages a repair job sits in while it is still open. One place says, per stage,
+// which list it comes from, what the primary button does, and how a row labels itself when
+// both stages share a screen — so a caller picks a stage, not four matching strings.
+export type RepairStage = "DAMAGED" | "UNDER_REPAIR";
+
+const STAGE_META = {
+  DAMAGED: {
+    stage: "damaged",
+    actionLabel: "ส่งซ่อม",
+    badge: "รอส่งซ่อม",
+    badgeClass: "bg-warning/10 text-warning-700 dark:text-warning-200",
+  },
+  UNDER_REPAIR: {
+    stage: "repair",
+    actionLabel: "รับคืนจากส่งซ่อม",
+    badge: "กำลังซ่อม",
+    badgeClass: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+} as const satisfies Record<RepairStage, { stage: "damaged" | "repair"; actionLabel: string; badge: string; badgeClass: string }>;
+
+// รอส่งซ่อม above กำลังซ่อม in a mixed list: the first is a job nobody has started yet.
+const STAGE_ORDER: Record<RepairStage, number> = { DAMAGED: 0, UNDER_REPAIR: 1 };
+
+function StageBadge({ stage }: { stage: RepairStage }) {
+  return (
+    <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + STAGE_META[stage].badgeClass}>
+      {STAGE_META[stage].badge}
+    </span>
+  );
+}
+
 // Generic "receive back" panel for per-unit sub-items in a fixed status
 // (UNDER_REPAIR = sent for repair, DAMAGED = reported damaged, awaiting a
 // send-to-repair decision). UNDER_REPAIR flips → AVAILABLE, DAMAGED → UNDER_REPAIR (ส่งซ่อม).
@@ -81,36 +112,58 @@ function VenuePicker({ value, onChange }: { value: "INTERNAL" | "EXTERNAL" | "";
 // and each screen shows both kinds in one list.
 export function SubItemStatusPanel({
   status,
-  actionLabel,
   emptyText,
+  onCount,
 }: {
-  status: "UNDER_REPAIR" | "DAMAGED";
-  actionLabel: string;
+  /** One stage, or "ALL" for the combined งานซ่อมที่ค้าง worklist. */
+  status: RepairStage | "ALL";
   emptyText: string;
+  onCount?: (n: number) => void;
 }) {
-  const [rows, setRows] = useState<SubItemByStatus[]>([]);
-  const [qtyRows, setQtyRows] = useState<PendingRepairDamage[]>([]);
+  const [rows, setRows] = useState<{ stage: RepairStage; row: SubItemByStatus }[]>([]);
+  const [qtyRows, setQtyRows] = useState<{ stage: RepairStage; row: PendingRepairDamage }[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const stage = status === "UNDER_REPAIR" ? "repair" : "damaged";
+  const showStage = status === "ALL";
 
   const load = useCallback(async () => {
     setLoading(true);
+    // Every row carries the stage it came from — the merged worklist has no other way to tell
+    // a piece waiting to be sent from one already at the shop, and the buttons differ.
+    const stages: RepairStage[] = status === "ALL" ? ["DAMAGED", "UNDER_REPAIR"] : [status];
     try {
-      const [subs, qty] = await Promise.all([getSubItemsByStatus(status), getPendingRepairDamage(stage)]);
-      setRows(subs.subItems);
-      setQtyRows(qty.rows);
+      const per = await Promise.all(
+        stages.map(async (st) => {
+          const [subs, qty] = await Promise.all([
+            getSubItemsByStatus(st),
+            getPendingRepairDamage(STAGE_META[st].stage),
+          ]);
+          return {
+            subs: subs.subItems.map((row) => ({ stage: st, row })),
+            qty: qty.rows.map((row) => ({ stage: st, row })),
+          };
+        }),
+      );
+      setRows(per.flatMap((p) => p.subs));
+      setQtyRows(per.flatMap((p) => p.qty));
     } catch {
       setRows([]);
       setQtyRows([]);
     } finally {
       setLoading(false);
     }
-  }, [status, stage]);
+  }, [status]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // The tab badge upstream counts open jobs, so it reports the whole list, not the search hit
+  // count — a filter typed into the box must not make the badge say the backlog shrank.
+  const total = rows.length + qtyRows.length;
+  useEffect(() => {
+    onCount?.(total);
+  }, [total, onCount]);
 
   if (loading) {
     return (
@@ -126,7 +179,7 @@ export function SubItemStatusPanel({
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
         <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-          {status === "UNDER_REPAIR" ? <Wrench className="h-6 w-6 text-muted-foreground" /> : status === "DAMAGED" ? <Send className="h-6 w-6 text-muted-foreground" /> : <RotateCcw className="h-6 w-6 text-muted-foreground" />}
+          {status === "DAMAGED" ? <Send className="h-6 w-6 text-muted-foreground" /> : <Wrench className="h-6 w-6 text-muted-foreground" />}
         </div>
         <p className="text-sm text-muted-foreground">{emptyText}</p>
       </div>
@@ -135,7 +188,7 @@ export function SubItemStatusPanel({
 
   const q = query.trim().toLowerCase();
   const filteredRows = q
-    ? rows.filter((r) => {
+    ? rows.filter(({ row: r }) => {
         const loc = r.location ?? r.item.location;
         return (
           r.item.name.toLowerCase().includes(q) ||
@@ -147,7 +200,7 @@ export function SubItemStatusPanel({
     : rows;
   const filteredQty = q
     ? qtyRows.filter(
-        (r) =>
+        ({ row: r }) =>
           r.item.name.toLowerCase().includes(q) ||
           r.item.code.toLowerCase().includes(q) ||
           (r.item.location ? locationLabel(r.item.location).toLowerCase().includes(q) : false),
@@ -156,10 +209,12 @@ export function SubItemStatusPanel({
 
   // One list, newest trip first — a piece and a qty booking are the same job to the staff
   // member holding the repaired thing, so they don't get sorted into separate sections.
+  // With both stages in one list the stage leads, because "ยังไม่ได้ส่ง" is the more urgent
+  // half; inside a single-stage panel that term is constant and the order is unchanged.
   const merged = [
-    ...filteredRows.map((r) => ({ key: `s${r.id}`, at: r.repairSentAt ?? "", node: <StatusRow row={r} status={status} actionLabel={actionLabel} onResolved={load} /> })),
-    ...filteredQty.map((r) => ({ key: `q${r.id}`, at: r.repairSentAt ?? r.adjustedAt, node: <QtyRepairRow row={r} status={status} actionLabel={actionLabel} onResolved={load} /> })),
-  ].sort((a, b) => b.at.localeCompare(a.at));
+    ...filteredRows.map(({ stage, row: r }) => ({ key: `s${r.id}`, stage, at: r.repairSentAt ?? "", node: <StatusRow row={r} stage={stage} showStage={showStage} onResolved={load} /> })),
+    ...filteredQty.map(({ stage, row: r }) => ({ key: `q${r.id}`, stage, at: r.repairSentAt ?? r.adjustedAt, node: <QtyRepairRow row={r} stage={stage} showStage={showStage} onResolved={load} /> })),
+  ].sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || b.at.localeCompare(a.at));
 
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
@@ -193,7 +248,7 @@ export function SubItemStatusPanel({
 // (writes venue/note/sentAt onto the booking — there is no status column to flip), then รับคืน
 // on the repair tab through the same MaintenanceFormDialog the tracked rows use, so ผล and
 // ค่าใช้จ่าย land in maintenance_records either way. `adjustmentId` says which booking closes.
-function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRepairDamage; status: "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
+function QtyRepairRow({ row, stage, showStage, onResolved }: { row: PendingRepairDamage; stage: RepairStage; showStage: boolean; onResolved: () => void }) {
   const { user } = useSession();
   const isSuperAdmin = user?.role === "SUPERADMIN";
   const [maintOpen, setMaintOpen] = useState(false);
@@ -206,7 +261,8 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
   const [damage, setDamage] = useState("");
   const [note, setNote] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
-  const isRepair = status === "UNDER_REPAIR";
+  const isRepair = stage === "UNDER_REPAIR";
+  const actionLabel = STAGE_META[stage].actionLabel;
   const unit = row.item.issueUnit.name;
 
   const reset = () => {
@@ -330,6 +386,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
                   about where the thing is and what's wrong with it. */}
               {isRepair ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  {showStage && <StageBadge stage={stage} />}
                   <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + VENUE_BADGE[row.repairVenue ?? "NONE"][1]}>
                     {VENUE_BADGE[row.repairVenue ?? "NONE"][0]}
                   </span>
@@ -343,6 +400,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  {showStage && <StageBadge stage={stage} />}
                   {row.item.location && (
                     <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(row.item.location)}</span>
                   )}
@@ -485,7 +543,7 @@ function QtyRepairRow({ row, status, actionLabel, onResolved }: { row: PendingRe
   );
 }
 
-function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemByStatus; status: "UNDER_REPAIR" | "DAMAGED"; actionLabel: string; onResolved: () => void }) {
+function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus; stage: RepairStage; showStage: boolean; onResolved: () => void }) {
   const { user } = useSession();
   const isSuperAdmin = user?.role === "SUPERADMIN";
   const [saving, setSaving] = useState(false);
@@ -500,8 +558,9 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
   const [damage, setDamage] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
-  const isRepair = status === "UNDER_REPAIR";
-  const isDamaged = status === "DAMAGED";
+  const isRepair = stage === "UNDER_REPAIR";
+  const isDamaged = stage === "DAMAGED";
+  const actionLabel = STAGE_META[stage].actionLabel;
   // DAMAGED → UNDER_REPAIR (ส่งซ่อม); UNDER_REPAIR → AVAILABLE (รับคืนจากส่งซ่อม).
   const targetStatus = isDamaged ? "UNDER_REPAIR" : "AVAILABLE";
   // Prefer the piece's own location; fall back to the spec's location when unset.
@@ -572,6 +631,7 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                   ชำรุด reason stands in as the detail. */}
               {isRepair ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  {showStage && <StageBadge stage={stage} />}
                   <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + VENUE_BADGE[row.repairVenue ?? "NONE"][1]}>
                     {VENUE_BADGE[row.repairVenue ?? "NONE"][0]}
                   </span>
@@ -584,7 +644,8 @@ function StatusRow({ row, status, actionLabel, onResolved }: { row: SubItemBySta
                   )}
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                  {showStage && <StageBadge stage={stage} />}
                   {loc && (
                     <span className="inline-flex items-center gap-1"><MapPin className="size-3 text-primary/80" />{locationLabel(loc)}</span>
                   )}
