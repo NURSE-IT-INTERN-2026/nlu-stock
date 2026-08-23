@@ -820,6 +820,31 @@ export function updateItem(itemId: string, data: Record<string, unknown>) {
   });
 }
 
+/**
+ * One repair job still open on an item — the "case" the item's timeline can only be read back
+ * into. `kind` says which half of the stock model it came from; the screen treats them alike.
+ */
+export interface OpenRepairCase {
+  kind: "PIECE" | "QTY";
+  /** SubItem id (PIECE) or the แจ้งชำรุด StockAdjustment id (QTY). */
+  id: string;
+  stage: "DAMAGED" | "UNDER_REPAIR";
+  subCode: string | null;
+  qty: number;
+  damageNote: string | null;
+  repairVenue: "INTERNAL" | "EXTERNAL" | null;
+  repairNote: string | null;
+  reportedAt: string | null;
+  repairSentAt: string | null;
+  by: string | null;
+}
+
+/** Open repair jobs on one item, or on one tracked copy when `subItemId` is given. */
+export function getOpenRepairs(itemId: string, subItemId?: string) {
+  const qs = subItemId ? `?subItemId=${subItemId}` : "";
+  return request<{ cases: OpenRepairCase[] }>(`/api/items/${itemId}/open-repairs${qs}`);
+}
+
 export function getItemHistory(itemId: string, params?: string) {
   const qs = params || "perPage=3";
   return request<{ events: unknown[] }>(`/api/items/${itemId}/history?${qs}`);

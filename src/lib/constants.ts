@@ -64,6 +64,12 @@ export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   LOCATION_CHANGE: "ย้ายที่ตั้ง",
 };
 
+// ประวัติของพัสดุแบ่งหยาบเป็นสองกอง: "ซ่อมบำรุง" คือเรื่องที่มีจุดเริ่มและจุดจบและมีคนรออยู่,
+// ที่เหลือคือความเคลื่อนไหวของของ. แบ่งครบทุก type — ไม่มี event ที่ตกอยู่นอกทั้งสองกอง.
+export const SERVICE_EVENT_TYPES: TimelineEventType[] = [
+  "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "MAINTENANCE",
+];
+
 export const RETURN_CONDITION_LABELS: Record<string, string> = {
   AVAILABLE: "ปกติ",
   DAMAGED: "ชำรุด",

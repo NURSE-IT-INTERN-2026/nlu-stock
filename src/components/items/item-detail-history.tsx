@@ -14,7 +14,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
-import { EVENT_TYPE_LABELS, type TimelineEventType } from "@/lib/constants";
+import { EVENT_TYPE_LABELS, SERVICE_EVENT_TYPES, type TimelineEventType } from "@/lib/constants";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
@@ -71,6 +71,23 @@ const CHIP_ORDER: TimelineEventType[] = [
   "ADJUSTMENT", "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
 ];
 
+// ── Groups ──
+// The twelve type chips answer "แสดงเฉพาะ X"; they cannot answer "เรื่องซ่อมของชิ้นนี้มีอะไรบ้าง"
+// without the reader knowing which four of the twelve to click. The group tabs are that answer,
+// and the chips below them narrow whichever group is open — coarse first, fine second.
+const GROUPS = [
+  { value: "all", label: "ทั้งหมด" },
+  { value: "movement", label: "การเคลื่อนไหว" },
+  { value: "service", label: "ซ่อมบำรุง" },
+] as const;
+
+type Group = (typeof GROUPS)[number]["value"];
+
+const MOVEMENT_TYPES = CHIP_ORDER.filter((t) => !SERVICE_EVENT_TYPES.includes(t));
+
+const groupTypes = (g: Group): TimelineEventType[] =>
+  g === "service" ? SERVICE_EVENT_TYPES : g === "movement" ? MOVEMENT_TYPES : CHIP_ORDER;
+
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */
 type Counts = Partial<Record<TimelineEventType, { n: number; qty: number | null }>>;
 
@@ -86,6 +103,7 @@ interface Props {
 
 export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props) {
   const isMobile = useIsMobile();
+  const [group, setGroup] = useState<Group>("all");
   const [typeFilter, setTypeFilter] = useState<TimelineEventType | "">("");
   const [counts, setCounts] = useState<Counts>({});
   const [unit, setUnit] = useState("");
@@ -95,7 +113,10 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   const fetchPage = useCallback(
     async (p: number) => {
       const qs = new URLSearchParams({ page: String(p), perPage: String(perPage) });
+      // One chip wins over its group; with no chip the group sends its whole member list, which
+      // the route takes comma-separated.
       if (typeFilter) qs.set("type", typeFilter);
+      else if (group !== "all") qs.set("type", groupTypes(group).join(","));
       if (subItemId) qs.set("subItemId", subItemId);
       const data = (await getItemHistory(itemId, qs.toString())) as Record<string, unknown>;
       // Filter-independent, so the chips stay complete while one type is selected.
@@ -106,7 +127,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         total: (data.total as number) || 0,
       };
     },
-    [itemId, subItemId, perPage, typeFilter],
+    [itemId, subItemId, perPage, typeFilter, group],
   );
 
   const {
@@ -121,10 +142,11 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   // Every chip counts events, never units. The word "รายการ" is dropped from each pill — the
   // caption above already frames these as counts, so a bare number reads compact and premium
   // instead of stacking "รายการ" seven times across a row that overflows the card.
-  const allRows = CHIP_ORDER.reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0);
+  const visibleTypes = groupTypes(group);
+  const allRows = visibleTypes.reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0);
   const chips: { value: TimelineEventType | ""; label: string; amount: string }[] = [
     { value: "", label: "ทั้งหมด", amount: `${allRows}` },
-    ...CHIP_ORDER.filter((t) => (counts[t]?.n ?? 0) > 0).map((t) => {
+    ...visibleTypes.filter((t) => (counts[t]?.n ?? 0) > 0).map((t) => {
       const c = counts[t]!;
       return {
         value: t,
@@ -151,6 +173,30 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           the units still out *right now*, while these chips count how many events of each kind
           were ever recorded. Two different meanings under one word on one screen needs the caption. */}
       <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8">
+        {/* Group tabs — segmented, not pills, so they never read as a thirteenth type chip. */}
+        <div className="mb-3 inline-flex rounded-lg border border-border bg-card p-0.5">
+          {GROUPS.map((g) => {
+            const on = group === g.value;
+            return (
+              <button
+                key={g.value}
+                type="button"
+                // Switching group drops the chip: a chip outside the new group would filter to
+                // nothing and read as "ไม่มีประวัติ" on an item that plainly has some.
+                onClick={() => { setGroup(g.value); setTypeFilter(""); }}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition",
+                  on ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {g.label}
+                <span className={cn("ml-1.5 font-semibold tabular-nums", on ? "text-primary-foreground/90" : "text-foreground/70")}>
+                  {groupTypes(g.value).reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <p className="mb-2.5 text-[11px] text-muted-foreground">รวมทั้งประวัติ</p>
         <div className="flex gap-2 overflow-x-auto">
           {chips.map((chip) => {

@@ -35,6 +35,7 @@ import type { OpenDamage } from "@/components/items/item-detail-overview";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
+import { OpenRepairBanner } from "@/components/items/open-repair-banner";
 import { AttachmentList } from "@/components/shared/attachment-list";
 import { ItemDetailLostHistory } from "@/components/items/item-detail-lost-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
@@ -220,12 +221,16 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   }, [mode, itemId, selectedSubCode]);
 
   // Refresh handlers (dialog onSuccess).
+  // Anything that refetches the page refetches the active-case card with it. แจ้งชำรุด is the
+  // action whose whole point is that a new case appears — a card that only loads on mount would
+  // stay empty right after the one moment it exists to report.
+  const [dataVersion, setDataVersion] = useState(0);
   const fetchItem = useCallback(async () => {
-    try { setItem((await getItem(itemId)) as ItemData); } catch {}
+    try { setItem((await getItem(itemId)) as ItemData); setDataVersion((v) => v + 1); } catch {}
   }, [itemId]);
   const fetchSub = useCallback(async () => {
     if (!selectedSubCode) return;
-    try { setSub((await getSubItem(itemId, selectedSubCode)) as SubItemData); } catch {}
+    try { setSub((await getSubItem(itemId, selectedSubCode)) as SubItemData); setDataVersion((v) => v + 1); } catch {}
   }, [itemId, selectedSubCode]);
 
   // Switch copy via query (shallow — item not refetched).
@@ -370,6 +375,15 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
             )}
           </div>
         )}
+
+        {/* ── งานซ่อมที่กำลังดำเนินการ ──
+            Above the hero, with the expiry alerts, because it is the same kind of fact: something
+            is open on this thing right now. Silent when nothing is. */}
+        {mode === "item" && item ? (
+          <OpenRepairBanner itemId={item.id} unit={item.issueUnit?.name} refreshKey={dataVersion} />
+        ) : sub ? (
+          <OpenRepairBanner itemId={sub.item.id} subItemId={sub.id} refreshKey={dataVersion} />
+        ) : null}
 
         {/* ── Hero card ── */}
         <section className="rounded-2xl border border-border bg-card overflow-hidden">
