@@ -442,7 +442,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return acc;
   }, {});
 
-  const filtered = typeFilter ? events.filter((e) => e.type === typeFilter) : events;
+  // `type` takes a comma-separated list as well as a single value, so the timeline's coarse
+  // groups (การเคลื่อนไหว / ซ่อมบำรุง) are one request instead of one per member type.
+  const wanted = typeFilter ? new Set(typeFilter.split(",")) : null;
+  const filtered = wanted ? events.filter((e) => wanted.has(e.type)) : events;
   const total = filtered.length;
   const paged = filtered.slice(skip, skip + take);
 
