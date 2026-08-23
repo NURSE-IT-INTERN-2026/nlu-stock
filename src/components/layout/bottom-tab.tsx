@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, BarChart3, Settings, LogOut, Bell } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, Hammer, BarChart3, Settings, LogOut, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { logout } from "@/lib/api";
@@ -104,6 +104,15 @@ export function BottomTab({ user }: BottomTabProps) {
                   >
                     <Wrench className="h-4 w-4" />
                     บำรุงรักษา
+                  </SheetClose>
+                )}
+                {canStock && (
+                  <SheetClose
+                    nativeButton={false}
+                    render={<Link href="/repairs" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
+                  >
+                    <Hammer className="h-4 w-4" />
+                    ซ่อมแซม
                   </SheetClose>
                 )}
                 <SheetClose

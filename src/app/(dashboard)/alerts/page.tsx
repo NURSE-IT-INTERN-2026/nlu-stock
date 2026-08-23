@@ -316,7 +316,7 @@ function AlertsContent() {
         />
       ) : alertType === "damagedPending" ? (
         <div className="flex-1 min-h-0">
-          <SubItemStatusPanel status="DAMAGED" actionLabel="ส่งซ่อม" emptyText="ไม่มีพัสดุที่แจ้งชำรุดอยู่" />
+          <SubItemStatusPanel status="DAMAGED" emptyText="ไม่มีพัสดุที่แจ้งชำรุดอยู่" />
         </div>
       ) : alertType === "overdueReturn" ? (
         <div className="flex-1 min-h-0">

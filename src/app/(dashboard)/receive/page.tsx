@@ -152,7 +152,7 @@ function ReceiveShell() {
         ) : tab === "return" ? (
           <ReturnPanel initialChip={initialDueChip} />
         ) : (
-          <SubItemStatusPanel status="UNDER_REPAIR" actionLabel="รับคืนจากส่งซ่อม" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
+          <SubItemStatusPanel status="UNDER_REPAIR" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
         )}
       </div>
     </div>
