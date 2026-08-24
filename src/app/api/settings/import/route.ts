@@ -16,15 +16,6 @@ interface ImportResult {
   errors: { row: number; message: string }[];
 }
 
-function safeErrorMessage(e: unknown): string {
-  if (e instanceof Prisma.PrismaClientKnownRequestError) {
-    if (e.code === "P2002") return "Duplicate entry already exists";
-    if (e.code === "P2003") return "Referenced record not found";
-    return "Database error";
-  }
-  return "Failed to import row";
-}
-
 function parseOptionalInt(v: string | undefined): number | null {
   if (!v) return null;
   const n = parseInt(v);

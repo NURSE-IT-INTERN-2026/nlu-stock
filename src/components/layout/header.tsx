@@ -82,7 +82,6 @@ function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
 export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
   const { setTheme, theme } = useTheme();
   const router = useRouter();
-  const pathname = usePathname();
   const { itemCount } = useCart();
   const { detail } = usePageHeader();
   const alerts = useAlerts();

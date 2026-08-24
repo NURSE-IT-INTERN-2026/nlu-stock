@@ -19,9 +19,6 @@ import {
 import {
   Sheet, SheetContent, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 import {

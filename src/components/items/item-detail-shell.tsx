@@ -481,7 +481,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
             onOpenChange={(o) => { setAdjustOpen(o); if (!o) { setAdjustFixedReason(null); } }}
             fixedReason={adjustFixedReason ?? undefined}
             trackIndividually={item.trackIndividually}
-            itemId={item.id} itemCode={item.code}
+            itemId={item.id}
             availableQty={item.availableQty} totalQty={item.totalQty} unit={item.issueUnit.name}
             checkedOutCount={item.trackIndividually ? item.subItems.filter((s) => s.status === "ON_LOAN").length : item.totalQty - item.availableQty}
             onSuccess={fetchItem}

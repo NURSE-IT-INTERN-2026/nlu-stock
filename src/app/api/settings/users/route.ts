@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
   const { page, perPage, skip, take } = paginate(params);
 
   const where = {};
-  const include = {};
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({ where, skip, take, orderBy: { name: "asc" } }),

@@ -15,7 +15,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getUnits } from "@/lib/api";
-import type { CategoryOption, UnitOption } from "@/lib/api";
+import type { UnitOption } from "@/lib/api";
 import { CodeBuilder } from "./code-builder";
 import type { CodeMeta } from "./code-builder";
 import { NumericInput } from "@/components/shared/numeric-input";
@@ -26,9 +26,6 @@ interface StepCategoryUnitsProps {
   onCodeChange: (code: string) => void;
   categoryId: string;
   categoryName: string;
-  onCategorySelect: (cat: CategoryOption) => void;
-  /** Filter categories by dispenseType */
-  allowedDispenseType?: "CONSUMABLE" | "COUNT" | "ITEM";
   issueUnitId: string;
   issueUnitName?: string;
   onIssueUnitChange: (id: string, name: string) => void;
@@ -54,8 +51,6 @@ export function StepCategoryUnits({
   onCodeChange,
   categoryId,
   categoryName,
-  onCategorySelect,
-  allowedDispenseType,
   issueUnitId,
   issueUnitName: issueUnitNameProp = "",
   onIssueUnitChange,

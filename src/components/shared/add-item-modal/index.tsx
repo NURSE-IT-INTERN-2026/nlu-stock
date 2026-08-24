@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sheet";
 import { quickCreateItem, createCategory } from "@/lib/api";
 import type { CategoryOption } from "@/lib/api";
-import type { AddItemModalProps, CategoryWizardState, ItemFormState, SimilarItem, WizardStep } from "./types";
+import type { AddItemModalProps, CategoryWizardState, ItemFormState, WizardStep } from "./types";
 import { USAGE_OPTIONS } from "./types";
 import { StepItemDetails } from "./step-item-details";
 import { StepCategoryUnits } from "./step-category-units";
@@ -362,7 +362,7 @@ export function AddItemModal({
 
         {/* Steps */}
         <nav className="flex flex-col gap-1 p-4">
-          {MAIN_STEPS.map((step, i) => {
+          {MAIN_STEPS.map((step) => {
             const Icon = step.icon;
             const isComplete = stepIdx > step.idx;
             const isCurrent = stepIdx === step.idx;
@@ -433,10 +433,6 @@ export function AddItemModal({
             onCodeChange={(c) => setState((s) => ({ ...s, form: { ...s.form, code: c } }))}
             categoryId={state.form.categoryId}
             categoryName={state.form.categoryName}
-            onCategorySelect={(cat: CategoryOption) =>
-              setState((s) => ({ ...s, form: { ...s.form, categoryId: cat.id, categoryName: cat.name } }))
-            }
-            allowedDispenseType={allowedDispenseType}
             issueUnitId={state.form.issueUnitId}
             issueUnitName={state.form.issueUnitName}
             onIssueUnitChange={(id, name) => setState((s) => ({ ...s, form: { ...s.form, issueUnitId: id, issueUnitName: name } }))}
@@ -458,7 +454,6 @@ export function AddItemModal({
             usageType={state.form.usageType}
             code={state.form.code}
             categoryName={state.form.categoryName}
-            categoryType={state.form.categoryType}
             issueUnitName={state.form.issueUnitName}
             codeMeta={state.codeMeta}
             initialQty={state.initialQty}

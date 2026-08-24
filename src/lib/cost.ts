@@ -84,7 +84,7 @@ export function writeOffValue(receiptUnitCost: number | null | undefined, itemAv
 
 // ── มูลค่าคงคลัง — one valuation, read by both the tab and its export ──
 
-/** สถานะที่แปลว่าของหายไปจากคลังถาวร — ตรงกับ WRITE_OFF_STATUSES ของ tab ชำรุด & ส่งซ่อม.
+/** สถานะที่แปลว่าของหายไปจากคลังถาวร — เกณฑ์เดียวกับที่การ์ด "มูลค่าที่หายไป" ในแท็บเคสงานใช้.
  *  ชำรุด (DAMAGED) ไม่อยู่ในนี้: ของที่ยังพังอยู่ยังไม่ได้เสียไปไหน ซ่อมเสร็จก็กลับมา. */
 const WRITTEN_OFF: ItemStatus[] = [ItemStatus.DISPOSED, ItemStatus.LOST];
 
