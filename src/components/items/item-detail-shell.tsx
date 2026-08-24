@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
+import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,9 +22,9 @@ import { cn } from "@/lib/utils";
 import { lotDisplay } from "@/lib/lot-code";
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import {
-  STATUS_LABELS, locationLabel, formatSubCode, qrUrl, labelFor,
-  CONDITION_LABELS, MAINT_RESULT_LABELS,
-  type MaintenanceResult, type ItemStatus,
+  STATUS_LABELS, locationLabel, formatSubCode, qrUrl,
+  CONDITION_LABELS,
+  type ItemStatus,
   USAGE_STATUS_ORDER, STATUS_PILLS, recipientLabel,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
@@ -36,9 +36,8 @@ import { ItemDetailOverview } from "@/components/items/item-detail-overview";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { OpenRepairBanner } from "@/components/items/open-repair-banner";
-import { AttachmentList } from "@/components/shared/attachment-list";
-import { ItemDetailLostHistory } from "@/components/items/item-detail-lost-history";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
+import { CaseWorkspace } from "@/components/cases/case-workspace";
 import { StockAdjustmentDialog } from "@/components/items/stock-adjustment-dialog";
 import { ReportStatusDialog } from "@/components/items/report-status-dialog";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
@@ -329,19 +328,20 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info },
     { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(item.imageUrl || (item.images?.length ?? 0) > 0) || !!canAct },
     { key: "history", label: "ประวัติ", icon: Clock },
-    { key: "lost", label: "ประวัติสูญหาย", icon: SearchX },
     // Consumables are used up, never repaired. Everything else can be, so it gets the
     // tab — and a repair record forces it open regardless, so history is never hidden.
-    { key: "maintenance", label: "การซ่อมบำรุง", icon: Wrench, show: item.category.profile?.dispenseType !== "CONSUMABLE" || item.maintenanceRecords.length > 0 },
+    { key: "maintenance", label: "ตรวจบำรุงตามรอบ", icon: Wrench, show: item.category.profile?.dispenseType !== "CONSUMABLE" || item.maintenanceRecords.length > 0 },
     { key: "kit", label: `ชุดประกอบ${item.kitComponents?.length ? ` (${item.kitComponents.length})` : ""}`, icon: Boxes, show: isKit || !!(item.kitComponents?.length) },
   ].filter((t) => t.show !== false) : [];
+  const preventiveCount = sub ? sub.maintenanceRecords.filter((r) => r.type !== "CORRECTIVE").length : 0;
   const pieceTabs = sub ? [
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info },
     { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(sub.imageUrl || (sub.images?.length ?? 0) > 0) || !!canAct },
     { key: "subcodes", label: `รหัสย่อย (${siblings.length})`, icon: Hash, show: siblings.length > 1 },
     { key: "history", label: "ประวัติ", icon: Clock },
-    { key: "lost", label: "ประวัติสูญหาย", icon: SearchX },
-    { key: "maintenance", label: `การซ่อมบำรุง${sub.maintenanceRecords.length ? ` (${sub.maintenanceRecords.length})` : ""}`, icon: Wrench, show: sub.item.category.profile?.dispenseType !== "CONSUMABLE" || sub.maintenanceRecords.length > 0 },
+    // Counts รอบ only now — the CORRECTIVE rows are shown in ประวัติ, so counting them on this
+    // tab would promise a list that is no longer here.
+    { key: "maintenance", label: `ตรวจบำรุงตามรอบ${preventiveCount ? ` (${preventiveCount})` : ""}`, icon: Wrench, show: sub.item.category.profile?.dispenseType !== "CONSUMABLE" || sub.maintenanceRecords.length > 0 },
   ].filter((t) => t.show !== false) : [];
   const tabs = mode === "item" ? itemTabs : pieceTabs;
 
@@ -429,7 +429,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                 <ItemDetailMedia item={{ id: item.id, imageUrl: item.imageUrl, images: item.images }} canAct={!!canAct} onRefresh={fetchItem} />
               )}
               {tab === "history" && <ItemDetailHistory itemId={item.id} canEdit={canAct} />}
-              {tab === "lost" && <ItemDetailLostHistory itemId={item.id} itemCode={item.code} isMulti={isMulti} canAct={canAct} onSuccess={fetchItem} />}
               {tab === "maintenance" && (
                 <ItemDetailMaintenance item={item} maintenanceRecords={item.maintenanceRecords} canAct={!!canAct} showAssetInfo={!!item.category.profile?.assetTracking} onRecordMaintenance={() => setMaintOpen(true)} />
               )}
@@ -465,7 +464,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   onUndoDispose={(row) => { setStatusAction("AVAILABLE"); setStatusTarget({ id: row.id, subCode: row.subCode, status: row.status }); }}
                 />
               )}
-              {tab === "lost" && <ItemDetailLostHistory itemId={sub.item.id} itemCode={sub.item.code} isMulti={isMulti} canAct={canAct} onSuccess={fetchSub} />}
               {tab === "history" && <ItemDetailHistory itemId={sub.item.id} subItemId={sub.id} canEdit={canAct} />}
               {tab === "maintenance" && (
                 <PieceMaintenance sub={sub} canAct={canAct} onRecord={() => setMaintOpen(true)} />
@@ -1070,19 +1068,16 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
 
 // ── Piece maintenance tab ──
 function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct: boolean; onRecord: () => void }) {
-  // Same override trick as the parent item's tab: แนบเพิ่ม answers with the new array, and the
-  // row shows that rather than the prop the page was rendered with.
-  const [edited, setEdited] = useState<Record<string, string[]>>({});
-  // Same split as the parent item's tab, for the same reason: a ใบเสร็จค่าซ่อม filed under a
-  // heading that reads บำรุงรักษา is a bill nobody can find again.
+  // Same move as the parent item's tab: ซ่อมแซม belongs next to แจ้งชำรุด/ส่งซ่อม in ประวัติ,
+  // not a tab away from them. Only the count stays here, as a pointer.
   const corrective = sub.maintenanceRecords.filter((r) => r.type === "CORRECTIVE");
   const preventive = sub.maintenanceRecords.filter((r) => r.type !== "CORRECTIVE");
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
-      <SectionHeader eyebrow="ซ่อมบำรุง" title="แผน & ประวัติซ่อมบำรุง" right={canAct ? <Button onClick={onRecord}><Wrench className="h-4 w-4 mr-1.5" />บันทึกการบำรุงรักษา</Button> : undefined} />
+      <SectionHeader eyebrow="ตรวจบำรุงตามรอบ" title="แผนและประวัติตรวจบำรุง" right={canAct ? <Button onClick={onRecord}><Wrench className="h-4 w-4 mr-1.5" />บันทึกการบำรุงรักษา</Button> : undefined} />
       <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 border-b border-border">
         <StatCard label="รอบถัดไป" value={sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"} icon={CalendarDays} tone={maintTone(sub.nextMaintenanceDate)} />
-        <StatCard label="ตรวจบำรุง / ซ่อมแซม" value={`${preventive.length} / ${corrective.length} ครั้ง`} icon={Wrench} />
+        <StatCard label="ตรวจบำรุงแล้ว" value={`${preventive.length} ครั้ง`} icon={Wrench} />
         <StatCard label="สถานะปัจจุบัน" value={STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ")} icon={ShieldAlert} tone={STATUS_META[sub.status]?.tone ?? "primary"} />
       </div>
       {/* Shown for every profile that reaches this tab — consumables never do. */}
@@ -1094,61 +1089,16 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
           <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"}</dd></div>
         </dl>
       </div>
-      {/* One section per case, both always rendered — see ItemDetailMaintenance. */}
-      <div className="p-4 sm:p-5 space-y-6">
-        <PieceMaintGroup title="ตรวจบำรุงตามรอบ" empty="ยังไม่มีประวัติตรวจบำรุงตามรอบ" records={preventive} canAct={canAct} edited={edited} onEdited={setEdited} />
-        <PieceMaintGroup title="ซ่อมแซม" empty="ยังไม่มีประวัติซ่อมแซม" records={corrective} canAct={canAct} edited={edited} onEdited={setEdited} />
+      {/* Rounds only, and read from the same place /cases reads — see ItemDetailMaintenance. */}
+      <div className="p-4 sm:p-5 space-y-4">
+        <CaseWorkspace itemId={sub.item.id} subItemId={sub.id} lockType="MAINTENANCE" compact canEdit={canAct} />
+        <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+          {corrective.length > 0
+            ? <>ประวัติ<span className="font-medium text-foreground">ซ่อมแซม {corrective.length} ครั้ง</span> ย้ายไปอยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span> แล้ว — แสดงรวมกับ แจ้งชำรุด และ ส่งซ่อม เป็นงานเดียวกัน</>
+            : <>ประวัติซ่อมแซม (แจ้งชำรุด → ส่งซ่อม → รับคืนจากซ่อม) อยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span></>}
+        </p>
       </div>
     </section>
-  );
-}
-
-function PieceMaintGroup({ title, empty, records, canAct, edited, onEdited }: {
-  title: string;
-  empty: string;
-  records: SubItemData["maintenanceRecords"];
-  canAct: boolean;
-  edited: Record<string, string[]>;
-  onEdited: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-}) {
-  const spend = records.reduce((sum, r) => sum + (r.cost ?? 0), 0);
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{title}</span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{records.length} ครั้ง{spend > 0 ? ` · ฿${spend.toLocaleString()}` : ""}</span>
-      </div>
-      {records.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <ul className="space-y-3">
-          {records.map((rec) => (
-            <li key={rec.id} className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20">
-              <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary"><Wrench className="size-4" /></div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1"><CalendarDays className="size-3" />{fmtDay(rec.performedAt)}</span>
-                  <span className={cn("text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border", rec.result === "AVAILABLE" ? "bg-success/10 text-success-700 border-success/20" : "bg-primary/10 text-primary border-primary/20")}>{labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}</span>
-                </div>
-                {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
-                {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
-                <div className="text-xs text-muted-foreground mt-0.5">โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}</div>
-                {/* Was a row of bare underlined links — the same หลักฐาน as everywhere else,
-                    shown differently for no reason and with no way to add to it. */}
-                <AttachmentList
-                  urls={edited[rec.id] ?? rec.attachmentUrls}
-                  className="mt-1.5"
-                  target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
-                  canEdit={canAct}
-                  onChange={(urls) => onEdited((m) => ({ ...m, [rec.id]: urls }))}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
 

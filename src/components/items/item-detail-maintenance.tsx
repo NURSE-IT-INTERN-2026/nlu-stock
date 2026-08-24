@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MAINT_RESULT_LABELS, labelFor, type MaintenanceResult } from "@/lib/constants";
 
-import { AttachmentList } from "@/components/shared/attachment-list";
+import { CaseWorkspace } from "@/components/cases/case-workspace";
 interface MaintenanceRecord {
   id: string;
   type: string;
@@ -57,16 +56,13 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
   );
 
   // ตรวจบำรุงตามรอบ กับ ซ่อมเมื่อพัง เป็นคนละงานบนของชิ้นเดียวกัน — คนละเหตุ คนละงบ คนละใบเสร็จ.
-  // One list holding both meant a ใบเสร็จค่าซ่อม sat under a heading that says บำรุงรักษา, and no
-  // reader could tell which case a bill belonged to. The column has always known (a CORRECTIVE
-  // record only ever comes out of รับคืนจากซ่อม); only the screen was pretending otherwise.
+  // Splitting them into two headings on this tab was half the fix: the ซ่อมแซม list still sat a
+  // tab away from แจ้งชำรุด and ส่งซ่อม, so a repair was three screens and the reader had to hold
+  // the trip together in their head. The CORRECTIVE rows now render as steps of their own trip
+  // in the ประวัติ tab, next to the two events that opened it. This tab is the schedule: รอบ,
+  // ครั้งถัดไป, and the rounds that were actually done.
   const corrective = maintenanceRecords.filter((r) => r.type === "CORRECTIVE");
   const preventive = maintenanceRecords.filter((r) => r.type !== "CORRECTIVE");
-
-  // The records arrive as props from a server render. แนบเพิ่ม answers with the array as it now
-  // stands, so the row shows that instead of the stale prop — cheaper and steadier than pushing
-  // a router.refresh() through the whole detail page for one thumbnail.
-  const [edited, setEdited] = useState<Record<string, string[]>>({});
 
   const statusTone: "success" | "warning" | "destructive" =
     maintStatus.variant === "destructive" ? "destructive" : maintStatus.variant === "secondary" ? "warning" : "success";
@@ -93,8 +89,8 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
       <SectionHeader
-        eyebrow="การซ่อมบำรุง"
-        title="แผน & ประวัติซ่อมบำรุง"
+        eyebrow="ตรวจบำรุงตามรอบ"
+        title="แผนและประวัติตรวจบำรุง"
         right={canAct ? (
           <button
             onClick={onRecordMaintenance}
@@ -112,7 +108,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
           value={item.nextMaintenanceDate ? fmtDate(item.nextMaintenanceDate, TH_DATE) : "—"}
           icon={CalendarDays}
         />
-        <StatCard label="ตรวจบำรุง / ซ่อมแซม" value={`${preventive.length} / ${corrective.length} ครั้ง`} icon={Wrench} />
+        <StatCard label="ตรวจบำรุงแล้ว" value={`${preventive.length} ครั้ง`} icon={Wrench} />
         <StatCard label="สถานะ" value={maintStatus.label} icon={ShieldAlert} tone={statusTone} />
       </div>
 
@@ -144,96 +140,26 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
         </dl>
       </div>
 
-      {/* ── History, one section per case ──
-          Both sections render even when empty: a missing ซ่อมแซม heading is what made people
-          hunt for a bill that was filed under บำรุงรักษา all along. */}
-      <div className="p-4 sm:p-5 space-y-6">
-        <MaintGroup
-          title="ตรวจบำรุงตามรอบ"
-          empty="ยังไม่มีประวัติตรวจบำรุงตามรอบ"
-          records={preventive}
-          canAct={canAct}
-          edited={edited}
-          onEdited={setEdited}
-        />
-        <MaintGroup
-          title="ซ่อมแซม"
-          empty="ยังไม่มีประวัติซ่อมแซม"
-          records={corrective}
-          canAct={canAct}
-          edited={edited}
-          onEdited={setEdited}
-        />
+      {/* ── History ──
+          รอบที่ทำไปแล้วคือ "เคส MC" ตัวเดียวกับที่หน้า /cases แสดง จึงอ่านจากที่มาเดียวกันเลย ไม่ทำ
+          list ของตัวเองขึ้นมาอีกกอง. แท็บนี้เหลือหน้าที่เดียว: แผน (ข้างบน) + สิ่งที่ทำไปแล้ว (ข้างล่าง).
+          The pointer is not decoration: ซ่อมแซม used to live right here. */}
+      <div className="p-4 sm:p-5 space-y-4">
+        <CaseWorkspace itemId={item.id} lockType="MAINTENANCE" compact canEdit={canAct} />
+        <RepairPointer count={corrective.length} />
       </div>
     </section>
   );
 }
 
-/** One case's history. The ประเภท chip is gone from the rows — the heading is the ประเภท now,
- *  and repeating it on every row was the noise that made the two cases look like one list. */
-function MaintGroup({ title, empty, records, canAct, edited, onEdited }: {
-  title: string;
-  empty: string;
-  records: MaintenanceRecord[];
-  canAct: boolean;
-  edited: Record<string, string[]>;
-  onEdited: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-}) {
-  const spend = records.reduce((sum, r) => sum + (r.cost ?? 0), 0);
-
+/** ซ่อมแซมย้ายไปอยู่ในแท็บประวัติแล้ว — บอกทางไว้ตรงที่เดิม ไม่งั้นคนที่เคยเห็นจะคิดว่าข้อมูลหาย. */
+function RepairPointer({ count }: { count: number }) {
   return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{title}</span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
-          {records.length} ครั้ง{spend > 0 ? ` · ฿${spend.toLocaleString()}` : ""}
-        </span>
-      </div>
-      {records.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <ul className="space-y-3">
-          {records.map((rec) => (
-            <li
-              key={rec.id}
-              className="grid grid-cols-[auto_1fr] gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-muted/20"
-            >
-              <div className="size-10 shrink-0 rounded-lg bg-primary/5 border border-primary/10 grid place-items-center text-primary">
-                <Wrench className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-                    <CalendarDays className="size-3" />
-                    {fmtDate(rec.performedAt, TH_DATE)}
-                  </span>
-                  <span className={cn(
-                    "text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border",
-                    rec.result === "AVAILABLE"
-                      ? "bg-success/10 text-success-700 border-success/20"
-                      : "bg-primary/10 text-primary border-primary/20",
-                  )}>
-                    {labelFor(MAINT_RESULT_LABELS, rec.result as MaintenanceResult)}
-                  </span>
-                </div>
-                {rec.issue && <div className="text-sm font-medium mt-1">{rec.issue}</div>}
-                {rec.description && <div className="text-sm text-muted-foreground mt-0.5">{rec.description}</div>}
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  โดย {rec.performer.name}{rec.cost != null ? ` · ฿${rec.cost.toLocaleString()}` : ""}
-                </div>
-                <AttachmentList
-                  urls={edited[rec.id] ?? rec.attachmentUrls}
-                  className="mt-1.5"
-                  target={{ recordType: "MaintenanceRecord", recordId: rec.id }}
-                  canEdit={canAct}
-                  onChange={(urls) => onEdited((m) => ({ ...m, [rec.id]: urls }))}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+      {count > 0
+        ? <>ประวัติ<span className="font-medium text-foreground">ซ่อมแซม {count} ครั้ง</span> ย้ายไปอยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span> แล้ว — แสดงรวมกับ แจ้งชำรุด และ ส่งซ่อม เป็นงานเดียวกัน</>
+        : <>ประวัติซ่อมแซม (แจ้งชำรุด → ส่งซ่อม → รับคืนจากซ่อม) อยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span></>}
+    </p>
   );
 }
 
