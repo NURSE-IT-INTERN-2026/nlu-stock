@@ -14,7 +14,9 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
-function DropdownMenuTrigger({ asChild, ...props }: MenuPrimitive.Trigger.Props & { asChild?: boolean }) {
+// Base UI ไม่มี asChild (Trigger เรนเดอร์ปุ่มของตัวเองอยู่แล้ว) — รับไว้เพื่อกลืน ไม่ให้มันทะลุลงไป
+// เป็น attribute แปลกๆ บน DOM ตอนที่โค้ดเก่าสไตล์ Radix ยังส่งมันมา
+function DropdownMenuTrigger({ asChild: _asChild, ...props }: MenuPrimitive.Trigger.Props & { asChild?: boolean }) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 

@@ -22,7 +22,6 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemId: string;
-  itemCode?: string;
   availableQty: number;
   totalQty: number;
   checkedOutCount: number;
@@ -35,7 +34,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-export function StockAdjustmentDialog({ open, onOpenChange, itemId, itemCode, availableQty, totalQty, checkedOutCount, unit, fixedReason, trackIndividually, onSuccess }: Props) {
+export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty, totalQty, checkedOutCount, unit, fixedReason, trackIndividually, onSuccess }: Props) {
   const [mode, setMode] = useState<string>(STOCK_COUNT_MODE);
   const [qty, setQty] = useState("");
   const [shortReason, setShortReason] = useState<string>("LOST");

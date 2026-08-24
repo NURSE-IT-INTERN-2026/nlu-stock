@@ -8,7 +8,6 @@ interface StepSummaryProps {
   usageType: string | null;
   code: string;
   categoryName: string;
-  categoryType?: string;
   issueUnitName: string;
   codeMeta?: CodeMeta | null;
   initialQty?: number;
@@ -20,7 +19,6 @@ export function StepSummary({
   usageType,
   code,
   categoryName,
-  categoryType,
   issueUnitName,
   codeMeta,
   initialQty = 0,

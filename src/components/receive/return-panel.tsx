@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
 import { ChevronRight, RotateCcw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getOpenBorrows, type OpenBorrow } from "@/lib/api";

@@ -22,7 +22,7 @@ import { useInventoryList } from "@/hooks/use-inventory-list";
 import { Pagination } from "@/components/shared/pagination";
 import { getItems, getSubItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
-import { ItemsFilterBar, EMPTY_FILTER, type FilterState } from "@/components/items/items-filter-bar";
+import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
 import { MoveLocationDialog } from "@/components/items/move-location-dialog";
 
 

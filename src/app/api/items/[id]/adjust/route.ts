@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { fmtDate, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
+import { fmtDate, TH_DATE } from "@/lib/format";
 import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { stockAdjustSchema } from "@/lib/validators";
 import { allocateAcrossLots, holdsTotalQty, recomputeItemCounts } from "@/lib/stock";
