@@ -64,13 +64,15 @@ export interface FilterConfig {
   maintenanceType?: boolean;
 }
 
-// ponytail: ทุก tab ที่เป็น ledger เปิดมาที่ 90 วันล่าสุด ไม่ใช่ทั้งชีวิตของระบบ — กด "ล้างตัวกรอง"
-// แล้วได้ทั้งหมด. อยู่ที่เดียวเพื่อไม่ให้แต่ละ tab ตั้งช่วงเริ่มต้นไม่เท่ากันแล้วตัวเลขเทียบกันไม่ได้.
-export const DEFAULT_RANGE_DAYS = 90;
-
+// ponytail: ทุก tab ที่เป็น ledger เปิดมาที่ "ปีนี้ทั้งปี" 1 ม.ค. – 31 ธ.ค. ไม่ใช่ทั้งชีวิตของระบบ —
+// กด "ล้างตัวกรอง" แล้วได้ทั้งหมด. อยู่ที่เดียวเพื่อไม่ให้แต่ละ tab ตั้งช่วงเริ่มต้นไม่เท่ากัน
+// แล้วตัวเลขเทียบกันไม่ได้.
 export function defaultDateFilters(): FilterValues {
-  const from = new Date(Date.now() - DEFAULT_RANGE_DAYS * 86_400_000);
-  return { dateFrom: fmtDate(from, "yyyy-MM-dd") };
+  const year = new Date().getFullYear();
+  return {
+    dateFrom: `${year}-01-01`,
+    dateTo: `${year}-12-31`,
+  };
 }
 
 /** "ตั้งแต่ 11 พ.ค. 2569" / "ทุกช่วงเวลา" — สำหรับบรรทัดใต้ตัวเลขในแถบสรุป */
@@ -86,6 +88,9 @@ interface ReportFiltersProps {
   values: FilterValues;
   onChange: (values: FilterValues) => void;
   actions?: ReactNode;
+  /** แถวบนสุดในการ์ดใบเดียวกัน — ที่ของ chip เลือก segment. มันคือตัวกรองอย่างหนึ่งเหมือนกัน
+   *  การปล่อยให้ลอยอยู่นอกการ์ดทำให้อ่านเป็นหัวเรื่องที่ไม่มีบ้าน */
+  leading?: ReactNode;
 }
 
 interface Option {
@@ -173,7 +178,7 @@ function FilterSearch({
   );
 }
 
-export function ReportFilters({ config, values, onChange, actions }: ReportFiltersProps) {
+export function ReportFilters({ config, values, onChange, actions, leading }: ReportFiltersProps) {
   const [categories, setCategories] = useState<CategoryLite[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [staff, setStaff] = useState<Option[]>([]);
@@ -214,6 +219,16 @@ export function ReportFilters({ config, values, onChange, actions }: ReportFilte
 
   return (
     <div data-testid="report-filters" className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
+      {/* chip ซ้าย ปุ่ม export ขวา: แถวที่มีของอยู่ข้างเดียวอ่านเป็นที่ว่างครึ่งการ์ด และ export
+          ก็เป็นของทั้งชุดข้อมูลที่ chip เลือกอยู่ ไม่ใช่ของตัวกรองบรรทัดล่าง */}
+      {leading && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+          {/* basis-full บนมือถือ: ราง segment กับปุ่ม export เบียดกันในบรรทัดเดียวแล้วป้ายไทยหด
+              จนอ่านไม่ออก — จอกว้างค่อยแบ่งบรรทัดเดียวกัน โดย segment กินที่ที่เหลือทั้งหมด */}
+          <div className="min-w-0 basis-full sm:flex-1">{leading}</div>
+          <div className="w-full shrink-0 sm:w-auto">{actions}</div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {config.dateRange && (
           <div className="flex w-full items-center gap-1.5 sm:w-auto">
@@ -371,9 +386,10 @@ export function ReportFilters({ config, values, onChange, actions }: ReportFilte
           </FilterSelect>
         )}
 
-        {/* Actions (export) + reset — full width & evenly split on mobile, pushed right on desktop */}
+        {/* Actions (export) + reset — full width & evenly split on mobile, pushed right on desktop.
+            มี leading เมื่อไร export ย้ายขึ้นไปอยู่แถวบนกับ chip แล้ว เหลือแค่ปุ่มล้างตัวกรอง */}
         <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
-          {actions}
+          {!leading && actions}
           {activeCount > 0 && (
             <Button
               variant="ghost"

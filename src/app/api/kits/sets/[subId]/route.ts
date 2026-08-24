@@ -5,7 +5,7 @@ import { cancelKitSet, loadKitComponents } from "@/lib/kits";
 import { z } from "zod";
 
 /**
- * GET  /api/kits/sets/[subId] — สิ่งที่ควรอยู่ในชุดนี้ (หน้าตรวจชุด / รับคืน)
+ * GET  /api/kits/sets/[subId] — สิ่งที่ควรอยู่ในชุดนี้ (ดูของในชุด / รับคืน)
  * POST /api/kits/sets/[subId] — ยกเลิกชุด: ชุดตาย ของคงทนกลับเข้าคลัง
  *
  * ยกเลิกชุด is the exit door, not part of the cycle. A set is persistent — it is borrowed and
@@ -25,7 +25,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       id: true,
       subCode: true,
       status: true,
-      needsCheck: true,
       item: { select: { id: true, code: true, name: true, category: { select: { profile: { select: { code: true } } } } } },
       kitContents: {
         select: {
@@ -49,16 +48,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   return json({
     set: {
-      id: set.id, subCode: set.subCode, status: set.status, needsCheck: set.needsCheck, item: set.item,
+      id: set.id, subCode: set.subCode, status: set.status, item: set.item,
     },
     // What is physically in the box, as far as anything can be known. Tracked pieces are known
     // exactly; the rest is what the recipe says should be there. Nothing here is a count of
-    // consumables — nobody counts gauze, which is the whole reason needsCheck exists.
+    // consumables — nobody counts gauze, and the system never pretended to.
     tracked: set.kitContents,
     durables: components.filter((c) => c.kind === "COUNT"),
     consumables: components.filter((c) => c.kind === "CONSUMABLE"),
     // Tracked slots the recipe expects that no piece currently fills — a component reported
-    // broken leaves the box, and this is what says so on the ตรวจชุด checklist.
+    // broken leaves the box, and this is what says so on the ดูของในชุด checklist.
     missingTracked: expectedTracked.flatMap((c) => {
       const short = c.perSet - (heldByItem.get(c.itemId) ?? 0);
       return short > 0 ? [{ itemId: c.itemId, code: c.code, name: c.name, missing: short }] : [];

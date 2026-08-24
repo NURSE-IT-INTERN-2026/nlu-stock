@@ -7,9 +7,8 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { DispenseEventDialog } from "./dispense-event-dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShoppingCart, ClipboardList, MapPin } from "lucide-react";
-import { Pill, SectionTitle, chipStyle, type Token } from "./report-kit";
+import { Tabs, TabsList, TabsTrigger, TabsIndicator } from "@/components/ui/tabs";
+import { Pill, segmentStyle, type Token } from "./report-kit";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { getReport } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
@@ -141,12 +140,8 @@ const COL = {
 } satisfies Record<string, Column<DispenseEvent>>;
 
 interface KindSpec {
-  /** สีประจำ segment — chip, หัวตาราง, การ์ดตัวเลข และไอคอนหัวเรื่องใช้ตัวเดียวกันหมด */
+  /** สีประจำ segment — chip, หัวตาราง และการ์ดตัวเลขใช้ตัวเดียวกันหมด */
   token: Token;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  /** ประโยคเดียวที่บอกว่า segment นี้ตอบคำถามอะไร — เดิมอยู่ที่ระดับหน้า จึงไม่เปลี่ยนตาม segment */
-  subtitle: string;
   columns: Column<DispenseEvent>[];
   filters: FilterConfig;
   /** ป้ายของคอลัมน์ที่ตั้งชื่อแถว — ป็อปอัพใช้คำเดียวกันเพื่อไม่ให้ตารางกับหัวป็อปอัพเรียกคนละอย่าง */
@@ -165,9 +160,6 @@ const baseFilters: FilterConfig = { dateRange: true, staff: true, usageTypes: tr
 const KINDS: Record<DispenseKind, KindSpec> = {
   consume: {
     token: "issue",
-    icon: ShoppingCart,
-    title: "เบิกใช้ — ของสิ้นเปลือง",
-    subtitle: "ของที่จ่ายออกไปแล้วไม่มีวันกลับเข้าคลัง — ใครเบิก เอาไปใช้กับอะไร",
     headerLabel: "เหตุผล",
     columns: [COL.usage, COL.reason, COL.date, COL.staff, COL.itemCount, COL.qty],
     filters: { ...baseFilters, recipientSearch: "ค้นหาวิชา / กิจกรรม / เหตุผล" },
@@ -180,9 +172,6 @@ const KINDS: Record<DispenseKind, KindSpec> = {
   },
   borrow: {
     token: "borrow",
-    icon: ClipboardList,
-    title: "ยืม — ยืมอะไรออกไป คืนครบหรือยัง",
-    subtitle: "ติดตามการคืน: คืนครบ / คืนบางส่วน / เกินกำหนดคืน",
     headerLabel: "เหตุผล",
     columns: [COL.usage, COL.reason, COL.date, COL.staff, COL.itemCount, COL.qty, COL.due,
       { key: "status", header: "สถานะ", render: (e) => <LoanStatus e={e} /> }],
@@ -206,9 +195,6 @@ const KINDS: Record<DispenseKind, KindSpec> = {
   },
   inuse: {
     token: "inuse",
-    icon: MapPin,
-    title: "นำไปใช้งาน — ของอยู่ที่ห้องไหน",
-    subtitle: "ของที่ตั้งไว้ใช้งานประจำที่ ไม่มีกำหนดคืน — กลับเข้าคลังทางหน้าคืนเข้าคลัง",
     headerLabel: "สถานที่",
     // ไม่มีคอลัมน์การใช้งาน: นำไปใช้งานไม่เคยบันทึก usageType (station-in-room-dialog ไม่ส่ง)
     // ทุกแถวจึงเป็น "—" เหมือนกันหมด — และตัว action เองก็บอกอยู่แล้วว่าเอาไปตั้งใช้ที่ห้อง.
@@ -301,31 +287,20 @@ export function StockOutTab() {
 
   return (
     <div className="space-y-4 pb-2">
-      <SectionTitle
-        token={spec.token}
-        icon={spec.icon}
-        title={spec.title}
-        subtitle={spec.subtitle}
-      />
-
-      {/* Sticky on phones only. Switching segment is the thing people do over and over on a
-          phone, and it was the one control that scrolled away the moment they started reading.
-          top-16 clears the app header, which is sticky at h-16 there. */}
-      <Tabs
-        value={kind}
-        onValueChange={(v) => selectKind(v as string)}
-        className="sticky top-16 z-20 -mx-4 bg-background px-4 py-2 md:static md:mx-0 md:bg-transparent md:p-0"
-      >
-        <TabsList variant="chip" className="w-full min-w-0 sm:w-auto">
-          {DISPENSE_KINDS.map((k) => (
-            <TabsTrigger key={k} value={k} className="min-w-0" style={chipStyle(KINDS[k].token)}>
-              {DISPENSE_KIND_LABELS[k]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
       <ReportFilters
+        leading={
+          <Tabs value={kind} onValueChange={(v) => selectKind(v as string)}>
+            {/* สีอยู่บนราง ไม่ใช่บนแต่ละช่อง เพราะตัวที่ทาสีคือแถบที่เลื่อน ไม่ใช่ปุ่ม */}
+            <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+              <TabsIndicator />
+              {DISPENSE_KINDS.map((k) => (
+                <TabsTrigger key={k} value={k} className="min-w-0">
+                  {DISPENSE_KIND_LABELS[k]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        }
         config={spec.filters}
         values={filters}
         onChange={setFilters}

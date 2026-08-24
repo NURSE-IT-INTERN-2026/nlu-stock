@@ -59,10 +59,7 @@ export async function GET(req: NextRequest) {
           select: { id: true, lotNumber: true, expiryDate: true, remainingQty: true },
         },
         subItems: {
-          // needsCheck excludes a KIT set that has been used since anyone confirmed its
-          // contents. api/dispense refuses it anyway; keeping it out of the picker means staff
-          // never build a cart around a set they are not allowed to lend.
-          where: { status: "AVAILABLE", needsCheck: false },
+          where: { status: "AVAILABLE" },
           select: { id: true, subCode: true, status: true, condition: true },
         },
         location: { select: { building: true, floor: true, room: true, detail: true } },

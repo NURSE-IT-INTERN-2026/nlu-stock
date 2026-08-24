@@ -12,7 +12,7 @@ import { z } from "zod";
  * The BOM is never frozen. It used to lock while a set was alive, because returning a set
  * unpacked it against the recipe — but sets are persistent now and no longer end on their own,
  * so that rule would lock every recipe permanently from its first assemble. What still reads
- * the BOM against a live set is the ตรวจชุด checklist (advice a human reads with the box open)
+ * the BOM against a live set is the ดูของในชุด checklist (advice a human reads with the box open)
  * and ยกเลิกชุด (a rare admin action with a confirm screen listing what goes back), so drift
  * is visible where it matters and costs nothing to accept.
  */
@@ -52,7 +52,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         id: true,
         subCode: true,
         status: true,
-        needsCheck: true,
         kitContents: {
           select: { id: true, subCode: true, item: { select: { id: true, code: true, name: true } } },
         },

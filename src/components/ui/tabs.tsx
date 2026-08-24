@@ -30,10 +30,13 @@ const tabsListVariants = cva(
       variant: {
         default: "bg-muted",
         line: "gap-1 bg-transparent",
-        // Free-standing pills instead of one segmented control. Used by the report tabs,
-        // where each sub-tab owns an event colour and the tracked strip has nothing to sit on.
-        // h-auto! because the base class pins horizontal lists to h-8.
-        chip: "h-auto! flex-wrap gap-2 bg-transparent p-0",
+        // Like `default`, but the fill is a sliding TabsIndicator painted in the caller's event
+        // colour. Used by the report tabs, where each segment owns a colour that its table header
+        // and cards reuse — the connected track reads as one switch, which free-standing pills
+        // did not once they sat alone in a row. `relative` is what the indicator positions against.
+        // overflow-x-auto: สี่ช่องกับป้ายไทยยาวๆ ไม่พอในรางเดียวบนจอ 320px — เลื่อนแนวนอน
+        // ดีกว่าบีบตัวอักษรจนตกขอบราง
+        segment: "relative overflow-x-auto bg-muted",
       },
     },
     defaultVariants: {
@@ -66,12 +69,38 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
         "data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
         "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
-        // chip: the active fill is the caller's colour, passed as `--chip` in a style prop —
-        // one class can't carry ten event tokens. Foreground is --card so the label stays
-        // readable against the fill in both themes without a second token per colour.
-        "group-data-[variant=chip]/tabs-list:h-9 group-data-[variant=chip]/tabs-list:flex-none group-data-[variant=chip]/tabs-list:rounded-full group-data-[variant=chip]/tabs-list:border-border group-data-[variant=chip]/tabs-list:bg-card group-data-[variant=chip]/tabs-list:px-4 group-data-[variant=chip]/tabs-list:after:hidden",
-        "group-data-[variant=chip]/tabs-list:data-active:border-(--chip) group-data-[variant=chip]/tabs-list:data-active:bg-(--chip) group-data-[variant=chip]/tabs-list:data-active:text-card dark:group-data-[variant=chip]/tabs-list:data-active:border-(--chip) dark:group-data-[variant=chip]/tabs-list:data-active:bg-(--chip) dark:group-data-[variant=chip]/tabs-list:data-active:text-card",
+        // segment: the fill is the indicator sliding underneath, so the tab itself stays
+        // transparent and only flips its label to --card, which reads on every event colour in
+        // both themes. The group-scoped selector is what outranks `data-active:bg-background`.
+        // shrink-0 คู่กับ flex-1 ของ base: กว้างพอก็ยืดแบ่งเท่าๆ กันเต็มราง แคบไปก็ดันให้รางเลื่อน
+        // แทนที่จะหดจนป้ายล้น
+        "group-data-[variant=segment]/tabs-list:shrink-0 group-data-[variant=segment]/tabs-list:px-3 group-data-[variant=segment]/tabs-list:after:hidden",
+        "group-data-[variant=segment]/tabs-list:data-active:border-transparent group-data-[variant=segment]/tabs-list:data-active:bg-transparent group-data-[variant=segment]/tabs-list:data-active:text-card dark:group-data-[variant=segment]/tabs-list:data-active:border-transparent dark:group-data-[variant=segment]/tabs-list:data-active:bg-transparent dark:group-data-[variant=segment]/tabs-list:data-active:text-card",
         className
+      )}
+      {...props}
+    />
+  )
+}
+
+/**
+ * The moving fill behind the active tab of a `variant="segment"` list. Render it as the FIRST
+ * child of the list: both it and the tabs are positioned, so the tabs must come later in the
+ * DOM to paint their labels above it. Colour comes from `--chip` on the list.
+ *
+ * data-activation-direction is "none" until the user switches tabs, so keying the transition on
+ * left/right is what keeps the first paint from sliding in from the edge.
+ */
+function TabsIndicator({ className, ...props }: TabsPrimitive.Indicator.Props) {
+  return (
+    <TabsPrimitive.Indicator
+      data-slot="tabs-indicator"
+      className={cn(
+        "pointer-events-none absolute top-[3px] left-0 h-[calc(100%-6px)] w-(--active-tab-width)",
+        "translate-x-(--active-tab-left) rounded-md bg-(--chip)",
+        "data-[activation-direction=left]:transition-[translate,width] data-[activation-direction=right]:transition-[translate,width] duration-200 ease-out",
+        "motion-reduce:transition-none",
+        className,
       )}
       {...props}
     />
@@ -88,4 +117,4 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+export { Tabs, TabsList, TabsTrigger, TabsContent, TabsIndicator, tabsListVariants }

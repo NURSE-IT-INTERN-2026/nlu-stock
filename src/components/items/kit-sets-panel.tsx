@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Boxes, Check, ClipboardCheck, Plus, ShoppingCart, Trash2, Wrench, FileText } from "lucide-react";
+import { AlertTriangle, Boxes, Check, ClipboardList, Plus, ShoppingCart, Trash2, Wrench, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ import type { ComponentRow } from "@/components/shared/create-kit-modal/types";
 import { STATUS_LABELS, type ItemStatus } from "@/lib/constants";
 import { useCart, buildCartItem, toDispenseableItem, type DispenseSearchItem } from "@/components/dispense/cart-context";
 import {
-  assembleKit, cancelKitSet, confirmKitSetChecked, fetchKit, fetchKitSet, updateKitBom,
+  assembleKit, cancelKitSet, fetchKit, fetchKitSet, updateKitBom,
   type KitComponent, type KitDetail, type KitSetContents,
 } from "@/lib/api";
 
@@ -27,10 +27,10 @@ import {
  * holds stock of its own: every row under "ชุดที่ประกอบไว้" is one physical set, and a set
  * is permanent. It is borrowed, returned and borrowed again; only ยกเลิกชุด ends one.
  *
- * The tab's real job is the รอตรวจ gate. The system never counts the consumables in a box —
- * the recipe says ชิ้น and the stock says กล่อง, and nothing converts between them — so it
- * tracks the one thing it can know for certain: whether the set has been used since a human
- * last confirmed it was complete. Until someone presses ยืนยัน, the set cannot be lent.
+ * What is actually inside a box is not the app's business. The recipe says ชิ้น and the stock
+ * says กล่อง and nothing converts between them, so the system never counted the consumables
+ * and never gated a loan on them — restocking a returned set is done off-system. ดูของในชุด
+ * is the reference list for whoever does it, and nothing more.
  */
 
 const KIND_LABEL: Record<string, string> = {
@@ -44,7 +44,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
   const [loading, setLoading] = useState(true);
   const [assembleOpen, setAssembleOpen] = useState(false);
   const [bomOpen, setBomOpen] = useState(false);
-  const [checkSetId, setCheckSetId] = useState<string | null>(null);
+  const [viewSetId, setViewSetId] = useState<string | null>(null);
   const [cancelSetId, setCancelSetId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -67,7 +67,6 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
   if (!data) return <p className="text-sm text-muted-foreground">โหลดข้อมูลชุดไม่สำเร็จ</p>;
 
   const liveSets = data.sets;
-  const pendingCount = liveSets.filter((s) => s.needsCheck).length;
 
   return (
     <div className="space-y-5">
@@ -172,8 +171,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
         <div>
           <h3 className="text-sm font-semibold text-foreground">ชุดที่ประกอบไว้ ({liveSets.length})</h3>
           <p className="text-xs text-muted-foreground">
-            ชุดอยู่ถาวร — ยืมแล้วคืนแล้วยืมใหม่ได้ ทุกครั้งที่คืนจะขึ้น <span className="font-medium text-warning-700 dark:text-warning-200">รอตรวจ</span> ให้เปิดกล่องดูแล้วกดยืนยันก่อนปล่อยยืมรอบหน้า
-            {pendingCount > 0 && ` · ตอนนี้รอตรวจ ${pendingCount} ชุด`}
+            ชุดอยู่ถาวร — ยืมแล้วคืนแล้วยืมใหม่ได้ทันที ของสิ้นเปลืองในกล่องเติมเองนอกระบบ
           </p>
         </div>
         {liveSets.length === 0 ? (
@@ -196,14 +194,14 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
                 {liveSets.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell className="px-2 font-mono text-xs">{s.subCode}</TableCell>
-                    <TableCell className="px-2 text-xs"><SetStatus set={s} /></TableCell>
+                    <TableCell className="px-2 text-xs text-muted-foreground">{STATUS_LABELS[s.status as ItemStatus] ?? s.status}</TableCell>
                     <TableCell className="px-2 text-xs text-muted-foreground">
                       {s.kitContents.length === 0 ? "—" : s.kitContents.map((k) => `${k.item.name} ${k.subCode}`).join(", ")}
                     </TableCell>
                     <TableCell className="px-2 text-right">
                       <SetActions
                         set={s} canAct={canAct}
-                        onCheck={() => setCheckSetId(s.id)}
+                        onView={() => setViewSetId(s.id)}
                         onCancel={() => setCancelSetId(s.id)}
                       />
                     </TableCell>
@@ -216,11 +214,11 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
                 <div key={s.id} className="space-y-1.5 px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs">{s.subCode}</span>
-                    <SetStatus set={s} />
+                    <span className="text-xs text-muted-foreground">{STATUS_LABELS[s.status as ItemStatus] ?? s.status}</span>
                     <div className="ml-auto">
                       <SetActions
                         set={s} canAct={canAct}
-                        onCheck={() => setCheckSetId(s.id)}
+                        onView={() => setViewSetId(s.id)}
                         onCancel={() => setCancelSetId(s.id)}
                       />
                     </div>
@@ -237,7 +235,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
 
       <AssembleDialog open={assembleOpen} onOpenChange={setAssembleOpen} kit={data} onDone={refresh} />
       {bomOpen && <EditBomDialog onClose={() => setBomOpen(false)} kit={data} onDone={refresh} />}
-      {checkSetId && <CheckSetDialog setId={checkSetId} onClose={() => setCheckSetId(null)} onDone={refresh} />}
+      {viewSetId && <SetContentsDialog setId={viewSetId} onClose={() => setViewSetId(null)} />}
       {cancelSetId && <CancelSetDialog setId={cancelSetId} onClose={() => setCancelSetId(null)} onDone={refresh} />}
     </div>
   );
@@ -245,28 +243,13 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
 
 type SetRow = KitDetail["sets"][number];
 
-/** รอตรวจ beats the ItemStatus: the set really is AVAILABLE on the shelf, but that is not the
- *  answer to the question the row is asked, which is whether it can go out. */
-function SetStatus({ set }: { set: SetRow }) {
-  if (set.needsCheck) {
-    return (
-      <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[10px] text-warning-700 dark:text-warning-200">
-        รอตรวจ
-      </Badge>
-    );
-  }
-  return <span className="text-xs text-muted-foreground">{STATUS_LABELS[set.status as ItemStatus] ?? set.status}</span>;
-}
-
-function SetActions({ set, canAct, onCheck, onCancel }: { set: SetRow; canAct: boolean; onCheck: () => void; onCancel: () => void }) {
+function SetActions({ set, canAct, onView, onCancel }: { set: SetRow; canAct: boolean; onView: () => void; onCancel: () => void }) {
   if (!canAct || set.status === "ON_LOAN") return null;
   return (
     <div className="flex items-center justify-end gap-1">
-      {set.needsCheck && (
-        <Button size="sm" className="text-xs" onClick={onCheck}>
-          <ClipboardCheck className="size-3.5" />ตรวจชุด
-        </Button>
-      )}
+      <Button variant="outline" size="sm" className="text-xs" onClick={onView}>
+        <ClipboardList className="size-3.5" />ดูของในชุด
+      </Button>
       <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={onCancel}>
         <Trash2 className="size-3.5" />ยกเลิกชุด
       </Button>
@@ -277,7 +260,6 @@ function SetActions({ set, canAct, onCheck, onCancel }: { set: SetRow; canAct: b
 // ── ประกอบชุด ──
 function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; kit: KitDetail; onDone: () => void }) {
   const [sets, setSets] = useState(1);
-  const [packed, setPacked] = useState(false);
   const [saving, setSaving] = useState(false);
   const tooMany = sets > kit.maxSets;
 
@@ -293,7 +275,6 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
       toast.success(`ประกอบ ${res.assembledQty} ชุดแล้ว`);
       onOpenChange(false);
       setSets(1);
-      setPacked(false);
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ประกอบชุดไม่สำเร็จ");
@@ -334,12 +315,11 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
             </div>
           </div>
 
-          {/* The one thing a human has to answer. The system cannot tell whether the gauze went
-              in — it does not know how many pieces a box holds — so this checkbox IS the check,
-              the same act ตรวจชุด asks for after every return. */}
+          {/* FYI only. The system cannot tell whether the gauze went in — it does not know how
+              many pieces a box holds — and it no longer asks anyone to promise that it did. */}
           {consumables.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-foreground">ของสิ้นเปลือง — ใส่เองก่อนกดยืนยัน</p>
+              <p className="text-xs font-medium text-foreground">ของสิ้นเปลือง — ใส่เอง ระบบไม่ตัดให้</p>
               <div className="space-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-xs">
                 {consumables.map((c) => (
                   <div key={c.itemId} className="flex justify-between gap-3">
@@ -350,21 +330,12 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
                   </div>
                 ))}
               </div>
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
-                <input
-                  type="checkbox"
-                  checked={packed}
-                  onChange={(e) => setPacked(e.target.checked)}
-                  className="size-4 accent-primary"
-                />
-                ใส่ของสิ้นเปลืองลงชุดครบแล้ว
-              </label>
             </div>
           )}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
-          <Button disabled={saving || sets < 1 || tooMany || (consumables.length > 0 && !packed)} onClick={submit}>
+          <Button disabled={saving || sets < 1 || tooMany} onClick={submit}>
             {saving ? "กำลังประกอบ..." : `ประกอบ ${sets} ชุด`}
           </Button>
         </div>
@@ -419,18 +390,17 @@ function EditBomDialog({ onClose, kit, onDone }: { onClose: () => void; kit: Kit
   );
 }
 
-// ── ตรวจชุด ──
+// ── ดูของในชุด ──
 /**
- * Read-only on purpose. It lists what the box is supposed to hold and takes one confirmation;
- * it checks nothing, cuts nothing and fixes nothing. Anything actually missing or broken is
- * handled on the screens that already own those jobs — เบิก for stock, แจ้งชำรุด for damage —
- * and the admin comes back and presses ยืนยัน once the box is right. The only shortcut offered
- * is loading the consumables into the cart, because finding them one by one is the tedious part.
+ * Read-only, and it writes nothing at all. It lists what the box is supposed to hold so the
+ * person refilling it has something to work off — the system stopped gating loans on the
+ * contents, so this is reference, not a step anyone has to complete. Anything missing or broken
+ * is handled on the screens that already own those jobs: เบิก for stock, แจ้งชำรุด for damage.
+ * The one shortcut offered is loading the consumables into the cart, because finding them one
+ * by one is the tedious part.
  */
-function CheckSetDialog({ setId, onClose, onDone }: { setId: string; onClose: () => void; onDone: () => void }) {
+function SetContentsDialog({ setId, onClose }: { setId: string; onClose: () => void }) {
   const [contents, setContents] = useState<KitSetContents | null>(null);
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
   const { addItem } = useCart();
   const router = useRouter();
 
@@ -440,26 +410,13 @@ function CheckSetDialog({ setId, onClose, onDone }: { setId: string; onClose: ()
     return () => { cancelled = true; };
   }, [setId]);
 
-  const submit = async () => {
-    setSaving(true);
-    try {
-      const res = await confirmKitSetChecked(setId, { note: note.trim() || undefined });
-      toast.success(`ชุด ${res.setLabel} พร้อมให้ยืมแล้ว`);
-      onClose();
-      onDone();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "ยืนยันไม่สำเร็จ");
-    }
-    setSaving(false);
-  };
-
   const label = contents ? `${contents.set.item.code}-${contents.set.subCode}` : "";
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className={DIALOG_SHELL}>
-        <DialogTitle>ตรวจชุด {label}</DialogTitle>
-        <DialogDescription>เปิดกล่องเทียบกับรายการนี้ ถ้าของครบแล้วกดยืนยันเพื่อให้ยืมได้</DialogDescription>
+        <DialogTitle>ของในชุด {label}</DialogTitle>
+        <DialogDescription>รายการอ้างอิงว่ากล่องนี้ควรมีอะไร — ไว้ดูตอนเติมของ ไม่ต้องกดยืนยันอะไร</DialogDescription>
         <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
           {!contents ? (
             <Skeleton className="h-40 w-full" />
@@ -473,18 +430,11 @@ function CheckSetDialog({ setId, onClose, onDone }: { setId: string; onClose: ()
                   addItem={addItem}
                 />
               )}
-              <div>
-                <Label htmlFor="check-note" className="text-xs">หมายเหตุ</Label>
-                <Textarea id="check-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="mt-1 bg-card" />
-              </div>
             </>
           )}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>ปิด</Button>
-          <Button disabled={saving || !contents} onClick={submit}>
-            {saving ? "กำลังบันทึก..." : "ยืนยัน — ของครบ พร้อมยืม"}
-          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -634,7 +584,7 @@ function ExpectedContents({ contents }: { contents: KitSetContents }) {
 /**
  * The checklist shown on the รับคืน screen. Receiving a set does NOT open it: the box comes
  * back whole and its contents are untouched, so this is here only to tell staff what should be
- * in it. The set lands รอตรวจ and someone opens it later, on the ชุดประกอบ tab.
+ * in it. The set goes straight back on the shelf, lendable.
  */
 export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
   const [contents, setContents] = useState<KitSetContents | null>(null);
@@ -650,7 +600,7 @@ export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        ของในชุด — รับคืนทั้งกล่อง ไม่ต้องแกะ ชุดจะขึ้น <span className="font-medium">รอตรวจ</span> ให้ไปเปิดดูและกดยืนยันที่หน้าชุดก่อนปล่อยยืมรอบหน้า
+        ของในชุด — รับคืนทั้งกล่อง ไม่ต้องแกะ ชุดกลับเข้าคลังพร้อมให้ยืมต่อทันที
       </p>
       <ContentRows
         rows={[

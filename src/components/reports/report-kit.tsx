@@ -52,34 +52,7 @@ export function Pill({ token, children }: { token?: Token; children: ReactNode }
   );
 }
 
-/** The heading a report section owes the reader: what am I looking at, and why is it its own
- *  screen. It lives inside the tab rather than on the page so that tabs with sub-tabs can
- *  re-answer the question when the sub-tab changes — a page-level line cannot. */
-export function SectionTitle({
-  token, icon: Icon, title, subtitle,
-}: {
-  token: Token;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <span
-        className={cn("grid size-8 shrink-0 place-items-center rounded-lg", tokenText[token])}
-        style={{ backgroundColor: tokenTint(token, 14) }}
-      >
-        <Icon className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <h2 className="font-semibold tracking-tight text-foreground">{title}</h2>
-        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-      </div>
-    </div>
-  );
-}
-
-/** Set on a `<TabsList variant="chip">` trigger to colour its active fill. */
-export function chipStyle(token: Token): CSSProperties {
+/** Set on a `<TabsList variant="segment">` trigger to colour its active fill. */
+export function segmentStyle(token: Token): CSSProperties {
   return { "--chip": tokenVar[token] } as CSSProperties;
 }

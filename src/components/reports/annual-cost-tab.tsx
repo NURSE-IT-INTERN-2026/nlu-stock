@@ -6,8 +6,6 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart, type AnnualCostMonth } from "./charts/annual-cost-chart";
-import { Wallet } from "lucide-react";
-import { SectionTitle } from "./report-kit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { getReport } from "@/lib/api";
@@ -79,12 +77,6 @@ export function AnnualCostTab() {
 
   return (
     <div className="space-y-4">
-      <SectionTitle
-        token="value"
-        icon={Wallet}
-        title="ค่าใช้จ่ายรายปี"
-        subtitle="ซื้อและซ่อมไปเท่าไรในปีนั้น — นับเฉพาะรายการที่กรอกราคาไว้แล้ว"
-      />
       <ReportFilters
         config={filterConfig}
         values={filters}

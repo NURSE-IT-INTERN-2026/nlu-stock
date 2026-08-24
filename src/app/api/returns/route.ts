@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 
         // A KIT set has no branch here on purpose: a set comes back as a set, the box is not
         // opened at the counter, and its contents are untouched. It returns exactly like any
-        // other tracked piece — and lands รอตรวจ, which api/dispense stamped on the way out.
+        // other tracked piece — straight back to พร้อมใช้งาน, lendable again.
 
         // A damaged return lands on ชำรุด and stops there. It does NOT jump to ส่งซ่อม:
         // sending for repair is a separate decision that has to capture ภายใน/ภายนอก and

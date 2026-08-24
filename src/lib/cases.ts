@@ -84,21 +84,51 @@ export type CaseSummary = {
    * `exact` = ราคามาจากใบรับเข้าของชิ้นนั้นเอง; false = ราคาเฉลี่ยของรายการ (ประมาณการ) หรือไม่มีราคา.
    */
   lostValue?: { amount: number | null; exact: boolean };
+  /**
+   * กำหนดคืน — มีเฉพาะเคสยืม. เดิม "เกินกำหนด" มีอยู่แค่ในข้อความของ `statusLabel` ซึ่งกรองไม่ได้
+   * และพังทันทีที่มีคนแก้คำ; ตัวที่ต้องกรองได้คือวันที่ ไม่ใช่ป้าย.
+   *
+   * ประเภทที่เหลือเป็น null โดยตั้งใจ ไม่ใช่เพราะยังไม่ได้ทำ: ส่งซ่อมไม่มีวันนัดรับ ของหายไม่มี
+   * เดดไลน์ ตั้งใช้ในห้องไม่มีกำหนดคืน (0 จาก 676 แถว). เกณฑ์อย่าง "ซ่อมค้างเกิน 30 วัน = สาย"
+   * เป็นตัวเลขที่ระบบคิดเอง ไม่มีใครตกลงด้วย — `statusLabel` บอก "ค้างมาแล้ว N วัน" อยู่แล้ว.
+   */
+  dueAt: Date | null;
   openedAt: Date;
   updatedAt: Date;
   openedBy: string;
 };
 
+/** เกินกำหนดจริงต้องยังไม่ปิด — ใบที่คืนช้าแต่คืนไปแล้วไม่ใช่ของที่ใครยังรออยู่. */
+export const isOverdue = (c: Pick<CaseSummary, "dueAt" | "state">) =>
+  !!c.dueAt && c.state === "OPEN" && c.dueAt < new Date();
+
+/**
+ * งานที่ยังมีคนต้องไปทำ — เกณฑ์ของแท็บ `รายการสิ่งที่ต้องทำ` และของตัวเลขบน badge ที่ต้องตรงกัน
+ * ตลอด จึงอยู่บรรทัดเดียวกันที่นี่ ไม่ใช่ที่ละสำเนา.
+ *
+ * ตั้งใช้ในห้องไม่อยู่ในนี้: มันเปิดค้างถาวรโดยออกแบบ ไม่ใช่งานที่ใครติดค้าง. ยืมเข้ามาเฉพาะที่
+ * เลยกำหนดแล้ว — ของที่ยังไม่ถึงกำหนดไม่ใช่งานสาย.
+ *
+ * บำรุงรักษาอยู่ในรายชื่อแต่ **นับได้ 0 เสมอ**: ระบบบันทึกตอนทำเสร็จแล้ว เคส MC จึงเกิดมาเป็น DONE
+ * ทุกใบ (ดู maintSummary). "เกินกำหนดซ่อมบำรุง" ที่คนอยากเห็นคือ `Item.nextMaintenanceDate < now`
+ * ซึ่งเป็นวันบนพัสดุ ไม่ใช่เคส — มันมีที่อยู่ของมันแล้วที่ alert `overdueMaint`.
+ */
+export const TODO_TYPES: CaseType[] = ["REPAIR", "MAINTENANCE", "LOST", "BORROW"];
+export const isTodo = (c: CaseSummary) =>
+  c.state === "OPEN" && TODO_TYPES.includes(c.type) && (c.type !== "BORROW" || isOverdue(c));
+
 /**
  * ยอดรวมสองก้อนที่บวกกันไม่ได้ จึงไม่บวก: เงินที่จ่ายไปเพื่อให้ของกลับมาใช้ได้ (ซ่อม + บำรุง) กับ
- * เงินที่หายไปพร้อมของ. เคสยืม/ตั้งใช้/ตรวจชุดไม่มีทั้งสองอย่าง จึงไม่อยู่ในตัวหารของก้อนไหนเลย —
+ * เงินที่หายไปพร้อมของ. เคสยืม/ตั้งใช้ไม่มีทั้งสองอย่าง จึงไม่อยู่ในตัวหารของก้อนไหนเลย —
  * ตัวหารที่รวมเคสที่ไม่มีวันมีราคาเข้าไปด้วยจะอ่านออกมาเป็น "ยังไม่ได้กรอกราคา 99%" ตลอดกาล.
  *
  * นับจากเคสทั้งชุดที่ตัวกรองคัดมา ไม่ใช่แค่หน้าที่กำลังเปิด — การ์ดสรุปที่เปลี่ยนตามหน้าไม่ใช่ยอดรวม.
  */
 export function summariseCases(cases: CaseSummary[]) {
   const service = cases.filter((c) => c.type === "REPAIR" || c.type === "MAINTENANCE");
-  const lost = cases.filter((c) => c.type === "LOST");
+  // OPEN เท่านั้น: ของที่เรียกคืนได้แล้วไม่ใช่ความเสียหาย การนับมันต่อทำให้ยอด "มูลค่าที่หายไป"
+  // โตขึ้นเรื่อยๆ ตลอดกาลแม้จะตามของกลับมาได้ครบทุกชิ้น.
+  const lost = cases.filter((c) => c.type === "LOST" && c.state === "OPEN");
   return {
     serviceCases: service.length,
     servicePriced: service.filter((c) => c.cost != null).length,
@@ -144,14 +174,12 @@ export type CaseDocument = {
 /**
  * สิ่งที่ทำได้กับเคสนี้ตอนนี้ — มีเฉพาะเคสที่เปิดค้างและมีปุ่มจริงรออยู่.
  *
- * ไม่ได้ทำเป็นระบบ action ทั่วไป: ตอนนี้มีอยู่กรณีเดียว และเคสส่วนใหญ่ปิดผ่านหน้างานของมันเอง
- * (รับคืนจากซ่อม อยู่ที่หน้าซ่อม, รับคืน อยู่ที่หน้ารับคืน) ซึ่งเป็นที่ที่ถูกแล้ว. ตรวจชุดต่างออกไป
- * เพราะมันไม่มีหน้างานของตัวเอง — เดิมต้องไล่หาทีละชุดในแท็บชุดประกอบของพัสดุนั้น.
+ * ไม่ได้ทำเป็นระบบ action ทั่วไป: เหลืออยู่กรณีเดียว และเคสส่วนใหญ่ปิดผ่านหน้างานของมันเอง
+ * (รับคืนจากซ่อม อยู่ที่หน้าซ่อม, รับคืน อยู่ที่หน้ารับคืน) ซึ่งเป็นที่ที่ถูกแล้ว.
  */
 export type CaseAction =
-  | { kind: "KIT_CHECK"; targetId: string; label: string }
   /** targetId = "PIECE|ADJUSTMENT:<recordId>:<itemId>" — the recover route needs all three. */
-  | { kind: "RECOVER"; targetId: string; label: string };
+  { kind: "RECOVER"; targetId: string; label: string };
 
 export type CaseDetail = CaseSummary & {
   action?: CaseAction | null;
@@ -178,7 +206,6 @@ function caseSourceKey(caseId: string): string {
   // แยกด้วย prefix ของ cuid ไม่ได้ จึงให้ตัวเรียกบอกมาแทน — ดู repairSourceKey.
   if (type === "MAINTENANCE") return sourceKey("maint", row);
   if (type === "BORROW" || type === "INUSE") return sourceKey("disp", row);
-  if (type === "KIT_CHECK") return sourceKey("ret", row);
   // เคสสูญหายพาชื่อตารางมาในไอดีอยู่แล้ว เพราะมันมาได้จากสองตาราง (log:… / adj:…)
   if (type === "LOST") return row;
   return sourceKey("adj", row); // REPAIR: overridden below where the kind is known
@@ -335,6 +362,7 @@ function qtySummary(b: QtyBooking, cancelIndex: CancelIndex): CaseSummary {
     qty,
     unit: b.item.issueUnit.name,
     cost: closer?.cost ?? null,
+    dueAt: null,
     openedAt: b.adjustedAt,
     updatedAt: closer?.createdAt ?? b.repairSentAt ?? b.adjustedAt,
     openedBy: b.adjuster.name,
@@ -454,6 +482,7 @@ function pieceSummary(c: PieceCase): CaseSummary {
     qty: 1,
     unit: o.item.issueUnit.name,
     cost: job?.cost ?? null,
+    dueAt: null,
     openedAt: o.changedAt,
     updatedAt: c.cancelledAt ?? job?.createdAt ?? last?.changedAt ?? o.changedAt,
     openedBy: o.changer.name,
@@ -490,6 +519,7 @@ function maintSummary(m: MaintRow): CaseSummary {
     qty: null,
     unit: m.item.issueUnit.name,
     cost: m.cost ?? null,
+    dueAt: null,
     openedAt: m.performedAt,
     updatedAt: m.createdAt,
     openedBy: m.performer.name,
@@ -548,6 +578,7 @@ function loanSummary(l: LoanRow): CaseSummary {
     qty: l.quantity,
     unit: l.item.issueUnit.name,
     cost: null,
+    dueAt: inRoom ? null : l.dueAt,
     openedAt: l.dispensedAt,
     updatedAt: lastReturn ?? l.dispensedAt,
     openedBy: l.staff.name,
@@ -596,35 +627,6 @@ async function loadPieceCases(itemId?: string): Promise<PieceCase[]> {
   return walkPieceCases(logs as PieceLog[], jobs as PieceJob[]);
 }
 
-const KIT_PROFILE = { item: { category: { profile: { code: "KIT" } } } } as const;
-
-async function loadKitChecks(itemId?: string, subItemId?: string): Promise<KitCheckCase[]> {
-  const scope = { ...(itemId ? { itemId } : {}), ...(subItemId ? { subItemId } : {}) };
-  const [returns, closers] = await Promise.all([
-    prisma.returnRecord.findMany({
-      where: { ...scope, subItemId: subItemId ?? { not: null }, subItem: KIT_PROFILE },
-      select: {
-        id: true, subItemId: true, returnedAt: true,
-        returner: { select: { name: true } },
-        item: { select: itemSelect },
-        subItem: { select: { subCode: true } },
-      },
-    }),
-    prisma.itemStatusLog.findMany({
-      where: {
-        ...scope,
-        subItemId: subItemId ?? { not: null },
-        OR: [{ reason: { startsWith: "ตรวจชุด" } }, { reason: { startsWith: "ยกเลิกชุด" } }],
-      },
-      select: {
-        id: true, subItemId: true, changedAt: true, reason: true, newStatus: true,
-        changer: { select: { name: true } },
-      },
-    }),
-  ]);
-  return walkKitChecks(returns as KitReturnRow[], closers as KitCloseRow[]);
-}
-
 export type CaseFilter = {
   type?: CaseType;
   state?: CaseState;
@@ -634,16 +636,22 @@ export type CaseFilter = {
   from?: Date;
   to?: Date;
   q?: string;
+  /** เฉพาะงานที่ยังมีคนต้องไปทำ — ดู isTodo. */
+  todo?: boolean;
 };
 
-export async function listCases(f: CaseFilter = {}): Promise<CaseSummary[]> {
+/**
+ * เคสทั้งชุดตามตัวกรอง ก่อนติดเลขเคส. แยกออกมาเพราะ `attachCodes` **เขียน** เลขใหม่ลงตาราง
+ * case_codes — ตัวนับที่ยิงทุก 5 นาทีทุกหน้าไม่ควรจ่ายเลขให้เคสที่ยังไม่มีใครเปิดดู.
+ */
+async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceIds: Set<string> }> {
   // ยืม กับ ตั้งใช้ในห้อง อ่านจากตารางเดียวกัน แยกกันตอนสรุป — โหลดทั้งคู่เมื่อถามหาอย่างใดอย่างหนึ่ง
   const want = (t: CaseType) => !f.type || f.type === t;
   const wantLoans = want("BORROW") || want("INUSE");
   const itemWhere = f.itemId ? { itemId: f.itemId } : {};
   const subWhere = f.subItemId ? { subItemId: f.subItemId } : {};
 
-  const [cancelIndex, qty, pieces, maints, kitChecks, losses, loans] = await Promise.all([
+  const [cancelIndex, qty, pieces, maints, losses, loans] = await Promise.all([
     want("REPAIR") ? loadCancelIndex(f.itemId) : new Set<string>(),
     // A qty booking is about N units of an item, never about one copy — scoping to a copy
     // excludes it rather than showing a case that is not about the thing on screen.
@@ -654,7 +662,6 @@ export async function listCases(f: CaseFilter = {}): Promise<CaseSummary[]> {
     want("MAINTENANCE")
       ? prisma.maintenanceRecord.findMany({ ...maintArgs, where: { ...maintArgs.where, ...itemWhere, ...subWhere } })
       : [],
-    want("KIT_CHECK") ? loadKitChecks(f.itemId, f.subItemId) : [],
     want("LOST") ? loadLostCases(f.itemId, f.subItemId) : [],
     wantLoans
       ? prisma.dispenseRecord.findMany({
@@ -675,7 +682,6 @@ export async function listCases(f: CaseFilter = {}): Promise<CaseSummary[]> {
     ...qty.map((b) => qtySummary(b, cancelIndex)),
     ...shownPieces.map(pieceSummary),
     ...maints.map(maintSummary),
-    ...kitChecks.map(kitCheckSummary),
     ...losses.map(lostSummary),
     ...loans.map(loanSummary).filter((c) => want(c.type)),
   ];
@@ -683,12 +689,17 @@ export async function listCases(f: CaseFilter = {}): Promise<CaseSummary[]> {
   if (f.state) cases = cases.filter((c) => c.state === f.state);
   if (f.from) cases = cases.filter((c) => c.openedAt >= f.from!);
   if (f.to) cases = cases.filter((c) => c.openedAt < f.to!);
+  if (f.todo) cases = cases.filter(isTodo);
   // Which REPAIR cases are a piece's status log rather than a qty booking — the two live in
   // different tables and the code table keys on the row, not on the case type.
   const pieceIds = new Set(shownPieces.map((c) => `REPAIR:${c.opener.id}`));
 
   cases.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  return { cases, pieceIds };
+}
 
+export async function listCases(f: CaseFilter = {}): Promise<CaseSummary[]> {
+  const { cases, pieceIds } = await buildCases(f);
   // Numbering first, then search: RC-2569-0142 is the one thing people will paste into the box,
   // and it does not exist until the codes are attached.
   const codes = await attachCodes(cases, pieceIds);
@@ -700,6 +711,20 @@ export async function listCases(f: CaseFilter = {}): Promise<CaseSummary[]> {
     c.title.toLowerCase().includes(q) ||
     c.itemCode.toLowerCase().includes(q) ||
     c.openedBy.toLowerCase().includes(q));
+}
+
+/**
+ * กี่งานที่ยังค้าง — ตัวเลขบน badge ของแท็บ `รายการสิ่งที่ต้องทำ`.
+ *
+ * ponytail: ปั้นเคสทั้งกองแล้วนับ แทนที่จะเขียน count() แยกต่อประเภท — เกณฑ์ "เคสนี้ยังเปิดอยู่ไหม"
+ * กระจายอยู่ในตัวสรุปทั้งห้าตัว (ยกเลิกคำขอ, ปิดเงียบ, คืนครบแล้ว) ไม่ใช่เงื่อนไข WHERE เดียว;
+ * count() ที่เขียนขนานไว้จะเลื่อนออกจากตารางในวันที่มีคนแก้ตัวสรุปตัวใดตัวหนึ่ง แล้วเลขบน badge
+ * กับจำนวนแถวที่กดเข้าไปเห็นจะไม่ตรงกันแบบที่หาสาเหตุยาก. ถ้าวันหนึ่งตารางซ่อมโตถึงหลักหมื่นแถว
+ * ค่อยเปลี่ยนไปเป็น count() ต่อประเภท พร้อมเทสที่ยันว่าสองทางให้เลขเท่ากัน.
+ */
+export async function countOpenCases(): Promise<number> {
+  const { cases } = await buildCases({ todo: true });
+  return cases.length;
 }
 
 // ── Detail ────────────────────────────────────────────────────────────────────
@@ -1053,36 +1078,6 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
     );
   }
 
-  if (type === "KIT_CHECK") {
-    const opener = await prisma.returnRecord.findUnique({ where: { id: src }, select: { subItemId: true, itemId: true } });
-    if (!opener?.subItemId) return null;
-    const all = await loadKitChecks(opener.itemId, opener.subItemId);
-    const k = all.find((x) => x.opener.id === src);
-    if (!k) return null;
-    const s = kitCheckSummary(k);
-    return finish(
-      s,
-      kitCheckSteps(k),
-      [
-        { label: "ชุดอุปกรณ์", value: k.opener.item.name },
-        { label: "รหัสชุด", value: `${k.opener.item.code}-${k.opener.subItem?.subCode ?? "?"}` },
-        { label: "คืนเมื่อ", value: k.opener.returnedAt.toLocaleDateString("th-TH") },
-        { label: "ผู้รับคืน", value: k.opener.returner.name },
-        ...(k.closer
-          ? [
-              { label: k.cancelled ? "ยกเลิกเมื่อ" : "ตรวจเมื่อ", value: k.closer.changedAt.toLocaleDateString("th-TH") },
-              { label: "ผู้ดำเนินการ", value: k.closer.changer.name },
-              ...(k.closer.reason ? [{ label: "บันทึก", value: k.closer.reason }] : []),
-            ]
-          : [{ label: "สถานะ", value: `รอตรวจมาแล้ว ${days(k.opener.returnedAt)} วัน — ยืมไม่ได้จนกว่าจะตรวจ` }]),
-      ],
-      null,
-      [],
-      false,
-      k.closer ? null : { kind: "KIT_CHECK", targetId: k.opener.subItemId!, label: "ยืนยันตรวจชุด" },
-    );
-  }
-
   // REPAIR — the source row is either a qty booking or a piece's →ชำรุด log.
   const booking = await prisma.stockAdjustment.findUnique({ ...qtyBookingArgs, where: { id: src } });
   if (booking && booking.reason === AdjustmentReason.DAMAGED_PENDING_REPAIR) {
@@ -1131,117 +1126,6 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
     await relatedForReturn(c.opener.fromReturnId),
     true,
   );
-}
-
-// ── KC: ตรวจชุด ───────────────────────────────────────────────────────────────
-// ชุดอุปกรณ์กลับมาแล้วยืมต่อไม่ได้จนกว่าจะมีคนเปิดกล่องนับของ — `SubItem.needsCheck` เป็นประตูจริง
-// ที่ api/dispense ปิดไว้ และ lib/stock ไม่นับชุดที่รอตรวจเป็นของพร้อมใช้ด้วยซ้ำ. นั่นคือ "มีคน
-// ต้องลงมือ" ครบตามนิยามเคส แต่เดิมมันมองเห็นได้ทางเดียว: ไล่ดูทีละชุดในแท็บชุดประกอบ.
-//
-// เปิดตอน "คืน" ไม่ใช่ตอน "ยืมออก" ทั้งที่ธง needsCheck ถูกยกตอนออก เพราะเคสที่เปิดค้างต้องแปลว่า
-// "มีกล่องวางอยู่ตรงหน้าเจ้าหน้าที่ รอเปิดตรวจ" — ชุดที่ยังอยู่กับผู้ยืมไม่ใช่งานของใครทั้งนั้น.
-//
-// ชุดหนึ่งชุดมีสถานะเดียว รอบการยืม-คืน-ตรวจ จึงเรียงต่อกันเป็นลำดับแน่นอน ไม่ต้องเดาว่าการตรวจครั้ง
-// ไหนปิดการคืนครั้งไหน — เหมือนเคสซ่อมของชิ้นที่ติดตามรายชิ้น.
-type KitReturnRow = {
-  id: string;
-  subItemId: string | null;
-  returnedAt: Date;
-  returner: { name: string };
-  item: { id: string; code: string; name: string; issueUnit: { name: string } };
-  subItem: { subCode: string } | null;
-};
-
-type KitCloseRow = {
-  id: string;
-  subItemId: string | null;
-  changedAt: Date;
-  reason: string | null;
-  changer: { name: string };
-  newStatus: ItemStatus;
-};
-
-export type KitCheckCase = {
-  opener: KitReturnRow;
-  closer: KitCloseRow | null;
-  /** ยกเลิกชุด ปิดเคสด้วย แต่ไม่ใช่ "ตรวจแล้ว" — กล่องไม่ได้ถูกเปิดนับ มันถูกเลิกใช้. */
-  cancelled: boolean;
-};
-
-/** Walk one set's คืน/ตรวจ rows oldest-first and cut them into cases. */
-export function walkKitChecks(returns: KitReturnRow[], closers: KitCloseRow[]): KitCheckCase[] {
-  const bySet = new Map<string, { rets: KitReturnRow[]; closes: KitCloseRow[] }>();
-  const bucket = (sid: string) =>
-    bySet.get(sid) ?? bySet.set(sid, { rets: [], closes: [] }).get(sid)!;
-  for (const r of returns) if (r.subItemId) bucket(r.subItemId).rets.push(r);
-  for (const c of closers) if (c.subItemId && bySet.has(c.subItemId)) bucket(c.subItemId).closes.push(c);
-
-  const out: KitCheckCase[] = [];
-  for (const { rets, closes } of bySet.values()) {
-    rets.sort((a, b) => a.returnedAt.getTime() - b.returnedAt.getTime());
-    closes.sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
-    const mine: KitCheckCase[] = rets.map((opener) => ({ opener, closer: null, cancelled: false }));
-    for (const c of closes) {
-      // ปิดเคสที่เปิดค้างอยู่และเปิดก่อนหน้าการตรวจครั้งนี้ — เก่าสุดก่อน เพราะคิวเดินตามลำดับ
-      const target = mine.find((k) => !k.closer && k.opener.returnedAt <= c.changedAt);
-      if (!target) continue;
-      target.closer = c;
-      target.cancelled = c.newStatus === ItemStatus.DISPOSED;
-    }
-    out.push(...mine);
-  }
-  return out;
-}
-
-function kitCheckSummary(k: KitCheckCase): CaseSummary {
-  const o = k.opener;
-  const waiting = days(o.returnedAt);
-  return {
-    id: `KIT_CHECK:${o.id}`,
-    type: "KIT_CHECK",
-    code: "",
-    state: k.cancelled ? "CANCELLED" : k.closer ? "DONE" : "OPEN",
-    statusLabel: k.cancelled ? "ยกเลิกชุด" : k.closer ? "ตรวจแล้ว" : `รอตรวจ ${waiting} วัน`,
-    subject: k.cancelled ? "ชุดถูกยกเลิกก่อนตรวจ" : "ตรวจความครบของชุดหลังคืน",
-    title: o.item.name,
-    itemId: o.item.id,
-    itemCode: o.item.code,
-    subCode: o.subItem?.subCode ?? null,
-    qty: 1,
-    unit: o.item.issueUnit.name,
-    cost: null,
-    openedAt: o.returnedAt,
-    updatedAt: k.closer?.changedAt ?? o.returnedAt,
-    openedBy: o.returner.name,
-  };
-}
-
-function kitCheckSteps(k: KitCheckCase): CaseStep[] {
-  const o = k.opener;
-  const steps: CaseStep[] = [
-    step({
-      key: "returned",
-      label: "คืนชุด",
-      at: o.returnedAt,
-      by: o.returner.name,
-      detail: o.subItem ? `${o.item.code}-${o.subItem.subCode}` : null,
-      waiting: k.closer
-        ? `รอตรวจ · ${days(o.returnedAt, k.closer.changedAt)} วัน`
-        : `รอตรวจ · ${days(o.returnedAt)} วัน แล้ว`,
-    }),
-  ];
-  if (k.closer) {
-    steps.push(step({
-      key: "checked",
-      label: k.cancelled ? "ยกเลิกชุด" : "ตรวจชุด",
-      at: k.closer.changedAt,
-      by: k.closer.changer.name,
-      detail: k.closer.reason,
-    }));
-  } else {
-    steps.push(step({ key: "checked", label: "ตรวจชุด" }));
-  }
-  return steps;
 }
 
 // ── LC: สูญหาย ────────────────────────────────────────────────────────────────
@@ -1298,6 +1182,7 @@ function lostSummary(l: LostRow): CaseSummary {
     lostValue: (({ value, exact }) => ({ amount: value == null ? null : value * l.qty, exact }))(
       writeOffValue(l.unitCost, l.avgPrice),
     ),
+    dueAt: null,
     openedAt: l.at,
     updatedAt: l.recoveredAt ?? l.at,
     openedBy: l.by,

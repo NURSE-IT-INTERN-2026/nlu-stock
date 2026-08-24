@@ -1,7 +1,15 @@
 import { prisma } from "@/lib/prisma";
-import { USAGE_TYPE_LABELS, stripLegacyRoomNote } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, stripLegacyRoomNote, locationLabel } from "@/lib/constants";
+import { monthKey, monthRange } from "@/lib/format";
+import {
+  USAGE_GROUPS, USAGE_GROUP_LABELS,
+  type UsageGroup, type UsageMonth, type UsageMonthGroup, type UsageMonthItem, type UsageMonthRow,
+} from "@/lib/usage-groups";
 
 export type UsageBySubjectRow = {
+  /** identity เดียวกับ row ในต้นไม้รายเดือน (subjectIdentity / locationId) — หน้าจอใช้ค่านี้
+   *  join ตารางเข้ากับรายละเอียดรายเดือน แทนที่จะเดาจากชื่อที่แสดงผล */
+  key: string;
   usageType: string | null;
   courseCode: string | null;
   label: string;
@@ -13,6 +21,35 @@ export type UsageBySubjectRow = {
    *  touches the whole storeroom */
   itemCount: number;
 };
+
+type SubjectSource = {
+  usageType: string | null;
+  courseCode: string | null;
+  usageNote: string | null;
+  notes: string | null;
+};
+
+/** The identity of one subject/activity, derived in one place so the monthly breakdown and
+ *  the whole-range table can never name (or split) the same subject differently.
+ *
+ *  A course is identified by its code — the name is a snapshot that can differ between two
+ *  draws for the same subject; an activity has only its free-text line, so that line is the
+ *  key. Legacy rows carry neither and keep their own "(ไม่ระบุ)" bucket rather than being
+ *  dropped, or historical totals stop reconciling. */
+function subjectIdentity(g: SubjectSource): { key: string; label: string } {
+  const isCourse = g.usageType === "COURSE";
+  const typeLabel = USAGE_TYPE_LABELS[g.usageType ?? ""] ?? g.usageType ?? "Unknown";
+  const reason = g.usageNote?.trim() || stripLegacyRoomNote(g.notes) || "";
+  const key = isCourse ? `COURSE:${g.courseCode ?? ""}` : `${g.usageType}:${reason}`;
+  const label = isCourse
+    ? g.courseCode
+      ? [g.courseCode, g.usageNote].filter(Boolean).join(" — ")
+      : `${typeLabel} (ไม่ระบุ)`
+    : reason
+      ? `${typeLabel} — ${reason}`
+      : `${typeLabel} (ไม่ระบุ)`;
+  return { key, label };
+}
 
 /** Usage totals split per subject — the whole point of the report is "which subject used
  *  what", which one lumped รายวิชา or กิจกรรม bucket cannot answer. usageNote carries the
@@ -43,24 +80,10 @@ export async function groupUsageBySubject(where: Record<string, unknown>): Promi
   // key so the report shows one row per subject, and let the first snapshot name it.
   const merged = new Map<string, UsageBySubjectRow & { items: Set<string> }>();
   for (const g of groups) {
-    const isCourse = g.usageType === "COURSE";
-    const typeLabel = USAGE_TYPE_LABELS[g.usageType ?? ""] ?? g.usageType ?? "Unknown";
-    // A course is identified by its code (the name is a snapshot that can differ between two
-    // draws for the same subject); an activity has only its line, so that line is the key.
-    const reason = g.usageNote?.trim() || stripLegacyRoomNote(g.notes) || "";
-    const key = isCourse ? `COURSE:${g.courseCode ?? ""}` : `${g.usageType}:${reason}`;
-    // Legacy rows carry no code and no line — keep them visible in their own bucket rather
-    // than dropping them, or historical totals stop reconciling.
-    const label = isCourse
-      ? g.courseCode
-        ? [g.courseCode, g.usageNote].filter(Boolean).join(" — ")
-        : `${typeLabel} (ไม่ระบุ)`
-      : reason
-        ? `${typeLabel} — ${reason}`
-        : `${typeLabel} (ไม่ระบุ)`;
+    const { key, label } = subjectIdentity(g);
 
     const row = merged.get(key) ?? {
-      usageType: g.usageType, courseCode: g.courseCode, label,
+      key, usageType: g.usageType, courseCode: g.courseCode, label,
       totalQuantity: 0, records: 0, itemCount: 0, items: new Set<string>(),
     };
     row.totalQuantity += g._sum.quantity ?? 0;
@@ -74,6 +97,17 @@ export async function groupUsageBySubject(where: Record<string, unknown>): Promi
     .sort((a, b) => b.totalQuantity - a.totalQuantity);
 }
 
+
+/** id → "อาคาร / ชั้น / ห้อง / รายละเอียด", for the two groupers that bucket by room. */
+async function locationNames(ids: (string | null)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => !!id))];
+  if (unique.length === 0) return new Map();
+  const locations = await prisma.location.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, building: true, floor: true, room: true, detail: true },
+  });
+  return new Map(locations.map((l) => [l.id, locationLabel(l)]));
+}
 
 /**
  * นำไปใช้งาน ไม่มีวิชาให้จัดกลุ่ม — station-in-room-dialog ถามแค่ห้อง และ validators/dispense
@@ -92,14 +126,7 @@ export async function groupInUseByLocation(where: Record<string, unknown>): Prom
     _count: { _all: true },
   });
 
-  const locationIds = [...new Set(groups.map((g) => g.locationId).filter((id): id is string => !!id))];
-  const locations = await prisma.location.findMany({
-    where: { id: { in: locationIds } },
-    select: { id: true, building: true, floor: true, room: true, detail: true },
-  });
-  const nameOf = new Map(
-    locations.map((l) => [l.id, [l.building, l.floor, l.room, l.detail].filter(Boolean).join(" / ")]),
-  );
+  const nameOf = await locationNames(groups.map((g) => g.locationId));
 
   const merged = new Map<string, UsageBySubjectRow & { items: Set<string> }>();
   for (const g of groups) {
@@ -107,7 +134,7 @@ export async function groupInUseByLocation(where: Record<string, unknown>): Prom
     // แถวเก่าที่เขียนก่อน locationId ถูกบังคับ ยังต้องเห็นได้ ไม่งั้นยอดรวมไม่ตรงกับจำนวนที่นำออกจริง
     const label = (g.locationId && nameOf.get(g.locationId)) || "ไม่ระบุสถานที่";
     const row = merged.get(key) ?? {
-      usageType: null, courseCode: null, label,
+      key, usageType: null, courseCode: null, label,
       totalQuantity: 0, records: 0, itemCount: 0, items: new Set<string>(),
     };
     row.totalQuantity += g._sum.quantity ?? 0;
@@ -119,4 +146,127 @@ export async function groupInUseByLocation(where: Record<string, unknown>): Prom
   return [...merged.values()]
     .map(({ items, ...r }) => ({ ...r, itemCount: items.size }))
     .sort((a, b) => b.totalQuantity - a.totalQuantity);
+}
+
+// ─── Monthly breakdown ───────────────────────────────────────────────────────────────────
+//
+// "วิชาไหนใช้มากที่สุด" ตอบได้แล้วจากตารางข้างบน แต่คำถามที่รายงานจริงต้องตอบคือ "เดือนไหนใช้เยอะ
+// และเดือนนั้นเป็นของวิชา กิจกรรม หรืออื่นๆ" — ยอดรวมทั้งช่วงกลบฤดูกาลของคลังทิ้งหมด (เปิดเทอม
+// ใช้หนัก ปิดเทอมเงียบ) แล้วอ่านเป็นเส้นแบนเส้นเดียว.
+//
+// สามระดับ: เดือน → กลุ่มการใช้งาน (วิชา / กิจกรรม / อื่นๆ / ไม่ระบุ) → รายวิชาหรือกิจกรรม →
+// รายการพัสดุ. ทั้งต้นไม้ส่งกลับไปในก้อนเดียว เพราะการกดดูรายละเอียดของเดือนต้องตอบทันที ไม่ใช่
+// รอ fetch อีกรอบต่อหนึ่งเดือนที่กด.
+
+type ItemLite = { id: string; code: string; name: string; issueUnit: { name: string } };
+
+type RowAcc = Omit<UsageMonthRow, "items"> & { items: Map<string, UsageMonthItem> };
+type GroupAcc = Omit<UsageMonthGroup, "rows"> & { rows: Map<string, RowAcc> };
+type MonthAcc = Omit<UsageMonth, "groups"> & { groups: Map<string, GroupAcc> };
+
+function bump(t: { records: number; totalQuantity: number }, qty: number) {
+  t.records += 1;
+  t.totalQuantity += qty;
+}
+
+/**
+ * เดือน → กลุ่ม → วิชา/กิจกรรม/ห้อง → พัสดุ.
+ *
+ * mode = "location" คือ นำไปใช้งาน ซึ่งไม่มี usageType (validators/dispense ยกเว้นให้โดยตั้งใจ)
+ * — กลุ่มจึงเหลือกลุ่มเดียวและห้องไปเป็นแถวข้างใน แทนที่จะเป็นซีรีส์ในกราฟห้องละสี ซึ่งพอมี
+ * สิบห้องก็อ่านไม่ออกแล้ว.
+ *
+ * ponytail: อ่านแถวดิบมานับใน JS ไม่ใช่ GROUP BY date_trunc ใน SQL — คลังนี้มีราวสามพันแถวต่อปี
+ * และการนับใน JS ใช้ `where` ก้อนเดียวกับที่ทุกส่วนของ report นี้ใช้ จึงไม่มีทางนับคนละชุดกับ
+ * ตารางที่อยู่ข้างๆ. ถ้าตารางนี้โตถึงหลักแสนแถวค่อยย้ายไป date_trunc.
+ */
+export async function groupUsageByMonth(
+  where: Record<string, unknown>,
+  mode: "usage" | "location",
+): Promise<UsageMonth[]> {
+  const records = await prisma.dispenseRecord.findMany({
+    where,
+    select: {
+      dispensedAt: true,
+      quantity: true,
+      usageType: true,
+      courseCode: true,
+      usageNote: true,
+      notes: true,
+      locationId: true,
+      item: { select: { id: true, code: true, name: true, issueUnit: { select: { name: true } } } },
+    },
+  });
+
+  const nameOf = mode === "location"
+    ? await locationNames(records.map((r) => r.locationId))
+    : new Map<string, string>();
+
+  const months = new Map<string, MonthAcc>();
+
+  for (const r of records) {
+    const item = r.item as ItemLite;
+    const month = months.get(monthKey(r.dispensedAt)) ?? {
+      month: monthKey(r.dispensedAt), records: 0, totalQuantity: 0, groups: new Map(),
+    };
+    months.set(month.month, month);
+    bump(month, r.quantity);
+
+    const [groupKey, rowKey, rowLabel] = mode === "location"
+      ? ["INUSE", r.locationId ?? "", (r.locationId && nameOf.get(r.locationId)) || "ไม่ระบุสถานที่"]
+      : (() => {
+          const g = r.usageType ?? "NONE";
+          if (g === "NONE") return ["NONE", "NONE", "ไม่ระบุการใช้งาน"];
+          const { key, label } = subjectIdentity(r);
+          return [g, key, label];
+        })();
+
+    const group = month.groups.get(groupKey) ?? {
+      group: groupKey, label: USAGE_GROUP_LABELS[groupKey] ?? groupKey,
+      records: 0, totalQuantity: 0, rows: new Map(),
+    };
+    month.groups.set(groupKey, group);
+    bump(group, r.quantity);
+
+    const row = group.rows.get(rowKey) ?? {
+      key: rowKey, label: rowLabel, records: 0, totalQuantity: 0, items: new Map(),
+    };
+    group.rows.set(rowKey, row);
+    bump(row, r.quantity);
+
+    const entry = row.items.get(item.id) ?? {
+      code: item.code, name: item.name, unit: item.issueUnit.name, quantity: 0, records: 0,
+    };
+    entry.quantity += r.quantity;
+    entry.records += 1;
+    row.items.set(item.id, entry);
+  }
+
+  if (months.size === 0) return [];
+
+  // เดือนที่ไม่มีการเบิกเลยต้องมีแท่งศูนย์ ไม่ใช่หายไปจากแกน — ช่องว่างบนแกนเวลาอ่านเป็น
+  // "ยังไม่มีข้อมูล" ทั้งที่แปลว่า "เดือนนั้นไม่ได้ใช้ของ"
+  const keys = [...months.keys()].sort();
+  return monthRange(keys[0], keys[keys.length - 1]).map((month) => {
+    const acc = months.get(month);
+    if (!acc) return { month, records: 0, totalQuantity: 0, groups: [] };
+    return {
+      month: acc.month,
+      records: acc.records,
+      totalQuantity: acc.totalQuantity,
+      groups: [...acc.groups.values()]
+        // ลำดับคงที่ตาม USAGE_GROUPS ไม่ใช่ตามยอด — สีของซีรีส์ในกราฟต้องหมายถึงกลุ่มเดิม
+        // ทุกเดือน ไม่งั้นแท่งเดือนหนึ่งกับอีกเดือนสีเดียวกันคนละความหมาย
+        .sort((a, b) => USAGE_GROUPS.indexOf(a.group as UsageGroup) - USAGE_GROUPS.indexOf(b.group as UsageGroup))
+        .map((g) => ({
+          ...g,
+          rows: [...g.rows.values()]
+            .map((r) => ({
+              ...r,
+              items: [...r.items.values()].sort((a, b) => b.quantity - a.quantity),
+            }))
+            .sort((a, b) => b.totalQuantity - a.totalQuantity),
+        })),
+    };
+  });
 }

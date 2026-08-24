@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsIndicator } from "@/components/ui/tabs";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { StockSummaryChart } from "./charts/stock-summary-chart";
-import { Boxes } from "lucide-react";
-import { SectionTitle, chipStyle } from "./report-kit";
+import { segmentStyle } from "./report-kit";
 import { getReport } from "@/lib/api";
 import { useAsync } from "@/hooks/use-async";
 
@@ -159,27 +158,21 @@ export function StockBalanceTab() {
 
   return (
     <div className="space-y-4">
-      <SectionTitle
-        token={spec.token}
-        icon={Boxes}
-        title="มูลค่าคงคลัง"
-        subtitle="ของที่เหลืออยู่กับของที่ออกไปแล้วคิดเป็นเงินเท่าไร แยกสิ้นเปลืองกับคงทน — และยังขาดราคาอีกกี่รายการ"
-      />
-
-      {/* ฝั่งเป็น state ในหน้านี้เอง ไม่ขึ้น URL: ?kind= ถูก tab ออกจากคลังจองไว้แล้ว และทุก tab
-          ของหน้ารายงานถูก mount พร้อมกัน — ใช้ชื่อซ้ำจะเด้งข้ามกัน */}
-      <Tabs value={side} onValueChange={(v) => setSide(v as Side)}>
-        <TabsList variant="chip" className="w-full min-w-0 sm:w-auto">
-          {(Object.keys(SIDES) as Side[]).map((k) => (
-            <TabsTrigger key={k} value={k} className="min-w-0" style={chipStyle(SIDES[k].token)}>
-              {SIDES[k].label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
       {/* side ถูกส่งไปกับ export ด้วย — ไฟล์ที่โหลดออกไปต้องเป็นฝั่งเดียวกับที่เห็นอยู่บนจอ ไม่ใช่ทั้งคลัง */}
       <ReportFilters
+        leading={
+          <Tabs value={side} onValueChange={(v) => setSide(v as Side)}>
+            {/* สีอยู่บนราง ไม่ใช่บนแต่ละช่อง เพราะตัวที่ทาสีคือแถบที่เลื่อน ไม่ใช่ปุ่ม */}
+            <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+              <TabsIndicator />
+              {(Object.keys(SIDES) as Side[]).map((k) => (
+                <TabsTrigger key={k} value={k} className="min-w-0">
+                  {SIDES[k].label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        }
         config={filterConfig}
         values={filters}
         onChange={setFilters}

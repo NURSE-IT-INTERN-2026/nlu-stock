@@ -44,7 +44,7 @@ export type CaseDocumentJson = {
 
 export type CaseDetailJson = CaseSummaryJson & {
   /** งานที่กดทำได้จากหน้าเคสตรงนี้เลย — มีเฉพาะเคสที่เปิดค้างและไม่มีหน้างานของตัวเอง. */
-  action?: { kind: "KIT_CHECK" | "RECOVER"; targetId: string; label: string } | null;
+  action?: { kind: "RECOVER"; targetId: string; label: string } | null;
   fields: { label: string; value: string }[];
   steps: CaseStepJson[];
   document: CaseDocumentJson | null;
@@ -550,8 +550,6 @@ export interface KitDetail {
     id: string;
     subCode: string;
     status: string;
-    /** true = ถูกใช้ไปแล้ว ยังไม่มีใครยืนยันว่าของครบ — ยืมไม่ได้จนกว่าจะกดตรวจ. */
-    needsCheck: boolean;
     kitContents: { id: string; subCode: string; item: { id: string; code: string; name: string } }[];
   }[];
   maxSets: number;
@@ -587,7 +585,7 @@ export function assembleKit(
 }
 
 export interface KitSetContents {
-  set: { id: string; subCode: string; status: string; needsCheck: boolean; item: { id: string; code: string; name: string } };
+  set: { id: string; subCode: string; status: string; item: { id: string; code: string; name: string } };
   tracked: { id: string; subCode: string; serialNumber: string | null; item: { id: string; code: string; name: string; issueUnit: { name: string } } }[];
   durables: KitComponent[];
   consumables: KitComponent[];
@@ -605,14 +603,6 @@ export function cancelKitSet(subItemId: string, data: { note?: string }) {
     `/api/kits/sets/${subItemId}`,
     { method: "POST", body: JSON.stringify(data) },
   );
-}
-
-/** ยืนยันตรวจชุด — lifts รอตรวจ. Checks nothing and moves no stock; it records that a human looked. */
-export function confirmKitSetChecked(subItemId: string, data: { note?: string }) {
-  return request<{ kitItemId: string; setLabel: string }>(`/api/kits/sets/${subItemId}/check`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
 }
 
 // ─── Receive ───
@@ -1016,7 +1006,7 @@ export function getMaintenanceSummary() {
 // ─── Alerts ───
 
 export function getAlerts() {
-  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; overdueReturn: number; damagedPending: number; dueCount: number; total: number; totalItems: number; onLoan: number }>(
+  return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; overdueReturn: number; damagedPending: number; dueCount: number; openCases: number; total: number; totalItems: number; onLoan: number }>(
     "/api/alerts",
   );
 }

@@ -37,7 +37,6 @@ import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { OpenRepairBanner } from "@/components/items/open-repair-banner";
 import { ItemDetailMaintenance } from "@/components/items/item-detail-maintenance";
-import { CaseWorkspace } from "@/components/cases/case-workspace";
 import { StockAdjustmentDialog } from "@/components/items/stock-adjustment-dialog";
 import { ReportStatusDialog } from "@/components/items/report-status-dialog";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
@@ -1065,9 +1064,6 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
 
 // ── Piece maintenance tab ──
 function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct: boolean; onRecord: () => void }) {
-  // Same move as the parent item's tab: ซ่อมแซม belongs next to แจ้งชำรุด/ส่งซ่อม in ประวัติ,
-  // not a tab away from them. Only the count stays here, as a pointer.
-  const corrective = sub.maintenanceRecords.filter((r) => r.type === "CORRECTIVE");
   const preventive = sub.maintenanceRecords.filter((r) => r.type !== "CORRECTIVE");
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -1085,15 +1081,6 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
           <div><dt className="text-muted-foreground text-xs">บำรุงล่าสุด</dt><dd className="font-medium mt-0.5">{sub.lastMaintenanceDate ? fmtDay(sub.lastMaintenanceDate) : sub.maintenanceRecords[0] ? fmtDay(sub.maintenanceRecords[0].performedAt) : "—"}</dd></div>
           <div><dt className="text-muted-foreground text-xs">รอบถัดไป</dt><dd className="font-medium mt-0.5">{sub.nextMaintenanceDate ? fmtDay(sub.nextMaintenanceDate) : "—"}</dd></div>
         </dl>
-      </div>
-      {/* Rounds only, and read from the same place /cases reads — see ItemDetailMaintenance. */}
-      <div className="p-4 sm:p-5 space-y-4">
-        <CaseWorkspace itemId={sub.item.id} subItemId={sub.id} lockType="MAINTENANCE" compact canEdit={canAct} />
-        <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-          {corrective.length > 0
-            ? <>ประวัติ<span className="font-medium text-foreground">ซ่อมแซม {corrective.length} ครั้ง</span> ย้ายไปอยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span> แล้ว — แสดงรวมกับ แจ้งชำรุด และ ส่งซ่อม เป็นงานเดียวกัน</>
-            : <>ประวัติซ่อมแซม (แจ้งชำรุด → ส่งซ่อม → รับคืนจากซ่อม) อยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span></>}
-        </p>
       </div>
     </section>
   );

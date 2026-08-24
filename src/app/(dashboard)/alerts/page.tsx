@@ -24,6 +24,12 @@ import { ItemsFilterBar, type FilterState } from "@/components/items/items-filte
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
 import { ReturnPanel } from "@/components/receive/return-panel";
 import { OverdueMaintenancePanel } from "@/components/items/overdue-maintenance-panel";
+import { CaseWorkspace } from "@/components/cases/case-workspace";
+import { ReportSummary, type SummaryStat } from "@/components/reports/report-summary";
+import { ExportButtons } from "@/components/reports/export-buttons";
+import { useSession } from "@/components/layout/auth-guard";
+import { canManageStock } from "@/lib/roles";
+import type { CaseTotalsJson } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface UnitType { id: string; name: string }
@@ -48,7 +54,9 @@ interface ItemRecord {
   alertTypes: string[];
 }
 
-type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "overdueReturn" | "damagedPending" | "dueCount";
+// `todo` เป็นแท็บเดียวที่แถวไม่ใช่พัสดุ แต่เป็นใบเคส — พัสดุชิ้นเดียวที่ทั้งชำรุดและเลยกำหนดคืน
+// เป็นสองงานที่ต้องทำคนละอย่าง ยุบเป็นแถวเดียวแล้วจะมีงานหนึ่งหายไปจากสายตา.
+type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "overdueReturn" | "damagedPending" | "dueCount" | "todo";
 
 const ALERT_BADGE: Record<string, string> = {
   lowStock: "bg-orange-500/15 text-orange-700 border-orange-500/30",
@@ -116,6 +124,7 @@ function AlertsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setDetail } = usePageHeader();
+  const { user } = useSession();
   const isMobile = useIsMobile();
   const { categories } = useCategories();
   const { locations } = useLocations();
@@ -136,12 +145,13 @@ function AlertsContent() {
     if (searchParams.get("overdueReturn") === "true") return "overdueReturn";
     if (searchParams.get("damagedPending") === "true") return "damagedPending";
     if (searchParams.get("dueCount") === "true") return "dueCount";
+    if (searchParams.get("todo") === "true") return "todo";
     return "all";
   }, [searchParams]);
 
   const selectAlertType = useCallback((key: AlertTypeKey) => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending", "dueCount"]) params.delete(k);
+    for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending", "dueCount", "todo"]) params.delete(k);
     if (key !== "all") params.set(key, "true");
     const qs = params.toString();
     router.replace(qs ? `/alerts?${qs}` : "/alerts");
@@ -163,7 +173,7 @@ function AlertsContent() {
   const fetchPage = useCallback(async (p: number) => {
     // "แจ้งชำรุด", "เกินกำหนดคืน", and "เกินกำหนดซ่อม" render their own worklist panels below
     // instead of the item table — skip the item fetch entirely while any is active.
-    if (alertType === "damagedPending" || alertType === "overdueReturn" || alertType === "overdueMaint") {
+    if (alertType === "damagedPending" || alertType === "overdueReturn" || alertType === "overdueMaint" || alertType === "todo") {
       return { items: [], total: 0 };
     }
     const params: Record<string, string> = { page: String(p), perPage: String(perPage) };
@@ -188,6 +198,9 @@ function AlertsContent() {
 
   const alertChips: { key: AlertTypeKey; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: alerts.total },
+    // นำหน้าแท็บที่เหลือ: อีกหกแท็บบอกว่า "พัสดุตัวไหนผิดปกติ" แท็บนี้บอกว่า "ใครต้องไปทำอะไร"
+    // ซึ่งเป็นคำถามที่คนเปิดหน้านี้มาถามก่อน.
+    { key: "todo", label: "รายการสิ่งที่ต้องทำ", count: alerts.openCases },
     { key: "lowStock", label: "ต่ำกว่าขั้นต่ำ", count: alerts.lowStock },
     { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
     { key: "overdueMaint", label: "เกินกำหนดซ่อมบำรุง", count: alerts.overdueMaintenance },
@@ -322,6 +335,8 @@ function AlertsContent() {
         <div className="flex-1 min-h-0">
           <ReturnPanel initialChip="overdue" readOnly />
         </div>
+      ) : alertType === "todo" ? (
+        <TodoTab canEdit={canManageStock(user?.role ?? "")} />
       ) : (
       <>
       <ItemsFilterBar
@@ -476,4 +491,69 @@ function AlertsContent() {
       )}
     </div>
   );
+}
+
+/**
+ * รายการสิ่งที่ต้องทำ — เวิร์กสเปซเคสตัวเดียวกับที่ /repairs, /maintenance และประวัติของพัสดุใช้
+ * ต่างกันแค่ถูกล็อกไว้ที่งานที่ยังไม่จบ. กดแถวแล้วรายละเอียดเปิดข้างๆ ตรงนั้นเลย ไม่ต้องเด้งออก
+ * ไปหน้าอื่นแล้วให้คนไล่หาแถวเดิมซ้ำอีกรอบ.
+ */
+function TodoTab({ canEdit }: { canEdit: boolean }) {
+  const [totals, setTotals] = useState<CaseTotalsJson | null>(null);
+  const [query, setQuery] = useState("");
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <ExportButtons reportType="cases" filters={exportFilters(query)} />
+      </div>
+      {totals && lostStat(totals).length > 0 && <ReportSummary stats={lostStat(totals)} />}
+      <CaseWorkspace todo canEdit={canEdit} onTotals={(t, q) => { setTotals(t); setQuery(q); }} />
+    </div>
+  );
+}
+
+/**
+ * ตัวกรองที่หน้าจอใช้อยู่ แปลงเป็นสิ่งที่ /api/reports/export รับ: `type` ถูกจองไว้เป็นชนิดรายงานแล้ว
+ * ประเภทเคสจึงต้องเดินทางในชื่อ caseType ไม่งั้นมันจะเขียนทับ type=cases แล้วไฟล์จะออกมาผิดรายงาน.
+ * `perPage` เป็นเรื่องของการแบ่งหน้าบนจอ ไฟล์ส่งออกทั้งชุดเสมอ. `todo` เดินทางไปด้วย — ไฟล์ที่
+ * ส่งออกมาทั้ง 697 เคสจากจอที่แสดง 420 คือไฟล์ที่ไม่มีใครเชื่ออีกเลย.
+ */
+function exportFilters(query: string): Record<string, string | undefined> {
+  const p = new URLSearchParams(query);
+  p.delete("perPage");
+  const type = p.get("type");
+  p.delete("type");
+  if (type) p.set("caseType", type);
+  return Object.fromEntries(p);
+}
+
+/**
+ * ของที่ยังหาไม่พบ — ยอดเดียวที่เหลือจากการ์ดเงินสองใบของแท็บเคสงานเดิม. ค่าซ่อมย้ายไปไหนไม่ได้
+ * เพราะ ค่าใช้จ่ายรายปี มีของมันอยู่แล้ว; ส่วนก้อนนี้ไม่ใช่รายงานเงิน มันคือ "ยังตามของไม่ได้อีก
+ * เท่าไหร่" ซึ่งเป็นงานที่ค้าง จึงมาอยู่หัวรายการงานที่ค้าง.
+ *
+ * นำด้วยจำนวนชิ้นจนกว่าจะตีราคาได้เกินครึ่ง — ของหาย 101 ชิ้นที่รู้ราคาแค่ชิ้นเดียวแล้วขึ้นหัวว่า
+ * ฿60,000 อ่านเหมือนยอดความเสียหายจริง ทั้งที่อีก 100 ชิ้นยังไม่ถูกนับ.
+ */
+function lostStat(t: CaseTotalsJson): SummaryStat[] {
+  if (t.lostCases === 0) return [];
+  const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
+  const known = t.lostPriced / t.lostCases >= 0.5;
+  // ป้าย (ประมาณการ) หายเองเมื่อทุกเคสที่ตีราคาได้ใช้ราคาจากใบรับเข้าของชิ้นนั้นเอง
+  const estimated = t.lostExact < t.lostPriced;
+  return [known
+    ? {
+        label: estimated ? "มูลค่าของที่ยังหาไม่พบ (ประมาณการ)" : "มูลค่าของที่ยังหาไม่พบ",
+        value: baht(t.lostValue),
+        hint: `${t.lostUnits.toLocaleString()} หน่วย · ตีราคาได้ ${t.lostPriced.toLocaleString()} จาก ${t.lostCases.toLocaleString()} เคส`,
+        token: "lost",
+      }
+    : {
+        label: "ของที่ยังหาไม่พบ",
+        value: `${t.lostUnits.toLocaleString()} หน่วย`,
+        hint: t.lostPriced === 0
+          ? `${t.lostCases.toLocaleString()} เคส · ยังไม่มีเคสไหนตีราคาได้`
+          : `ตีราคาได้ ${t.lostPriced.toLocaleString()} จาก ${t.lostCases.toLocaleString()} เคส · ${baht(t.lostValue)} (ประมาณการ)`,
+        token: "lost",
+      }];
 }

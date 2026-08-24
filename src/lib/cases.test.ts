@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { walkPieceCases, walkKitChecks, summariseCases, type CaseSummary, type CaseType } from "./cases";
+import { walkPieceCases, summariseCases, isOverdue, isTodo, type CaseSummary, type CaseType } from "./cases";
 import { formatCode } from "./case-codes";
 
 const at = (day: number) => new Date(`2026-03-${String(day).padStart(2, "0")}T03:00:00Z`);
@@ -94,65 +94,11 @@ test("case code pads to four digits", () => {
   assert.equal(formatCode("BR", 2569, 7), "BR-2569-0007");
 });
 
-// ── KC ตรวจชุด ────────────────────────────────────────────────────────────────
-type AnyRet = Parameters<typeof walkKitChecks>[0][number];
-type AnyClose = Parameters<typeof walkKitChecks>[1][number];
-
-const ret = (id: string, sub: string, day: number): AnyRet => ({
-  id, subItemId: sub, returnedAt: at(day), returner: { name: "Admin" },
-  item: { id: "k1", code: "NLU-KIT-001", name: "ชุดทำแผล", issueUnit: { name: "ชุด" } },
-  subItem: { subCode: sub },
-} as unknown as AnyRet);
-
-const close = (id: string, sub: string, day: number, reason = "ตรวจชุด NLU-KIT-001-C04 — ของครบ", status = "AVAILABLE"): AnyClose => ({
-  id, subItemId: sub, changedAt: at(day), reason, newStatus: status, changer: { name: "Staff" },
-} as unknown as AnyClose);
-
-test("คืน → ตรวจ → คืน → ตรวจ กลายเป็นสองเคสที่ปิดคนละครั้ง", () => {
-  const cases = walkKitChecks(
-    [ret("r1", "c04", 1), ret("r2", "c04", 10)],
-    [close("k1", "c04", 3), close("k2", "c04", 12)],
-  );
-  assert.equal(cases.length, 2);
-  assert.deepEqual(cases.map((c) => c.closer?.id), ["k1", "k2"]);
-});
-
-test("ชุดที่คืนแล้วยังไม่ตรวจ = เคสเปิดค้าง", () => {
-  const [c] = walkKitChecks([ret("r1", "c04", 1)], []);
-  assert.equal(c.closer, null);
-  assert.equal(c.cancelled, false);
-});
-
-test("ยกเลิกชุด ปิดเคสได้ แต่ไม่ใช่ 'ตรวจแล้ว'", () => {
-  const [c] = walkKitChecks(
-    [ret("r1", "c04", 1)],
-    [close("x1", "c04", 4, "ยกเลิกชุด NLU-KIT-001-C04", "DISPOSED")],
-  );
-  assert.equal(c.cancelled, true);
-  assert.equal(c.closer?.id, "x1");
-});
-
-test("การตรวจของชุดหนึ่ง ไม่ปิดเคสค้างของอีกชุด", () => {
-  const cases = walkKitChecks(
-    [ret("r1", "c04", 1), ret("r2", "c05", 2)],
-    [close("k5", "c05", 5)],
-  );
-  const c04 = cases.find((c) => c.opener.subItemId === "c04")!;
-  const c05 = cases.find((c) => c.opener.subItemId === "c05")!;
-  assert.equal(c04.closer, null, "c04 ยังรอตรวจ");
-  assert.equal(c05.closer?.id, "k5");
-});
-
-test("การตรวจที่เกิดก่อนการคืน ไม่ถูกจับไปปิดการคืนนั้น", () => {
-  const [c] = walkKitChecks([ret("r1", "c04", 10)], [close("k1", "c04", 2)]);
-  assert.equal(c.closer, null, "ตรวจตอนวันที่ 2 ปิดการคืนวันที่ 10 ไม่ได้");
-});
-
 // ── summariseCases ────────────────────────────────────────────────────────────
-// เคสยืม/ตั้งใช้/ตรวจชุดไม่มีวันมีราคา การนับมันเข้าตัวหารทำให้การ์ดอ่านว่า "กรอกราคาแล้ว 0.4%" ตลอดกาล
+// เคสยืม/ตั้งใช้ไม่มีวันมีราคา การนับมันเข้าตัวหารทำให้การ์ดอ่านว่า "กรอกราคาแล้ว 0.4%" ตลอดกาล
 const summaryRow = (type: CaseType, extra: Partial<CaseSummary> = {}): CaseSummary => ({
   id: `${type}:x`, type, code: "", state: "OPEN", statusLabel: "", subject: "", title: "",
-  itemId: "i", itemCode: "C", subCode: null, qty: 1, unit: "ชิ้น", cost: null,
+  itemId: "i", itemCode: "C", subCode: null, qty: 1, unit: "ชิ้น", cost: null, dueAt: null,
   openedAt: at(1), updatedAt: at(1), openedBy: "u", ...extra,
 });
 
@@ -163,11 +109,10 @@ test("summariseCases counts service money against ซ่อม+บำรุง o
     summaryRow("REPAIR"),          // ยังไม่กรอกราคา — อยู่ในตัวหาร ไม่อยู่ในยอด
     summaryRow("BORROW"),          // ไม่มีวันมีราคา
     summaryRow("INUSE"),
-    summaryRow("KIT_CHECK"),
   ]);
   assert.equal(totals.serviceCost, 1_500);
   assert.equal(totals.servicePriced, 2);
-  assert.equal(totals.serviceCases, 3, "ยืม/ตั้งใช้/ตรวจชุด ต้องไม่อยู่ในตัวหาร");
+  assert.equal(totals.serviceCases, 3, "ยืม/ตั้งใช้ ต้องไม่อยู่ในตัวหาร");
 });
 
 test("summariseCases keeps lost value apart from repair spend", () => {
@@ -183,6 +128,46 @@ test("summariseCases keeps lost value apart from repair spend", () => {
   assert.equal(totals.lostCases, 3);
   assert.equal(totals.lostPriced, 2, "เคสที่ไม่มีราคาเลยต้องไม่นับว่าตีราคาได้");
   assert.equal(totals.lostExact, 1, "เท่ากับ lostPriced เมื่อไหร่ ยอดถึงจะเลิกเป็นประมาณการ");
+});
+
+test("summariseCases counts only what is still lost", () => {
+  const totals = summariseCases([
+    summaryRow("LOST", { qty: 2, lostValue: { amount: 400, exact: true } }),
+    // ตามของกลับมาได้แล้ว — ไม่ใช่ความเสียหาย และต้องหลุดออกจากทุกช่องของก้อนนี้
+    summaryRow("LOST", { state: "DONE", qty: 5, lostValue: { amount: 999, exact: true } }),
+  ]);
+  assert.equal(totals.lostCases, 1);
+  assert.equal(totals.lostUnits, 2);
+  assert.equal(totals.lostValue, 400, "ของที่เรียกคืนแล้วต้องไม่ค้างอยู่ในยอดความเสียหาย");
+});
+
+// ── worklist ──────────────────────────────────────────────────────────────────
+const past = new Date(Date.now() - 86_400_000);
+const future = new Date(Date.now() + 86_400_000);
+
+test("isOverdue needs a due date AND an open case", () => {
+  assert.equal(isOverdue({ dueAt: past, state: "OPEN" }), true);
+  assert.equal(isOverdue({ dueAt: future, state: "OPEN" }), false);
+  assert.equal(isOverdue({ dueAt: past, state: "DONE" }), false, "คืนช้าแต่คืนแล้ว ไม่มีใครรออยู่");
+  assert.equal(isOverdue({ dueAt: null, state: "OPEN" }), false, "ไม่มีกำหนด = เกินไม่ได้");
+});
+
+test("isTodo takes borrows only once they are late", () => {
+  assert.equal(isTodo(summaryRow("BORROW", { dueAt: past })), true);
+  assert.equal(isTodo(summaryRow("BORROW", { dueAt: future })), false, "ยังไม่ถึงกำหนด ไม่ใช่งานค้าง");
+  assert.equal(isTodo(summaryRow("BORROW")), false, "ยืมที่ไม่ได้ตั้งกำหนดไว้ ไม่มีอะไรให้เกิน");
+});
+
+test("isTodo leaves ตั้งใช้ในห้อง out however long it has been open", () => {
+  assert.equal(isTodo(summaryRow("INUSE")), false);
+  assert.equal(isTodo(summaryRow("INUSE", { dueAt: past })), false, "ประเภทเป็นตัวตัด ไม่ใช่วันที่");
+});
+
+test("isTodo keeps open repairs and losses, drops closed ones", () => {
+  assert.equal(isTodo(summaryRow("REPAIR")), true);
+  assert.equal(isTodo(summaryRow("LOST")), true);
+  assert.equal(isTodo(summaryRow("REPAIR", { state: "DONE" })), false);
+  assert.equal(isTodo(summaryRow("REPAIR", { state: "CANCELLED" })), false, "ยกเลิกคำขอแล้วไม่มีใครต้องทำอะไร");
 });
 
 test("summariseCases reports zeros rather than NaN when nothing matches", () => {

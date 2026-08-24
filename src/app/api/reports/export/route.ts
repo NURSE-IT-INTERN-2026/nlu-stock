@@ -4,15 +4,16 @@ import * as XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, monthLabel } from "@/lib/format";
 import { stockValueRows } from "@/lib/cost";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 import { USAGE_TYPE_LABELS, STATUS_LABELS, effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
-import { groupUsageBySubject, groupInUseByLocation } from "@/lib/usage-by-subject";
+import { groupUsageByMonth } from "@/lib/usage-by-subject";
 import { caseRangeStart, listCases } from "@/lib/cases";
+import { itemHistory } from "@/app/api/items/[id]/history/route";
 import { CASE_PREFIX, CASE_STATE_LABELS, CASE_TYPE_LABELS, type CaseState, type CaseType } from "@/lib/case-types";
 
 /** เหตุผล search — the four columns recipientLabel can render from. Always nested under
@@ -163,7 +164,8 @@ type ReportType =
   | "usage-by-subject"
   | "annual-cost"
   | "maintenance-schedule"
-  | "cases";
+  | "cases"
+  | "item-history";
 
 const REPORT_TYPES: ReportType[] = [
   "stock-balance",
@@ -175,6 +177,7 @@ const REPORT_TYPES: ReportType[] = [
   "annual-cost",
   "maintenance-schedule",
   "cases",
+  "item-history",
 ];
 
 // หัวเรื่องบนไฟล์ PDF — เดิมเป็น type.toUpperCase() ("DISPENSE HISTORY") ซึ่งไม่ตรงกับชื่อ tab
@@ -189,6 +192,7 @@ const REPORT_TITLES: Record<ReportType, string> = {
   "annual-cost": "ค่าใช้จ่ายรายปี",
   "maintenance-schedule": "ตารางบำรุงรักษา",
   "cases": "เคสงาน",
+  "item-history": "ประวัติพัสดุ",
 };
 
 const SIDE_LABELS: Record<string, string> = {
@@ -493,30 +497,29 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       if (categoryId) filters.push({ item: { categoryId } });
       const where = { AND: filters };
 
-      // นำไปใช้งานจัดกลุ่มตามห้อง ไม่ใช่ตามวิชา — หัวคอลัมน์จึงต้องเปลี่ยนตาม ไม่งั้นไฟล์จะพิมพ์
-      // ชื่อห้องไว้ใต้หัวข้อ "วิชา / กิจกรรม"
-      if (kind === "inuse") {
-        const rows = await groupInUseByLocation(where);
-        return rows.map((r) => ({
-          สถานที่: r.label,
-          จำนวนครั้ง: r.records,
-          จำนวนหน่วย: r.totalQuantity,
-          ชนิดพัสดุ: r.itemCount,
-        }));
-      }
+      // ไฟล์ต้องเล่าเรื่องเดียวกับหน้าจอ ซึ่งตอนนี้แกนเป็นเดือน — ไฟล์ที่เป็นยอดรวมทั้งช่วงอย่างเดียว
+      // จะตอบ "เดือนไหนใช้เยอะ" ไม่ได้ ทั้งที่เป็นคำถามแรกของรายงาน. ละเอียดถึงระดับพัสดุหนึ่งแถว
+      // เพื่อให้ pivot ใน Excel ได้ทุกแกน (เดือน / ประเภท / วิชา / พัสดุ) โดยไม่ต้องออกไฟล์ซ้ำ
+      // และทุกคอลัมน์ยังสั้นพอที่ PDF จะจัดหน้าได้.
+      const months = await groupUsageByMonth(where, kind === "inuse" ? "location" : "usage");
+      const subjectHeader = kind === "inuse" ? "สถานที่" : "วิชา / กิจกรรม";
 
-      const rows = await groupUsageBySubject(where);
-
-      return rows.map((r) => ({
-        ประเภทการใช้งาน: USAGE_TYPE_LABELS[r.usageType ?? ""] ?? r.usageType ?? "ไม่ระบุ",
-        // Kept as its own column so a spreadsheet can pivot on the code, not just read it
-        // out of the combined label.
-        รหัสวิชา: r.courseCode ?? "",
-        "วิชา / กิจกรรม": r.label,
-        จำนวนครั้ง: r.records,
-        จำนวนหน่วย: r.totalQuantity,
-        ชนิดพัสดุ: r.itemCount,
-      }));
+      return months.flatMap((m) =>
+        m.groups.flatMap((g) =>
+          g.rows.flatMap((row) =>
+            row.items.map((it) => ({
+              เดือน: monthLabel(m.month),
+              ประเภทการใช้งาน: g.label,
+              [subjectHeader]: row.label,
+              รหัสพัสดุ: it.code,
+              รายการพัสดุ: it.name,
+              จำนวนครั้ง: it.records,
+              จำนวนหน่วย: it.quantity,
+              หน่วยนับ: it.unit,
+            })),
+          ),
+        ),
+      );
     }
 
     case "annual-cost": {
@@ -637,6 +640,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         ...(state && state in CASE_STATE_LABELS ? { state: state as CaseState } : {}),
         ...(params.get("q") ? { q: params.get("q")! } : {}),
         ...(params.get("itemId") ? { itemId: params.get("itemId")! } : {}),
+        // งานที่ยังมีคนรออยู่ — เกณฑ์เดียวกับที่แท็บ รายการสิ่งที่ต้องทำ แสดง ไม่ใช่ state=OPEN เปล่าๆ
+        ...(params.get("todo") === "true" ? { todo: true } : {}),
         ...(from ? { from } : {}),
       });
 
@@ -657,6 +662,51 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           : c.lostValue.exact ? "ใบรับเข้าของชิ้นนี้" : "ประมาณการจากราคาเฉลี่ย",
         วันที่เปิดเคส: fmtDate(c.openedAt, "yyyy-MM-dd"),
         ผู้เปิดเคส: c.openedBy,
+      }));
+    }
+
+    // ประวัติพัสดุ — เคสและการเคลื่อนไหวปนกันเหมือนที่แท็บประวัติแสดง. อ่านผ่าน itemHistory
+    // ตัวเดียวกับหน้าจอ ตัวกรองจึงเป็นชุดเดียวกันโดยไม่ต้องมีใครคอยจำให้ตรงกัน.
+    //
+    // แบนเป็นบรรทัดต่อเหตุการณ์ ไม่ใช่บรรทัดต่อเคส: การ์ดเคสบนจอมีขั้นตอนซ้อนอยู่ข้างใน ซึ่ง
+    // spreadsheet ไม่มีที่ให้ซ้อน — คอลัมน์ `รหัสเคส` คือสิ่งที่ผูกสามบรรทัดของงานเดียวกันไว้แทน.
+    case "item-history": {
+      const itemId = params.get("itemId");
+      if (!itemId) return [];
+      const p = new URLSearchParams(params);
+      // ประเภทกิจกรรมมาในชื่อ kind เพราะ type เป็นของชนิดรายงาน — คืนชื่อจริงให้ itemHistory ที่นี่
+      const kind = p.get("kind");
+      p.delete("kind");
+      if (kind) p.set("type", kind); else p.delete("type");
+      // ไฟล์ได้ทั้งชุดที่กรองไว้ ไม่ใช่หน้าที่กำลังเปิด
+      p.set("page", "1");
+      p.set("perPage", "100000");
+      const data = await itemHistory(itemId, p);
+      if (!data) return [];
+
+      type Row = { id: string; type: string; date: string | Date; qty: number | null; delta: number | null; note: string; subtitle: string; notes: string; user: string };
+      type Unit = Row | { kind: "trip"; code: string; caseType: string; statusLabel: string; subject: string; steps: Row[] };
+      const flat: { code: string; caseType: string; subject: string; step: Row }[] = [];
+      for (const u of data.events as Unit[]) {
+        if ("steps" in u) {
+          for (const step of u.steps) flat.push({ code: u.code, caseType: CASE_TYPE_LABELS[u.caseType as CaseType] ?? u.caseType, subject: u.subject, step });
+        } else {
+          flat.push({ code: "", caseType: "", subject: "", step: u });
+        }
+      }
+
+      return flat.map((r) => ({
+        วันที่: fmtDate(new Date(r.step.date), "yyyy-MM-dd"),
+        รหัสเคส: r.code,
+        ประเภทเคส: r.caseType,
+        เรื่อง: r.subject,
+        กิจกรรม: r.step.note,
+        รายละเอียด: r.step.subtitle,
+        จำนวน: r.step.qty ?? "",
+        // ต่างกับ จำนวน บนแถวคืนของชำรุด: ของกลับเข้าประตู 3 ชิ้น แต่ไม่มีชิ้นไหนกลับเข้าสต๊อกที่ใช้ได้
+        สต็อกเปลี่ยน: r.step.delta ?? "",
+        หมายเหตุ: r.step.notes,
+        ผู้ทำรายการ: r.step.user,
       }));
     }
   }

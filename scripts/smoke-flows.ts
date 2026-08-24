@@ -72,9 +72,9 @@ const pickItems = (profileCode: string, limit: number, extra = "") =>
 const item = async (id: string) =>
   (await q<ItemRow>(`SELECT id, code, "availableQty", "totalQty", status, "locationId" FROM items WHERE id = $1`, [id]))[0];
 const sub = async (id: string) =>
-  (await q<any>(`SELECT id, "subCode", status, "needsCheck", "inKitSubItemId", "locationId" FROM sub_items WHERE id = $1`, [id]))[0];
+  (await q<any>(`SELECT id, "subCode", status, "inKitSubItemId", "locationId" FROM sub_items WHERE id = $1`, [id]))[0];
 const availSubs = (itemId: string, limit = 1) =>
-  q<any>(`SELECT id, "subCode" FROM sub_items WHERE "itemId" = $1 AND status = 'AVAILABLE' AND NOT "needsCheck" ORDER BY random() LIMIT $2`, [itemId, limit]);
+  q<any>(`SELECT id, "subCode" FROM sub_items WHERE "itemId" = $1 AND status = 'AVAILABLE' ORDER BY random() LIMIT $2`, [itemId, limit]);
 const firstLot = async (itemId: string) =>
   (await q<any>(`SELECT id, "lotNumber", "remainingQty" FROM lots WHERE "itemId" = $1 AND "remainingQty" > 0 ORDER BY "expiryDate" NULLS LAST LIMIT 1`, [itemId]))[0];
 const countRow = async (sql: string, params: any[] = []) => Number((await q<any>(sql, params))[0].c);
@@ -404,7 +404,7 @@ async function phaseReturns() {
 
 const damagedSubs: { itemId: string; subItemId: string; recordId: string }[] = [];
 
-/** ชุดอุปกรณ์ — ผูกสูตร → ประกอบชุด → ยืม → คืน → รอตรวจ → ยืนยันตรวจ. */
+/** ชุดอุปกรณ์ — ผูกสูตร → ประกอบชุด → ยืม → คืน → ยืมรอบสองได้ทันที. */
 async function phaseKit() {
   phase = "6 ชุดอุปกรณ์";
   const kits = await q<ItemRow>(
@@ -448,8 +448,10 @@ async function phaseKit() {
 
     const setIds: string[] = asm.json.setSubItemIds;
     const setId = setIds[0];
+    // ชุดที่ประกอบเสร็จพร้อมให้ยืมทันที — ยอดนี้คือเส้นฐานที่การคืนต้องพากลับมาให้ได้
+    const kitAvail = (await item(kit.id)).availableQty;
 
-    // 3. ยืมชุด → ต้องขึ้น รอตรวจ ทันที
+    // 3. ยืมชุด
     const course = pick(courses);
     const out = await POST("/api/dispense", {
       items: [{ itemId: kit.id, subItemId: setId, quantity: 1 }],
@@ -459,37 +461,25 @@ async function phaseKit() {
     if (!out.ok) continue;
     const afterOut = await sub(setId);
     eq(`ชุดออกไปแล้ว → ON_LOAN`, afterOut.status, "ON_LOAN");
-    eq(`ชุดที่ถูกใช้ → รอตรวจ`, afterOut.needsCheck, true);
 
     // 4. คืนชุด
     const back = await POST("/api/returns", { entries: [{ dispenseRecordId: out.json.ids[0], subItemId: setId, status: "AVAILABLE" }], note: "คืนชุด" });
     check(`คืนชุด ${kit.code}`, back.ok, JSON.stringify(back.json));
     const afterBack = await sub(setId);
     eq(`ชุดคืนแล้ว → AVAILABLE`, afterBack.status, "AVAILABLE");
-    eq(`ชุดยัง รอตรวจ หลังคืน`, afterBack.needsCheck, true);
+    eq(`ชุดคืนแล้ว นับเป็นของพร้อมใช้ทันที`, (await item(kit.id)).availableQty, kitAvail);
 
-    // 5. ยืมซ้ำทั้งที่ยังไม่ตรวจ → ต้องถูกปฏิเสธ
-    const blocked = await POST("/api/dispense", {
-      items: [{ itemId: kit.id, subItemId: setId, quantity: 1 }],
-      usageType: "ACTIVITY", usageNote: "ทดสอบยืมชุดที่ยังไม่ตรวจ",
-    });
-    check(`ชุดรอตรวจ ยืมไม่ได้`, !blocked.ok, `status=${blocked.status} ${JSON.stringify(blocked.json)}`);
-
-    // 6. ยืนยันตรวจชุด → ยืมได้อีก
-    const confirm = await POST(`/api/kits/sets/${setId}/check`, { note: "ตรวจครบตามสูตร" });
-    check(`ยืนยันตรวจชุด ${kit.code}`, confirm.ok, JSON.stringify(confirm.json));
-    eq(`ตรวจแล้ว → ไม่รอตรวจ`, (await sub(setId)).needsCheck, false);
-
+    // 5. ยืมรอบสองต่อจากการคืนตรงๆ — ไม่มีขั้นตรวจคั่นอีกแล้ว
     const again = await POST("/api/dispense", {
       items: [{ itemId: kit.id, subItemId: setId, quantity: 1 }],
       usageType: "COURSE", courseCode: pick(courses).code, usageNote: "ยืมรอบสอง", dueAt: daysFromNow(5),
     });
-    check(`ตรวจแล้วยืมได้`, again.ok, JSON.stringify(again.json));
+    check(`คืนแล้วยืมต่อได้ทันที`, again.ok, JSON.stringify(again.json));
     if (again.ok) {
       await POST("/api/returns", { entries: [{ dispenseRecordId: again.json.ids[0], subItemId: setId, status: "AVAILABLE" }], note: "คืนชุดรอบสอง" });
     }
 
-    // 7. ชิ้นในชุดแจ้งชำรุด → ต้องหลุดออกจากชุด
+    // 6. ชิ้นในชุดแจ้งชำรุด → ต้องหลุดออกจากชุด
     const inside = (await q<any>(`SELECT id, "itemId", "subCode" FROM sub_items WHERE "inKitSubItemId" = $1 LIMIT 1`, [setIds[1] ?? setId]))[0];
     if (inside) {
       const dmg = await POST(`/api/items/${inside.itemId}/status`, {
@@ -639,10 +629,9 @@ async function phaseHistory() {
   const reports: [string, string][] = [
     ["dispense-history", "/api/reports/dispense-history?perPage=20"],
     ["receive-history", "/api/reports/receive-history?perPage=20"],
-    ["maintenance-history", "/api/reports/maintenance-history?perPage=20"],
+    ["cases", "/api/cases?perPage=20"],
     ["status-log", "/api/reports/status-log?perPage=20"],
     ["stock-balance", "/api/reports/stock-balance"],
-    ["damaged-assets", "/api/reports/damaged-assets"],
     ["maintenance-schedule", "/api/reports/maintenance-schedule"],
     ["usage-by-subject", "/api/reports/usage-by-subject"],
     ["annual-cost", "/api/reports/annual-cost"],
@@ -690,11 +679,11 @@ async function phaseInvariants() {
 
   const trackedDrift = await q<any>(
     `SELECT i.code, i."availableQty",
-            count(*) FILTER (WHERE s.status = 'AVAILABLE' AND NOT s."needsCheck" AND s."inKitSubItemId" IS NULL) avail
+            count(*) FILTER (WHERE s.status = 'AVAILABLE' AND s."inKitSubItemId" IS NULL) avail
        FROM items i JOIN sub_items s ON s."itemId" = i.id
       WHERE i."trackIndividually"
       GROUP BY i.id, i.code, i."availableQty"
-     HAVING i."availableQty" <> count(*) FILTER (WHERE s.status = 'AVAILABLE' AND NOT s."needsCheck" AND s."inKitSubItemId" IS NULL)`,
+     HAVING i."availableQty" <> count(*) FILTER (WHERE s.status = 'AVAILABLE' AND s."inKitSubItemId" IS NULL)`,
   );
   check("ของรายชิ้น: availableQty = จำนวนชิ้นพร้อมใช้", trackedDrift.length === 0, JSON.stringify(trackedDrift.slice(0, 5)));
 
