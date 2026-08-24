@@ -1,8 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { prisma } from "./prisma";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
+const genAI = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 const EMBED_MODEL = "text-embedding-004";
 
@@ -12,9 +12,12 @@ export const hasEmbedding = () => !!genAI;
 /** Generate embedding for a single text */
 export async function embedText(text: string): Promise<number[]> {
   if (!genAI) throw new Error("Gemini API key not configured");
-  const model = genAI.getGenerativeModel({ model: EMBED_MODEL });
-  const result = await model.embedContent(text);
-  return result.embedding.values;
+  const result = await genAI.models.embedContent({ model: EMBED_MODEL, contents: text });
+  // ทุก field ใน response เป็น optional ใน SDK ใหม่ — ปล่อยให้ undefined ไหลลงไปเป็น
+  // `[undefined]` ใน vectorStr จะกลายเป็น SQL ที่พังตอน cast ซึ่งอ่านไม่ออกว่าต้นเหตุคืออะไร
+  const values = result.embeddings?.[0]?.values;
+  if (!values?.length) throw new Error("Gemini returned no embedding");
+  return values;
 }
 
 /** Generate embedding and save to DB for an item */

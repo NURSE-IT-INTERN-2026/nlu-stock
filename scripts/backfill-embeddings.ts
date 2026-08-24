@@ -7,7 +7,7 @@
  * Requires GOOGLE_GENERATIVE_AI_API_KEY in .env
  */
 import "dotenv/config";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import pg from "pg";
 
 const { DATABASE_URL, GOOGLE_GENERATIVE_AI_API_KEY } = process.env;
@@ -16,7 +16,7 @@ if (!DATABASE_URL || !GOOGLE_GENERATIVE_AI_API_KEY) {
   process.exit(1);
 }
 
-const genAI = new GoogleGenerativeAI(GOOGLE_GENERATIVE_AI_API_KEY);
+const genAI = new GoogleGenAI({ apiKey: GOOGLE_GENERATIVE_AI_API_KEY });
 const pool = new pg.Pool({ connectionString: DATABASE_URL });
 
 const BATCH_SIZE = 10;
@@ -44,9 +44,12 @@ async function main() {
     for (const item of batch) {
       try {
         const text = `${item.name} ${item.nameEn ?? ""} ${item.code} ${item.category_name ?? ""}`.trim();
-        const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
-        const result = await model.embedContent(text);
-        const values = result.embedding.values;
+        const result = await genAI.models.embedContent({
+          model: "text-embedding-004",
+          contents: text,
+        });
+        const values = result.embeddings?.[0]?.values;
+        if (!values?.length) throw new Error("Gemini returned no embedding");
         const vectorStr = `[${values.join(",")}]`;
 
         await pool.query(
