@@ -481,6 +481,13 @@ model ReturnRecord {
   returner         User            @relation(fields: [returnedBy], references: [id])
   returnedAt       DateTime        @default(now())
 
+  // The ชำรุด/สูญหาย rows this return opened. คืนสภาพชำรุด books a repair on the spot, and until
+  // these existed the resulting case had no way to say where the damage came from — you opened
+  // a repair and could not tell who had the thing when it broke. One of the two at most: qty
+  // stock writes an adjustment, a tracked piece writes a status log.
+  openedAdjustments StockAdjustment[] @relation("OpenedByReturn")
+  openedStatusLogs  ItemStatusLog[]   @relation("OpenedByReturn")
+
   @@index([itemId, returnedAt])
   @@index([subItemId])
   @@map("return_records")
@@ -515,6 +522,14 @@ model StockAdjustment {
   repairJobs    MaintenanceRecord[] @relation("TimelineRow")
   // The jobs that closed THIS booking. One in practice — a trip ends once.
   closedBy      MaintenanceRecord[] @relation("RepairBooking")
+
+  // The คืนพัสดุ that opened this row, when the damage was found on the way back in. Written by
+  // api/items/[id]/return, which already creates both rows in one transaction and simply had
+  // nowhere to record that they were the same event. Null on every row written before this
+  // column existed, and on damage reported outside a return (the แจ้งชำรุด tile). Deliberately
+  // not backfilled: the pair can only be guessed from timestamps.
+  fromReturnId  String?
+  fromReturn    ReturnRecord?    @relation("OpenedByReturn", fields: [fromReturnId], references: [id])
 
   @@index([itemId, adjustedAt])
   @@map("stock_adjustments")
@@ -594,6 +609,10 @@ model ItemStatusLog {
   kitSubItemId   String?
   changedAt      DateTime     @default(now())
   recoveredAt    DateTime? // set when a →LOST transition is reversed (เรียกคืน)
+  // The คืนพัสดุ that opened this row — see StockAdjustment.fromReturnId, same reason. This is
+  // the tracked-piece half: a piece handed back ชำรุด flips status here instead of booking qty.
+  fromReturnId   String?
+  fromReturn     ReturnRecord? @relation("OpenedByReturn", fields: [fromReturnId], references: [id])
 
   @@map("item_status_logs")
 }
@@ -642,6 +661,29 @@ model AttachmentLog {
   @@map("attachment_logs")
 }
 
+
+// --- Case numbers ---
+// เลขเคส (RC-2569-0142) ต้องนิ่ง เพราะมันคือสิ่งที่คนจดใส่กระดาษ พูดทางโทรศัพท์ และเขียนบนกล่อง
+// ที่ส่งไปร้านซ่อม. เดิมเลขนี้คำนวณสดจากลำดับ — พอเพิ่มหรือแยกประเภทเคสทีนึง เลขทั้งกองก็เลื่อน
+// และเลขที่ใครจดไว้เมื่อวานก็ชี้ไปคนละเคส.
+//
+// `seq` นับรวมทั้งปี ไม่แยกตามประเภท โดยตั้งใจ: เคสที่ย้ายประเภท (ตั้งใช้ในห้อง ที่เคยถูกนับรวมกับ
+// ยืม) ต้องเก็บเลขเดิมไว้ได้ เปลี่ยนแค่ prefix — ถ้านับแยกตามประเภท การย้ายก็คือการ renumber
+// ซึ่งเป็นสิ่งเดียวกับที่ตารางนี้มีไว้ป้องกัน. prefix จึงเป็นการแสดงผล ไม่ใช่ตัวระบุ.
+//
+// `sourceKey` ตั้งใจไม่ใส่ประเภทเคสลงไป (`disp:<id>` ไม่ใช่ `BORROW:<id>`) ด้วยเหตุผลเดียวกัน —
+// แถวต้นทางหนึ่งแถวคือหนึ่งเคสเสมอ ส่วนมันจะถูกเรียกว่าประเภทอะไรเปลี่ยนได้.
+// ไม่มี FK: sourceKey ชี้ข้ามห้าตาราง (ดู CASE_SOURCES ใน src/lib/case-codes.ts) แถวกำพร้าจึง
+// เป็นไปได้ถ้าต้นทางถูกลบ — ไม่มีอะไร join กลับมา จึงมองไม่เห็นมากกว่าเป็นอันตราย.
+model CaseCode {
+  sourceKey String   @id
+  be        Int // พ.ศ. ที่เคสเปิด
+  seq       Int
+  createdAt DateTime @default(now())
+
+  @@unique([be, seq])
+  @@map("case_codes")
+}
 
 // --- Course cache (CMU รายวิชา) ---
 // Read-through mirror of two APIs owned by other faculties: the course code list from

@@ -70,8 +70,8 @@ async function logReturn(
     notes?: string | null;
     userId: string;
   },
-): Promise<void> {
-  await tx.returnRecord.create({
+) {
+  return tx.returnRecord.create({
     data: {
       itemId: row.itemId,
       subItemId: row.subItemId ?? null,
@@ -187,18 +187,6 @@ export async function resolveSubItemReturn(
       ? note ? `คืนเข้าสู่ระบบ (${note})` : "คืนเข้าสู่ระบบ"
       : `คืนพร้อมระบุ: ${REASON_LABEL[status]}${note ? ` (${note})` : ""}`;
 
-  await tx.subItem.update({ where: { id: subItemId }, data: { status: newStatus } });
-  await tx.itemStatusLog.create({
-    data: {
-      itemId,
-      subItemId,
-      previousStatus: ItemStatus.ON_LOAN,
-      newStatus,
-      reason,
-      changedBy: userId,
-    },
-  });
-
   const dispense = await tx.dispenseRecord.findFirst({
     where: {
       ...(dispenseRecordId ? { id: dispenseRecordId } : {}),
@@ -220,7 +208,9 @@ export async function resolveSubItemReturn(
     });
   }
 
-  await logReturn(tx, {
+  // Written before the status log so that log can point at it. A ชำรุด return opens a repair
+  // case on the spot, and fromReturnId is the only thing that says which loan it came out of.
+  const ret = await logReturn(tx, {
     itemId,
     subItemId,
     dispenseRecordId: dispense?.id ?? null,
@@ -228,5 +218,18 @@ export async function resolveSubItemReturn(
     condition: status,
     notes: note,
     userId,
+  });
+
+  await tx.subItem.update({ where: { id: subItemId }, data: { status: newStatus } });
+  await tx.itemStatusLog.create({
+    data: {
+      itemId,
+      subItemId,
+      previousStatus: ItemStatus.ON_LOAN,
+      newStatus,
+      reason,
+      changedBy: userId,
+      ...(status === "AVAILABLE" ? {} : { fromReturnId: ret.id }),
+    },
   });
 }

@@ -69,6 +69,19 @@ export async function POST(
         const outstanding = dispense.quantity - dispense.resolvedQty;
         if (qty > outstanding) throw new Error(`Cannot resolve ${qty}, only ${outstanding} outstanding`);
 
+        // One row per act of returning, not per loan — คืน 3 แล้วค่อยคืน 7 leaves two rows.
+        // Written first so the ชำรุด/สูญหาย booking below can name the return it came out of:
+        // that booking IS the repair case, and without the link the case cannot say which loan
+        // the thing broke on.
+        const ret = await logReturn(tx, {
+          itemId,
+          dispenseRecordId: dispense.id,
+          quantity: qty,
+          condition: status,
+          notes: note,
+          userId: auth.user.userId,
+        });
+
         if (status === "AVAILABLE") {
           // Returned to usable stock
           await tx.item.update({ where: { id: itemId }, data: { availableQty: { increment: qty } } });
@@ -91,19 +104,10 @@ export async function POST(
               reason,
               notes: note,
               adjustedBy: auth.user.userId,
+              fromReturnId: ret.id,
             },
           });
         }
-
-        // One row per act of returning, not per loan — คืน 3 แล้วค่อยคืน 7 leaves two rows.
-        await logReturn(tx, {
-          itemId,
-          dispenseRecordId: dispense.id,
-          quantity: qty,
-          condition: status,
-          notes: note,
-          userId: auth.user.userId,
-        });
 
         const newResolved = dispense.resolvedQty + qty;
         const returnCondition = status;

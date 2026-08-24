@@ -5,6 +5,44 @@
 
 import { scopeQuery, type DashboardScope } from "@/lib/dashboard-scope";
 import type { AttachRecordType } from "@/lib/attachments";
+import type { CaseState, CaseType } from "@/lib/case-types";
+
+// The wire shape of src/lib/cases.ts — same fields, Dates already serialised to ISO strings.
+// Declared here rather than imported so a client bundle never reaches into a module that
+// imports prisma.
+export type CaseSummaryJson = {
+  id: string; type: CaseType; code: string; state: CaseState; statusLabel: string;
+  subject: string; title: string; itemId: string; itemCode: string; subCode: string | null;
+  qty: number | null; unit: string; cost: number | null;
+  openedAt: string; updatedAt: string; openedBy: string;
+};
+
+export type CaseStepJson = {
+  key: string; label: string; at: string | null; by: string | null; detail: string | null;
+  cost: number | null; waiting: string | null;
+  attachments: { recordType: AttachRecordType; recordId: string; urls: string[] }[];
+};
+
+/** เอกสารต้นทาง — การกดเบิก/ยืมหนึ่งครั้งที่จ่ายของออกหลายรายการ. null เมื่อใบนั้นมีรายการเดียว. */
+export type CaseDocumentJson = {
+  code: string;
+  at: string;
+  by: string;
+  lines: {
+    caseId: string | null; itemId: string; itemCode: string; name: string;
+    subCode: string | null; qty: number; unit: string; kind: string; statusLabel: string;
+  }[];
+};
+
+export type CaseDetailJson = CaseSummaryJson & {
+  /** งานที่กดทำได้จากหน้าเคสตรงนี้เลย — มีเฉพาะเคสที่เปิดค้างและไม่มีหน้างานของตัวเอง. */
+  action?: { kind: "KIT_CHECK" | "RECOVER"; targetId: string; label: string } | null;
+  fields: { label: string; value: string }[];
+  steps: CaseStepJson[];
+  document: CaseDocumentJson | null;
+  related: { id: string; code: string; type: CaseType; note: string }[];
+  attachments: { recordType: AttachRecordType; recordId: string; urls: string[] }[];
+};
 
 // ─── Error class ───
 
@@ -843,6 +881,15 @@ export interface OpenRepairCase {
 export function getOpenRepairs(itemId: string, subItemId?: string) {
   const qs = subItemId ? `?subItemId=${subItemId}` : "";
   return request<{ cases: OpenRepairCase[] }>(`/api/items/${itemId}/open-repairs${qs}`);
+}
+
+/** เคสทั้งหมด (RC/MC/BR) — see src/lib/cases.ts for what counts as one. */
+export function getCases(params?: string) {
+  return request<{ cases: CaseSummaryJson[]; total: number }>(`/api/cases${params ? `?${params}` : ""}`);
+}
+
+export function getCaseDetail(caseId: string) {
+  return request<CaseDetailJson>(`/api/cases/${encodeURIComponent(caseId)}`);
 }
 
 export function getItemHistory(itemId: string, params?: string) {
