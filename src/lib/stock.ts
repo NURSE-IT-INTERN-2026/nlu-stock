@@ -11,11 +11,10 @@ export const STATUS_PRIORITY: Record<ItemStatus, number> = {
   AVAILABLE: 1,
   IN_USE: 2,
   ON_LOAN: 3,
-  PENDING_MAINTENANCE: 4,
-  UNDER_REPAIR: 5,
-  DAMAGED: 6,
-  LOST: 7,
-  DISPOSED: 8,
+  UNDER_REPAIR: 4,
+  DAMAGED: 5,
+  LOST: 6,
+  DISPOSED: 7,
 };
 
 // Aggregate a tracked item's status from its sub-item statuses (highest priority wins).

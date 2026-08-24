@@ -111,7 +111,6 @@ const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: strin
   AVAILABLE: { label: "พร้อมใช้งาน", bar: "bg-success", dot: "bg-success" },
   ON_LOAN: { label: "ถูกยืม", bar: "bg-primary", dot: "bg-primary" },
   IN_USE: { label: "กำลังใช้งาน", bar: "bg-chart-3", dot: "bg-chart-3" },
-  PENDING_MAINTENANCE: { label: "รอบำรุงรักษา", bar: "bg-warning", dot: "bg-warning" },
   UNDER_REPAIR: { label: "ส่งซ่อม", bar: "bg-warning", dot: "bg-warning" },
   DAMAGED: { label: "ชำรุด", bar: "bg-warning", dot: "bg-warning" },
 };
@@ -121,7 +120,6 @@ const STATUS_META: Record<string, { icon: typeof CheckCircle2; tone: Tone }> = {
   AVAILABLE: { icon: CheckCircle2, tone: "success" },
   ON_LOAN: { icon: Undo2, tone: "primary" },
   IN_USE: { icon: ShoppingCart, tone: "primary" },
-  PENDING_MAINTENANCE: { icon: Wrench, tone: "warning" },
   UNDER_REPAIR: { icon: Wrench, tone: "warning" },
   DAMAGED: { icon: ShieldAlert, tone: "warning" },
   LOST: { icon: XCircle, tone: "destructive" },
@@ -801,10 +799,9 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
   for (const s of siblingStatuses) all[s] = (all[s] ?? 0) + 1;
   const mixedStatuses = Object.keys(all).length > 1;
   // Every ItemStatus, not just the five in the breakdown: this line promises to account for
-  // every piece the list below shows, so it carries the written-off ones and the statuses
-  // the breakdown folds away (PENDING_MAINTENANCE). `.filter` drops whatever has no rows,
-  // so the extra keys cost nothing and a piece can never go uncounted here.
-  const listSummary = [...USAGE_STATUS_ORDER, "PENDING_MAINTENANCE", "LOST", "DISPOSED"]
+  // every piece the list below shows, so it carries the written-off ones that the breakdown
+  // leaves out. `.filter` drops whatever has no rows, so a piece can never go uncounted here.
+  const listSummary = [...USAGE_STATUS_ORDER, "LOST", "DISPOSED"]
     .filter((k) => all[k])
     .map((k) => `${STOCK_STATUS_META[k]?.label ?? STATUS_LABELS[k as ItemStatus] ?? k} ${all[k]}`)
     .join(" · ");

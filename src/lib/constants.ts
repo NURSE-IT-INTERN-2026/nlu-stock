@@ -190,7 +190,6 @@ export const STATUS_LABELS = {
   DAMAGED: "ชำรุด",
   UNDER_REPAIR: "ส่งซ่อม",
   LOST: "สูญหาย",
-  PENDING_MAINTENANCE: "บำรุงรักษา",
   DISPOSED: "ตัดจำหน่าย",
 } satisfies Record<ItemStatus, string>;
 
@@ -201,7 +200,6 @@ export const STATUS_COLORS = {
   DAMAGED: "#ef4444",
   UNDER_REPAIR: "#f59e0b",
   LOST: "#a855f7",
-  PENDING_MAINTENANCE: "#06b6d4",
   DISPOSED: "#9ca3af",
 } satisfies Record<ItemStatus, string>;
 
@@ -213,7 +211,6 @@ export const STATUS_PILLS = {
   UNDER_REPAIR: "bg-warning/15 text-warning-foreground border-warning/30",
   LOST: "bg-purple-500/15 text-purple-500 border-purple-500/30",
   DISPOSED: "bg-muted text-muted-foreground border-border",
-  PENDING_MAINTENANCE: "bg-cyan-500/15 text-cyan-600 border-cyan-500/30",
 } satisfies Record<ItemStatus, string>;
 
 export const STATUS_VARIANTS = {
@@ -224,7 +221,6 @@ export const STATUS_VARIANTS = {
   UNDER_REPAIR: "secondary",
   LOST: "destructive",
   DISPOSED: "outline",
-  PENDING_MAINTENANCE: "secondary",
 } satisfies Record<ItemStatus, "default" | "secondary" | "destructive" | "outline">;
 
 /**
@@ -236,23 +232,10 @@ export const STATUS_VARIANTS = {
  * LOST/DISPOSED are absent because they are written off: not counted in the total, not
  * rendered. They still show in ประวัติสูญหาย and in the รายชิ้น legend below the breakdown.
  *
- * PENDING_MAINTENANCE is absent because NOTHING IN THE APP CAN SET IT. Three independent
- * checks, all done 2026-08-12, all agreeing:
- *   1. status-utils.ts ALLOWED_TRANSITIONS gives it an empty edge list AND no other status
- *      names it as a target — the node is unreachable in both directions.
- *   2. Every reference to it in src/ is a read path (label, colour, pill, this order,
- *      a counter). There is no write anywhere.
- *   3. api/items/[id]/maintenance accepts result: "AVAILABLE" | "DISPOSED" only, so even
- *      the บำรุงรักษา flow cannot produce it.
- * The service schedule is date-based (Item/SubItem.nextMaintenanceDate), not status-based:
- * a machine due for its round stays พร้อมใช้งาน and is flagged by the date. So the row was
- * permanently 0 — not "0 right now" but "0 by construction", which is exactly the kind of
- * row that teaches staff to stop reading the card.
- *
- * To bring it back: give it edges in ALLOWED_TRANSITIONS, add a writer, then add the key
- * here and to STATE_META + DistributionRow["state"] in distribution-table.tsx and
- * lib/distribution.ts (SUB_ITEM_STATE). Until then it falls into ถูกใช้งาน, which keeps the
- * columns adding up instead of silently dropping stock.
+ * ถึงรอบบำรุงรักษาไม่ใช่สถานะ และไม่เคยเป็น: ของที่ถึงรอบยังพร้อมใช้งานอยู่ มันถูกชี้ด้วยวันที่
+ * (Item/SubItem.nextMaintenanceDate) ที่หน้า /maintenance และ /alerts ไม่ใช่ด้วยสถานะของชิ้น.
+ * เคยมีค่า PENDING_MAINTENANCE ค้างอยู่ใน enum จาก model แรกที่คิดแบบนั้น — ลบทิ้งไปแล้ว
+ * (migration 20260824090000) หลังพิสูจน์ว่าไม่มี write path และฐานข้อมูลไม่มีสักแถว.
  */
 export const USAGE_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "UNDER_REPAIR", "DAMAGED"] as const;
 

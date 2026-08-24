@@ -30,9 +30,7 @@ export type DistributionRow = {
    * สัดส่วนการใช้งาน card cannot disagree about which states exist.
    *
    * It used to be four, with ส่งซ่อม folded into ถูกใช้งาน — that made ถูกใช้งาน mean
-   * "not available, reason unstated" and hid the one state staff act on. PENDING_MAINTENANCE
-   * is deliberately NOT here (see USAGE_STATUS_ORDER in lib/constants.ts for the three
-   * checks that proved nothing can set it); it falls back to IN_USE below.
+   * "not available, reason unstated" and hid the one state staff act on.
    */
   state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "UNDER_REPAIR" | "DAMAGED";
   /** Loan rows only — when it went out, so ของค้างนาน is visible at a glance. */
@@ -52,9 +50,9 @@ const GONE: ReadonlySet<ItemStatus> = new Set([ItemStatus.DISPOSED, ItemStatus.L
 /**
  * SubItem.status → row state. Only the statuses that earn their own row are listed; anything
  * else falls back to ถูกใช้งาน, which is the honest default for "the piece exists, it is
- * somewhere, it is not on the shelf". That fallback is what keeps the column adding up:
- * PENDING_MAINTENANCE (unreachable today) and any status added later still contribute their
- * qty instead of vanishing from a total the card prints as fact.
+ * somewhere, it is not on the shelf". That fallback is what keeps the column adding up: any
+ * status added later still contributes its qty instead of vanishing from a total the card
+ * prints as fact.
  * ON_LOAN is absent on purpose — trackedRows skips those, the borrower rows own them.
  */
 const SUB_ITEM_STATE: Partial<Record<ItemStatus, DistributionRow["state"]>> = {
