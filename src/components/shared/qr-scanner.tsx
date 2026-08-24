@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { BarcodeDetector, BarcodeDetectorOptions } from "barcode-detector/ponyfill";
 import {
   DIALOG_SHELL,
   DIALOG_BODY,
@@ -21,52 +22,79 @@ interface Props {
   onScan: (code: string) => void;
 }
 
+type DetectorCtor = new (options?: BarcodeDetectorOptions) => BarcodeDetector;
+
+/**
+ * Chrome และ Android ที่นี่คือเครื่องที่สแกนของจริง ทั้งคู่มี BarcodeDetector ในตัว
+ * browser อยู่แล้ว — ใช้ของ native ก็ไม่ต้องโหลดอะไรเพิ่มเลยสักไบต์. Safari ยังไม่มี
+ * เลยดึง ponyfill (zxing-wasm) มาเฉพาะตอนที่ไม่มีของ native จริงๆ ไม่ให้ iPhone
+ * ตกไปเหลือแค่พิมพ์รหัสมือ
+ */
+async function loadDetector(): Promise<BarcodeDetector> {
+  const native = (globalThis as { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
+  const Ctor = native ?? (await import("barcode-detector/ponyfill")).BarcodeDetector;
+  return new Ctor({ formats: ["qr_code"] });
+}
+
+const SCAN_INTERVAL_MS = 150;
+
 export function QrScanner({ open, onClose, onScan }: Props) {
   const [manualMode, setManualMode] = useState(false);
   const [manualCode, setManualCode] = useState("");
-  const scannerRef = useRef<any>(null);
-  const startedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const onScanRef = useRef(onScan);
   const onCloseRef = useRef(onClose);
-  onScanRef.current = onScan;
-  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open || manualMode) return;
 
     let cancelled = false;
+    let stream: MediaStream | null = null;
 
-    const stopScanner = async () => {
-      if (scannerRef.current && startedRef.current) {
-        try {
-          await scannerRef.current.stop();
-          scannerRef.current.clear();
-        } catch {}
-        scannerRef.current = null;
-        startedRef.current = false;
-      }
+    const stopCamera = () => {
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = null;
     };
 
     const start = async () => {
-      if (startedRef.current) return;
       try {
-        const { Html5Qrcode } = await import("html5-qrcode");
-        if (cancelled) return;
-        const scanner = new Html5Qrcode("qr-reader");
-        scannerRef.current = scanner;
-        startedRef.current = true;
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decoded: string) => {
-            onScanRef.current(decoded);
-            toast.success(`สแกนสำเร็จ: ${decoded}`);
-            stopScanner();
-            onCloseRef.current();
-          },
-          () => {}
-        );
+        const [detector, media] = await Promise.all([
+          loadDetector(),
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }),
+        ]);
+        stream = media;
+        // dialog อาจปิดไปแล้วระหว่างรอ permission prompt — ถ้าไม่เช็ค กล้องจะค้างเปิดทิ้งไว้
+        if (cancelled) return stopCamera();
+
+        const video = videoRef.current;
+        if (!video) return stopCamera();
+        video.srcObject = media;
+        await video.play();
+
+        // วนแบบ await ต่อกันไปเรื่อยๆ แทน setInterval เพราะ detect() เป็น async —
+        // ถ้าเครื่องช้ากว่า interval งานจะซ้อนกันจนกล้องหน่วง
+        while (!cancelled) {
+          try {
+            const [hit] = await detector.detect(video);
+            if (hit) {
+              stopCamera();
+              onScanRef.current(hit.rawValue);
+              toast.success(`สแกนสำเร็จ: ${hit.rawValue}`);
+              onCloseRef.current();
+              return;
+            }
+          } catch {
+            // เฟรมที่อ่านไม่ออกเป็นเรื่องปกติของการสแกน ไม่ใช่ error ที่ต้องบอกใคร
+          }
+          await new Promise((r) => setTimeout(r, SCAN_INTERVAL_MS));
+        }
       } catch {
+        stopCamera();
         if (!cancelled) {
           toast.error("เข้าถึงกล้องไม่ได้ กรุณาพิมพ์รหัสด้วยตนเอง");
           setManualMode(true);
@@ -77,7 +105,7 @@ export function QrScanner({ open, onClose, onScan }: Props) {
 
     return () => {
       cancelled = true;
-      stopScanner();
+      stopCamera();
     };
   }, [open, manualMode]);
 
@@ -130,9 +158,12 @@ export function QrScanner({ open, onClose, onScan }: Props) {
           </div>
         ) : (
           <div className="space-y-3">
-            <div
-              id="qr-reader"
-              className="w-full min-h-[300px] rounded-lg overflow-hidden bg-muted"
+            <video
+              ref={videoRef}
+              // playsInline กันไม่ให้ iOS ยึดวิดีโอไปเล่นเต็มจอทับ dialog
+              playsInline
+              muted
+              className="w-full min-h-[300px] rounded-lg bg-muted object-cover"
             />
             <p className="text-xs text-center text-muted-foreground">
               นำกล้องไปที่ QR Code บนพัสดุ
