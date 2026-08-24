@@ -5,11 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { History, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSession } from "@/components/layout/auth-guard";
-import { canManageStock } from "@/lib/roles";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
-import { RecentMaintenanceRecords } from "@/components/maintenance/recent-records";
+import { CaseWorkspace } from "@/components/cases/case-workspace";
 
 // ซ่อม ≠ บำรุงรักษา. บำรุงรักษา is planned — a cycle, a due date, a table you read ahead of time
 // (/maintenance). ซ่อม is unplanned — something broke, and the only question is what is still
@@ -41,8 +39,6 @@ function RepairsShell() {
     router.replace(`/repairs?${params.toString()}`, { scroll: false });
   };
 
-  const { user } = useSession();
-  const canEdit = canManageStock(user?.role ?? "");
   const [openJobs, setOpenJobs] = useState(0);
 
   const { setDetail } = usePageHeader();
@@ -94,13 +90,11 @@ function RepairsShell() {
         <SubItemStatusPanel status="ALL" onCount={setOpenJobs} emptyText="ไม่มีรายการค้างซ่อม" />
       </div>
 
+      {/* ประวัติ = เคสซ่อมทั้งหมด อ่านจากที่มาเดียวกับหน้า /cases. เดิมที่นี่ list บันทึกซ่อมดิบๆ ซึ่งคือ
+          "ขั้นปิด" ของเคส — เป็น log คู่ขนานที่พูดเรื่องเดียวกันคนละหน่วย. หน้านี้เก็บไว้แค่คิวค้างซ่อม
+          ซึ่งเป็นสิ่งที่ต้องลงมือทำ. */}
       <div className={cn("pb-4", tab !== "history" && "hidden")}>
-        <RecentMaintenanceRecords
-          type="CORRECTIVE"
-          title="ซ่อมแซม"
-          empty="ยังไม่มีบันทึกซ่อมแซม"
-          canEdit={canEdit}
-        />
+        {tab === "history" && <CaseWorkspace lockType="REPAIR" />}
       </div>
     </div>
   );

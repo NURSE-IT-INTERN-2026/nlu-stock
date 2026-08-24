@@ -21,10 +21,8 @@ import { ExportButtons } from "@/components/reports/export-buttons";
 import { getMaintenanceSummary, getReport } from "@/lib/api";
 import { toast } from "sonner";
 
-import { useSession } from "@/components/layout/auth-guard";
-import { canManageStock } from "@/lib/roles";
 import { usePageHeader } from "@/components/layout/page-header-context";
-import { RecentMaintenanceRecords } from "@/components/maintenance/recent-records";
+import { CaseWorkspace } from "@/components/cases/case-workspace";
 // ── Types ──
 
 interface Summary {
@@ -109,8 +107,6 @@ function MaintenanceShell() {
     return () => setDetail(null);
   }, [activeLabel, setDetail]);
 
-  const { user } = useSession();
-  const canEdit = canManageStock(user?.role ?? "");
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -413,18 +409,11 @@ function MaintenanceShell() {
 
       </div>
 
+      {/* ตรวจบำรุงตามรอบ only — ซ่อมแซม answers the other page's question and lives at
+          /repairs?tab=history. Both tabs are the same workspace as /cases, reading the same
+          source: แท็บภาพรวมข้างบนคือ "ถึงรอบเมื่อไหร่" (สิ่งที่ต้องทำ), แท็บนี้คือ "ทำอะไรไปแล้ว". */}
       <div className={cn("space-y-4 sm:space-y-8 pb-4", tab !== "history" && "hidden")}>
-        {/* ตรวจบำรุงตามรอบ only. ซ่อมแซม is filed as a MaintenanceRecord too (CORRECTIVE), but it
-            answers the other page's question and is listed at /repairs?tab=history. */}
-        <section>
-          <h2 className="mb-4 text-lg font-semibold">บันทึกล่าสุด</h2>
-          <RecentMaintenanceRecords
-            type="PREVENTIVE"
-            title="ตรวจบำรุงตามรอบ"
-            empty="ยังไม่มีบันทึกตรวจบำรุงตามรอบ"
-            canEdit={canEdit}
-          />
-        </section>
+        {tab === "history" && <CaseWorkspace lockType="MAINTENANCE" />}
       </div>
 
       {/* ── Dialog ── */}
