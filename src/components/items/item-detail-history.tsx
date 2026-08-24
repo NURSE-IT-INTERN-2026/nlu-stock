@@ -6,16 +6,16 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight,
+  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight, ChevronDown, ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
-import { EVENT_TYPE_LABELS, SERVICE_EVENT_TYPES, type TimelineEventType } from "@/lib/constants";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EVENT_TYPE_LABELS, type TimelineEventType } from "@/lib/constants";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
 import { AttachmentList } from "@/components/shared/attachment-list";
@@ -41,6 +41,29 @@ interface TimelineEvent {
   // owns the array so the dialog can write back; a รับคืนจากซ่อม row carries two groups.
   attachments?: AttachGroup[];
 }
+
+// One เคส, assembled by the API into a single unit — the same case, with the same number, that
+// /cases opens. It occupies one slot in the list, so a card is never split across a page.
+interface RepairTrip {
+  kind: "trip";
+  id: string;
+  caseType: string;
+  code: string;
+  statusLabel: string;
+  subject: string;
+  date: string;
+  openedAt: string;
+  closedAt: string | null;
+  done: boolean;
+  qty: number | null;
+  cost: number | null;
+  attachments: number;
+  steps: TimelineEvent[];
+}
+
+type Unit = TimelineEvent | RepairTrip;
+
+const isTrip = (u: Unit): u is RepairTrip => "steps" in u;
 
 // Movement types lead with colour (stock left / stock came back); the three that don't touch
 // stock share one quiet muted badge, so the eye separates "ของขยับ" from "เหตุการณ์อื่น" before
@@ -71,22 +94,9 @@ const CHIP_ORDER: TimelineEventType[] = [
   "ADJUSTMENT", "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
 ];
 
-// ── Groups ──
-// The twelve type chips answer "แสดงเฉพาะ X"; they cannot answer "เรื่องซ่อมของชิ้นนี้มีอะไรบ้าง"
-// without the reader knowing which four of the twelve to click. The group tabs are that answer,
-// and the chips below them narrow whichever group is open — coarse first, fine second.
-const GROUPS = [
-  { value: "all", label: "ทั้งหมด" },
-  { value: "movement", label: "การเคลื่อนไหว" },
-  { value: "service", label: "ซ่อมบำรุง" },
-] as const;
-
-type Group = (typeof GROUPS)[number]["value"];
-
-const MOVEMENT_TYPES = CHIP_ORDER.filter((t) => !SERVICE_EVENT_TYPES.includes(t));
-
-const groupTypes = (g: Group): TimelineEventType[] =>
-  g === "service" ? SERVICE_EVENT_TYPES : g === "movement" ? MOVEMENT_TYPES : CHIP_ORDER;
+// The ซ่อมบำรุง group tab used to exist because the four repair types were scattered and the
+// reader had to know which of the twelve chips to click to see a repair whole. The trip card
+// answers that directly now, so the coarse tabs are gone and the chips are the only filter.
 
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */
 type Counts = Partial<Record<TimelineEventType, { n: number; qty: number | null }>>;
@@ -103,7 +113,6 @@ interface Props {
 
 export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props) {
   const isMobile = useIsMobile();
-  const [group, setGroup] = useState<Group>("all");
   const [typeFilter, setTypeFilter] = useState<TimelineEventType | "">("");
   const [counts, setCounts] = useState<Counts>({});
   const [unit, setUnit] = useState("");
@@ -113,26 +122,23 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   const fetchPage = useCallback(
     async (p: number) => {
       const qs = new URLSearchParams({ page: String(p), perPage: String(perPage) });
-      // One chip wins over its group; with no chip the group sends its whole member list, which
-      // the route takes comma-separated.
       if (typeFilter) qs.set("type", typeFilter);
-      else if (group !== "all") qs.set("type", groupTypes(group).join(","));
       if (subItemId) qs.set("subItemId", subItemId);
       const data = (await getItemHistory(itemId, qs.toString())) as Record<string, unknown>;
       // Filter-independent, so the chips stay complete while one type is selected.
       setCounts((data.counts as Counts) ?? {});
       setUnit((data.unit as string) ?? "");
       return {
-        items: (data.events || []) as TimelineEvent[],
+        items: (data.events || []) as Unit[],
         total: (data.total as number) || 0,
       };
     },
-    [itemId, subItemId, perPage, typeFilter, group],
+    [itemId, subItemId, perPage, typeFilter],
   );
 
   const {
     items: events, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
-  } = usePagedList<TimelineEvent>({ fetchPage, pageSize: perPage, isMobile });
+  } = usePagedList<Unit>({ fetchPage, pageSize: perPage, isMobile });
 
   // แนบเพิ่ม/ลบ answers with the record's array as it now stands. Keeping those answers here —
   // keyed by the record, not by the timeline row — means they survive closing the dialog, paging,
@@ -142,11 +148,12 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   // Every chip counts events, never units. The word "รายการ" is dropped from each pill — the
   // caption above already frames these as counts, so a bare number reads compact and premium
   // instead of stacking "รายการ" seven times across a row that overflows the card.
-  const visibleTypes = groupTypes(group);
-  const allRows = visibleTypes.reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0);
+  // How many lines the table actually draws — a case is one รายการ but several rows.
+  const rowCount = events.reduce((n, u) => n + (isTrip(u) ? u.steps.length + 1 : 1), 0);
+  const allRows = CHIP_ORDER.reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0);
   const chips: { value: TimelineEventType | ""; label: string; amount: string }[] = [
     { value: "", label: "ทั้งหมด", amount: `${allRows}` },
-    ...visibleTypes.filter((t) => (counts[t]?.n ?? 0) > 0).map((t) => {
+    ...CHIP_ORDER.filter((t) => (counts[t]?.n ?? 0) > 0).map((t) => {
       const c = counts[t]!;
       return {
         value: t,
@@ -173,31 +180,9 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           the units still out *right now*, while these chips count how many events of each kind
           were ever recorded. Two different meanings under one word on one screen needs the caption. */}
       <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8">
-        {/* Group tabs — segmented, not pills, so they never read as a thirteenth type chip. */}
-        <div className="mb-3 inline-flex rounded-lg border border-border bg-card p-0.5">
-          {GROUPS.map((g) => {
-            const on = group === g.value;
-            return (
-              <button
-                key={g.value}
-                type="button"
-                // Switching group drops the chip: a chip outside the new group would filter to
-                // nothing and read as "ไม่มีประวัติ" on an item that plainly has some.
-                onClick={() => { setGroup(g.value); setTypeFilter(""); }}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-xs font-medium transition",
-                  on ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {g.label}
-                <span className={cn("ml-1.5 font-semibold tabular-nums", on ? "text-primary-foreground/90" : "text-foreground/70")}>
-                  {groupTypes(g.value).reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="mb-2.5 text-[11px] text-muted-foreground">รวมทั้งประวัติ</p>
+        <p className="mb-2.5 text-[11px] text-muted-foreground">
+          รวมทั้งประวัติ{typeFilter ? " · กรองอยู่ จึงแสดงเป็นรายการเดี่ยว ไม่รวมเป็นงานซ่อม" : ""}
+        </p>
         <div className="flex gap-2 overflow-x-auto">
           {chips.map((chip) => {
             const on = typeFilter === chip.value;
@@ -228,93 +213,14 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         </div>
       ) : events.length === 0 ? (
         <p className="py-16 text-center text-sm text-muted-foreground">ไม่มีรายการในหมวดนี้</p>
-      ) : isMobile ? (
-        <ul className="space-y-2 p-3">
-          {events.map((e) => (
-            <li key={e.id}>
-              <button
-                type="button"
-                onClick={() => setSelected(e)}
-                className="w-full rounded-xl border border-border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-muted/40"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <TypeChip type={e.type} />
-                  <div className="flex flex-col items-end">
-                    <Delta value={e.delta ?? e.qty} unit={unit} size="lg" neutral={e.delta === null} />
-                    <ChangeHint delta={e.delta} change={e.change} />
-                  </div>
-                </div>
-                <p className="mt-2 flex items-center gap-1 text-sm font-medium">
-                  {e.note}
-                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                </p>
-                {e.subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{e.subtitle}</p>}
-                <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Avatar name={e.user} /> {e.user}
-                  </span>
-                  <span className="tabular-nums">{fmtDate(e.date, TH_DATE)} · {timeOf(e.date)} น.</span>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
       ) : (
-        <Table grid zebra className="table-fixed">
-          <TableHeader>
-            {/* The shared table is a 32px-header datagrid; a history row carries two lines, so
-                the header is given the taller band that matches them. Local override — the
-                report tables keep the tighter default. */}
-            <TableRow className="hover:bg-transparent [&>th]:h-13">
-              <TableHead className="w-[18%] pl-5 sm:pl-8">ประเภท</TableHead>
-              <TableHead className="w-[12%] text-right">จำนวน</TableHead>
-              <TableHead className="w-[40%]">รายการ</TableHead>
-              <TableHead className="w-[17%]">ผู้ดำเนินการ</TableHead>
-              <TableHead className="w-[13%] pr-5 text-right sm:pr-8">วันที่ / เวลา</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {events.map((e) => (
-              <TableRow
-                key={e.id}
-                className="group cursor-pointer"
-                onClick={() => setSelected(e)}
-              >
-                <TableCell className="relative pl-5 align-top sm:pl-8">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "absolute inset-y-2 left-0 w-[3px] rounded-r-full opacity-0 transition-opacity group-hover:opacity-100",
-                      TYPE_META[e.type].rail,
-                    )}
-                  />
-                  <TypeChip type={e.type} />
-                </TableCell>
-                <TableCell className="text-right align-top">
-                  <Delta value={e.delta ?? e.qty} unit={unit} neutral={e.delta === null} />
-                  <ChangeHint delta={e.delta} change={e.change} />
-                </TableCell>
-                <TableCell className="align-top">
-                  <p className="flex items-center gap-1 text-sm font-medium leading-snug text-foreground">
-                    <span className="truncate">{e.note}</span>
-                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                  </p>
-                  {e.subtitle && <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">{e.subtitle}</p>}
-                </TableCell>
-                <TableCell className="align-top">
-                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <Avatar name={e.user} />
-                    <span className="truncate">{e.user}</span>
-                  </span>
-                </TableCell>
-                <TableCell className="pr-5 text-right align-top sm:pr-8">
-                  <p className="text-xs font-medium tabular-nums">{fmtDate(e.date, TH_DATE)}</p>
-                  <p className="text-[11px] tabular-nums text-muted-foreground">{timeOf(e.date)} น.</p>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <ol className="p-4 sm:p-6">
+          {events.map((u, i) => (
+            isTrip(u)
+              ? <CaseBlock key={`case:${u.id}`} trip={u} unit={unit} onSelect={setSelected} last={i === events.length - 1} />
+              : <MovementRow key={u.id} e={u} unit={unit} onSelect={setSelected} last={i === events.length - 1} />
+          ))}
+        </ol>
       )}
 
       {/* ── Footer / pagination ── */}
@@ -323,6 +229,9 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           <p className="text-xs text-muted-foreground">
             แสดง <span className="font-semibold tabular-nums text-foreground">{events.length}</span> จาก{" "}
             <span className="tabular-nums">{total}</span> รายการ
+            {/* A case counts as one รายการ but prints several rows. Saying "4 จาก 4" over a table
+                of ten lines reads like a bug unless the rows are named too. */}
+            {rowCount !== events.length && <> · <span className="tabular-nums">{rowCount}</span> เหตุการณ์</>}
           </p>
           {totalPages > 1 && (isMobile ? (
             <Pagination
@@ -348,6 +257,217 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         onClose={() => setSelected(null)}
       />
     </section>
+  );
+}
+
+// ── Repair trip ───────────────────────────────────────────────────────────────
+// Closed trips arrive folded: the reader scanning a year of history wants the one line that
+// says "ซ่อมไปแล้ว จบ เท่าไหร่". An open one arrives expanded, because an open trip is the thing
+// somebody is waiting on and hiding its last step is hiding the answer.
+
+const dayCount = (from: string) => Math.max(0, Math.floor((Date.now() - new Date(from).getTime()) / 86_400_000));
+
+const tripTone = (trip: RepairTrip) => trip.done
+  ? "bg-success/10 text-success-700 dark:text-success-200"
+  : "bg-warning/15 text-warning-700 dark:text-warning-200";
+
+const CASE_META: Record<string, { icon: typeof Package; name: string; done: string; open: string }> = {
+  REPAIR: { icon: Wrench, name: "งานซ่อม", done: "ปิดงานแล้ว", open: "ยังไม่ปิด" },
+  BORROW: { icon: ArrowUpFromLine, name: "การยืม", done: "คืนครบแล้ว", open: "ยังไม่คืนครบ" },
+  INUSE: { icon: MonitorCog, name: "ตั้งใช้ในห้อง", done: "คืนเข้าพัสดุแล้ว", open: "ยังตั้งใช้อยู่" },
+  MAINTENANCE: { icon: Wrench, name: "บำรุงรักษา", done: "เสร็จสิ้น", open: "ยังไม่ปิด" },
+  KIT_CHECK: { icon: Package, name: "ตรวจชุด", done: "ตรวจแล้ว", open: "รอตรวจ" },
+};
+
+/** เคสประเภทที่ยังไม่มีหน้าตาของตัวเอง อ่านเป็นงานซ่อมไว้ก่อน ดีกว่าพังทั้งแถว. */
+const caseMeta = (t: string) => CASE_META[t] ?? CASE_META.REPAIR;
+
+const caseIdOf = (trip: RepairTrip) => `${trip.caseType}:${trip.id}`;
+
+/**
+ * The trip's second line. In the table it must NOT repeat the count or the date — those columns
+ * are right there saying the same thing, and a row that prints "23 ชิ้น" twice is what makes the
+ * eye stop. On mobile there are no columns to carry them, so `full` puts them back.
+ */
+function tripMeta(trip: RepairTrip, unit: string, full = false): string {
+  const opened = trip.caseType === "BORROW" ? "ยืม" : "แจ้ง";
+  return [
+    full && trip.qty != null ? `${trip.qty}${unit ? ` ${unit}` : ""}` : null,
+    trip.done
+      ? `${opened} ${fmtDate(trip.openedAt, TH_DATE)}`
+      : `${opened} ${fmtDate(trip.openedAt, TH_DATE)} · ผ่านมา ${dayCount(trip.openedAt)} วัน`,
+    trip.cost != null ? `฿${trip.cost.toLocaleString("th-TH")}` : null,
+    trip.attachments > 0 ? `หลักฐาน ${trip.attachments}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function CaseIcon({ trip, className }: { trip: RepairTrip; className?: string }) {
+  const Icon = caseMeta(trip.caseType).icon;
+  return <Icon className={className} />;
+}
+
+/** ไปเปิดเคสเดียวกันที่ /cases — เลขเดียวกัน ที่มาเดียวกัน ไม่ใช่ log คนละกอง. */
+function CaseLink({ trip }: { trip: RepairTrip }) {
+  return (
+    <Link
+      href={`/cases?case=${encodeURIComponent(caseIdOf(trip))}`}
+      onClick={(e) => e.stopPropagation()}
+      title="เปิดเคสนี้"
+      aria-label={`เปิดเคส ${trip.code}`}
+      className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
+    >
+      <ExternalLink className="size-3.5" />
+    </Link>
+  );
+}
+
+/** The rail every entry hangs off. `last` stops the line instead of running it off the end. */
+function Rail({ children, last, dot }: { children: ReactNode; last?: boolean; dot: ReactNode }) {
+  return (
+    <li className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 sm:gap-x-4">
+      <div className="flex flex-col items-center">
+        {dot}
+        {!last && <span aria-hidden className="w-px flex-1 bg-border" />}
+      </div>
+      <div className={cn("min-w-0", last ? "pb-0" : "pb-4")}>{children}</div>
+    </li>
+  );
+}
+
+/**
+ * เคสหนึ่งเคสในประวัติของพัสดุ — กล่องเดียว มีขั้นตอนอยู่ข้างใน อ่านเก่า→ใหม่ เหมือนหน้า /cases เป๊ะ
+ * เพราะมันคือเคสเดียวกัน เลขเดียวกัน. เคสที่ปิดแล้วมาแบบพับ เคสที่ยังค้างมาแบบกาง — สิ่งที่ค้างอยู่คือ
+ * สิ่งที่คนเปิดหน้านี้มาหา.
+ */
+function CaseBlock({ trip, unit, onSelect, last }: {
+  trip: RepairTrip;
+  unit: string;
+  onSelect: (e: TimelineEvent) => void;
+  last?: boolean;
+}) {
+  const [open, setOpen] = useState(!trip.done);
+  const tone = tripTone(trip);
+  return (
+    <Rail
+      last={last}
+      dot={<span aria-hidden className={cn("mt-3.5 grid size-6 shrink-0 place-items-center rounded-full", tone)}>
+        <CaseIcon trip={trip} className="size-3.5" />
+      </span>}
+    >
+      <div className={cn("overflow-hidden rounded-xl border", trip.done ? "border-border" : "border-warning/40")}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex w-full items-start gap-2 bg-muted/30 px-3 py-2.5 text-left transition hover:bg-muted/50"
+        >
+          {/* ประเภท → เรื่อง → เลขอ้างอิง. รหัสเคยนำหัวการ์ด ซึ่งอ่านแล้วรู้แค่ว่า "นี่คือเคส" —
+              RC-2569-0320 กับ RC-2569-0321 หน้าตาเหมือนกันเป๊ะ. ชื่อพัสดุไม่อยู่ที่นี่: หน้านี้คือ
+              หน้าของพัสดุตัวนั้นอยู่แล้ว เขียนซ้ำทุกการ์ดคือ noise (หน้า /cases เขียน เพราะปนหลายตัว). */}
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-sm font-semibold">{caseMeta(trip.caseType).name}</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", tone)}>
+                {trip.statusLabel || (trip.done ? caseMeta(trip.caseType).done : caseMeta(trip.caseType).open)}
+              </span>
+            </span>
+            {trip.subject && (
+              <span className="mt-0.5 block truncate text-sm text-foreground">{trip.subject}</span>
+            )}
+            <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+              {trip.code && <><span className="font-mono">{trip.code}</span> · </>}
+              {tripMeta(trip, unit, true)} · {trip.steps.length} ขั้นตอน
+            </span>
+          </span>
+          <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+          {trip.code && <CaseLink trip={trip} />}
+        </button>
+
+        {open && (
+          <ol className="divide-y divide-border">
+            {trip.steps.map((step) => (
+              <CaseStepRow key={step.id} e={step} unit={unit} onSelect={onSelect} />
+            ))}
+          </ol>
+        )}
+      </div>
+    </Rail>
+  );
+}
+
+/** ขั้นตอนหนึ่งขั้นในเคส. จำนวนขึ้นเฉพาะตอนสต๊อกขยับจริง — ยอดของเคสอยู่บนหัวกล่องแล้ว. */
+function CaseStepRow({ e, unit, onSelect }: { e: TimelineEvent; unit: string; onSelect: (e: TimelineEvent) => void }) {
+  const moved = e.delta !== null || !!e.change;
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onSelect(e)}
+        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2.5 text-left transition hover:bg-muted/30"
+      >
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <TypeChip type={e.type} />
+            <span className="truncate text-sm font-medium">{e.note}</span>
+          </span>
+          {e.subtitle && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{e.subtitle}</span>}
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+            <Avatar name={e.user} />
+            {e.user}
+            <span className="tabular-nums">· {fmtDate(e.date, TH_DATE)} {timeOf(e.date)} น.</span>
+          </span>
+        </span>
+        {moved && (
+          <span className="shrink-0 text-right">
+            <Delta value={e.delta ?? e.qty} unit={unit} neutral={e.delta === null} />
+            <ChangeHint delta={e.delta} change={e.change} />
+          </span>
+        )}
+      </button>
+    </li>
+  );
+}
+
+/**
+ * ความเคลื่อนไหวที่ไม่มีเคส — รับเข้า, เบิกสิ้นเปลือง, ปรับสต๊อก, ย้ายที่ตั้ง, สูญหาย. ของพวกนี้ไม่มีใคร
+ * รออยู่และไม่มีจุดจบ จึงไม่ใช่เคส แต่ยังเป็นสิ่งที่เกิดกับของชิ้นนี้ และยอดคงเหลือของมันอ่านได้จาก
+ * แถวพวกนี้เท่านั้น — นี่คือเหตุผลที่หน้านี้ไม่ใช่รายการเคสเฉยๆ.
+ */
+function MovementRow({ e, unit, onSelect, last }: {
+  e: TimelineEvent;
+  unit: string;
+  onSelect: (e: TimelineEvent) => void;
+  last?: boolean;
+}) {
+  return (
+    <Rail
+      last={last}
+      dot={<span aria-hidden className={cn("mt-3 size-3 shrink-0 rounded-full", TYPE_META[e.type].rail)} />}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(e)}
+        className="group grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted/40"
+      >
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <TypeChip type={e.type} />
+            <span className="truncate text-sm font-medium">{e.note}</span>
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          </span>
+          {e.subtitle && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{e.subtitle}</span>}
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+            <Avatar name={e.user} />
+            {e.user}
+            <span className="tabular-nums">· {fmtDate(e.date, TH_DATE)} {timeOf(e.date)} น.</span>
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          <Delta value={e.delta ?? e.qty} unit={unit} neutral={e.delta === null} />
+          <ChangeHint delta={e.delta} change={e.change} />
+        </span>
+      </button>
+    </Rail>
   );
 }
 

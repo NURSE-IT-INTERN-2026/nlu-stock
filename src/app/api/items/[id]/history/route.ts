@@ -9,6 +9,8 @@ import { AdjustmentReason } from "@/generated/prisma/enums";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 import type { AttachRecordType } from "@/lib/attachments";
+import { groupTimelineCases, type Booking, type TimelineCase } from "@/lib/timeline-cases";
+import { listCases } from "@/lib/cases";
 
 // A history row as the table renders it. Three text fields, each with one job:
 //   note     — the bold title, the one thing worth scanning ("รับคืนจากซ่อม").
@@ -95,9 +97,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const searchParams = getSearchParams(request);
   const { page, perPage, skip, take } = paginate(searchParams);
   const typeFilter = searchParams.get("type");
-  // lost mode: merge the 3 loss sources (status→LOST, adjustment reason LOST, return LOST),
-  // each filtered + enriched with the fields the lost-history table needs.
-  const lost = searchParams.get("lost") === "1";
   // Piece mode: only the sources that carry a subItemId can be scoped to one copy.
   // ReceiveRecord / StockAdjustment / LocationChangeLog are item-level and drop out.
   const subItemId = searchParams.get("subItemId");
@@ -108,21 +107,30 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // adjustment id → its own หลักฐาน, so a closing row can reach the booking it closed without a
   // second query. Every adjustment for this item is already loaded below.
   const adjAttachments = new Map<string, string[]>();
+  // แจ้งชำรุด bookings, for placing the ส่งซ่อม rows that carry no link back to one.
+  const bookings = new Map<string, Booking>();
+  // booking id → the id of the timeline row that closed it.
+  const closedBy = new Map<string, string>();
+  // ── ยืม cases ──
+  // หนึ่งเคส = หนึ่งบรรทัดของใบ ไม่ใช่ทั้งใบ: ชามรูปไตที่คืนครบแล้วต้องอ่านว่าจบ ถึงแก้วน้ำในใบเดียวกัน
+  // จะยังค้างอยู่. บรรทัดคือ DispenseRecord และ รับคืน ชี้กลับหาบรรทัดที่มันปิดอยู่แล้ว — ไม่มีอะไรต้องเดา.
+  const loanKeyOf = new Map<string, string>(); // event id → dispense record id
+  const loanOutstanding = new Map<string, number>(); // dispense record id → units still out
 
   const itemLevel = !subItemId;
-  const fetchDispense = !lost;
-  const fetchReturn = !lost;
-  const fetchReceive = !lost && itemLevel;
-  const fetchAdjust = lost || itemLevel;
-  const fetchMaint = !lost;
-  const fetchLocation = !lost && itemLevel;
+  // เดิมมีโหมด `?lost=1` ที่ยิงคำถามคนละคำถามผ่านเส้นทางเดียวกันนี้ — เปลี่ยนทั้งเงื่อนไข where,
+  // ชื่อแถว และรูปร่างของ details ทั้งหมด เพื่อป้อนแท็บประวัติสูญหายที่แยกต่างหาก. ตอนนี้ของหาย
+  // เป็นเคส LC ซึ่งอ่านจาก src/lib/cases.ts เหมือนเคสอื่น โหมดนั้นจึงหายไปทั้งโหมด.
+  const fetchReceive = itemLevel;
+  const fetchAdjust = itemLevel;
+  const fetchLocation = itemLevel;
 
   // ponytail: every row for this item is loaded, then sorted and sliced in memory. Paging
   // across 7 tables in SQL means a UNION ALL query or a materialised ledger; neither is
   // worth it while an item's history is in the hundreds. Revisit if one ever hits ~10k rows.
   const queries: Promise<void>[] = [];
 
-  if (fetchDispense) {
+  {
     queries.push(
       prisma.dispenseRecord.findMany({
         where: { itemId: id, ...(subItemId ? { subItemId } : {}) },
@@ -139,6 +147,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           // เหตุผล lives in usageNote; notes is where กิจกรรม/อื่นๆ wrote it before that, and
           // where นำไปใช้งาน still writes it (lib/constants recipientLabel uses the same order).
           const reason = r.usageNote?.trim() || r.notes?.trim() || null;
+          // เบิกสิ้นเปลือง is not a case — nothing comes back and nobody is waiting on it.
+          if (type !== "DISPENSE") {
+            loanKeyOf.set(r.id, r.id);
+            loanOutstanding.set(r.id, Math.max(0, r.quantity - r.resolvedQty));
+          }
           events.push({
             id: r.id,
             type,
@@ -174,14 +187,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
-  if (fetchReturn) {
+  {
     queries.push(
       prisma.returnRecord.findMany({
         where: { itemId: id, ...(subItemId ? { subItemId } : {}) },
-        include: { returner: { select: { name: true } } },
+        include: {
+          returner: { select: { name: true } },
+        },
         orderBy: { returnedAt: "desc" },
       }).then((records) => {
         for (const r of records) {
+          if (r.dispenseRecordId) loanKeyOf.set(r.id, r.dispenseRecordId);
           events.push({
             id: r.id,
             type: "RETURN",
@@ -234,21 +250,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (fetchAdjust) {
     queries.push(
       prisma.stockAdjustment.findMany({
-        where: lost ? { itemId: id, reason: "LOST" } : { itemId: id },
+        where: { itemId: id },
         include: { adjuster: { select: { name: true } } },
         orderBy: { adjustedAt: "desc" },
       }).then((records) => {
         for (const r of records) {
           adjAttachments.set(r.id, r.imageEvidenceUrls);
+          if (r.reason === AdjustmentReason.DAMAGED_PENDING_REPAIR) {
+            bookings.set(r.id, { openedAt: r.adjustedAt, closedAt: r.recoveredAt, qty: r.previousQty - r.newQty });
+          }
           events.push({
             id: r.id,
             // Two reasons are events, not stock corrections: แจ้งชำรุด opens the repair flow, and
             // the row that hands repaired units back is stock walking in the door — the same
             // thing รับเข้า means everywhere else in the app. ยกเลิกคำขอชำรุด stays ปรับสต๊อก: it
             // withdraws a booking that should not have existed, it does not receive anything.
-            type: lost
-              ? "ADJUSTMENT"
-              : r.reason === AdjustmentReason.DAMAGED_PENDING_REPAIR
+            type: r.reason === AdjustmentReason.DAMAGED_PENDING_REPAIR
                 ? "DAMAGE_REPORT"
                 : r.reason === AdjustmentReason.REPAIR_RETURN
                   ? "RECEIVE"
@@ -259,17 +276,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             // รายการ leads with the reason label alone — the จำนวน column already carries how many
             // units moved, and the before/after balance rides in `change`, so neither the yard
             // figure nor the "ปรับยอด X → Y" string crowds the cell any more.
-            note: lost
-              ? `สูญหาย ${r.previousQty - r.newQty} ${unit}`
-              : ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason,
-            subtitle: lost ? "" : (ADJUSTMENT_SUBTITLE[r.reason] ?? ""),
+            note: ADJUSTMENT_REASON_LABELS[r.reason] ?? r.reason,
+            subtitle: ADJUSTMENT_SUBTITLE[r.reason] ?? "",
             notes: r.notes ?? "",
-            change: lost ? null : { from: r.previousQty, to: r.newQty },
+            change: { from: r.previousQty, to: r.newQty },
             user: r.adjuster.name,
             attachments: [{ recordType: "StockAdjustment", recordId: r.id, urls: r.imageEvidenceUrls }],
-            details: lost
-              ? { source: "ADJUSTMENT", qty: r.previousQty - r.newQty, notes: r.notes, recoveredAt: r.recoveredAt }
-              : { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
+            details: { previousQty: r.previousQty, newQty: r.newQty, reason: r.reason },
           });
         }
       })
@@ -281,14 +294,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       where: {
         itemId: id,
         ...(subItemId ? { subItemId } : {}),
-        ...(lost ? { newStatus: "LOST" as const } : {}),
       },
       include: { changer: { select: { name: true } }, subItem: { select: { subCode: true } } },
       orderBy: { changedAt: "desc" },
     }).then((records) => {
       for (const r of records) {
         // Loan transitions belong to the เบิก/รับคืน rows, both ways — see isDuplicateOfLoanRow.
-        if (!lost && isDuplicateOfLoanRow(r)) continue;
+        if (isDuplicateOfLoanRow(r)) continue;
         // A birth certificate, not a transition: ประกอบชุด logs AVAILABLE → AVAILABLE because
         // the set did not exist a moment earlier. "พร้อมใช้งาน → พร้อมใช้งาน" describes
         // nothing, so the reason — which names the set — becomes the headline.
@@ -327,15 +339,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           ),
           user: r.changer.name,
           attachments: [{ recordType: "ItemStatusLog", recordId: r.id, urls: r.imageUrls }],
-          details: lost
-            ? { source: "PIECE", subCode: r.subItem?.subCode ?? null, reason: r.reason, recoveredAt: r.recoveredAt }
-            : { previousStatus: r.previousStatus, newStatus: r.newStatus, subItemId: r.subItemId, repairVenue: r.repairVenue },
+          details: { previousStatus: r.previousStatus, newStatus: r.newStatus, subItemId: r.subItemId, repairVenue: r.repairVenue },
         });
       }
     })
   );
 
-  if (fetchMaint) {
+  {
     queries.push(
       prisma.maintenanceRecord.findMany({
         where: { itemId: id, ...(subItemId ? { subItemId } : {}) },
@@ -370,7 +380,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             notes: r.issue ?? "",
             user: r.performer.name,
             attachments: [{ recordType: "MaintenanceRecord", recordId: r.id, urls: r.attachmentUrls }],
-            details: { type: r.type, result: r.result, cost: r.cost, issue: r.issue },
+            // subItemId is what scopes a piece's repair rows into one trip — see groupRepairTrips.
+            details: { type: r.type, result: r.result, cost: r.cost, issue: r.issue, subItemId: r.subItemId },
           });
         }
       })
@@ -408,6 +419,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const job = repairJobs.get(e.id);
     if (job) {
       e.cost = job.cost;
+      if (job.bookingId) closedBy.set(job.bookingId, e.id);
       // The closing paperwork belongs to the row that shows the trip, not to a record the
       // timeline deliberately does not print. It keeps its own group: the files live on the
       // maintenance record, so that is where an edit has to land.
@@ -446,8 +458,42 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // groups (การเคลื่อนไหว / ซ่อมบำรุง) are one request instead of one per member type.
   const wanted = typeFilter ? new Set(typeFilter.split(",")) : null;
   const filtered = wanted ? events.filter((e) => wanted.has(e.type)) : events;
-  const total = filtered.length;
-  const paged = filtered.slice(skip, skip + take);
+  // Trips group the unfiltered view only. A chip means "แสดงเฉพาะ X" — folding the matching rows
+  // back into cards that also hold rows the reader just filtered out would answer a different
+  // question than the one they asked. Filtered = flat, and the คำถามว่า "เรื่องนี้ของทริปไหน"
+  // is what the unfiltered view exists to answer.
+  const loanCaseOf = (e: TimelineEvent) => {
+    const key = loanKeyOf.get(e.id);
+    if (!key) return null;
+    return { key, type: "BORROW" as const, done: (loanOutstanding.get(key) ?? 0) === 0 };
+  };
+
+  const units: (TimelineEvent | TimelineCase<TimelineEvent>)[] =
+    wanted ? filtered : groupTimelineCases(filtered, bookings, closedBy, loanCaseOf);
+  const total = units.length;
+  const paged = units.slice(skip, skip + take);
+
+  // Number AND wording come straight off src/lib/cases.ts — the same builder /cases renders.
+  // Deriving them here from the grouped events instead would give two answers that happen to
+  // agree today: "ปิดงานแล้ว" on one screen and "ซ่อมเสร็จ" on the other is the same case
+  // wearing two names, which is exactly what the case model was meant to end.
+  // Scoped to this item, so the extra build is a handful of indexed lookups.
+  const shown = paged.filter((u): u is TimelineCase<TimelineEvent> => "steps" in u);
+  if (shown.length) {
+    const known = await listCases({ itemId: id, ...(subItemId ? { subItemId } : {}) });
+    const byId = new Map(known.map((c) => [c.id, c]));
+    for (const t of shown) {
+      // ไอดีของเคสยืม/ตั้งใช้ในห้อง ขึ้นต้น BORROW ทั้งคู่ — มันคือแถวในตาราง ไม่ใช่ประเภท
+    const c = byId.get(`${t.caseType}:${t.id}`);
+      if (!c) continue;
+      t.code = c.code;
+      t.statusLabel = c.statusLabel;
+      t.subject = c.subject;
+      // ตั้งใช้ในห้อง ถูกจับกลุ่มมาในกอง "ยืม" เพราะมันอยู่ตารางเดียวกัน แต่ป้ายที่คนอ่านต้องเป็น
+      // ประเภทจริงของเคส ไม่ใช่ชื่อของตารางที่มันบังเอิญอยู่.
+      t.caseType = c.type;
+    }
+  }
 
   return json({ events: paged, page, perPage, total, counts, unit });
 }
