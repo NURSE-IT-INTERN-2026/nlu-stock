@@ -316,12 +316,6 @@ model SubItem {
   inKitSubItemId      String?
   inKitSubItem        SubItem?       @relation("KitContents", fields: [inKitSubItemId], references: [id])
   kitContents         SubItem[]      @relation("KitContents")
-  // KIT sets only. A set is persistent: it is borrowed, returned and borrowed again, and the
-  // system never counts the consumables inside it. What it does know for certain is that the
-  // set has been USED since someone last confirmed it was complete — set on เบิก, cleared by
-  // the ยืนยัน button on ตรวจชุด. True = ยืมไม่ได้ and not counted in availableQty.
-  // Every other kind of sub-item holds the default forever.
-  needsCheck          Boolean        @default(false)
   // ใบรับเข้าที่พาชิ้นนี้เข้าคลัง — ราคาต่อชิ้นจริงอ่านจาก receiveRecord.unitCost.
   // A foreign key, not a copied price: มูลค่าตัดจำหน่าย used to be ราคาเฉลี่ยของรายการ × จำนวน,
   // so ten pieces bought across three years at three prices all wrote off at one figure.

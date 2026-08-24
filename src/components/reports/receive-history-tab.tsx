@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, type ReactNode } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   ReportFilters, defaultDateFilters, periodLabel,
@@ -10,9 +10,8 @@ import { ReportDataTable, type Column } from "./report-data-table";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowDownToLine, ClipboardList, Recycle, Wrench, type LucideIcon } from "lucide-react";
-import { SectionTitle, chipStyle, type Token } from "./report-kit";
+import { Tabs, TabsList, TabsTrigger, TabsIndicator } from "@/components/ui/tabs";
+import { segmentStyle, type Token } from "./report-kit";
 import { Badge } from "@/components/ui/badge";
 import { getReport, updateReceiveUnitCost } from "@/lib/api";
 import { toast } from "sonner";
@@ -33,22 +32,18 @@ type SubTab = "receive" | "in_use" | "return" | "repair";
 //
 // สี่ sub-tab นี้คือ "ของกลับเข้าคลัง" เหมือนกันหมด แต่มาจากคนละที่ — token จึงเป็นสีของ
 // ต้นทาง (ยืม / นำไปใช้งาน / ส่งซ่อม) ไม่ใช่สีของปลายทาง ไม่งั้นทั้ง 4 อันเขียวเหมือนกันหมด.
-const SUB_TABS: { value: SubTab; label: string; token: Token; icon: LucideIcon; title: string; subtitle: string }[] = [
+const SUB_TABS: { value: SubTab; label: string; token: Token }[] = [
   {
-    value: "receive", label: "นำเข้าคลัง", token: "stockin", icon: ArrowDownToLine,
-    title: "นำเข้าคลัง", subtitle: "ของใหม่ที่รับเข้าคลัง แยกตามล็อตและผู้รับเข้า",
+    value: "receive", label: "นำเข้าคลัง", token: "stockin",
   },
   {
-    value: "in_use", label: "คืนเข้าคลัง", token: "inuse", icon: Recycle,
-    title: "คืนเข้าคลัง", subtitle: "ของที่ตั้งใช้งานตามห้องแล้วส่งกลับคลัง",
+    value: "in_use", label: "คืนเข้าคลัง", token: "inuse",
   },
   {
-    value: "return", label: "รับคืนจากใบยืม", token: "borrow", icon: ClipboardList,
-    title: "รับคืนจากใบยืม", subtitle: "ของที่ยืมออกไปแล้วคืนกลับ — ดูว่าคืนมาในสภาพไหน",
+    value: "return", label: "รับคืนจากใบยืม", token: "borrow",
   },
   {
-    value: "repair", label: "รับคืนจากส่งซ่อม", token: "repair", icon: Wrench,
-    title: "รับคืนจากส่งซ่อม", subtitle: "ของที่ซ่อมเสร็จและกลับมาพร้อมใช้งาน",
+    value: "repair", label: "รับคืนจากส่งซ่อม", token: "repair",
   },
 ];
 
@@ -80,36 +75,33 @@ export function ReceiveHistoryTab() {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  // Segment picker sits above the filter card, same as ออกจากคลัง — it chooses WHICH ledger is
-  // on screen, so it is not one of that ledger's filters and does not belong inside their box.
+  // ตารางลูกเป็นคนวาดการ์ดตัวกรอง chip จึงต้องส่งลงไปเป็น leading ไม่ใช่วาดที่นี่ —
+  // ไม่งั้นมันลอยอยู่นอกการ์ดคนเดียวทั้งหน้า
+  const chips = (
+    <Tabs value={sub} onValueChange={(v) => selectSub(v as SubTab)}>
+      <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+        <TabsIndicator />
+        {SUB_TABS.map(({ value, label }) => (
+          <TabsTrigger key={value} value={value}>
+            {label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+
   return (
     <div className="space-y-4">
-      <SectionTitle token={spec.token} icon={spec.icon} title={spec.title} subtitle={spec.subtitle} />
-
-      {/* Sticky on phones only — same reasoning as ออกจากคลัง: the segment picker is the
-          control people come back to, and top-16 clears the app header. */}
-      <Tabs
-        value={sub}
-        onValueChange={(v) => selectSub(v as SubTab)}
-        className="sticky top-16 z-20 -mx-4 bg-background px-4 py-2 md:static md:mx-0 md:bg-transparent md:p-0"
-      >
-        <TabsList variant="chip" className="w-full min-w-0 sm:w-auto">
-          {SUB_TABS.map(({ value, label, token }) => (
-            <TabsTrigger key={value} value={value} className="min-w-0" style={chipStyle(token)}>
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
+      {/* chip เลือก sub-tab อยู่แถวบนสุดของการ์ดตัวกรอง ซึ่งเป็นของตารางลูก — มันคือตัวกรอง
+          อย่างหนึ่ง ปล่อยลอยนอกการ์ดแล้วอ่านเป็นหัวเรื่องที่ไม่มีบ้าน */}
       {sub === "receive" ? (
-        <ReceiveLogTable token={spec.token} />
+        <ReceiveLogTable token={spec.token} leading={chips} />
       ) : sub === "in_use" ? (
-        <StatusLogTable from="IN_USE" to="AVAILABLE" noun="คืนเข้าคลัง" token={spec.token} />
+        <StatusLogTable from="IN_USE" to="AVAILABLE" noun="คืนเข้าคลัง" token={spec.token} leading={chips} />
       ) : sub === "return" ? (
-        <StatusLogTable from="ON_LOAN" noun="รับคืนจากใบยืม" token={spec.token} />
+        <StatusLogTable from="ON_LOAN" noun="รับคืนจากใบยืม" token={spec.token} leading={chips} />
       ) : (
-        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" noun="รับคืนจากส่งซ่อม" token={spec.token} />
+        <StatusLogTable from="UNDER_REPAIR" to="AVAILABLE" noun="รับคืนจากส่งซ่อม" token={spec.token} leading={chips} />
       )}
     </div>
   );
@@ -127,6 +119,8 @@ interface ReportTableProps<T extends { id: string }> {
   statsFor: (s: Record<string, number>, values: FilterValues) => SummaryStat[];
   emptyMessage: string;
   token: Token;
+  /** แถวบนสุดของการ์ดตัวกรอง — sub-tab chip ของหน้านี้ */
+  leading?: ReactNode;
 }
 
 function ReportTable<T extends { id: string }>({
@@ -139,6 +133,7 @@ function ReportTable<T extends { id: string }>({
   statsFor,
   emptyMessage,
   token,
+  leading,
 }: ReportTableProps<T>) {
   const isMobile = useIsMobile();
   const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
@@ -173,6 +168,7 @@ function ReportTable<T extends { id: string }>({
   return (
     <div className="space-y-4 pb-2">
       <ReportFilters
+        leading={leading}
         config={filterConfig}
         values={filters}
         onChange={setFilters}
@@ -304,13 +300,14 @@ function receiveColumns(editable: boolean): Column<ReceiveRow>[] {
   ];
 }
 
-function ReceiveLogTable({ token }: { token: Token }) {
+function ReceiveLogTable({ token, leading }: { token: Token; leading?: ReactNode }) {
   const { user } = useSession();
   const editable = canManageStock(user?.role ?? "");
   const columns = useMemo(() => receiveColumns(editable), [editable]);
   return (
     <ReportTable<ReceiveRow>
       token={token}
+      leading={leading}
       path="receive-history"
       columns={columns}
       filterConfig={COMMON_FILTERS}
@@ -358,7 +355,7 @@ const statusColumns: Column<StatusRow>[] = [
   { key: "changerName", header: "ผู้บันทึก" },
 ];
 
-function StatusLogTable({ from, to, noun, token }: { from: string; to?: string; noun: string; token: Token }) {
+function StatusLogTable({ from, to, noun, token, leading }: { from: string; to?: string; noun: string; token: Token; leading?: ReactNode }) {
   // Memoized so identity is stable across re-renders — otherwise ReportTable's
   // fetchPage (useCallback deps on extraParams) would change every render,
   // re-triggering its effect and refetching in an unbounded loop.
@@ -367,6 +364,7 @@ function StatusLogTable({ from, to, noun, token }: { from: string; to?: string; 
   return (
     <ReportTable<StatusRow>
       token={token}
+      leading={leading}
       path="status-log"
       columns={statusColumns}
       filterConfig={COMMON_FILTERS}

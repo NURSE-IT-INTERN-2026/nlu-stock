@@ -27,8 +27,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // A piece inside an assembled KIT set may be reported broken from right here — this is
     // the ONE damage path in the app, and a set is no longer taken apart to reach the pieces
-    // in it. Saying so leaves the set physically short of that piece, which is fine: it breaks
-    // during use, and a set that has been used is already รอตรวจ and cannot be lent.
+    // in it. Saying so leaves the set physically short of that piece; ดูของในชุด lists the
+    // gap so whoever refills the box can see it.
     // Leaving the set is handled below (inKitSubItemId cleared, INUSE record closed by
     // closeOpenLoan); a piece that stays put keeps its link.
     const leavingKitSet = !!subItem.inKitSubItemId && data.newStatus !== ItemStatus.IN_USE;

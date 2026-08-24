@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "@/lib/prisma";
 import { ItemStatus, LoanType } from "@/generated/prisma/enums";
-import { assembleKitSets, cancelKitSet, confirmKitSetChecked, maxAssemblableSets, unitMismatches } from "@/lib/kits";
+import { assembleKitSets, cancelKitSet, maxAssemblableSets, unitMismatches } from "@/lib/kits";
 
 /**
  * ประกอบ → ยกเลิก, end to end, against the dev database inside a transaction that always rolls
@@ -104,19 +104,10 @@ test("kit set: assemble parks the durables and leaves the consumable alone", { s
         "and nothing at all is written for the consumable",
       );
 
-      // A fresh set is ready to lend: the assemble dialog's checkbox was the check.
+      // A fresh set is on the shelf and lendable — nothing gates it.
       const fresh = await tx.subItem.findUniqueOrThrow({ where: { id: setSubItemIds[0] } });
-      assert.equal(fresh.needsCheck, false);
-      await assert.rejects(
-        () => confirmKitSetChecked(tx, { setSubItemId: setSubItemIds[0], userId: user.id }),
-        /ตรวจแล้ว/,
-        "confirming a set nobody has used is refused rather than logged as a no-op",
-      );
-
-      // รอตรวจ takes the set out of availableQty even though it is sitting on the shelf.
-      await tx.subItem.update({ where: { id: setSubItemIds[0] }, data: { needsCheck: true } });
-      await confirmKitSetChecked(tx, { setSubItemId: setSubItemIds[0], userId: user.id });
-      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: kit.id } })).availableQty, 1, "confirming puts it back");
+      assert.equal(fresh.status, ItemStatus.AVAILABLE);
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: kit.id } })).availableQty, 1);
 
       const result = await cancelKitSet(tx, { setSubItemId: setSubItemIds[0], userId: user.id });
       assert.deepEqual(result.consumables.map((c) => c.name), [gauze.name], "staff are told what is still in the box");

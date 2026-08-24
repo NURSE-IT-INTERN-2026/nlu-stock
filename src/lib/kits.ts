@@ -130,9 +130,8 @@ export interface AssembleInput {
  * ประกอบชุด — build `sets` physical copies of a kit recipe, cutting the durable components.
  * Runs inside the caller's $transaction. Returns the new set SubItem ids.
  *
- * A fresh set is ready to lend (needsCheck false) even though the system never saw a single
- * consumable go in: the confirmation checkbox on the assemble dialog IS that check, the same
- * human act the ตรวจชุด screen asks for after every return.
+ * The system never sees a single consumable go in — the recipe counts ชิ้น while the stock
+ * counts กล่อง — so what is physically in the box is the staff's business, not the app's.
  */
 export async function assembleKitSets(
   tx: TxClient,
@@ -374,8 +373,7 @@ async function closeSetLoan(
  * แจ้งชำรุด uses this to name the box a broken piece is leaving. Detaching itself is one field
  * on the update the status route already writes, and the INUSE record is closed by the
  * closeOpenLoan call that route already makes — a broken piece leaves through the ordinary
- * damage screen rather than a second damage path hidden inside the kit UI. The set is not
- * flagged รอตรวจ: things break while a set is out, and a set that has been out already is.
+ * damage screen rather than a second damage path hidden inside the kit UI.
  */
 export async function kitSetLabelOf(tx: TxClient, subItemId: string): Promise<string | null> {
   const piece = await tx.subItem.findUnique({
@@ -475,7 +473,7 @@ export async function cancelKitSet(
   }
 
   // 3. The set itself is gone.
-  await tx.subItem.update({ where: { id: set.id }, data: { status: ItemStatus.DISPOSED, needsCheck: false } });
+  await tx.subItem.update({ where: { id: set.id }, data: { status: ItemStatus.DISPOSED } });
   await tx.itemStatusLog.create({
     data: {
       itemId: set.itemId,
@@ -493,41 +491,3 @@ export async function cancelKitSet(
   return { kitItemId: set.itemId, setLabel, consumables };
 }
 
-/**
- * ยืนยันตรวจชุด — a human opened the box, compared it against the recipe and says it is ready.
- * The system checks nothing: it cannot count gauze, and anything that needed fixing was fixed
- * through the normal screens before this button was pressed. All it does is lift the gate.
- */
-export async function confirmKitSetChecked(
-  tx: TxClient,
-  { setSubItemId, userId, note }: { setSubItemId: string; userId: string; note?: string | null },
-): Promise<{ kitItemId: string; setLabel: string }> {
-  const set = await tx.subItem.findUnique({
-    where: { id: setSubItemId },
-    select: {
-      id: true, subCode: true, status: true, itemId: true, needsCheck: true,
-      item: { select: { code: true, category: { select: { profile: { select: { code: true } } } } } },
-    },
-  });
-  if (!set) throw new Error("ไม่พบชุดอุปกรณ์");
-  if (set.item.category.profile.code !== "KIT") throw new Error("รายการนี้ไม่ใช่ชุดอุปกรณ์");
-  if (set.status === ItemStatus.DISPOSED) throw new Error("ชุดนี้ถูกยกเลิกไปแล้ว");
-  if (set.status === ItemStatus.ON_LOAN) throw new Error("ชุดนี้ถูกยืมออกอยู่ — ต้องรับคืนก่อน");
-  if (!set.needsCheck) throw new Error("ชุดนี้ตรวจแล้ว");
-
-  const setLabel = `${set.item.code}-${set.subCode}`;
-  await tx.subItem.update({ where: { id: set.id }, data: { needsCheck: false } });
-  await tx.itemStatusLog.create({
-    data: {
-      itemId: set.itemId,
-      subItemId: set.id,
-      previousStatus: set.status,
-      newStatus: set.status,
-      reason: `ตรวจชุด ${setLabel} — ของครบ พร้อมให้ยืม${note ? ` (${note})` : ""}`,
-      changedBy: userId,
-    },
-  });
-
-  await recomputeItemCounts(tx, set.itemId);
-  return { kitItemId: set.itemId, setLabel };
-}

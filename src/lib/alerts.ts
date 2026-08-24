@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { countOpenCases } from "@/lib/cases";
 
 export interface AlertCounts {
   lowStock: number;
@@ -7,6 +8,8 @@ export interface AlertCounts {
   overdueReturn: number;
   damagedPending: number;
   dueCount: number;
+  /** เคสที่ยังมีคนรออยู่ — ซ่อม, สูญหาย, ยืมเลยกำหนด. เกณฑ์อยู่ที่ isTodo ใน lib/cases. */
+  openCases: number;
   total: number;
   totalItems: number;
   onLoan: number;
@@ -19,7 +22,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   // Each count must be in the same unit as the rows its chip opens — an item count over an
   // item table, a piece count over a piece panel. They differ by chip, and that is fine;
   // what is not fine is a badge in a unit its own list never renders.
-  const [lowStockIds, nearExpiry, overdueMaint, totalItems, onLoan, overdueLoans, damagedPending, dueCount] = await Promise.all([
+  const [lowStockIds, nearExpiry, overdueMaint, totalItems, onLoan, overdueLoans, damagedPending, dueCount, openCases] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
     `,
@@ -92,6 +95,9 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     prisma.item.count({
       where: { isActive: true, OR: [{ nextCountDate: null }, { nextCountDate: { lt: now } }] },
     }),
+    // นับเป็นใบเคส ตรงกับที่แท็บ รายการสิ่งที่ต้องทำ แสดงเป็นแถว — พัสดุชิ้นเดียวที่มีสองงานค้าง
+    // เป็นสองแถวที่นั่น จึงต้องเป็นสองที่นี่.
+    countOpenCases(),
   ]);
 
   const lowStock = lowStockIds.length;
@@ -101,7 +107,9 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   // count of the ทั้งหมด tab and cannot be: the chips count different things (items, pieces,
   // loan events) and one item can raise several alerts at once. The tab paginates distinct
   // items. onLoan is not an alert — it is a normal state, filtered on /items instead.
-  const total = lowStock + nearExpiry + overdueMaint + overdueReturn + damagedPending + dueCount;
+  // openCases อยู่ในยอดรวมด้วย ไม่งั้นคลังที่มีแต่เคสค้างจะได้ total = 0 แล้วหน้า /alerts คืน
+  // empty state ทิ้งไปทั้งหน้า ก่อนจะทันวาดแถบแท็บที่แท็บนั้นอยู่.
+  const total = lowStock + nearExpiry + overdueMaint + overdueReturn + damagedPending + dueCount + openCases;
 
   return {
     lowStock,
@@ -110,6 +118,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     overdueReturn,
     damagedPending,
     dueCount,
+    openCases,
     total,
     totalItems,
     onLoan,

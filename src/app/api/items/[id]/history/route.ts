@@ -10,7 +10,7 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 import type { AttachRecordType } from "@/lib/attachments";
 import { groupTimelineCases, type Booking, type TimelineCase } from "@/lib/timeline-cases";
-import { listCases } from "@/lib/cases";
+import { caseRangeStart, listCases, type CaseState } from "@/lib/cases";
 
 // A history row as the table renders it. Three text fields, each with one job:
 //   note     — the bold title, the one thing worth scanning ("รับคืนจากซ่อม").
@@ -80,6 +80,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
+  const data = await itemHistory(id, getSearchParams(request));
+  return data ? json(data) : notFound("Item not found");
+}
+
+/**
+ * ประวัติของพัสดุหนึ่งชิ้นตามตัวกรอง. Exported เพราะไฟล์ส่งออกอ่านทางนี้ทางเดียวกับหน้าจอ —
+ * รายงานที่ query เองอีกชุดคือรายงานที่วันหนึ่งจะให้คำตอบไม่ตรงกับจอที่คนกดปุ่มมองอยู่.
+ * คืน null เมื่อไม่มีพัสดุนี้ ให้ผู้เรียกเป็นคนตัดสินว่าจะตอบ 404 หรืออะไร.
+ */
+export async function itemHistory(id: string, searchParams: URLSearchParams) {
   const item = await prisma.item.findUnique({
     where: { id },
     select: {
@@ -88,15 +98,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       category: { select: { profile: { select: { code: true, dispenseType: true } } } },
     },
   });
-  if (!item) return notFound("Item not found");
+  if (!item) return null;
 
   const unit = item.issueUnit.name;
   const isConsumable = item.category.profile?.dispenseType === "CONSUMABLE";
   const isKit = item.category.profile?.code === "KIT";
 
-  const searchParams = getSearchParams(request);
   const { page, perPage, skip, take } = paginate(searchParams);
   const typeFilter = searchParams.get("type");
+  // ตัวกรองชุดเดียวกับที่เวิร์กสเปซเคสใช้ — หน้านี้เลิกเป็น "ประวัติที่กรองได้แค่ประเภท" แล้ว
+  const stateFilter = searchParams.get("state") as CaseState | null;
+  const fromDate = caseRangeStart(searchParams.get("range"));
+  const q = searchParams.get("q")?.trim().toLowerCase() || null;
   // Piece mode: only the sources that carry a subItemId can be scoped to one copy.
   // ReceiveRecord / StockAdjustment / LocationChangeLog are item-level and drop out.
   const subItemId = searchParams.get("subItemId");
@@ -454,22 +467,47 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return acc;
   }, {});
 
-  // `type` takes a comma-separated list as well as a single value, so the timeline's coarse
-  // groups (การเคลื่อนไหว / ซ่อมบำรุง) are one request instead of one per member type.
+  // `type` takes a comma-separated list as well as a single value, so one เคส in the picker
+  // ("ซ่อมแซม") is one request covering แจ้งชำรุด/ส่งซ่อม/รับคืนจากซ่อม.
   const wanted = typeFilter ? new Set(typeFilter.split(",")) : null;
-  const filtered = wanted ? events.filter((e) => wanted.has(e.type)) : events;
-  // Trips group the unfiltered view only. A chip means "แสดงเฉพาะ X" — folding the matching rows
-  // back into cards that also hold rows the reader just filtered out would answer a different
-  // question than the one they asked. Filtered = flat, and the คำถามว่า "เรื่องนี้ของทริปไหน"
-  // is what the unfiltered view exists to answer.
   const loanCaseOf = (e: TimelineEvent) => {
     const key = loanKeyOf.get(e.id);
     if (!key) return null;
     return { key, type: "BORROW" as const, done: (loanOutstanding.get(key) ?? 0) === 0 };
   };
 
-  const units: (TimelineEvent | TimelineCase<TimelineEvent>)[] =
-    wanted ? filtered : groupTimelineCases(filtered, bookings, closedBy, loanCaseOf);
+  // จัดกลุ่มก่อนแล้วค่อยกรอง ไม่ใช่ทางกลับกัน: กรองก่อนจะทำให้เลือก "ซ่อมแซม" แล้วได้แถวแบนๆ
+  // สามแถวแทนที่จะได้การ์ดเคสที่เล่าเรื่องเดียวกันครบทั้งใบ — ซึ่งคือสิ่งเดียวที่การ์ดมีไว้ทำ.
+  // เคสถูกเก็บไว้เมื่อขั้นตอนใดขั้นตอนหนึ่งของมันตรงกับที่เลือก และเก็บไปทั้งใบ.
+  const grouped = groupTimelineCases(events, bookings, closedBy, loanCaseOf);
+
+  // สถานะกับคำค้นเป็นคำถามระดับเคส จึงต้องรู้จักเคสทั้งกองก่อนตัด ไม่ใช่แค่ใบที่อยู่หน้าปัจจุบัน.
+  // Scoped to this item, so the extra build is a handful of indexed lookups.
+  const known = new Map(
+    (await listCases({ itemId: id, ...(subItemId ? { subItemId } : {}) })).map((c) => [c.id, c]),
+  );
+  const caseOf = (u: TimelineCase<TimelineEvent>) => known.get(`${u.caseType}:${u.id}`);
+
+  const isCase = (u: TimelineEvent | TimelineCase<TimelineEvent>): u is TimelineCase<TimelineEvent> => "steps" in u;
+  const stepsOf = (u: TimelineEvent | TimelineCase<TimelineEvent>) => (isCase(u) ? u.steps : [u]);
+
+  let units = grouped;
+  if (wanted) units = units.filter((u) => stepsOf(u).some((e) => wanted.has(e.type)));
+  // ช่วงเวลาวัดที่ขั้นตอนล่าสุด: เคสที่เปิดปีที่แล้วแต่เพิ่งปิดเมื่อวานคือความเคลื่อนไหวของสัปดาห์นี้
+  if (fromDate) units = units.filter((u) => stepsOf(u).some((e) => e.date >= fromDate));
+  // แถวที่ไม่ใช่เคสไม่มีสถานะให้กรอง — เลือกสถานะแล้วเหลือแต่งาน ไม่ใช่การเคลื่อนไหวของของ
+  if (stateFilter) units = units.filter((u) => isCase(u) && caseOf(u)?.state === stateFilter);
+  if (q) {
+    units = units.filter((u) => {
+      const c = isCase(u) ? caseOf(u) : null;
+      const hay = [
+        c?.code, c?.subject, c?.statusLabel,
+        ...stepsOf(u).flatMap((e) => [e.note, e.subtitle, e.notes, e.user]),
+      ];
+      return hay.some((h) => h?.toLowerCase().includes(q));
+    });
+  }
+
   const total = units.length;
   const paged = units.slice(skip, skip + take);
 
@@ -477,23 +515,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // Deriving them here from the grouped events instead would give two answers that happen to
   // agree today: "ปิดงานแล้ว" on one screen and "ซ่อมเสร็จ" on the other is the same case
   // wearing two names, which is exactly what the case model was meant to end.
-  // Scoped to this item, so the extra build is a handful of indexed lookups.
-  const shown = paged.filter((u): u is TimelineCase<TimelineEvent> => "steps" in u);
-  if (shown.length) {
-    const known = await listCases({ itemId: id, ...(subItemId ? { subItemId } : {}) });
-    const byId = new Map(known.map((c) => [c.id, c]));
-    for (const t of shown) {
-      // ไอดีของเคสยืม/ตั้งใช้ในห้อง ขึ้นต้น BORROW ทั้งคู่ — มันคือแถวในตาราง ไม่ใช่ประเภท
-    const c = byId.get(`${t.caseType}:${t.id}`);
-      if (!c) continue;
-      t.code = c.code;
-      t.statusLabel = c.statusLabel;
-      t.subject = c.subject;
-      // ตั้งใช้ในห้อง ถูกจับกลุ่มมาในกอง "ยืม" เพราะมันอยู่ตารางเดียวกัน แต่ป้ายที่คนอ่านต้องเป็น
-      // ประเภทจริงของเคส ไม่ใช่ชื่อของตารางที่มันบังเอิญอยู่.
-      t.caseType = c.type;
-    }
+  for (const t of paged) {
+    // ไอดีของเคสยืม/ตั้งใช้ในห้อง ขึ้นต้น BORROW ทั้งคู่ — มันคือแถวในตาราง ไม่ใช่ประเภท
+    const c = isCase(t) ? caseOf(t) : null;
+    if (!c || !isCase(t)) continue;
+    t.code = c.code;
+    t.statusLabel = c.statusLabel;
+    t.subject = c.subject;
+    // ตั้งใช้ในห้อง ถูกจับกลุ่มมาในกอง "ยืม" เพราะมันอยู่ตารางเดียวกัน แต่ป้ายที่คนอ่านต้องเป็น
+    // ประเภทจริงของเคส ไม่ใช่ชื่อของตารางที่มันบังเอิญอยู่.
+    t.caseType = c.type;
   }
 
-  return json({ events: paged, page, perPage, total, counts, unit });
+  return { events: paged, page, perPage, total, counts, unit };
 }

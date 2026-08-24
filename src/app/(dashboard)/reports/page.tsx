@@ -4,31 +4,30 @@ import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import {
-  ShoppingCart, BookOpen, Wallet,
-  FolderKanban, ArrowDownToLine, Boxes,
+  ShoppingCart, BookOpen, Wallet, ArrowDownToLine, Boxes,
 } from "lucide-react";
 import { StockBalanceTab } from "@/components/reports/stock-balance-tab";
 import { StockOutTab } from "@/components/reports/stock-out-tab";
 import { ReceiveHistoryTab } from "@/components/reports/receive-history-tab";
 import { UsageBySubjectTab } from "@/components/reports/usage-by-subject-tab";
 import { AnnualCostTab } from "@/components/reports/annual-cost-tab";
-import { CasesTab } from "@/components/reports/cases-tab";
 import { usePageHeader } from "@/components/layout/page-header-context";
 
 // เรียงตาม tab ที่มีข้อมูลจริงก่อน — ออกจากคลังคือสิ่งที่เกิดขึ้นทุกวัน ส่วนมูลค่า/ค่าใช้จ่าย
 // รอให้มีคนกรอกราคาก่อนถึงจะมีอะไรให้อ่าน.
 //
-// `เคสงาน` เคยเป็นสาม: หน้า /cases ของตัวเอง กับ tab `ชำรุด & ส่งซ่อม` และ `ประวัติบำรุงรักษา` ที่นี่
-// ซึ่งอ่านจากคนละ query กันแล้วให้ตัวเลขไม่ตรงกัน. ทั้งหมดอ่านจาก /api/cases ทางเดียวแล้ว.
+// `เคสงาน` เคยอยู่ที่นี่ ก่อนหน้านั้นเคยเป็นหน้า /cases ของตัวเอง และเคยเป็น tab `ชำรุด & ส่งซ่อม`
+// กับ `ประวัติบำรุงรักษา` ที่อ่านคนละ query กันแล้วให้ตัวเลขไม่ตรงกัน. ตอนนี้เคสอ่านที่ตัวของ —
+// แท็บประวัติในหน้าพัสดุ — ส่วนงานที่ยังค้างอยู่รวมกันที่ /alerts?todo=true. หน้ารายงานเหลือแต่
+// รายงาน: สิ่งที่นับรวมได้ทั้งคลัง ไม่ใช่ประวัติของของชิ้นใดชิ้นหนึ่ง.
 //
-// เดิมมี `hint` ที่ระดับหน้านี้ ตอนนี้ย้ายไปเป็น SectionTitle ในแต่ละ tab แทน: tab ที่มี
-// sub-tab (ออกจากคลัง, เข้าคลัง) ตอบคนละคำถามในแต่ละ sub-tab ซึ่งบรรทัดเดียวระดับหน้าทำไม่ได้.
-// `token` คือสีประจำ tab ที่ SectionTitle / หัวตาราง / การ์ดตัวเลขข้างในใช้ร่วมกัน.
+// ไม่มีหัวเรื่องกับคำโปรยในแต่ละ tab แล้ว — ชื่อบน tab บอกครบอยู่แล้วว่ากำลังดูอะไร และคำโปรย
+// ก็กินที่บนสุดของทุกหน้าจอโดยที่ไม่มีใครอ่านซ้ำรอบที่สอง.
+// `token` คือสีประจำ tab ที่หัวตาราง / การ์ดตัวเลขข้างในใช้ร่วมกัน.
 const TABS = [
   { value: "dispense-history", label: "ออกจากคลัง", token: "issue", icon: ShoppingCart, component: StockOutTab },
   { value: "receive-history", label: "เข้าคลัง", token: "stockin", icon: ArrowDownToLine, component: ReceiveHistoryTab },
   { value: "usage-by-subject", label: "สถิติการใช้งาน", token: "maintain", icon: BookOpen, component: UsageBySubjectTab },
-  { value: "cases", label: "เคสงาน", token: "damage", icon: FolderKanban, component: CasesTab },
   { value: "stock-balance", label: "มูลค่าคงคลัง", token: "value", icon: Boxes, component: StockBalanceTab },
   { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", token: "value", icon: Wallet, component: AnnualCostTab },
 ] as const;
@@ -57,10 +56,15 @@ function ReportsContent() {
     setActiveTab(value);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", value);
-    // ?case= เป็นของแท็บเคสงานเท่านั้น ค้างไว้บนแท็บอื่นก็เป็น URL ที่อธิบายตัวเองไม่ได้
-    if (value !== "cases") params.delete("case");
+    params.delete("case");
     router.replace(`${pathname}?${params.toString()}`);
   };
+
+  // ลิงก์เก่าที่ชี้มาแท็บเคสงาน. ปล่อยให้ตกไปแท็บแรกเงียบๆ แปลว่าคนกดมาแล้วไปโผล่ "ออกจากคลัง"
+  // โดยไม่มีอะไรบอกว่าเกิดอะไรขึ้น — bookmark ที่ยังใช้ได้แต่พาไปผิดที่แย่กว่าลิงก์ที่พาไปถูกที่.
+  useEffect(() => {
+    if (tabParam === "cases") router.replace("/alerts?todo=true");
+  }, [tabParam, router]);
 
   // Reflect the active tab in the header breadcrumb ("รายงาน & สถิติ › <tab>").
   const active = TABS.find((t) => t.value === activeTab) ?? TABS[0];

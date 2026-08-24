@@ -66,12 +66,6 @@ export async function POST(req: NextRequest) {
           const sub = item.subItems[0];
           if (!sub) throw new Error("ไม่พบชิ้นย่อย");
           if (sub.status !== ItemStatus.AVAILABLE) throw new Error(`ชิ้นย่อย ${sub.subCode} ไม่พร้อมใช้งาน`);
-          // A KIT set that has been used since anyone last confirmed its contents. The box is
-          // on the shelf and looks lendable, but nobody has opened it — hard stop, not a
-          // warning, or the class gets a set with no gauze in it.
-          if (sub.needsCheck) {
-            throw new Error(`ชุด ${item.code}-${sub.subCode} รอตรวจ — ต้องยืนยันว่าของครบก่อนจึงให้ยืมได้`);
-          }
         } else if (di.lotId) {
           const lot = item.lots[0];
           if (!lot) throw new Error("ไม่พบล็อต");
@@ -110,16 +104,9 @@ export async function POST(req: NextRequest) {
             where: { id: di.subItemId },
             // นำไปใช้งาน (INUSE) moves this one physical piece — mirror the destination onto
             // the sub-item's own locationId (only when it resolved to a real Location).
-            //
-            // needsCheck is the KIT set gate, and this is its only writer. It is raised on the
-            // way OUT rather than on the way back because that is when the consumables inside
-            // start being spent — a set is รอตรวจ from the moment it leaves, whatever path
-            // eventually closes the loan. Harmless on every other tracked item: nothing clears
-            // it except ตรวจชุด, and nothing else reads it except the KIT screens.
             data: {
               status: newStatus,
               ...(inRoom && locationId ? { locationId } : {}),
-              ...(item.category.profile.code === "KIT" ? { needsCheck: true } : {}),
             },
           });
           // This is the ONLY writer that moves a piece INTO ON_LOAN/IN_USE, which is what lets

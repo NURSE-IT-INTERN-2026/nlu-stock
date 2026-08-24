@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
   RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight, ChevronDown, ExternalLink,
+  ListFilter, CircleDot, CalendarDays, FilterX, Search,
 } from "lucide-react";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
@@ -19,6 +19,11 @@ import { EVENT_TYPE_LABELS, type TimelineEventType } from "@/lib/constants";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
 import { AttachmentList } from "@/components/shared/attachment-list";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CaseDetailPane } from "@/components/cases/case-workspace";
+import { ExportButtons } from "@/components/reports/export-buttons";
 import type { AttachRecordType } from "@/lib/attachments";
 interface TimelineEvent {
   id: string;
@@ -89,14 +94,45 @@ const TYPE_META: Record<TimelineEventType, { icon: typeof Package; chip: string;
   LOCATION_CHANGE: { icon: MapPin, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
 };
 
-const CHIP_ORDER: TimelineEventType[] = [
-  "DISPENSE", "BORROW", "INUSE", "RETURN", "RECEIVE",
-  "ADJUSTMENT", "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "STATUS_CHANGE", "MAINTENANCE", "LOCATION_CHANGE",
+/**
+ * ตัวเลือกของช่อง "ประเภท" — ชุดเดียว ไม่ใช่สองระบบซ้อนกัน.
+ *
+ * เดิมเป็นชิป 12 ใบเรียงตามชนิดเหตุการณ์ ซึ่งบังคับให้คนอ่านรู้ล่วงหน้าว่างานซ่อมหนึ่งงานกระจายอยู่
+ * ในสามใบ (แจ้งชำรุด / ส่งซ่อม / รับคืนจากซ่อม) แล้วต้องเลือกให้ถูกใบ. ที่นี่ "ซ่อมแซม" คือหนึ่ง
+ * ตัวเลือกที่ครอบทั้งสาม แล้วฝั่ง server เก็บเคสไว้ทั้งใบ — ตัวกรองพูดภาษาเดียวกับการ์ดที่มันกรอง.
+ *
+ * สูญหายไม่มีในนี้: ในไทม์ไลน์ของหายมาในรูปการเปลี่ยนสถานะหรือปรับสต๊อก ไม่ได้เป็นชนิดของตัวเอง —
+ * ตัวเลือกที่แมปกับข้อมูลไม่ได้คือตัวเลือกที่กดแล้วว่าง.
+ */
+const TYPE_GROUPS: { value: string; label: string; types: TimelineEventType[] }[] = [
+  { value: "REPAIR", label: "ซ่อมแซม", types: ["DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN"] },
+  { value: "MAINTENANCE", label: "บำรุงรักษา", types: ["MAINTENANCE"] },
+  { value: "BORROW", label: "ยืมพัสดุ", types: ["BORROW"] },
+  { value: "INUSE", label: "ตั้งใช้ในห้อง", types: ["INUSE"] },
+  { value: "DISPENSE", label: "เบิกใช้", types: ["DISPENSE"] },
+  { value: "RETURN", label: "รับคืน", types: ["RETURN"] },
+  { value: "RECEIVE", label: "รับเข้า", types: ["RECEIVE"] },
+  { value: "ADJUSTMENT", label: "ปรับสต๊อก", types: ["ADJUSTMENT"] },
+  { value: "STATUS_CHANGE", label: "เปลี่ยนสถานะ", types: ["STATUS_CHANGE"] },
+  { value: "LOCATION_CHANGE", label: "ย้ายที่ตั้ง", types: ["LOCATION_CHANGE"] },
 ];
 
-// The ซ่อมบำรุง group tab used to exist because the four repair types were scattered and the
-// reader had to know which of the twelve chips to click to see a repair whole. The trip card
-// answers that directly now, so the coarse tabs are gone and the chips are the only filter.
+/** ตัวเลือกหนึ่งค่า → ชนิดเหตุการณ์ที่มันครอบ, ส่งไปเป็น list ให้ `?type=` ที่รับ comma อยู่แล้ว. */
+const typeOf = (value: string) => TYPE_GROUPS.find((g) => g.value === value)?.types ?? [];
+
+const STATE_OPTIONS = [
+  { value: "all", label: "ทั้งหมด" },
+  { value: "OPEN", label: "กำลังดำเนินการ" },
+  { value: "DONE", label: "เสร็จสิ้น" },
+  { value: "CANCELLED", label: "ยกเลิก" },
+];
+const RANGE_OPTIONS = [
+  { value: "all", label: "ทั้งหมด" },
+  { value: "7d", label: "7 วันล่าสุด" },
+  { value: "30d", label: "30 วันล่าสุด" },
+  { value: "90d", label: "90 วันล่าสุด" },
+  { value: "year", label: "ปีนี้" },
+];
 
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */
 type Counts = Partial<Record<TimelineEventType, { n: number; qty: number | null }>>;
@@ -113,16 +149,31 @@ interface Props {
 
 export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props) {
   const isMobile = useIsMobile();
-  const [typeFilter, setTypeFilter] = useState<TimelineEventType | "">("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [state, setState] = useState("all");
+  const [range, setRange] = useState("all");
+  const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
   const [counts, setCounts] = useState<Counts>({});
   const [unit, setUnit] = useState("");
   const [selected, setSelected] = useState<TimelineEvent | null>(null);
+  // เคสที่กำลังเปิดอ่านอยู่ — รายละเอียดมาจาก CaseDetailPane ตัวเดียวกับหน้าเคส
+  const [openCase, setOpenCase] = useState<string | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
+
+  // A keystroke per request would put one full history build behind every letter.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const fetchPage = useCallback(
     async (p: number) => {
       const qs = new URLSearchParams({ page: String(p), perPage: String(perPage) });
-      if (typeFilter) qs.set("type", typeFilter);
+      if (typeFilter !== "all") qs.set("type", typeOf(typeFilter).join(","));
+      if (state !== "all") qs.set("state", state);
+      if (range !== "all") qs.set("range", range);
+      if (search) qs.set("q", search);
       if (subItemId) qs.set("subItemId", subItemId);
       const data = (await getItemHistory(itemId, qs.toString())) as Record<string, unknown>;
       // Filter-independent, so the chips stay complete while one type is selected.
@@ -133,7 +184,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         total: (data.total as number) || 0,
       };
     },
-    [itemId, subItemId, perPage, typeFilter],
+    [itemId, subItemId, perPage, typeFilter, state, range, search],
   );
 
   const {
@@ -145,23 +196,29 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   // and filtering, without a refetch of seven tables to repaint one thumbnail.
   const [attachOverride, setAttachOverride] = useState<Record<string, string[]>>({});
 
-  // Every chip counts events, never units. The word "รายการ" is dropped from each pill — the
-  // caption above already frames these as counts, so a bare number reads compact and premium
-  // instead of stacking "รายการ" seven times across a row that overflows the card.
   // How many lines the table actually draws — a case is one รายการ but several rows.
   const rowCount = events.reduce((n, u) => n + (isTrip(u) ? u.steps.length + 1 : 1), 0);
-  const allRows = CHIP_ORDER.reduce((sum, t) => sum + (counts[t]?.n ?? 0), 0);
-  const chips: { value: TimelineEventType | ""; label: string; amount: string }[] = [
-    { value: "", label: "ทั้งหมด", amount: `${allRows}` },
-    ...CHIP_ORDER.filter((t) => (counts[t]?.n ?? 0) > 0).map((t) => {
-      const c = counts[t]!;
-      return {
-        value: t,
-        label: EVENT_TYPE_LABELS[t],
-        amount: `${c.n}`,
-      };
-    }),
+  // ตัวเลือกที่ไม่มีข้อมูลเลยไม่ต้องมี — เมนูที่ยาวด้วยบรรทัดที่กดแล้วว่างคือเมนูที่อ่านช้าลงเปล่าๆ.
+  // จำนวนนับเป็นเหตุการณ์ ไม่ใช่เคส: หนึ่งงานซ่อมมีสามเหตุการณ์ และช่องนี้กรองด้วยเหตุการณ์.
+  const nOf = (g: (typeof TYPE_GROUPS)[number]) => g.types.reduce((n, t) => n + (counts[t]?.n ?? 0), 0);
+  const typeOptions = [
+    { value: "all", label: "ทั้งหมด" },
+    ...TYPE_GROUPS.filter((g) => nOf(g) > 0).map((g) => ({ value: g.value, label: `${g.label} (${nOf(g)})` })),
   ];
+  const dirty = typeFilter !== "all" || state !== "all" || range !== "all" || !!search;
+  const clear = () => { setTypeFilter("all"); setState("all"); setRange("all"); setQ(""); };
+  // ตัวกรองชุดเดียวกับที่ fetchPage ยิงไป ลบ `page`/`perPage` ทิ้ง — การแบ่งหน้าเป็นเรื่องของจอ
+  // ไฟล์ส่งออกทั้งชุดที่กรองไว้เสมอ.
+  const exportFilters = (): Record<string, string | undefined> => ({
+    itemId,
+    subItemId,
+    // `type` ถูกจองไว้เป็นชนิดรายงานแล้วใน /api/reports/export ประเภทกิจกรรมจึงเดินทางในชื่อ kind
+    // — ส่งไปในชื่อ type เมื่อไหร่ มันจะเขียนทับ type=item-history แล้วไฟล์จะออกมาผิดรายงาน
+    ...(typeFilter !== "all" ? { kind: typeOf(typeFilter).join(",") } : {}),
+    ...(state !== "all" ? { state } : {}),
+    ...(range !== "all" ? { range } : {}),
+    ...(search ? { q: search } : {}),
+  });
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -171,39 +228,50 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           point), the footer back to the filter's rhythm. Equal padding everywhere is what made
           the card read as one dense block with hairlines through it. */}
       <header className="border-b border-border px-5 py-6 sm:px-8">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
-        <h2 className="mt-1.5 text-lg font-semibold leading-tight tracking-tight">ประวัติ</h2>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
+            <h2 className="mt-1.5 text-lg font-semibold leading-tight tracking-tight">ประวัติ</h2>
+          </div>
+          {/* ไฟล์ได้ชุดเดียวกับที่กรองอยู่บนจอ ไม่ใช่ทั้งประวัติเสมอ — ปุ่มส่งออกที่ไม่ฟังตัวกรอง
+              คือไฟล์ที่ต้องมาเถียงกันทีหลังว่าทำไมเลขไม่ตรงกับหน้าจอ. */}
+          <ExportButtons reportType="item-history" filters={exportFilters()} />
+        </div>
       </header>
 
-      {/* ── Filter pills ──
-          Labelled "รวมทั้งประวัติ" on purpose: the stock card above these tabs shows ถูกยืม as
-          the units still out *right now*, while these chips count how many events of each kind
-          were ever recorded. Two different meanings under one word on one screen needs the caption. */}
+      {/* ── Filters ──
+          ชุดเดียวกับที่เวิร์กสเปซเคสใช้ เพราะที่นี่ก็อ่านเคสใบเดียวกัน. "ประเภท" เป็นช่องเดียว
+          ไม่ใช่ชิปชนิดเหตุการณ์ 12 ใบซ้อนกับ dropdown ประเภทเคสอีกอัน — สองระบบที่ทับกันบนจอเดียว
+          คือตัวกรองที่เถียงกันเอง (เลือกซ่อมแซม + ชิปรับเข้า = ว่างเสมอ). */}
       <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8">
-        <p className="mb-2.5 text-[11px] text-muted-foreground">
-          รวมทั้งประวัติ{typeFilter ? " · กรองอยู่ จึงแสดงเป็นรายการเดี่ยว ไม่รวมเป็นงานซ่อม" : ""}
-        </p>
-        <div className="flex gap-2 overflow-x-auto">
-          {chips.map((chip) => {
-            const on = typeFilter === chip.value;
-            return (
-              <button
-                key={chip.value || "all"}
-                onClick={() => setTypeFilter(chip.value)}
-                className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition",
-                  on
-                    ? "border-transparent bg-primary text-primary-foreground shadow-sm"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                )}
-              >
-                {chip.label}
-                <span className={cn("font-semibold tabular-nums", on ? "text-primary-foreground" : "text-foreground/80")}>
-                  {chip.amount}
-                </span>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="ประเภท">
+            <FilterSelect icon={ListFilter} value={typeFilter} onValueChange={setTypeFilter} options={typeOptions} />
+          </Field>
+          {/* สถานะเป็นคำถามของงาน ไม่ใช่ของของ — เลือกแล้วแถวรับเข้า/ย้ายที่ตั้งหายไปโดยตั้งใจ */}
+          <Field label="สถานะงาน">
+            <FilterSelect icon={CircleDot} value={state} onValueChange={setState} options={STATE_OPTIONS} />
+          </Field>
+          <Field label="ช่วงเวลา">
+            <FilterSelect icon={CalendarDays} value={range} onValueChange={setRange} options={RANGE_OPTIONS} />
+          </Field>
+          <div className="min-w-[180px] flex-1">
+            <p className="mb-1.5 text-[11px] text-muted-foreground">ค้นหา</p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="เลขเคส, เรื่อง, ผู้ทำรายการ"
+                className="h-8 pl-8"
+              />
+            </div>
+          </div>
+          {dirty && (
+            <Button variant="outline" className="gap-1.5" onClick={clear}>
+              <FilterX className="size-4" /> ล้างตัวกรอง
+            </Button>
+          )}
         </div>
       </div>
 
@@ -212,12 +280,14 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
         </div>
       ) : events.length === 0 ? (
-        <p className="py-16 text-center text-sm text-muted-foreground">ไม่มีรายการในหมวดนี้</p>
+        <p className="py-16 text-center text-sm text-muted-foreground">
+          {dirty ? "ไม่มีรายการที่ตรงกับตัวกรอง" : "ยังไม่มีประวัติของพัสดุนี้"}
+        </p>
       ) : (
         <ol className="p-4 sm:p-6">
           {events.map((u, i) => (
             isTrip(u)
-              ? <CaseBlock key={`case:${u.id}`} trip={u} unit={unit} onSelect={setSelected} last={i === events.length - 1} />
+              ? <CaseBlock key={`case:${u.id}`} trip={u} unit={unit} onSelect={setSelected} onOpenCase={setOpenCase} last={i === events.length - 1} />
               : <MovementRow key={u.id} e={u} unit={unit} onSelect={setSelected} last={i === events.length - 1} />
           ))}
         </ol>
@@ -248,6 +318,20 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         </div>
       )}
 
+      {/* รายละเอียดเคสเต็มใบ — component ตัวเดียวกับที่หน้าเคสใช้ ไม่ใช่ของที่เขียนซ้ำไว้อีกหน้า.
+          เดิมปุ่มนี้เป็นลิงก์ออกไปแท็บเคสงานในหน้ารายงาน ซึ่งกำลังจะไม่มีแล้ว. */}
+      <Dialog open={!!openCase} onOpenChange={(o) => !o && setOpenCase(null)}>
+        <DialogContent className={DIALOG_SHELL_FIT}>
+          <DialogHeader>
+            <DialogTitle>รายละเอียดเคส</DialogTitle>
+            <DialogDescription className="sr-only">ขั้นตอน หลักฐาน และข้อมูลของเคสนี้</DialogDescription>
+          </DialogHeader>
+          <div className={DIALOG_BODY}>
+            {openCase && <CaseDetailPane caseId={openCase} onOpenCase={setOpenCase} canEdit={canEdit} />}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <EventDetailDialog
         event={selected}
         unit={unit}
@@ -276,7 +360,6 @@ const CASE_META: Record<string, { icon: typeof Package; name: string; done: stri
   BORROW: { icon: ArrowUpFromLine, name: "การยืม", done: "คืนครบแล้ว", open: "ยังไม่คืนครบ" },
   INUSE: { icon: MonitorCog, name: "ตั้งใช้ในห้อง", done: "คืนเข้าพัสดุแล้ว", open: "ยังตั้งใช้อยู่" },
   MAINTENANCE: { icon: Wrench, name: "บำรุงรักษา", done: "เสร็จสิ้น", open: "ยังไม่ปิด" },
-  KIT_CHECK: { icon: Package, name: "ตรวจชุด", done: "ตรวจแล้ว", open: "รอตรวจ" },
 };
 
 /** เคสประเภทที่ยังไม่มีหน้าตาของตัวเอง อ่านเป็นงานซ่อมไว้ก่อน ดีกว่าพังทั้งแถว. */
@@ -306,18 +389,20 @@ function CaseIcon({ trip, className }: { trip: RepairTrip; className?: string })
   return <Icon className={className} />;
 }
 
-/** ไปเปิดเคสเดียวกันที่แท็บเคสงานในหน้ารายงาน — เลขเดียวกัน ที่มาเดียวกัน ไม่ใช่ log คนละกอง. */
-function CaseLink({ trip }: { trip: RepairTrip }) {
+/** เปิดเคสใบนี้เต็มๆ — อยู่หน้าเดิม ไม่เด้งออกไปไหน. หัวการ์ดกางขั้นตอน ปุ่มนี้เปิดรายละเอียด. */
+function CaseOpenButton({ trip, onOpenCase }: { trip: RepairTrip; onOpenCase: (id: string) => void }) {
   return (
-    <Link
-      href={`/reports?tab=cases&case=${encodeURIComponent(caseIdOf(trip))}`}
-      onClick={(e) => e.stopPropagation()}
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { e.stopPropagation(); onOpenCase(caseIdOf(trip)); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onOpenCase(caseIdOf(trip)); } }}
       title="เปิดเคสนี้"
       aria-label={`เปิดเคส ${trip.code}`}
-      className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
+      className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
     >
       <ExternalLink className="size-3.5" />
-    </Link>
+    </span>
   );
 }
 
@@ -339,10 +424,11 @@ function Rail({ children, last, dot }: { children: ReactNode; last?: boolean; do
  * เพราะมันคือเคสเดียวกัน เลขเดียวกัน. เคสที่ปิดแล้วมาแบบพับ เคสที่ยังค้างมาแบบกาง — สิ่งที่ค้างอยู่คือ
  * สิ่งที่คนเปิดหน้านี้มาหา.
  */
-function CaseBlock({ trip, unit, onSelect, last }: {
+function CaseBlock({ trip, unit, onSelect, onOpenCase, last }: {
   trip: RepairTrip;
   unit: string;
   onSelect: (e: TimelineEvent) => void;
+  onOpenCase: (id: string) => void;
   last?: boolean;
 }) {
   const [open, setOpen] = useState(!trip.done);
@@ -380,7 +466,7 @@ function CaseBlock({ trip, unit, onSelect, last }: {
             </span>
           </span>
           <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-          {trip.code && <CaseLink trip={trip} />}
+          {trip.code && <CaseOpenButton trip={trip} onOpenCase={onOpenCase} />}
         </button>
 
         {open && (
@@ -660,5 +746,39 @@ function ChangeHint({ delta, change }: { delta: number | null; change?: { from: 
     <span className={cn("mt-0.5 block font-mono text-[10px] tabular-nums", tone)}>
       {delta > 0 ? "+" : "−"}{Math.abs(delta)}
     </span>
+  );
+}
+
+
+// ── Filter controls ───────────────────────────────────────────────────────────
+// เตี้ยกว่าปกติ (h-8) เท่ากับที่เวิร์กสเปซเคสใช้ — แถบตัวกรองอยู่เหนือตารางที่ความหนาแน่นคือประโยชน์
+// ของมัน ปุ่มขนาดฟอร์มเต็มตัวจะดันตารางลงไปพ้นจอตั้งแต่ยังไม่ทันอ่าน.
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-[150px] flex-1 sm:flex-none">
+      <p className="mb-1.5 text-[11px] text-muted-foreground">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function FilterSelect({ icon: Icon, value, onValueChange, options }: {
+  icon: typeof Package;
+  value: string;
+  onValueChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onValueChange((v as string) ?? "all")}>
+      <SelectTrigger className="h-8 w-full gap-1.5 text-xs">
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        {/* Base UI: SelectValue ต้องได้ label มาเอง ไม่งั้นมันพิมพ์ค่าดิบออกมา */}
+        <SelectValue>{options.find((o) => o.value === value)?.label ?? ""}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
   );
 }

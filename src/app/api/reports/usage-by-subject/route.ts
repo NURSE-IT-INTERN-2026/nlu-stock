@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
-import { groupUsageBySubject, groupInUseByLocation } from "@/lib/usage-by-subject";
+import { groupUsageBySubject, groupInUseByLocation, groupUsageByMonth } from "@/lib/usage-by-subject";
 import { parseDispenseKind } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
 
@@ -40,17 +40,19 @@ export async function GET(request: NextRequest) {
 
   const where = { AND: filters };
 
+  // แกนหลักของรายงานคือเดือน — ตารางรวมทั้งช่วงยังอยู่ข้างล่างเพื่อตอบ "ทั้งช่วงใครใช้มากสุด"
+  // แต่ตัวที่คนเปิดรายงานมาดูคือ ใช้เยอะเดือนไหน และเดือนนั้นเป็นวิชาหรือกิจกรรม
+  const months = await groupUsageByMonth(where, kind === "inuse" ? "location" : "usage");
+
   // นำไปใช้งานจัดกลุ่มตามห้อง ไม่ใช่ตามวิชา — ดูเหตุผลที่ groupInUseByLocation
   if (kind === "inuse") {
     const rows = await groupInUseByLocation(where);
-    const unlocated = rows.find((r) => r.label === "ไม่ระบุสถานที่");
     return json({
       rows,
+      months,
       summary: {
-        subjects: rows.filter((r) => r !== unlocated).length,
         records: rows.reduce((s, r) => s + r.records, 0),
         units: rows.reduce((s, r) => s + r.totalQuantity, 0),
-        unspecifiedRecords: unlocated?.records ?? 0,
       },
     });
   }
@@ -72,6 +74,8 @@ export async function GET(request: NextRequest) {
 
   if (noTypeAgg._count._all > 0) {
     data.push({
+      // คีย์เดียวกับกลุ่ม NONE ในต้นไม้รายเดือน เพื่อให้กดแถวนี้แล้วเปิดรายละเอียดได้เหมือนแถวอื่น
+      key: "NONE",
       usageType: null,
       courseCode: null,
       label: "ไม่ระบุ",
@@ -81,16 +85,16 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // ยอดรวมทั้งช่วง — หน้าจอแปะไว้ใต้ตารางอันดับ. จำนวนวิชากับจำนวนแถวที่ไม่ระบุเคยเป็นการ์ด
+  // ของตัวเอง แต่ทั้งคู่อ่านออกจากตารางอยู่แล้ว (จำนวนแถว และแถว "ไม่ระบุ" ที่กดดูได้)
   const summary = {
-    subjects: data.filter((r) => r.usageType !== null).length,
     records: data.reduce((s, r) => s + r.records, 0),
     units: data.reduce((s, r) => s + r.totalQuantity, 0),
-    unspecifiedRecords: noTypeAgg._count._all,
   };
 
   // การ์ดสัดส่วนรายวิชา — Notion ขอแยกออกมาอีกใบจากภาพรวม รายวิชา/กิจกรรม/อื่นๆ. คิดจากแถวชุด
   // เดียวกับตาราง เพื่อไม่ให้สองการ์ดบนหน้าเดียวกันเถียงกันเรื่องยอดของวิชาเดียวกัน.
   const courses = data.filter((r) => r.usageType === "COURSE" && r.courseCode);
 
-  return json({ rows: data, courses, summary });
+  return json({ rows: data, courses, months, summary });
 }

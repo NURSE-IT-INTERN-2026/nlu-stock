@@ -5,7 +5,6 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { Wrench, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { CaseWorkspace } from "@/components/cases/case-workspace";
 interface MaintenanceRecord {
   id: string;
   type: string;
@@ -61,7 +60,6 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
   // the trip together in their head. The CORRECTIVE rows now render as steps of their own trip
   // in the ประวัติ tab, next to the two events that opened it. This tab is the schedule: รอบ,
   // ครั้งถัดไป, and the rounds that were actually done.
-  const corrective = maintenanceRecords.filter((r) => r.type === "CORRECTIVE");
   const preventive = maintenanceRecords.filter((r) => r.type !== "CORRECTIVE");
 
   const statusTone: "success" | "warning" | "destructive" =
@@ -140,26 +138,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
         </dl>
       </div>
 
-      {/* ── History ──
-          รอบที่ทำไปแล้วคือ "เคส MC" ตัวเดียวกับที่หน้า /cases แสดง จึงอ่านจากที่มาเดียวกันเลย ไม่ทำ
-          list ของตัวเองขึ้นมาอีกกอง. แท็บนี้เหลือหน้าที่เดียว: แผน (ข้างบน) + สิ่งที่ทำไปแล้ว (ข้างล่าง).
-          The pointer is not decoration: ซ่อมแซม used to live right here. */}
-      <div className="p-4 sm:p-5 space-y-4">
-        <CaseWorkspace itemId={item.id} lockType="MAINTENANCE" compact canEdit={canAct} />
-        <RepairPointer count={corrective.length} />
-      </div>
     </section>
-  );
-}
-
-/** ซ่อมแซมย้ายไปอยู่ในแท็บประวัติแล้ว — บอกทางไว้ตรงที่เดิม ไม่งั้นคนที่เคยเห็นจะคิดว่าข้อมูลหาย. */
-function RepairPointer({ count }: { count: number }) {
-  return (
-    <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-      {count > 0
-        ? <>ประวัติ<span className="font-medium text-foreground">ซ่อมแซม {count} ครั้ง</span> ย้ายไปอยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span> แล้ว — แสดงรวมกับ แจ้งชำรุด และ ส่งซ่อม เป็นงานเดียวกัน</>
-        : <>ประวัติซ่อมแซม (แจ้งชำรุด → ส่งซ่อม → รับคืนจากซ่อม) อยู่ในแท็บ <span className="font-medium text-foreground">ประวัติ</span></>}
-    </p>
   );
 }
 

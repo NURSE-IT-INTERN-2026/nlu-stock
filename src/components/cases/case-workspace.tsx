@@ -7,7 +7,7 @@ import {
   CalendarDays, ListFilter, CircleDot, Paperclip, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getCases, getCaseDetail, confirmKitSetChecked, recoverStock, type CaseSummaryJson, type CaseDetailJson, type CaseTotalsJson } from "@/lib/api";
+import { getCases, getCaseDetail, recoverStock, type CaseSummaryJson, type CaseDetailJson, type CaseTotalsJson } from "@/lib/api";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -28,7 +28,6 @@ const TYPE_META: Record<CaseType, { icon: typeof Wrench; tone: string; ring: str
   MAINTENANCE: { icon: ShieldCheck, tone: "bg-success/10 text-success-700 dark:text-success-200", ring: "bg-success" },
   BORROW: { icon: ShoppingCart, tone: "bg-primary/10 text-primary", ring: "bg-primary" },
   INUSE: { icon: MonitorCog, tone: "bg-info-500/10 text-info-700 dark:text-info-200", ring: "bg-info-500" },
-  KIT_CHECK: { icon: ClipboardCheck, tone: "bg-warning/15 text-warning-700 dark:text-warning-200", ring: "bg-warning" },
   LOST: { icon: SearchX, tone: "bg-destructive/10 text-destructive dark:text-danger-400", ring: "bg-destructive" },
 };
 
@@ -42,6 +41,8 @@ const TYPE_OPTIONS = [
   { value: "all", label: "ทั้งหมด" },
   ...(Object.keys(CASE_TYPE_LABELS) as CaseType[]).map((t) => ({ value: t, label: CASE_TYPE_LABELS[t] })),
 ];
+// โหมดสิ่งที่ต้องทำเสนอเฉพาะประเภทที่โผล่ในนั้นได้จริง — ตัวเลือกที่กดแล้วว่างเปล่าเสมอไม่ใช่ตัวกรอง
+const TODO_TYPE_OPTIONS = TYPE_OPTIONS.filter((o) => o.value !== "INUSE");
 const STATE_OPTIONS = [
   { value: "all", label: "ทั้งหมด" },
   { value: "OPEN", label: "กำลังดำเนินการ" },
@@ -61,10 +62,15 @@ const RANGE_OPTIONS = [
  * `lockType` คือความต่างทั้งหมด — หน้าที่ถามคำถามเดียวไม่ต้องมี dropdown ให้เลือกประเภท และที่
  * สำคัญกว่านั้นคือ ทั้งสามที่อ่านจากที่มาเดียวกัน จึงไม่มีทางเป็น log คนละกองที่ไม่ตรงกัน.
  */
-export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, compact, canEdit, onTotals }: {
+export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId, compact, canEdit, onTotals }: {
   itemId?: string;
   subItemId?: string;
   lockType?: CaseType;
+  /**
+   * รายการสิ่งที่ต้องทำ: เฉพาะเคสที่ยังมีคนรออยู่ (isTodo ฝั่ง server). สถานะถูกล็อกไว้เป็น
+   * "กำลังดำเนินการ" อยู่แล้ว dropdown สถานะจึงหายไป — ตัวกรองที่มีค่าเดียวให้เลือกไม่ใช่ตัวกรอง.
+   */
+  todo?: boolean;
   initialCaseId?: string;
   /** Embedded in an item tab: no filter bar — a scoped list of three has nothing to filter. */
   compact?: boolean;
@@ -96,7 +102,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
     return () => clearTimeout(t);
   }, [q]);
 
-  const dirty = (!lockType && type !== "all") || state !== "all" || range !== "all" || !!search;
+  const dirty = (!lockType && type !== "all") || (!todo && state !== "all") || range !== "all" || !!search;
 
   useEffect(() => {
     let live = true;
@@ -105,6 +111,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
     if (state !== "all") p.set("state", state);
     if (range !== "all") p.set("range", range);
     if (search) p.set("q", search);
+    if (todo) p.set("todo", "true");
     if (itemId) p.set("itemId", itemId);
     if (subItemId) p.set("subItemId", subItemId);
     (async () => {
@@ -120,7 +127,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
       }
     })();
     return () => { live = false; };
-  }, [type, state, range, search, itemId, subItemId]);
+  }, [type, state, range, search, todo, itemId, subItemId]);
 
   // Derived, not stored: a selection that the newest filter excludes must not survive as state
   // the user cannot navigate back to. Falling through to the first row keeps the desktop pane
@@ -152,7 +159,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
   if (isMobile) {
     return (
       <div className="space-y-4">
-        <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear }} />
+        <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear, todo }} />
         {active ? (
           <div>
             <Button variant="ghost" className="mb-2 gap-1.5" onClick={() => setSelected(null)}>
@@ -167,8 +174,12 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
 
   return (
     <div className="space-y-4">
-      {!compact && <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType }} />}
-      <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      {!compact && <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo }} />}
+      {/* 1:2 — รายการเคสได้หนึ่งส่วน รายละเอียดได้สองส่วน เพราะที่นี่คือที่ที่ timeline กับ fields อยู่
+          จริง ส่วนแถวในรายการมีแค่ชื่อ+รหัส+วันที่. แตกสองคอลัมน์ที่ lg ไม่ใช่ xl: 1024px หาร 1:2
+          ให้รายการ ~341px ซึ่งเท่ากับความกว้างคงที่ที่ใช้อยู่เดิม จึงไม่มีเหตุให้รอถึง 1280px.
+          minmax(0,…) ไม่ใช่ 1fr/2fr เปล่า — track ที่เป็น auto ปล่อยให้ข้อความยาวดันคอลัมน์บวม. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         {list}
         {active
           ? <CaseDetailPane caseId={active} onOpenCase={setSelected} canEdit={canEdit} />
@@ -178,13 +189,15 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
   );
 }
 
-function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType }: {
+function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo }: {
   type: string; setType: (v: string) => void;
   state: string; setState: (v: string) => void;
   range: string; setRange: (v: string) => void;
   dirty: boolean; clear: () => void;
   lockType?: CaseType;
+  todo?: boolean;
 }) {
+  const typeOptions = todo ? TODO_TYPE_OPTIONS : TYPE_OPTIONS;
   const label = (opts: { value: string; label: string }[], v: string) => opts.find((o) => o.value === v)?.label ?? "";
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
@@ -192,16 +205,18 @@ function Filters({ type, setType, state, setState, range, setRange, dirty, clear
           appears where more than one type can show up. */}
       {!lockType && (
         <Field label="ประเภทเคส">
-          <FilterSelect icon={ListFilter} value={type} onValueChange={setType} selectedLabel={label(TYPE_OPTIONS, type)}>
-            {TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          <FilterSelect icon={ListFilter} value={type} onValueChange={setType} selectedLabel={label(typeOptions, type)}>
+            {typeOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </FilterSelect>
         </Field>
       )}
-      <Field label="สถานะ">
-        <FilterSelect icon={CircleDot} value={state} onValueChange={setState} selectedLabel={label(STATE_OPTIONS, state)}>
-          {STATE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-        </FilterSelect>
-      </Field>
+      {!todo && (
+        <Field label="สถานะ">
+          <FilterSelect icon={CircleDot} value={state} onValueChange={setState} selectedLabel={label(STATE_OPTIONS, state)}>
+            {STATE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          </FilterSelect>
+        </Field>
+      )}
       <Field label="ช่วงเวลา">
         <FilterSelect icon={CalendarDays} value={range} onValueChange={setRange} selectedLabel={label(RANGE_OPTIONS, range)}>
           {RANGE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -333,7 +348,9 @@ function CaseList({ cases, total, loading, selected, onSelect, q, onQ, compact }
 
 function StatePill({ c }: { c: CaseSummaryJson }) {
   return (
-    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", STATE_TONE[c.state])}>
+    // จุดนำหน้าเหมือนกับป้ายสถานะบนหัวเคส — ทึบ+จุด แปลว่าสถานะ ทั้งในรายการและในเคส
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", STATE_TONE[c.state])}>
+      <span aria-hidden className="size-1.5 rounded-full bg-current" />
       {c.statusLabel}
     </span>
   );
@@ -359,7 +376,11 @@ const DETAIL_TABS = [
 
 type DetailTab = (typeof DETAIL_TABS)[number]["value"];
 
-function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
+/**
+ * รายละเอียดเคสหนึ่งใบ. Exported เพราะประวัติของพัสดุเปิดเคสด้วยตัวนี้เหมือนกัน — คนละหน้า แต่ต้อง
+ * เป็นเคสใบเดียวกันที่หน้าตาเหมือนกันเป๊ะ ไม่ใช่ของสองอันที่ค่อยๆ เพี้ยนออกจากกัน.
+ */
+export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
   caseId: string;
   onOpenCase: (id: string) => void;
   canEdit?: boolean;
@@ -425,18 +446,25 @@ function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
   const Icon = meta.icon;
 
   return (
-    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
+    <div>
       <section className="overflow-hidden rounded-2xl border border-border bg-card">
         <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
           <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", meta.tone)}>
             <Icon className="size-5" />
           </span>
           <div className="min-w-0">
+            {/* ป้ายสองอันนี้ตอบคนละคำถาม — "นี่งานอะไร" กับ "ไปถึงไหนแล้ว" — จึงต้องแยกด้วยรูปทรง
+                ไม่ใช่แค่สี: ป้ายทึบเหมือนกันสองอันทำให้สีอ่านเหมือนเป็นหมวดหมู่ทั้งคู่ แล้วคนอ่าน
+                ต้องจำเอาเองว่าอันซ้ายแปลว่าอะไร. กฎที่ได้: เส้นขอบ+ไอคอน = ประเภท, ทึบ+จุด = สถานะ.
+                ประเภทจึงไม่ถือสีของตัวเองที่นี่ (ไอคอนก้อนใหญ่ซ้ายมือถือไว้แล้ว) — สีในแถวนี้
+                เหลือความหมายเดียวคือเคสจบหรือยัง. */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", meta.tone)}>
+              <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                <Icon className="size-3" />
                 {CASE_TYPE_LABELS[data.type]}
               </span>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", STATE_TONE[data.state])}>
+              <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold", STATE_TONE[data.state])}>
+                <span aria-hidden className="size-1.5 rounded-full bg-current" />
                 {data.statusLabel}
               </span>
             </div>
@@ -489,28 +517,6 @@ function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
         </div>
       </section>
 
-      <aside className="h-fit rounded-2xl border border-border bg-card p-5">
-        <h3 className="text-sm font-semibold">สรุปข้อมูลเคส</h3>
-        <dl className="mt-4 space-y-3">
-          <SummaryRow label="รหัสเคส" value={<span className="font-mono">{data.code}</span>} />
-          <SummaryRow label="ประเภท" value={
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", meta.tone)}>
-              {CASE_TYPE_LABELS[data.type]}
-            </span>
-          } />
-          <SummaryRow label="สถานะ" value={
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", STATE_TONE[data.state])}>
-              {data.statusLabel}
-            </span>
-          } />
-          <SummaryRow label="เปิดเมื่อ" value={fmtDate(data.openedAt, TH_DATE)} />
-          <SummaryRow label="อัปเดตล่าสุด" value={fmtDate(data.updatedAt, TH_DATE)} />
-          <SummaryRow label="ผู้เปิดเคส" value={data.openedBy} />
-          {data.qty != null && <SummaryRow label="จำนวน" value={`${data.qty} ${data.unit}`} />}
-          {data.cost != null && <SummaryRow label="ค่าใช้จ่าย" value={`฿${data.cost.toLocaleString("th-TH")}`} />}
-        </dl>
-      </aside>
-
       <Dialog open={askAction} onOpenChange={(o) => { if (!o) { setAskAction(false); setNote(""); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -557,24 +563,11 @@ function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 text-right text-sm font-medium">{value}</dd>
-    </div>
-  );
-}
-
 // ── ไทม์ไลน์ ──────────────────────────────────────────────────────────────────
 // ขั้นที่ยังไม่ถึงก็แสดง เป็นวงกลมโปร่งไม่มีเวลา — เคสซ่อมที่ "แจ้งแล้วแต่ยังไม่ส่ง" ถูกนิยามด้วย
 // ขั้นที่ยังไม่เกิด การซ่อนมันไว้คือการซ่อนคำตอบ. ส่วน "รอส่งซ่อม" ไม่มี timestamp ของตัวเอง
 // (มันคือ repairSentAt = null) จึงเป็นป้ายบนเส้นเชื่อม ไม่ใช่จุด — เขียนเป็นจุดเมื่อไหร่ก็ต้องกุเวลา.
-const ACTION_COPY: Record<"KIT_CHECK" | "RECOVER", { hint: string; done: string }> = {
-  KIT_CHECK: {
-    hint: "เปิดกล่องแล้วเทียบกับรายการของชุด ถ้าครบและพร้อมให้ยืม กดยืนยัน — ระบบไม่ได้นับของให้ และการยืนยันนี้คือสิ่งเดียวที่ปลดล็อกให้ชุดนี้ถูกยืมได้อีกครั้ง",
-    done: "ตรวจชุดแล้ว — ชุดนี้ยืมได้อีกครั้ง",
-  },
+const ACTION_COPY: Record<"RECOVER", { hint: string; done: string }> = {
   RECOVER: {
     hint: "ของที่แจ้งหายไว้หาเจอแล้ว กดยืนยันเพื่อคืนเข้าคลัง — ยอดจะกลับมาและเคสนี้จะปิด",
     done: "เรียกคืนแล้ว — ของกลับเข้าคลัง",
@@ -583,7 +576,6 @@ const ACTION_COPY: Record<"KIT_CHECK" | "RECOVER", { hint: string; done: string 
 
 /** ปุ่มบนเคสเรียก API เดิมของงานนั้น ไม่ได้เขียน logic ปิดเคสขึ้นมาใหม่อีกชุด. */
 function runCaseAction(action: NonNullable<CaseDetailJson["action"]>, note?: string) {
-  if (action.kind === "KIT_CHECK") return confirmKitSetChecked(action.targetId, { note });
   const [source, recordId, itemId] = action.targetId.split(":");
   return recoverStock(itemId, { source: source as "PIECE" | "ADJUSTMENT", recordId, note });
 }
