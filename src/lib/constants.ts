@@ -56,19 +56,13 @@ export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   ADJUSTMENT: "ปรับสต๊อก",
   DAMAGE_REPORT: "แจ้งชำรุด",
   REPAIR_SENT: "ส่งซ่อม",
-  // The chip is the bucket ("ของกลับเข้าคลัง"); what came back and from where is the
-  // รายการ cell's job — it spells out "รับคืนจากซ่อม" there.
-  REPAIR_RETURN: "รับคืน",
+  // Not "รับคืน": RETURN above already owns that word, and two chips reading the same thing on
+  // one timeline is exactly how a loan coming back and a repair coming back became one blur.
+  REPAIR_RETURN: "รับคืนจากซ่อม",
   STATUS_CHANGE: "เปลี่ยนสถานะ",
   MAINTENANCE: "บำรุงรักษา",
   LOCATION_CHANGE: "ย้ายที่ตั้ง",
 };
-
-// ประวัติของพัสดุแบ่งหยาบเป็นสองกอง: "ซ่อมบำรุง" คือเรื่องที่มีจุดเริ่มและจุดจบและมีคนรออยู่,
-// ที่เหลือคือความเคลื่อนไหวของของ. แบ่งครบทุก type — ไม่มี event ที่ตกอยู่นอกทั้งสองกอง.
-export const SERVICE_EVENT_TYPES: TimelineEventType[] = [
-  "DAMAGE_REPORT", "REPAIR_SENT", "REPAIR_RETURN", "MAINTENANCE",
-];
 
 export const RETURN_CONDITION_LABELS: Record<string, string> = {
   AVAILABLE: "ปกติ",
