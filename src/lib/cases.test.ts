@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { walkPieceCases, walkKitChecks } from "./cases";
+import { walkPieceCases, walkKitChecks, summariseCases, type CaseSummary, type CaseType } from "./cases";
 import { formatCode } from "./case-codes";
 
 const at = (day: number) => new Date(`2026-03-${String(day).padStart(2, "0")}T03:00:00Z`);
@@ -146,4 +146,49 @@ test("การตรวจของชุดหนึ่ง ไม่ปิด�
 test("การตรวจที่เกิดก่อนการคืน ไม่ถูกจับไปปิดการคืนนั้น", () => {
   const [c] = walkKitChecks([ret("r1", "c04", 10)], [close("k1", "c04", 2)]);
   assert.equal(c.closer, null, "ตรวจตอนวันที่ 2 ปิดการคืนวันที่ 10 ไม่ได้");
+});
+
+// ── summariseCases ────────────────────────────────────────────────────────────
+// เคสยืม/ตั้งใช้/ตรวจชุดไม่มีวันมีราคา การนับมันเข้าตัวหารทำให้การ์ดอ่านว่า "กรอกราคาแล้ว 0.4%" ตลอดกาล
+const summaryRow = (type: CaseType, extra: Partial<CaseSummary> = {}): CaseSummary => ({
+  id: `${type}:x`, type, code: "", state: "OPEN", statusLabel: "", subject: "", title: "",
+  itemId: "i", itemCode: "C", subCode: null, qty: 1, unit: "ชิ้น", cost: null,
+  openedAt: at(1), updatedAt: at(1), openedBy: "u", ...extra,
+});
+
+test("summariseCases counts service money against ซ่อม+บำรุง only", () => {
+  const totals = summariseCases([
+    summaryRow("REPAIR", { cost: 1_000 }),
+    summaryRow("MAINTENANCE", { cost: 500 }),
+    summaryRow("REPAIR"),          // ยังไม่กรอกราคา — อยู่ในตัวหาร ไม่อยู่ในยอด
+    summaryRow("BORROW"),          // ไม่มีวันมีราคา
+    summaryRow("INUSE"),
+    summaryRow("KIT_CHECK"),
+  ]);
+  assert.equal(totals.serviceCost, 1_500);
+  assert.equal(totals.servicePriced, 2);
+  assert.equal(totals.serviceCases, 3, "ยืม/ตั้งใช้/ตรวจชุด ต้องไม่อยู่ในตัวหาร");
+});
+
+test("summariseCases keeps lost value apart from repair spend", () => {
+  const totals = summariseCases([
+    summaryRow("REPAIR", { cost: 900 }),
+    summaryRow("LOST", { qty: 2, lostValue: { amount: 400, exact: true } }),
+    summaryRow("LOST", { qty: 3, lostValue: { amount: 150, exact: false } }),
+    summaryRow("LOST", { qty: 1, lostValue: { amount: null, exact: false } }),
+  ]);
+  assert.equal(totals.serviceCost, 900, "เงินที่จ่ายซ่อมกับเงินที่หายไปบวกกันไม่ได้");
+  assert.equal(totals.lostValue, 550);
+  assert.equal(totals.lostUnits, 6, "นับหน่วยที่หาย ไม่ใช่จำนวนเคส");
+  assert.equal(totals.lostCases, 3);
+  assert.equal(totals.lostPriced, 2, "เคสที่ไม่มีราคาเลยต้องไม่นับว่าตีราคาได้");
+  assert.equal(totals.lostExact, 1, "เท่ากับ lostPriced เมื่อไหร่ ยอดถึงจะเลิกเป็นประมาณการ");
+});
+
+test("summariseCases reports zeros rather than NaN when nothing matches", () => {
+  const totals = summariseCases([]);
+  assert.equal(totals.serviceCases, 0);
+  assert.equal(totals.serviceCost, 0);
+  assert.equal(totals.lostCases, 0);
+  assert.equal(totals.lostValue, 0);
 });
