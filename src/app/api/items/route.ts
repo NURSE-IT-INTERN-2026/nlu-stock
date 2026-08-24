@@ -162,7 +162,7 @@ export async function GET(request: NextRequest) {
       for (const s of item.subItems) {
         if (s.status === ItemStatus.AVAILABLE) c.available++;
         else if (s.status === ItemStatus.ON_LOAN || s.status === ItemStatus.IN_USE) c.inUse++;
-        else if (s.status === ItemStatus.DAMAGED || s.status === ItemStatus.UNDER_REPAIR || s.status === ItemStatus.PENDING_MAINTENANCE) c.unavailable++;
+        else if (s.status === ItemStatus.DAMAGED || s.status === ItemStatus.UNDER_REPAIR) c.unavailable++;
       }
       statusCounts = c;
     }

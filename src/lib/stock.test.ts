@@ -62,7 +62,6 @@ test("isManualHold: only staff-set statuses block a dispense", () => {
   for (const status of [
     ItemStatus.DAMAGED,
     ItemStatus.UNDER_REPAIR,
-    ItemStatus.PENDING_MAINTENANCE,
     ItemStatus.LOST,
     ItemStatus.DISPOSED,
   ]) {

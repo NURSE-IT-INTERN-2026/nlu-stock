@@ -58,8 +58,6 @@ export function statusOptionsFor(dispenseType?: "CONSUMABLE" | "COUNT" | "ITEM" 
 //
 // Non-tracked items (COUNT/CONSUMABLE) never reach here — they have no per-piece identity,
 // so damage is a qty adjustment (StockAdjustment), not a status.
-// PENDING_MAINTENANCE has no edges: nothing in the app sets it (the service schedule lives
-// on nextMaintenanceDate). Left as an isolated node rather than removed from the enum.
 export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
   AVAILABLE: ["ON_LOAN", "IN_USE", "DAMAGED", "LOST", "DISPOSED"],
   ON_LOAN: ["AVAILABLE", "DAMAGED", "LOST"],
@@ -67,7 +65,6 @@ export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
   DAMAGED: ["UNDER_REPAIR", "DISPOSED"],
   UNDER_REPAIR: ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"],
   LOST: ["AVAILABLE"],
-  PENDING_MAINTENANCE: [],
   // ยกเลิกตัดจำหน่าย — mirror of LOST → AVAILABLE (เรียกคืน): a disposed piece can be
   // brought back to พร้อมใช้งาน, so dispose is repeatable across the lifecycle like lost.
   DISPOSED: ["AVAILABLE"],
