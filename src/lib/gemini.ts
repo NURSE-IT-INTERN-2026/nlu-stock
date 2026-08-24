@@ -4,7 +4,11 @@ import { prisma } from "./prisma";
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const genAI = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
-const EMBED_MODEL = "text-embedding-004";
+// text-embedding-004 ถูกถอดออกจาก API ไปแล้ว (ยิงไปได้ 404 NOT_FOUND) — ตัวที่เหลือคือ
+// gemini-embedding-001 ซึ่งคืน 3072 dims มาเป็นค่า default. ขอ 768 กลับมาแทนเพื่อให้ลงคอลัมน์
+// vector(768) ที่มีอยู่ได้พอดี ไม่ต้อง migrate schema
+const EMBED_MODEL = "gemini-embedding-001";
+const EMBED_DIMS = 768;
 
 /** Whether Gemini embedding is configured */
 export const hasEmbedding = () => !!genAI;
@@ -12,7 +16,11 @@ export const hasEmbedding = () => !!genAI;
 /** Generate embedding for a single text */
 export async function embedText(text: string): Promise<number[]> {
   if (!genAI) throw new Error("Gemini API key not configured");
-  const result = await genAI.models.embedContent({ model: EMBED_MODEL, contents: text });
+  const result = await genAI.models.embedContent({
+    model: EMBED_MODEL,
+    contents: text,
+    config: { outputDimensionality: EMBED_DIMS },
+  });
   // ทุก field ใน response เป็น optional ใน SDK ใหม่ — ปล่อยให้ undefined ไหลลงไปเป็น
   // `[undefined]` ใน vectorStr จะกลายเป็น SQL ที่พังตอน cast ซึ่งอ่านไม่ออกว่าต้นเหตุคืออะไร
   const values = result.embeddings?.[0]?.values;
@@ -34,7 +42,7 @@ export async function embedItem(itemId: string): Promise<void> {
   const vectorStr = `[${values.join(",")}]`;
 
   await prisma.$executeRawUnsafe(
-    `UPDATE "Item" SET embedding = $1::vector WHERE id = $2`,
+    `UPDATE items SET embedding = $1::vector WHERE id = $2`,
     vectorStr,
     itemId,
   );
@@ -55,15 +63,18 @@ export async function similaritySearch(
   const rows = await prisma.$queryRawUnsafe<
     Array<{ id: string; code: string; name: string; category_name: string; category_type: string; similarity: number }>
   >(
+    // ชื่อ model ใน Prisma กับชื่อตารางจริงไม่ตรงกัน (@@map) — raw SQL ต้องใช้ชื่อตารางจริง
+    // ส่วน categoryType คือ dispenseType ที่อยู่บน profile ไม่ได้อยู่บน category
     `SELECT
        i.id,
        i.code,
        i.name,
        c.name AS category_name,
-       c.category AS category_type,
+       p."dispenseType" AS category_type,
        1 - (i.embedding <=> $1::vector) AS similarity
-     FROM "Item" i
-     LEFT JOIN "CategoryType" c ON c.id = i."categoryId"
+     FROM items i
+     LEFT JOIN categories c ON c.id = i."categoryId"
+     LEFT JOIN category_profiles p ON p.id = c."profileId"
      WHERE i.embedding IS NOT NULL
        AND i."isActive" = true
        AND ($2::text IS NULL OR i.id != $2)
