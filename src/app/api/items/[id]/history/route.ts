@@ -371,7 +371,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             // date the staff member picks (date input → 00:00 UTC → 07:00 on screen), so a repair
             // filed at 14:20 landed seven hours from the ปรับสต๊อก row of the very same
             // transaction. `createdAt` is when it was written, same clock as every other table.
-            // performedAt stays the reporting date — reports/maintenance-history still read it.
+            // performedAt stays the reporting date — the เคสงาน timeline still reads it.
             date: r.createdAt,
             delta: null,
             qty: null,

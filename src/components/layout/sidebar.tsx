@@ -14,7 +14,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Menu, FolderKanban } from "lucide-react";
+  Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, LayoutGroup } from "motion/react";
 import type { SessionUser } from "@/types";
@@ -29,7 +29,6 @@ const navItems = [
   { href: "/receive", label: "รับเข้า-คืนพัสดุ", icon: Truck, stockOnly: true },
   { href: "/maintenance", label: "บำรุงรักษา", icon: Wrench, stockOnly: true },
   { href: "/repairs", label: "ซ่อมแซม", icon: Hammer, stockOnly: true },
-  { href: "/cases", label: "เคสงาน", icon: FolderKanban },
   { href: "/reports", label: "รายงาน & สถิติ", icon: BarChart3 },
   { href: "/settings", label: "ตั้งค่า", icon: Settings, superOnly: true },
 ];

@@ -17,9 +17,23 @@ import type { AttachRecordType } from "@/lib/attachments";
 import { CASE_PREFIX, type CaseType, type CaseState } from "@/lib/case-types";
 import { codesFor, sourceKey } from "@/lib/case-codes";
 import { USAGE_TYPE_LABELS } from "@/lib/constants";
+import { writeOffValue } from "@/lib/cost";
 
 export { CASE_PREFIX, CASE_TYPE_LABELS } from "@/lib/case-types";
 export type { CaseType, CaseState } from "@/lib/case-types";
+
+/**
+ * ช่วงเวลาที่ตัวกรอง "ช่วงเวลา" ให้เลือก. ค่าที่ไม่รู้จักถูกมองข้าม ไม่ใช่ปฏิเสธ — bookmark เก่าควรเห็น
+ * เคสทั้งหมด ไม่ใช่ 400. อยู่ตรงนี้เพราะทั้ง /api/cases และการส่งออกต้องแปลค่าเดียวกันให้ได้ผลเดียวกัน.
+ */
+export function caseRangeStart(range: string | null): Date | undefined {
+  const d = new Date();
+  if (range === "7d") return new Date(d.getTime() - 7 * 86_400_000);
+  if (range === "30d") return new Date(d.getTime() - 30 * 86_400_000);
+  if (range === "90d") return new Date(d.getTime() - 90 * 86_400_000);
+  if (range === "year") return new Date(d.getFullYear(), 0, 1);
+  return undefined;
+}
 
 export type Attach = { recordType: AttachRecordType; recordId: string; urls: string[] };
 
@@ -64,10 +78,40 @@ export type CaseSummary = {
   qty: number | null;
   unit: string;
   cost: number | null;
+  /**
+   * มูลค่าของที่หายไป — เฉพาะเคสสูญหาย, undefined บนเคสอื่น. แยกจาก `cost` โดยตั้งใจ: `cost` คือเงิน
+   * ที่จ่ายออกไปเพื่อซ่อม/บำรุง ส่วนนี่คือเงินที่หายไปกับของ สองก้อนนี้บวกกันไม่ได้.
+   * `exact` = ราคามาจากใบรับเข้าของชิ้นนั้นเอง; false = ราคาเฉลี่ยของรายการ (ประมาณการ) หรือไม่มีราคา.
+   */
+  lostValue?: { amount: number | null; exact: boolean };
   openedAt: Date;
   updatedAt: Date;
   openedBy: string;
 };
+
+/**
+ * ยอดรวมสองก้อนที่บวกกันไม่ได้ จึงไม่บวก: เงินที่จ่ายไปเพื่อให้ของกลับมาใช้ได้ (ซ่อม + บำรุง) กับ
+ * เงินที่หายไปพร้อมของ. เคสยืม/ตั้งใช้/ตรวจชุดไม่มีทั้งสองอย่าง จึงไม่อยู่ในตัวหารของก้อนไหนเลย —
+ * ตัวหารที่รวมเคสที่ไม่มีวันมีราคาเข้าไปด้วยจะอ่านออกมาเป็น "ยังไม่ได้กรอกราคา 99%" ตลอดกาล.
+ *
+ * นับจากเคสทั้งชุดที่ตัวกรองคัดมา ไม่ใช่แค่หน้าที่กำลังเปิด — การ์ดสรุปที่เปลี่ยนตามหน้าไม่ใช่ยอดรวม.
+ */
+export function summariseCases(cases: CaseSummary[]) {
+  const service = cases.filter((c) => c.type === "REPAIR" || c.type === "MAINTENANCE");
+  const lost = cases.filter((c) => c.type === "LOST");
+  return {
+    serviceCases: service.length,
+    servicePriced: service.filter((c) => c.cost != null).length,
+    serviceCost: service.reduce((sum, c) => sum + (c.cost ?? 0), 0),
+    lostCases: lost.length,
+    lostUnits: lost.reduce((sum, c) => sum + (c.qty ?? 0), 0),
+    /** ตีราคาได้กี่เคส — เทียบกับ lostCases คือความครบของข้อมูล ไม่ใช่ความแม่นของราคา */
+    lostPriced: lost.filter((c) => c.lostValue?.amount != null).length,
+    /** กี่เคสที่ราคามาจากใบรับเข้าของชิ้นนั้นเอง เท่ากับ lostPriced เมื่อไหร่ ยอดก็เลิกเป็นประมาณการ */
+    lostExact: lost.filter((c) => c.lostValue?.exact).length,
+    lostValue: lost.reduce((sum, c) => sum + (c.lostValue?.amount ?? 0), 0),
+  };
+}
 
 export type RelatedCase = { id: string; code: string; type: CaseType; note: string };
 
@@ -1224,6 +1268,10 @@ type LostRow = {
   itemName: string;
   unit: string;
   subCode: string | null;
+  /** ราคาต่อหน่วยจากใบรับเข้าของชิ้นนั้น — null เมื่อชิ้นไม่ได้ผูกใบ (หรือเป็นยอดนับจำนวน). */
+  unitCost: number | null;
+  /** ราคาเฉลี่ยของรายการ ใช้เป็นตัวสำรองเมื่อไม่มีใบของตัวเอง. */
+  avgPrice: number | null;
 };
 
 function lostSummary(l: LostRow): CaseSummary {
@@ -1246,6 +1294,10 @@ function lostSummary(l: LostRow): CaseSummary {
     qty: l.qty,
     unit: l.unit,
     cost: null,
+    // คูณด้วยจำนวน: ยอดนับจำนวนหายทีละหลายหน่วย ส่วนชิ้นที่ track รายชิ้น qty = 1 อยู่แล้ว
+    lostValue: (({ value, exact }) => ({ amount: value == null ? null : value * l.qty, exact }))(
+      writeOffValue(l.unitCost, l.avgPrice),
+    ),
     openedAt: l.at,
     updatedAt: l.recoveredAt ?? l.at,
     openedBy: l.by,
@@ -1286,8 +1338,8 @@ async function loadLostCases(itemId?: string, subItemId?: string): Promise<LostR
       select: {
         id: true, itemId: true, changedAt: true, reason: true, recoveredAt: true, fromReturnId: true,
         changer: { select: { name: true } },
-        item: { select: itemSelect },
-        subItem: { select: { subCode: true, status: true } },
+        item: { select: { ...itemSelect, purchasePrice: true } },
+        subItem: { select: { subCode: true, status: true, receiveRecord: { select: { unitCost: true } } } },
       },
     }),
     // ของนับจำนวน: ยอดที่หายไม่มี "ชิ้น" ให้ดูสถานะ — recoveredAt คือคำตอบเดียวที่มี
@@ -1297,7 +1349,7 @@ async function loadLostCases(itemId?: string, subItemId?: string): Promise<LostR
         id: true, itemId: true, adjustedAt: true, notes: true, recoveredAt: true, fromReturnId: true,
         previousQty: true, newQty: true,
         adjuster: { select: { name: true } },
-        item: { select: itemSelect },
+        item: { select: { ...itemSelect, purchasePrice: true } },
       },
     }),
   ]);
@@ -1318,6 +1370,8 @@ async function loadLostCases(itemId?: string, subItemId?: string): Promise<LostR
       itemName: p.item.name,
       unit: p.item.issueUnit.name,
       subCode: p.subItem?.subCode ?? null,
+      unitCost: p.subItem?.receiveRecord?.unitCost ?? null,
+      avgPrice: p.item.purchasePrice,
     })),
     ...adjustments.map((a): LostRow => ({
       kind: "ADJUSTMENT",
@@ -1334,6 +1388,9 @@ async function loadLostCases(itemId?: string, subItemId?: string): Promise<LostR
       itemName: a.item.name,
       unit: a.item.issueUnit.name,
       subCode: null,
+      // ยอดนับจำนวนไม่มี "ชิ้น" ให้ผูกใบรับเข้า ราคาจึงเป็นประมาณการเสมอ
+      unitCost: null,
+      avgPrice: a.item.purchasePrice,
     })),
   ];
 }

@@ -5,19 +5,21 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import {
   ShoppingCart, BookOpen, Wallet,
-  Wrench, History, ArrowDownToLine, Boxes,
+  FolderKanban, ArrowDownToLine, Boxes,
 } from "lucide-react";
 import { StockBalanceTab } from "@/components/reports/stock-balance-tab";
 import { StockOutTab } from "@/components/reports/stock-out-tab";
 import { ReceiveHistoryTab } from "@/components/reports/receive-history-tab";
 import { UsageBySubjectTab } from "@/components/reports/usage-by-subject-tab";
 import { AnnualCostTab } from "@/components/reports/annual-cost-tab";
-import { DamagedAssetsTab } from "@/components/reports/damaged-assets-tab";
-import { MaintenanceHistoryTab } from "@/components/reports/maintenance-history-tab";
+import { CasesTab } from "@/components/reports/cases-tab";
 import { usePageHeader } from "@/components/layout/page-header-context";
 
 // เรียงตาม tab ที่มีข้อมูลจริงก่อน — ออกจากคลังคือสิ่งที่เกิดขึ้นทุกวัน ส่วนมูลค่า/ค่าใช้จ่าย
 // รอให้มีคนกรอกราคาก่อนถึงจะมีอะไรให้อ่าน.
+//
+// `เคสงาน` เคยเป็นสาม: หน้า /cases ของตัวเอง กับ tab `ชำรุด & ส่งซ่อม` และ `ประวัติบำรุงรักษา` ที่นี่
+// ซึ่งอ่านจากคนละ query กันแล้วให้ตัวเลขไม่ตรงกัน. ทั้งหมดอ่านจาก /api/cases ทางเดียวแล้ว.
 //
 // เดิมมี `hint` ที่ระดับหน้านี้ ตอนนี้ย้ายไปเป็น SectionTitle ในแต่ละ tab แทน: tab ที่มี
 // sub-tab (ออกจากคลัง, เข้าคลัง) ตอบคนละคำถามในแต่ละ sub-tab ซึ่งบรรทัดเดียวระดับหน้าทำไม่ได้.
@@ -26,8 +28,7 @@ const TABS = [
   { value: "dispense-history", label: "ออกจากคลัง", token: "issue", icon: ShoppingCart, component: StockOutTab },
   { value: "receive-history", label: "เข้าคลัง", token: "stockin", icon: ArrowDownToLine, component: ReceiveHistoryTab },
   { value: "usage-by-subject", label: "สถิติการใช้งาน", token: "maintain", icon: BookOpen, component: UsageBySubjectTab },
-  { value: "damaged-assets", label: "ชำรุด & ส่งซ่อม", token: "damage", icon: Wrench, component: DamagedAssetsTab },
-  { value: "maintenance-history", label: "ประวัติบำรุงรักษา", token: "repair", icon: History, component: MaintenanceHistoryTab },
+  { value: "cases", label: "เคสงาน", token: "damage", icon: FolderKanban, component: CasesTab },
   { value: "stock-balance", label: "มูลค่าคงคลัง", token: "value", icon: Boxes, component: StockBalanceTab },
   { value: "annual-cost", label: "ค่าใช้จ่ายรายปี", token: "value", icon: Wallet, component: AnnualCostTab },
 ] as const;
@@ -56,6 +57,8 @@ function ReportsContent() {
     setActiveTab(value);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", value);
+    // ?case= เป็นของแท็บเคสงานเท่านั้น ค้างไว้บนแท็บอื่นก็เป็น URL ที่อธิบายตัวเองไม่ได้
+    if (value !== "cases") params.delete("case");
     router.replace(`${pathname}?${params.toString()}`);
   };
 

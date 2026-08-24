@@ -5,14 +5,15 @@ import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format";
-import { writeOffValue, stockValueRows } from "@/lib/cost";
-import { ItemStatus } from "@/generated/prisma/enums";
+import { stockValueRows } from "@/lib/cost";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
-import { USAGE_TYPE_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS, labelFor, effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, STATUS_LABELS, effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
 import { groupUsageBySubject, groupInUseByLocation } from "@/lib/usage-by-subject";
+import { caseRangeStart, listCases } from "@/lib/cases";
+import { CASE_PREFIX, CASE_STATE_LABELS, CASE_TYPE_LABELS, type CaseState, type CaseType } from "@/lib/case-types";
 
 /** เหตุผล search — the four columns recipientLabel can render from. Always nested under
  *  AND: both callers' `where` already owns `OR` for the NULL-safe loanType pair. */
@@ -161,9 +162,8 @@ type ReportType =
   | "status-log"
   | "usage-by-subject"
   | "annual-cost"
-  | "damaged-assets"
   | "maintenance-schedule"
-  | "maintenance-history";
+  | "cases";
 
 const REPORT_TYPES: ReportType[] = [
   "stock-balance",
@@ -173,9 +173,8 @@ const REPORT_TYPES: ReportType[] = [
   "status-log",
   "usage-by-subject",
   "annual-cost",
-  "damaged-assets",
   "maintenance-schedule",
-  "maintenance-history",
+  "cases",
 ];
 
 // หัวเรื่องบนไฟล์ PDF — เดิมเป็น type.toUpperCase() ("DISPENSE HISTORY") ซึ่งไม่ตรงกับชื่อ tab
@@ -188,16 +187,8 @@ const REPORT_TITLES: Record<ReportType, string> = {
   "status-log": "เข้าคลัง — คืนเข้าคลัง",
   "usage-by-subject": "สถิติการใช้งาน",
   "annual-cost": "ค่าใช้จ่ายรายปี",
-  "damaged-assets": "ชำรุด & ส่งซ่อม",
   "maintenance-schedule": "ตารางบำรุงรักษา",
-  "maintenance-history": "ประวัติบำรุงรักษา",
-};
-
-/** ชื่อส่วนของ tab ชำรุด & ส่งซ่อม — slug ลงชื่อไฟล์ (ห้ามมีจุลภาค), label ลงหัวเรื่อง PDF */
-const DAMAGE_SEGMENTS: Record<string, { slug: string; label: string }> = {
-  DAMAGED: { slug: "damaged", label: "ชำรุด" },
-  UNDER_REPAIR: { slug: "under-repair", label: "กำลังซ่อม" },
-  "DISPOSED,LOST": { slug: "write-off", label: "ตัดจำหน่าย" },
+  "cases": "เคสงาน",
 };
 
 const SIDE_LABELS: Record<string, string> = {
@@ -598,88 +589,6 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       return [...purchaseRows, ...repairRows].sort((a, b) => b.วันที่.localeCompare(a.วันที่));
     }
 
-    case "damaged-assets": {
-      const all: ItemStatus[] = [ItemStatus.DAMAGED, ItemStatus.UNDER_REPAIR, ItemStatus.DISPOSED, ItemStatus.LOST];
-      // หน้าจอส่งมาเป็นรายการคั่นด้วยจุลภาค ("DISPOSED,LOST") — ไฟล์ต้องได้ชุดเดียวกับที่เห็นอยู่
-      const asked = (params.get("status") ?? "").split(",").filter((s) => all.includes(s as ItemStatus)) as ItemStatus[];
-      const statuses: ItemStatus[] = asked.length > 0 ? asked : all;
-      // มูลค่าประมาณการมีความหมายเฉพาะของที่ตัดออกถาวร ส่วนของที่ยังพังอยู่ยังไม่ได้เสียไปไหน
-      const wantsValue = statuses.every((s) => s === ItemStatus.DISPOSED || s === ItemStatus.LOST);
-
-      // เดิม export ไม่อ่านช่วงวันที่เลย ทั้งที่หน้าจอกรองอยู่ — ไฟล์จึงมีแถวที่คนกดปุ่มไม่เห็น
-      const dfrom = params.get("dateFrom");
-      const dto = params.get("dateTo");
-      const dateWhere = dfrom || dto
-        ? {
-            statusLogs: {
-              some: {
-                newStatus: { in: statuses },
-                changedAt: {
-                  ...(dfrom && { gte: new Date(dfrom) }),
-                  ...(dto && { lte: new Date(dto + "T23:59:59") }),
-                },
-              },
-            },
-          }
-        : {};
-
-      // Mirrors api/reports/damaged-assets: match written-off pieces too, one row each.
-      const items = await prisma.item.findMany({
-        where: {
-          isActive: true,
-          OR: [{ status: { in: statuses } }, { subItems: { some: { status: { in: statuses } } } }],
-          ...dateWhere,
-        },
-        include: {
-          category: { select: { name: true } },
-          location: { select: { building: true, floor: true, room: true, detail: true } },
-          _count: { select: { subItems: true } },
-          subItems: {
-            where: { status: { in: statuses } },
-            select: { subCode: true, status: true, receiveRecord: { select: { unitCost: true } } },
-            orderBy: { subCode: "asc" },
-          },
-        },
-        take: 10000,
-      });
-
-      return items.flatMap((i) => {
-        const base = {
-          รายการพัสดุ: i.name,
-          หมวดหมู่: i.category.name,
-          สถานที่: [i.location?.building, i.location?.floor, i.location?.room, i.location?.detail].filter(Boolean).join(" / "),
-        };
-        // ชิ้นที่ผูกใบรับเข้าไว้ = ยอดที่จ่ายจริงของใบนั้น; ที่เหลือตกไปใช้ราคาเฉลี่ยของรายการ
-        // ไฟล์จึงมีสองคอลัมน์แยกกัน คนอ่านงบต้องรู้ว่าตัวเลขไหนเป็นของจริง ไม่ใช่เดารวมในช่องเดียว
-        const valueFor = (unitCost: number | null | undefined) => {
-          if (!wantsValue) return {};
-          const { value, exact } = writeOffValue(unitCost, i.purchasePrice);
-          return {
-            "มูลค่าที่เสียไป": value ?? "",
-            "ที่มาของราคา": value == null ? "" : exact ? "ใบรับเข้าของชิ้นนี้" : "ประมาณการจากราคาเฉลี่ย",
-          };
-        };
-        if (i.subItems.length > 0) {
-          return i.subItems.map((s) => ({
-            รหัสพัสดุ: effectiveCode(i.code, s.subCode, i._count.subItems),
-            รายการพัสดุ: base.รายการพัสดุ,
-            สถานะ: STATUS_LABELS[s.status] ?? s.status,
-            หมวดหมู่: base.หมวดหมู่,
-            สถานที่: base.สถานที่,
-            ...valueFor(s.receiveRecord?.unitCost),
-          }));
-        }
-        return [{
-          รหัสพัสดุ: i.code,
-          รายการพัสดุ: base.รายการพัสดุ,
-          สถานะ: STATUS_LABELS[i.status] ?? i.status,
-          หมวดหมู่: base.หมวดหมู่,
-          สถานที่: base.สถานที่,
-          ...valueFor(null),
-        }];
-      });
-    }
-
     case "maintenance-schedule": {
       const locationId = params.get("locationId");
       const dateFrom = params.get("dateFrom");
@@ -715,40 +624,39 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       }));
     }
 
-    case "maintenance-history": {
-      const where: Record<string, unknown> = {};
-      const dateFrom = params.get("dateFrom");
-      const dateTo = params.get("dateTo");
-      if (dateFrom || dateTo) {
-        where.performedAt = {
-          ...(dateFrom && { gte: new Date(dateFrom) }),
-          ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
-        };
-      }
-      const maintType = params.get("maintenanceType");
-      if (maintType) where.type = maintType;
-      const itemId = params.get("itemId");
-      if (itemId) where.itemId = itemId;
-
-      const records = await prisma.maintenanceRecord.findMany({
-        where,
-        include: {
-          item: { select: { code: true, name: true } },
-          performer: { select: { name: true } },
-        },
-        orderBy: { performedAt: "desc" },
-        take: 10000,
+    // เคสงาน — ไฟล์ต้องได้ชุดเดียวกับที่หน้าจอกรองอยู่ จึงอ่านผ่าน listCases ตัวเดียวกับ /api/cases
+    // ไม่ใช่ query ของตัวเอง. เคยเป็นสองรายงาน (ชำรุด & ส่งซ่อม, ประวัติบำรุงรักษา) ที่นับคนละทาง
+    // แล้วให้ยอดไม่ตรงกัน.
+    case "cases": {
+      // `type` ถูกจองไว้เป็นชนิดรายงานแล้ว ประเภทเคสจึงเดินทางมาในชื่อ caseType
+      const type = params.get("caseType");
+      const state = params.get("state");
+      const from = caseRangeStart(params.get("range"));
+      const rows = await listCases({
+        ...(type && type in CASE_PREFIX ? { type: type as CaseType } : {}),
+        ...(state && state in CASE_STATE_LABELS ? { state: state as CaseState } : {}),
+        ...(params.get("q") ? { q: params.get("q")! } : {}),
+        ...(params.get("itemId") ? { itemId: params.get("itemId")! } : {}),
+        ...(from ? { from } : {}),
       });
 
-      return records.map((r) => ({
-        วันที่: fmtDate(r.performedAt, "yyyy-MM-dd"),
-        รหัสพัสดุ: r.item.code,
-        รายการพัสดุ: r.item.name,
-        ประเภท: labelFor(MAINT_TYPE_LABELS, r.type),
-        ผลการดำเนินการ: labelFor(MAINT_RESULT_LABELS, r.result),
-        "อาการ / สิ่งที่ทำ": r.issue ?? "",
-        ค่าใช้จ่าย: r.cost ?? 0,
-        ผู้ดำเนินการ: r.performer.name,
+      return rows.map((c) => ({
+        รหัสเคส: c.code,
+        ประเภท: CASE_TYPE_LABELS[c.type],
+        สถานะ: c.statusLabel,
+        เรื่อง: c.subject,
+        รหัสพัสดุ: effectiveCode(c.itemCode, c.subCode, 2),
+        รายการพัสดุ: c.title,
+        จำนวน: c.qty ?? "",
+        หน่วย: c.unit,
+        // สองก้อนแยกคอลัมน์เพราะบวกกันไม่ได้: จ่ายไปเพื่อให้ของกลับมาใช้ได้ vs หายไปพร้อมของ
+        ค่าใช้จ่าย: c.cost ?? "",
+        มูลค่าที่หายไป: c.lostValue?.amount ?? "",
+        ที่มาของราคา: c.lostValue == null || c.lostValue.amount == null
+          ? ""
+          : c.lostValue.exact ? "ใบรับเข้าของชิ้นนี้" : "ประมาณการจากราคาเฉลี่ย",
+        วันที่เปิดเคส: fmtDate(c.openedAt, "yyyy-MM-dd"),
+        ผู้เปิดเคส: c.openedBy,
       }));
     }
   }
@@ -780,11 +688,10 @@ export async function GET(request: NextRequest) {
     : null;
   // เหตุผลเดียวกันกับ kind: มูลค่าคงคลังส่งออกได้สองฝั่ง ชื่อไฟล์กับหัวเรื่องต้องบอกว่าฝั่งไหน
   const side = type === "stock-balance" ? SIDE_LABELS[params.get("side") ?? ""] ?? null : null;
-  const segment = type === "damaged-assets" ? DAMAGE_SEGMENTS[params.get("status") ?? ""] ?? null : null;
-  const suffix = kind ? `-${kind}` : side ? `-${params.get("side")}` : segment ? `-${segment.slug}` : "";
+  const suffix = kind ? `-${kind}` : side ? `-${params.get("side")}` : "";
   const filename = `${type}${suffix}-${new Date().toISOString().slice(0, 10)}`;
   const title = REPORT_TITLES[type]
-    + (kind ? ` — ${DISPENSE_KIND_LABELS[kind]}` : side ? ` — ${side}` : segment ? ` — ${segment.label}` : "");
+    + (kind ? ` — ${DISPENSE_KIND_LABELS[kind]}` : side ? ` — ${side}` : "");
 
   if (format === "xlsx") return toXlsx(data, filename, type);
   return await toPdf(data, filename, title);

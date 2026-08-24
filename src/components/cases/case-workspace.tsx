@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import {
   Wrench, ShieldCheck, ShoppingCart, MonitorCog, ClipboardCheck, SearchX, Search, FilterX, ChevronRight, ArrowLeft,
   CalendarDays, ListFilter, CircleDot, Paperclip, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getCases, getCaseDetail, confirmKitSetChecked, recoverStock, type CaseSummaryJson, type CaseDetailJson } from "@/lib/api";
+import { getCases, getCaseDetail, confirmKitSetChecked, recoverStock, type CaseSummaryJson, type CaseDetailJson, type CaseTotalsJson } from "@/lib/api";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -61,7 +61,7 @@ const RANGE_OPTIONS = [
  * `lockType` คือความต่างทั้งหมด — หน้าที่ถามคำถามเดียวไม่ต้องมี dropdown ให้เลือกประเภท และที่
  * สำคัญกว่านั้นคือ ทั้งสามที่อ่านจากที่มาเดียวกัน จึงไม่มีทางเป็น log คนละกองที่ไม่ตรงกัน.
  */
-export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, compact, canEdit }: {
+export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, compact, canEdit, onTotals }: {
   itemId?: string;
   subItemId?: string;
   lockType?: CaseType;
@@ -69,6 +69,10 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
   /** Embedded in an item tab: no filter bar — a scoped list of three has nothing to filter. */
   compact?: boolean;
   canEdit?: boolean;
+  /** Handed the totals of every fetch, plus the query that produced them, so a caller can head
+   *  the list with them and export exactly what is on screen. The workspace itself draws
+   *  neither: a list scoped to one พัสดุ has nothing to total and nothing to export. */
+  onTotals?: (totals: CaseTotalsJson, query: string) => void;
 }) {
   const isMobile = useIsMobile();
   const [type, setType] = useState<string>(lockType ?? "all");
@@ -80,6 +84,11 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(initialCaseId ?? null);
+
+  // Held in a ref, not a dependency: callers pass an inline arrow, and a new function identity
+  // every render would refire the fetch below forever.
+  const onTotalsRef = useRef(onTotals);
+  useEffect(() => { onTotalsRef.current = onTotals; });
 
   // A keystroke per request would put one full case build behind every letter.
   useEffect(() => {
@@ -105,6 +114,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, initialCaseId, comp
         if (!live) return;
         setCases(data.cases);
         setTotal(data.total);
+        onTotalsRef.current?.(data.summary, p.toString());
       } finally {
         if (live) setLoading(false);
       }

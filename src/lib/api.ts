@@ -14,7 +14,15 @@ export type CaseSummaryJson = {
   id: string; type: CaseType; code: string; state: CaseState; statusLabel: string;
   subject: string; title: string; itemId: string; itemCode: string; subCode: string | null;
   qty: number | null; unit: string; cost: number | null;
+  /** เฉพาะเคสสูญหาย — มูลค่าของที่หายไป, คนละก้อนกับ `cost` ซึ่งคือเงินที่จ่ายไปซ่อม. */
+  lostValue?: { amount: number | null; exact: boolean };
   openedAt: string; updatedAt: string; openedBy: string;
+};
+
+/** ยอดรวมของ "ทุกเคสที่ตัวกรองคัดมา" ไม่ใช่แค่หน้าที่เปิดอยู่ — ดู summarise() ใน /api/cases. */
+export type CaseTotalsJson = {
+  serviceCases: number; servicePriced: number; serviceCost: number;
+  lostCases: number; lostUnits: number; lostPriced: number; lostExact: number; lostValue: number;
 };
 
 export type CaseStepJson = {
@@ -885,7 +893,9 @@ export function getOpenRepairs(itemId: string, subItemId?: string) {
 
 /** เคสทั้งหมด (RC/MC/BR) — see src/lib/cases.ts for what counts as one. */
 export function getCases(params?: string) {
-  return request<{ cases: CaseSummaryJson[]; total: number }>(`/api/cases${params ? `?${params}` : ""}`);
+  return request<{ cases: CaseSummaryJson[]; total: number; summary: CaseTotalsJson }>(
+    `/api/cases${params ? `?${params}` : ""}`,
+  );
 }
 
 export function getCaseDetail(caseId: string) {

@@ -306,11 +306,11 @@ function CaseIcon({ trip, className }: { trip: RepairTrip; className?: string })
   return <Icon className={className} />;
 }
 
-/** ไปเปิดเคสเดียวกันที่ /cases — เลขเดียวกัน ที่มาเดียวกัน ไม่ใช่ log คนละกอง. */
+/** ไปเปิดเคสเดียวกันที่แท็บเคสงานในหน้ารายงาน — เลขเดียวกัน ที่มาเดียวกัน ไม่ใช่ log คนละกอง. */
 function CaseLink({ trip }: { trip: RepairTrip }) {
   return (
     <Link
-      href={`/cases?case=${encodeURIComponent(caseIdOf(trip))}`}
+      href={`/reports?tab=cases&case=${encodeURIComponent(caseIdOf(trip))}`}
       onClick={(e) => e.stopPropagation()}
       title="เปิดเคสนี้"
       aria-label={`เปิดเคส ${trip.code}`}

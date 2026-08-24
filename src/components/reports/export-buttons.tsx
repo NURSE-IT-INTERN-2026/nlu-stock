@@ -6,7 +6,9 @@ import type { FilterValues } from "./report-filters";
 
 interface ExportButtonsProps {
   reportType: string;
-  filters: FilterValues;
+  /** Tabs built on ReportFilters pass their FilterValues; เคสงาน keeps its own filter shape and
+   *  passes that instead — either way this only forwards the pairs to the export route. */
+  filters: FilterValues | Record<string, string | undefined>;
 }
 
 export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
