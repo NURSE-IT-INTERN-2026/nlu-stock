@@ -387,24 +387,18 @@ function MaintenanceShell() {
                 );
               })}
             </div>
+            {/* นับรวม + แบ่งหน้าอยู่ในกล่องเดียวกับตาราง ไม่ลอยอยู่บนพื้นหลังหน้า */}
             {!loading && filteredSchedule.length > 0 && (
-              <div className="flex items-center justify-between gap-4 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-                <span>แสดง {filteredSchedule.length} รายการ</span>
-                {/* ponytail: reserved slot for future pagination */}
-              </div>
+              <Pagination
+                page={schedulePage}
+                total={filteredSchedule.length}
+                pageSize={PAGE_SIZE.COMPACT}
+                onChange={setSchedulePage}
+              />
             )}
           </div>
 
-          {!loading && filteredSchedule.length > PAGE_SIZE.COMPACT && (
-            <Pagination
-              page={schedulePage}
-              total={filteredSchedule.length}
-              pageSize={PAGE_SIZE.COMPACT}
-              onChange={setSchedulePage}
-            />
-          )}
-
-          {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. Count summary moved into the card footer above. */}
+          {/* ponytail: removed urgent-items pill list — duplicated table rows, no purpose. */}
         </section>
 
       </div>

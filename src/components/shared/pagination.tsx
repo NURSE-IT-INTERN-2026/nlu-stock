@@ -1,23 +1,19 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  ChevronsLeft,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsRight,
-  Loader2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 // ponytail: one presentational component, two UI modes. Transport (offset / cursor / client-slice)
 // lives in the consumer's hook — this never fetches. Numbered mode is identical for offset and
 // cursor (both pass page/total/pageSize); loadMore is the mobile-append variant. Single height
 // token (h-8) across every mode — no per-consumer h-7/h-8/h-9 drift.
+//
+// Layout: total count on the left, one segmented button group on the right, sitting on a
+// border-t inside the card/table it belongs to. It has no background of its own — dropping it
+// outside a Card leaves it floating on the page wash, which is the look this replaced.
 
-const NUM_BTN = "hidden sm:inline-flex h-8 min-w-8 px-2 text-xs tabular-nums";
-const NAV_BTN = "h-8 w-8";
-const NAV_BTN_DESKTOP = "hidden sm:inline-flex h-8 w-8";
+const NUM_BTN = "hidden sm:inline-flex h-8 min-w-9 rounded-none px-2 text-xs tabular-nums";
+const NAV_BTN = "h-8 rounded-none px-2.5 text-xs";
 
 // Windowed page list: all when ≤7, otherwise 1 … (page-1..page+1) … last.
 function windowed(page: number, total: number): (number | "ellipsis")[] {
@@ -40,6 +36,8 @@ type PaginationProps =
       pageSize: number;
       onChange: (page: number) => void;
       loading?: boolean;
+      /** หน่วยนับฝั่งซ้าย — "รายการ" (ค่าเริ่มต้น) / "ครั้ง" */
+      unit?: string;
     }
   | {
       mode: "loadMore";
@@ -71,37 +69,44 @@ export function Pagination(props: PaginationProps) {
     );
   }
 
-  const { page, total, pageSize, onChange, loading } = props;
+  const { page, total, pageSize, onChange, loading, unit = "รายการ" } = props;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const busy = !!loading;
   const pages = windowed(page, totalPages);
 
-  const nav = (
-    n: number,
-    disabled: boolean,
-    icon: ReactNode,
-    label: string,
-    className: string,
-  ) => (
-    <Button
-      variant="ghost"
-      className={className}
-      disabled={disabled || busy}
-      onClick={() => onChange(n)}
-      aria-label={label}
-    >
-      {icon}
-    </Button>
-  );
-
   return (
-    <nav className="border-t py-2" aria-label="Pagination">
-      <div className="flex items-center justify-center gap-1 flex-wrap">
-        {nav(1, page === 1, <ChevronsLeft className="size-4" />, "First page", NAV_BTN_DESKTOP)}
-        {nav(page - 1, page === 1, <ChevronLeft className="size-4" />, "Previous page", NAV_BTN)}
+    <nav
+      className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3"
+      aria-label="Pagination"
+    >
+      <span className="text-sm text-muted-foreground tabular-nums">
+        รายการทั้งหมด {total.toLocaleString("th-TH")} {unit}
+      </span>
+
+      {/* หนึ่งกล่อง segmented. เส้นคั่นต้องตั้ง "สี" ด้วย ไม่ใช่แค่ความหนา: buttonVariants base มี
+          border-transparent ติดมาทุกปุ่ม และ divide-x คอมไพล์เป็น :where(...) ที่ specificity = 0
+          จึงแพ้ — ได้เส้นเฉพาะ span "…" ที่ไม่มี class สี. border-l-border ทับ border-transparent
+          ได้เพราะ arbitrary variant เรียงท้าย utilities layer (specificity เท่ากัน ตัวหลังชนะ). */}
+      <div className="inline-flex items-center rounded-md border overflow-hidden [&>*+*]:border-l [&>*+*]:border-l-border">
+        <Button
+          variant="ghost"
+          className={NAV_BTN}
+          disabled={page === 1 || busy}
+          onClick={() => onChange(page - 1)}
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="size-4" />
+          <span className="hidden sm:inline">ก่อนหน้า</span>
+        </Button>
+
         {pages.map((p, i) =>
           p === "ellipsis" ? (
-            <span key={`e${i}`} className="hidden sm:inline px-1 text-xs text-muted-foreground">…</span>
+            <span
+              key={`e${i}`}
+              className="hidden sm:flex h-8 min-w-9 items-center justify-center text-xs text-muted-foreground"
+            >
+              …
+            </span>
           ) : (
             <Button
               key={p}
@@ -115,12 +120,22 @@ export function Pagination(props: PaginationProps) {
             </Button>
           ),
         )}
-        {/* mobile compact indicator (numbered buttons are sm:inline-flex above) */}
-        <span className="sm:hidden px-2 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+
+        {/* จอเล็กแสดงตัวเลขย่อแทนปุ่มหน้า */}
+        <span className="sm:hidden flex h-8 items-center px-3 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
           {page} / {totalPages}
         </span>
-        {nav(page + 1, page === totalPages, <ChevronRight className="size-4" />, "Next page", NAV_BTN)}
-        {nav(totalPages, page === totalPages, <ChevronsRight className="size-4" />, "Last page", NAV_BTN_DESKTOP)}
+
+        <Button
+          variant="ghost"
+          className={NAV_BTN}
+          disabled={page === totalPages || busy}
+          onClick={() => onChange(page + 1)}
+          aria-label="Next page"
+        >
+          <span className="hidden sm:inline">ถัดไป</span>
+          <ChevronRight className="size-4" />
+        </Button>
       </div>
     </nav>
   );

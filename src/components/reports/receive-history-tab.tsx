@@ -162,7 +162,7 @@ function ReportTable<T extends { id: string }>({
   }, [filters, perPage, path, extraParams]);
 
   const {
-    items: data, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
+    items: data, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<T>({ fetchPage, pageSize: perPage, isMobile });
 
   return (
@@ -182,26 +182,23 @@ function ReportTable<T extends { id: string }>({
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
         emptyMessage={emptyMessage}
         token={token}
+        footer={
+          isMobile ? (
+            data.length > 0 && (
+              <Pagination
+                mode="loadMore"
+                shown={data.length}
+                total={total}
+                hasMore={hasNext}
+                isLoading={isLoadingMore}
+                onLoadMore={loadMore}
+              />
+            )
+          ) : (
+            <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
+          )
+        }
       />
-      {isMobile ? (
-        data.length > 0 && (
-          <Pagination
-            mode="loadMore"
-            shown={data.length}
-            total={total}
-            hasMore={hasNext}
-            isLoading={isLoadingMore}
-            onLoadMore={loadMore}
-          />
-        )
-      ) : (
-        <>
-          <p className="text-xs text-muted-foreground py-1">
-            หน้า {page} จาก {totalPages} ({total} รายการ)
-          </p>
-          <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
-        </>
-      )}
     </div>
   );
 }
