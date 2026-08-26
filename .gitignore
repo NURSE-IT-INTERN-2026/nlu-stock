@@ -61,6 +61,12 @@ graphify-out/
 # Auto-generated reports
 TECH_STACK_REPORT.html
 
+# สไลด์/ไดอะแกรมที่ generate ไว้ดูเอง — ไม่ใช่ของที่ build ใช้ และแก้ทุกครั้งที่ regenerate
+nlu-stock-architecture.html
+slides-nitee-r2.html
+slides-scope.html
+slides-workflow.html
+
 # doc exports / artifacts
 doc/*.zip
 doc/*.csv
