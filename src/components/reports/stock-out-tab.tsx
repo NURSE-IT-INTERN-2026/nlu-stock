@@ -280,7 +280,7 @@ export function StockOutTab() {
   }, [filters, perPage, kind]);
 
   const {
-    items: data, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
+    items: data, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<StockOutRow>({ fetchPage, pageSize: perPage, isMobile });
 
   const events = useMemo(() => groupEvents(data), [data]);
@@ -323,6 +323,28 @@ export function StockOutTab() {
         emptyMessage={filters.status ? "ไม่มีรายการค้างอยู่ในช่วงนี้" : spec.emptyMessage}
         onRowClick={setOpenEvent}
         token={spec.token}
+        footer={
+          isMobile ? (
+            events.length > 0 && (
+              <Pagination
+                mode="loadMore"
+                shown={events.length}
+                total={total}
+                hasMore={hasNext}
+                isLoading={isLoadingMore}
+                onLoadMore={loadMore}
+              />
+            )
+          ) : (
+            <Pagination
+              page={page}
+              total={total}
+              pageSize={perPage}
+              onChange={setPage}
+              unit="ครั้ง"
+            />
+          )
+        }
       />
 
       <DispenseEventDialog
@@ -333,25 +355,6 @@ export function StockOutTab() {
         onClose={() => setOpenEvent(null)}
       />
 
-      {isMobile ? (
-        events.length > 0 && (
-          <Pagination
-            mode="loadMore"
-            shown={events.length}
-            total={total}
-            hasMore={hasNext}
-            isLoading={isLoadingMore}
-            onLoadMore={loadMore}
-          />
-        )
-      ) : (
-        <>
-          <p className="text-xs text-muted-foreground py-1">
-            หน้า {page} จาก {totalPages} ({total} ครั้ง)
-          </p>
-          <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
-        </>
-      )}
     </div>
   );
 }

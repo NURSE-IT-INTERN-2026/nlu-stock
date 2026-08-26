@@ -32,6 +32,9 @@ interface ReportDataTableProps<T> {
   onRowClick?: (row: T) => void;
   /** Tints the header with the section's event colour. Omit for the plain header. */
   token?: Token;
+  /** Server-paged callers pass their own <Pagination/> here so it renders inside the Card
+      instead of floating on the page wash below it. Replaces the client-side pager. */
+  footer?: React.ReactNode;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +46,7 @@ export function ReportDataTable<T extends Record<string, any>>({
   emptyMessage = "ไม่พบข้อมูล",
   onRowClick,
   token,
+  footer,
 }: ReportDataTableProps<T>) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
@@ -129,14 +133,15 @@ export function ReportDataTable<T extends Record<string, any>>({
         </Table>
       </div>
 
-      {totalPages > 1 && (
-        <Pagination
-          page={currentPage}
-          total={data.length}
-          pageSize={pageSize}
-          onChange={setPage}
-        />
-      )}
+      {footer ??
+        (totalPages > 1 && (
+          <Pagination
+            page={currentPage}
+            total={data.length}
+            pageSize={pageSize}
+            onChange={setPage}
+          />
+        ))}
     </Card>
   );
 }

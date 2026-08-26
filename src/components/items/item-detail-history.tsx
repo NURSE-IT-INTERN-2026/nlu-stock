@@ -185,7 +185,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   );
 
   const {
-    items: events, total, page, totalPages, loading, isLoadingMore, hasNext, loadMore, setPage,
+    items: events, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<Unit>({ fetchPage, pageSize: perPage, isMobile });
 
   // แนบเพิ่ม/ลบ answers with the record's array as it now stands. Keeping those answers here —
@@ -295,29 +295,26 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         </ol>
       )}
 
-      {!loading && events.length > 0 && (
-        <div className="space-y-2 border-t border-border bg-muted/30 px-5 py-4">
-          <p className="text-xs text-muted-foreground">
-            แสดง <span className="font-semibold tabular-nums text-foreground">{events.length}</span> จาก{" "}
-            <span className="tabular-nums">{total}</span> รายการ
-            {/* A case counts as one รายการ but prints several rows. Saying "4 จาก 4" over a table
-                of ten lines reads like a bug unless the rows are named too. */}
-            {rowCount !== events.length && <> · <span className="tabular-nums">{rowCount}</span> เหตุการณ์</>}
-          </p>
-          {totalPages > 1 && (isMobile ? (
-            <Pagination
-              mode="loadMore"
-              shown={events.length}
-              total={total}
-              hasMore={hasNext}
-              isLoading={isLoadingMore}
-              onLoadMore={loadMore}
-            />
-          ) : (
-            <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
-          ))}
-        </div>
-      )}
+      {!loading && events.length > 0 && (isMobile ? (
+        <Pagination
+          mode="loadMore"
+          shown={events.length}
+          total={total}
+          hasMore={hasNext}
+          isLoading={isLoadingMore}
+          onLoadMore={loadMore}
+        />
+      ) : (
+        // A case counts as one รายการ but prints several rows. Saying "4 รายการ" over a table
+        // of ten lines reads like a bug unless the rows are named too.
+        <Pagination
+          page={page}
+          total={total}
+          pageSize={perPage}
+          onChange={setPage}
+          unit={rowCount !== events.length ? `รายการ · ${rowCount} เหตุการณ์` : "รายการ"}
+        />
+      ))}
     </section>
   );
 

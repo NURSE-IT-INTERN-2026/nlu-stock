@@ -135,7 +135,7 @@ export function MoveTable({
             </Table>
           </div>
 
-          <div className="mt-auto border-t bg-secondary/25 px-2">
+          <div className="mt-auto">
             <Pagination page={page} total={rows.length} pageSize={PAGE_SIZE.DASHBOARD} onChange={handlePageChange} />
           </div>
         </div>
