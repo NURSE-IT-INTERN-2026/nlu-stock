@@ -13,22 +13,24 @@ interface UsageByTypeData {
   label: string;
   courseCode?: string | null;
   totalQuantity: number;
+  records: number;
 }
 
 interface ChartTooltipProps {
   active?: boolean;
   payload?: Array<{ value: number; payload: { name: string; fullName: string } }>;
   clickable?: boolean;
+  unitWord?: string;
 }
 
-function ChartTooltip({ active, payload, clickable }: ChartTooltipProps) {
+function ChartTooltip({ active, payload, clickable, unitWord }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-foreground">{d.payload.fullName}</p>
       <p className="text-muted-foreground">
-        จำนวน: <span className="font-semibold text-foreground">{d.value.toLocaleString("th-TH")}</span> ชิ้น
+        จำนวน: <span className="font-semibold text-foreground">{d.value.toLocaleString("th-TH")}</span> {unitWord ?? "ชิ้น"}
       </p>
       {clickable && <p className="mt-1 text-xs text-muted-foreground">กดเพื่อดูรายละเอียดของวิชานี้</p>}
     </div>
@@ -45,6 +47,7 @@ export function UsageBySubjectChart<T extends UsageByTypeData>({
   hint,
   height,
   onSelect,
+  metric = "quantity",
 }: {
   data: T[];
   title: string;
@@ -52,7 +55,10 @@ export function UsageBySubjectChart<T extends UsageByTypeData>({
   height: number;
   /** กดแท่งแล้วเปิดรายละเอียดของวิชานั้น — เหมือนกราฟรายเดือน ไม่งั้นกราฟจบที่ "วิชานี้เยอะ" เฉยๆ */
   onSelect?: (row: T) => void;
+  /** ยืมนับเป็นครั้ง — ดูเหตุผลที่ KINDS ใน usage-by-subject-tab */
+  metric?: "quantity" | "records";
 }) {
+  const unitWord = metric === "records" ? "ครั้ง" : "ชิ้น";
   // ponytail: one fill, not a colour per bar. The categories are already named on the axis,
   // so a second encoding would carry no information.
   const fillColor = useThemeColor("--chart-2");
@@ -65,10 +71,13 @@ export function UsageBySubjectChart<T extends UsageByTypeData>({
   // แกน x เอาแค่รหัสวิชา: ชื่อเต็มยาวกว่าความกว้างของแท่งหลายเท่า recharts เลยซ่อน tick ที่ชนกัน
   // ทิ้ง — ได้แท่งสิบสองแท่งที่มีป้ายสามอัน วางไม่ตรงกับแท่งไหนเลย. ชื่อเต็มอยู่ใน tooltip
   // และในกล่องรายละเอียดที่กดเข้าไปดู.
+  // แถวต้นทางเดินทางไปกับ datum เพื่อให้ onClick ของ Bar คืนของจริงกลับมาได้ ไม่ต้องหาย้อนจาก
+  // index ที่ recharts ไม่ได้ให้มา (ดูคอมเมนต์ที่ <Bar> ข้างล่าง)
   const chartData = shown.map((d) => ({
     name: d.courseCode || d.label,
     fullName: d.label,
-    totalQuantity: d.totalQuantity,
+    value: metric === "records" ? d.records : d.totalQuantity,
+    row: d,
   }));
 
   return (
@@ -87,7 +96,7 @@ export function UsageBySubjectChart<T extends UsageByTypeData>({
         <div
           style={{ height }}
           role="img"
-          aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.fullName} (${d.totalQuantity})`).join(", ")}`}
+          aria-label={`สัดส่วนการใช้งาน: ${chartData.map((d) => `${d.fullName} (${d.value} ${unitWord})`).join(", ")}`}
         >
           <ChartContainer>
             {({ width, height }) => (
@@ -96,18 +105,29 @@ export function UsageBySubjectChart<T extends UsageByTypeData>({
                 width={width}
                 height={height}
                 margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
-                // activeIndex, not activePayload: recharts 3 stopped handing the row to the
-                // chart-level click handler and only names the tick that was hit.
-                onClick={(e) => {
-                  const hit = shown[Number(e?.activeIndex)];
-                  if (hit) onSelect?.(hit);
-                }}
                 style={onSelect ? { cursor: "pointer" } : undefined}
               >
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip content={<ChartTooltip clickable={!!onSelect} />} cursor={{ fill: "var(--secondary)" }} />
-                <Bar dataKey="totalQuantity" fill={fillColor} radius={[6, 6, 0, 0]} isAnimationActive={false} />
+                <Tooltip content={<ChartTooltip clickable={!!onSelect} unitWord={unitWord} />} cursor={{ fill: "var(--secondary)" }} />
+                {/* onClick อยู่บน <Bar> ไม่ใช่บน <BarChart>: chart-level click ของ recharts 3
+                    ส่ง activeIndex เป็น null และ `Number(null)` คือ 0 — กดแท่งไหนก็เปิดอันดับ 1
+                    เสมอโดยไม่มีอะไรฟ้อง. background โปร่งใสทำให้เป้าคลิกสูงเต็มแกน ไม่ใช่แค่
+                    ความสูงของแท่ง ซึ่งอันดับท้ายๆ เตี้ยจนกดไม่โดน. */}
+                <Bar
+                  dataKey="value"
+                  fill={fillColor}
+                  radius={[6, 6, 0, 0]}
+                  isAnimationActive={false}
+                  {...(onSelect
+                    ? {
+                        background: { fill: "transparent" },
+                        onClick: (d: { payload?: { row: T } }) => {
+                          if (d?.payload) onSelect(d.payload.row);
+                        },
+                      }
+                    : {})}
+                />
               </BarChart>
             )}
           </ChartContainer>

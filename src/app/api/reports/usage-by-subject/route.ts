@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { NextRequest } from "next/server";
-import { groupUsageBySubject, groupInUseByLocation, groupUsageByMonth } from "@/lib/usage-by-subject";
+import { groupUsageBySubject, groupInUseSnapshot, groupUsageByMonth } from "@/lib/usage-by-subject";
 import { parseDispenseKind } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
 
@@ -26,7 +26,9 @@ export async function GET(request: NextRequest) {
   const categoryId = params.get("categoryId") || undefined;
 
   const filters: Record<string, unknown>[] = [kindWhere(kind)];
-  if (dateFrom || dateTo) {
+  // นำไปใช้งานเป็นภาพนิ่งของตอนนี้ ไม่ใช่บัญชีเหตุการณ์ — ตัวกรองช่วงวันที่จึงไม่มีความหมายกับมัน
+  // และถ้ารับมาจะตัดของที่ตั้งไว้ก่อนช่วงนั้นทิ้ง ทั้งที่มันยังอยู่ในห้องอยู่ (ดู groupInUseSnapshot)
+  if (kind !== "inuse" && (dateFrom || dateTo)) {
     filters.push({
       dispensedAt: {
         ...(dateFrom && { gte: new Date(dateFrom) }),
@@ -40,22 +42,23 @@ export async function GET(request: NextRequest) {
 
   const where = { AND: filters };
 
-  // แกนหลักของรายงานคือเดือน — ตารางรวมทั้งช่วงยังอยู่ข้างล่างเพื่อตอบ "ทั้งช่วงใครใช้มากสุด"
-  // แต่ตัวที่คนเปิดรายงานมาดูคือ ใช้เยอะเดือนไหน และเดือนนั้นเป็นวิชาหรือกิจกรรม
-  const months = await groupUsageByMonth(where, kind === "inuse" ? "location" : "usage");
-
-  // นำไปใช้งานจัดกลุ่มตามห้อง ไม่ใช่ตามวิชา — ดูเหตุผลที่ groupInUseByLocation
+  // นำไปใช้งาน = ของที่ยังตั้งอยู่ตอนนี้ แยกตามอาคาร → ห้อง → พัสดุ. ไม่มีแกนเดือน เพราะภาพนิ่ง
+  // ไม่มีเดือน — ของที่ตั้งไว้ตั้งแต่ปีที่แล้วก็ยังเป็นของที่อยู่ในห้องนั้นวันนี้.
   if (kind === "inuse") {
-    const rows = await groupInUseByLocation(where);
+    const { rows, buildings } = await groupInUseSnapshot(where);
     return json({
       rows,
-      months,
+      buildings,
       summary: {
         records: rows.reduce((s, r) => s + r.records, 0),
         units: rows.reduce((s, r) => s + r.totalQuantity, 0),
       },
     });
   }
+
+  // แกนหลักของรายงานคือเดือน — ตารางรวมทั้งช่วงยังอยู่ข้างล่างเพื่อตอบ "ทั้งช่วงใครใช้มากสุด"
+  // แต่ตัวที่คนเปิดรายงานมาดูคือ ใช้เยอะเดือนไหน และเดือนนั้นเป็นวิชาหรือกิจกรรม
+  const months = await groupUsageByMonth(where);
 
   const data = await groupUsageBySubject(where);
 

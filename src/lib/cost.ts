@@ -1,5 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { ItemStatus } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 
 /** ราคาต่อหน่วยถัวเฉลี่ยถ่วงน้ำหนักจากรายการรับเข้าที่มีราคา — ค่าที่ Item.purchasePrice เก็บไว้
  *  ให้รายงานมูลค่าคงคลังตีราคาของคงทน.
@@ -80,6 +80,128 @@ export function writeOffValue(receiptUnitCost: number | null | undefined, itemAv
   return receiptUnitCost != null
     ? { value: receiptUnitCost, exact: true }
     : { value: itemAvgPrice ?? null, exact: false };
+}
+
+// ── ของที่หายออกจากคลัง — เหตุการณ์ ไม่ใช่สถานะ ──
+
+/**
+ * หนึ่งครั้งที่ของหลุดออกจากคลังถาวร: สูญหาย หรือ ตัดจำหน่าย.
+ *
+ * **นับเหตุการณ์ ไม่ใช่สถานะปัจจุบัน** — ตรงข้ามกับ `stockValueRows` ข้างล่างที่ถามว่า "ตอนนี้ของ
+ * ชิ้นไหนอยู่สถานะ LOST/DISPOSED บ้าง" ตลอดกาล. คำถามที่นี่คือ "เดือนไหน/ปีไหนเสียของไปเท่าไร"
+ * ซึ่งตอบด้วยสถานะปัจจุบันไม่ได้เลย เพราะสถานะไม่มีวันที่. สองยอดนี้ไม่มีวันเท่ากันและไม่ควรเท่า.
+ *
+ * ของที่เรียกคืนได้แล้ว (recoveredAt) ไม่นับ — มันกลับมาแล้ว จึงไม่ใช่ของที่เสียไป. เกณฑ์เดียวกับ
+ * การ์ดของหายใน /alerts ที่กรองเฉพาะเคสที่ยังเปิด.
+ *
+ * ที่เดียวสำหรับทั้งกราฟรายเดือนของ มูลค่าคงคลัง และการ์ดรายปีของ ค่าใช้จ่ายรายปี — สองหน้าที่
+ * นับคนละ query แล้วให้ตัวเลขไม่ตรงกันคือสิ่งที่หน้ารายงานนี้เคยเป็นมาแล้ว.
+ */
+export interface LossEvent {
+  at: Date;
+  kind: "LOST" | "DISPOSED";
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unitName: string;
+  /** พัสดุที่ยังไม่ได้ผูก profile ตกเป็น "ไม่ใช่สิ้นเปลือง" เกณฑ์เดียวกับ stockValueRows */
+  isConsumable: boolean;
+  qty: number;
+  /** null = ตีราคาไม่ได้เลย (ไม่มีทั้งใบรับเข้าและราคาเฉลี่ย) */
+  value: number | null;
+  /** true = ราคาจากใบรับเข้าของชิ้นนั้นเอง, false = ตีจากราคาเฉลี่ยของรายการ (แสดง ≈) */
+  exact: boolean;
+}
+
+export async function lossEvents(
+  db: Pick<TxClient, "itemStatusLog" | "stockAdjustment">,
+  range?: { gte: Date; lte: Date },
+  item?: Prisma.ItemWhereInput,
+): Promise<LossEvent[]> {
+  const itemWhere = item ? { item } : {};
+  const [logs, adjustments] = await Promise.all([
+    db.itemStatusLog.findMany({
+      where: {
+        newStatus: { in: [ItemStatus.LOST, ItemStatus.DISPOSED] },
+        recoveredAt: null,
+        ...(range ? { changedAt: range } : {}),
+        ...itemWhere,
+      },
+      select: {
+        changedAt: true, newStatus: true, qty: true,
+        item: { select: { id: true, code: true, name: true, purchasePrice: true, issueUnit: { select: { name: true } }, category: { select: { profile: { select: { dispenseType: true } } } } } },
+        subItem: { select: { receiveRecord: { select: { unitCost: true } } } },
+      },
+    }),
+    db.stockAdjustment.findMany({
+      where: {
+        reason: { in: [AdjustmentReason.LOST, AdjustmentReason.DISPOSAL] },
+        recoveredAt: null,
+        ...(range ? { adjustedAt: range } : {}),
+        ...itemWhere,
+      },
+      select: {
+        adjustedAt: true, reason: true, previousQty: true, newQty: true,
+        item: { select: { id: true, code: true, name: true, purchasePrice: true, issueUnit: { select: { name: true } }, category: { select: { profile: { select: { dispenseType: true } } } } } },
+      },
+    }),
+  ]);
+
+  const events: LossEvent[] = [];
+
+  for (const l of logs) {
+    // qty เป็น null บนทุกแถวที่เป็นการเปลี่ยนสถานะของชิ้นเดียว — ดูคอมเมนต์ที่ schema
+    const qty = l.qty ?? 1;
+    const { value, exact } = writeOffValue(l.subItem?.receiveRecord?.unitCost, l.item.purchasePrice);
+    events.push({
+      at: l.changedAt,
+      kind: l.newStatus === ItemStatus.LOST ? "LOST" : "DISPOSED",
+      itemId: l.item.id,
+      itemCode: l.item.code,
+      itemName: l.item.name,
+      unitName: l.item.issueUnit.name,
+      isConsumable: l.item.category.profile?.dispenseType === "CONSUMABLE",
+      qty,
+      value: value == null ? null : value * qty,
+      exact,
+    });
+  }
+
+  for (const a of adjustments) {
+    // ยอดที่หายไป = ที่ลดลงจริง. แถวที่ยอดไม่ลด (แก้ข้อมูลกลับ) ไม่ใช่ของที่เสียไป
+    const qty = a.previousQty - a.newQty;
+    if (qty <= 0) continue;
+    // ยอดนับจำนวนไม่มีใบรับเข้าของตัวเอง — ราคาเฉลี่ยของรายการคือคำตอบเดียวที่มี จึงไม่มีทาง exact
+    const { value, exact } = writeOffValue(null, a.item.purchasePrice);
+    events.push({
+      at: a.adjustedAt,
+      kind: a.reason === AdjustmentReason.LOST ? "LOST" : "DISPOSED",
+      itemId: a.item.id,
+      itemCode: a.item.code,
+      itemName: a.item.name,
+      unitName: a.item.issueUnit.name,
+      isConsumable: a.item.category.profile?.dispenseType === "CONSUMABLE",
+      qty,
+      value: value == null ? null : value * qty,
+      exact,
+    });
+  }
+
+  return events.sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+/** ยอดรวมของกอง LossEvent — การ์ดทุกใบที่พูดถึงของหายอ่านผ่านตัวนี้ตัวเดียว. */
+export function summariseLosses(events: LossEvent[]) {
+  const priced = events.filter((e) => e.value != null);
+  return {
+    qty: events.reduce((s, e) => s + e.qty, 0),
+    /** จำนวนหน่วยที่ตีราคาไม่ได้เลย จึงไม่อยู่ใน value — ตัวหารที่บอกว่ายอดครอบคลุมแค่ไหน */
+    unpricedQty: events.filter((e) => e.value == null).reduce((s, e) => s + e.qty, 0),
+    value: priced.reduce((s, e) => s + (e.value ?? 0), 0),
+    /** false = มีอย่างน้อยหนึ่งหน่วยที่ตีจากราคาเฉลี่ย ไม่ใช่ยอดที่จ่ายจริง (แสดง ≈) */
+    exact: priced.every((e) => e.exact),
+    events: events.length,
+  };
 }
 
 // ── มูลค่าคงคลัง — one valuation, read by both the tab and its export ──

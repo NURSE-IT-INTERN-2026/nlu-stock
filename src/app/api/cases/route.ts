@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
-import { caseRangeStart, listCases, summariseCases, type CaseFilter, type CaseState, type CaseType } from "@/lib/cases";
+import { caseRangeBounds, listCases, summariseCases, type CaseFilter, type CaseState, type CaseType } from "@/lib/cases";
 
 const TYPES = new Set(["REPAIR", "MAINTENANCE", "BORROW", "INUSE", "LOST"]);
 const STATES = new Set(["OPEN", "DONE", "CANCELLED"]);
@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
     // ซึ่งจะลากตั้งใช้ในห้องกับยืมที่ยังไม่ถึงกำหนดเข้ามาด้วย
     ...(p.get("todo") === "true" ? { todo: true } : {}),
   };
-  const from = caseRangeStart(p.get("range"));
+  const { from, to } = caseRangeBounds(p.get("range"));
   if (from) filter.from = from;
+  if (to) filter.to = to;
 
   const cases = await listCases(filter);
   const { page, perPage, skip, take } = paginate(p);

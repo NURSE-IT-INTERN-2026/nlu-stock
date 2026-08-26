@@ -42,7 +42,9 @@ export interface FilterValues {
   status?: string;
   loanStatus?: string; // ออกจากคลัง: "open" | "overdue" (export only — the tab drives it via `status`)
   kind?: string; // ออกจากคลัง: consume | borrow | inuse (export only — the segment drives it)
-  side?: string; // มูลค่าคงคลัง: consumable | durable (export only — the segment drives it)
+  // ฝั่งของ tab ที่แบ่งเป็นสองก้อน — มูลค่าคงคลัง: consumable | durable,
+  // ค่าใช้จ่ายรายปี: consumable | other. (export only — the segment drives it)
+  side?: string;
   year?: string;
   maintenanceType?: string;
   from?: string; // status-log previousStatus (export only — not rendered)
@@ -51,6 +53,9 @@ export interface FilterValues {
 
 export interface FilterConfig {
   dateRange?: boolean;
+  /** ปุ่มลัดเลือกทั้งปี — เขียนทับ dateFrom/dateTo เป็น 1 ม.ค.–31 ธ.ค. ของปีที่เลือก.
+   *  ไม่ใช่ตัวกรอง `year` (ค่าแยกของค่าใช้จ่ายรายปี) — อันนี้เป็นแค่มือที่กรอก date picker ให้ */
+  yearQuick?: boolean;
   profiles?: boolean;
   categories?: boolean;
   locations?: boolean;
@@ -103,7 +108,12 @@ interface CategoryLite extends Option {
   profile?: { id: string } | null;
 }
 
-const dateInputCls = "h-8 flex-1 min-w-0 sm:flex-none sm:w-[150px] rounded-lg border-border bg-background text-sm";
+// 150px เดิมเหลือที่ให้ข้อความ 74px แต่ "31 ธ.ค. 2569" กว้าง 87px — วันที่จึงถูกตัดเป็น
+// "31 ธ.ค. 2…" ทุกครั้งที่เดือนหรือวันเป็นสองหลัก. 176px เหลือที่ให้ข้อความ 100px ซึ่งพอสำหรับ
+// วันที่ยาวที่สุดที่ thaiDate สร้างได้ บวกที่เผื่อไว้เล็กน้อย.
+// บนมือถือกว้างเต็มแถว ไม่ใช่ครึ่งแถว: จอ 375px หารสองแล้วเหลือที่ให้ข้อความ 59px ซึ่งตัดวันที่
+// ทุกกรณี — สองช่องเรียงกันจึงแสดงเต็มไม่ได้เลย ต้องซ้อนกัน
+const dateInputCls = "h-8 w-full min-w-0 sm:w-44 rounded-lg border-border bg-background text-sm";
 
 function FilterSelect({
   icon: Icon,
@@ -204,8 +214,12 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
 
+  // นับเฉพาะตัวกรองที่มองเห็นอยู่จริง — segment ที่ไม่มีช่องวันที่ (ภาพนิ่ง) ยังถือค่าวันที่ของ
+  // segment ก่อนหน้าไว้ใน state และจะทำให้ปุ่ม "ล้างตัวกรอง" โผล่มาโดยไม่มีอะไรบนจอให้ล้าง
+  const dateActive = config.dateRange || config.yearQuick;
   const activeCount = [
-    values.dateFrom, values.dateTo, values.profileId, values.categoryId,
+    dateActive ? values.dateFrom : undefined, dateActive ? values.dateTo : undefined,
+    values.profileId, values.categoryId,
     values.locationId, values.staffId, values.recipient, values.usageType, values.status,
     values.maintenanceType,
     values.year && values.year !== String(currentYear) ? values.year : undefined,
@@ -230,15 +244,40 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
+        {config.yearQuick && (() => {
+          // ปีที่ "เลือกอยู่" อ่านย้อนจากค่าใน date picker — ไม่มี state ของตัวเอง จึงไม่มีวัน
+          // เถียงกับ picker: พิมพ์ช่วงเองเมื่อไรป้ายก็ตกเป็น "กำหนดเอง" เอง
+          const selected = years.find(
+            (y) => values.dateFrom === `${y}-01-01` && values.dateTo === `${y}-12-31`,
+          );
+          return (
+            <FilterSelect
+              icon={CalendarRange}
+              value={selected ?? "custom"}
+              placeholder="ปี"
+              selectedLabel={selected ? `พ.ศ. ${Number(selected) + 543}` : "กำหนดเอง"}
+              onValueChange={(v) => {
+                if (v === "custom") return;
+                onChange({ ...values, dateFrom: `${v}-01-01`, dateTo: `${v}-12-31` });
+              }}
+            >
+              {years.map((y) => (
+                <SelectItem key={y} value={y}>{`พ.ศ. ${Number(y) + 543}`}</SelectItem>
+              ))}
+            </FilterSelect>
+          );
+        })()}
         {config.dateRange && (
-          <div className="flex w-full items-center gap-1.5 sm:w-auto">
+          // ซ้อนบนมือถือ เรียงกันบนจอกว้าง. "ถึง" ต้องอยู่ต่อไปแม้ตอนซ้อน — พอเลือกวันแล้ว
+          // placeholder "จากวันที่/ถึงวันที่" ถูกแทนที่ด้วยตัววันที่ ไม่มีอะไรเหลือบอกว่าช่องไหนคือช่องไหน
+          <div className="flex w-full flex-col items-stretch gap-1.5 sm:w-auto sm:flex-row sm:items-center">
             <DatePicker
               value={values.dateFrom ?? ""}
               onChange={(v) => onChange({ ...values, dateFrom: v || undefined })}
               placeholder="จากวันที่"
               className={dateInputCls}
             />
-            <span className="text-xs text-muted-foreground">ถึง</span>
+            <span className="text-center text-xs text-muted-foreground sm:text-left">ถึง</span>
             <DatePicker
               value={values.dateTo ?? ""}
               onChange={(v) => onChange({ ...values, dateTo: v || undefined })}
