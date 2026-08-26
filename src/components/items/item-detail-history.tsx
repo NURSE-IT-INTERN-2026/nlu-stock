@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight, ChevronDown, ExternalLink,
-  ListFilter, CircleDot, CalendarDays, FilterX, Search,
+  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight,
+  ListFilter, CircleDot, CalendarDays, FilterX, Search, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
@@ -16,7 +16,6 @@ import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { EVENT_TYPE_LABELS, type TimelineEventType } from "@/lib/constants";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DIALOG_SHELL_FIT, DIALOG_BODY } from "@/components/ui/dialog";
 
 import { AttachmentList } from "@/components/shared/attachment-list";
 import { Input } from "@/components/ui/input";
@@ -69,6 +68,10 @@ interface RepairTrip {
 type Unit = TimelineEvent | RepairTrip;
 
 const isTrip = (u: Unit): u is RepairTrip => "steps" in u;
+
+/** คีย์ของแถวหนึ่งแถวในรายการ. ต้องมี prefix: ไอดีของเคสคือไอดีของแถวต้นทาง ซึ่งบางเคส (ชิ้นที่
+ *  ติดตามรายชิ้น) ใช้ไอดีเดียวกับ event ที่เปิดมัน — ไม่มี prefix แล้วสองแถวจะเป็นแถวเดียวกัน. */
+const unitKey = (u: Unit) => (isTrip(u) ? `case:${u.id}` : `ev:${u.id}`);
 
 // Movement types lead with colour (stock left / stock came back); the three that don't touch
 // stock share one quiet muted badge, so the eye separates "ของขยับ" from "เหตุการณ์อื่น" before
@@ -156,9 +159,8 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   const [search, setSearch] = useState("");
   const [counts, setCounts] = useState<Counts>({});
   const [unit, setUnit] = useState("");
-  const [selected, setSelected] = useState<TimelineEvent | null>(null);
-  // เคสที่กำลังเปิดอ่านอยู่ — รายละเอียดมาจาก CaseDetailPane ตัวเดียวกับหน้าเคส
-  const [openCase, setOpenCase] = useState<string | null>(null);
+  // แถวที่เลือกอยู่ — เคสหรือกิจกรรมก็คีย์เดียวกัน เพราะทั้งคู่ยึดช่องรายละเอียดช่องเดียวกัน
+  const [selected, setSelected] = useState<string | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   // A keystroke per request would put one full history build behind every letter.
@@ -207,6 +209,15 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   ];
   const dirty = typeFilter !== "all" || state !== "all" || range !== "all" || !!search;
   const clear = () => { setTypeFilter("all"); setState("all"); setRange("all"); setQ(""); };
+
+  // Derived, not stored — เหมือนเวิร์กสเปซเคส: แถวที่เลือกไว้แล้วตัวกรองใหม่คัดออก ต้องไม่ค้างอยู่
+  // เป็น state ที่คนกดกลับไปหาไม่ได้. บนจอใหญ่ตกมาที่แถวแรกเพื่อไม่ให้ช่องขวาว่างเปล่าตั้งแต่เปิด.
+  const active = useMemo(() => {
+    const found = events.find((u) => unitKey(u) === selected);
+    if (found) return found;
+    if (isMobile) return null;
+    return events[0] ?? null;
+  }, [events, selected, isMobile]);
   // ตัวกรองชุดเดียวกับที่ fetchPage ยิงไป ลบ `page`/`perPage` ทิ้ง — การแบ่งหน้าเป็นเรื่องของจอ
   // ไฟล์ส่งออกทั้งชุดที่กรองไว้เสมอ.
   const exportFilters = (): Record<string, string | undefined> => ({
@@ -220,61 +231,55 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
     ...(search ? { q: search } : {}),
   });
 
-  return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      {/* ── Header ──
-          The four bands are one card, so their padding is what tells them apart: the header
-          breathes most, the filter half as much, the table least (it is data — density is the
-          point), the footer back to the filter's rhythm. Equal padding everywhere is what made
-          the card read as one dense block with hairlines through it. */}
-      <header className="border-b border-border px-5 py-6 sm:px-8">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
-            <h2 className="mt-1.5 text-lg font-semibold leading-tight tracking-tight">ประวัติ</h2>
-          </div>
-          {/* ไฟล์ได้ชุดเดียวกับที่กรองอยู่บนจอ ไม่ใช่ทั้งประวัติเสมอ — ปุ่มส่งออกที่ไม่ฟังตัวกรอง
-              คือไฟล์ที่ต้องมาเถียงกันทีหลังว่าทำไมเลขไม่ตรงกับหน้าจอ. */}
-          <ExportButtons reportType="item-history" filters={exportFilters()} />
+  const filters = (
+    // แถบตัวกรองเต็มความกว้าง เหนือสองคอลัมน์ — เหมือนเวิร์กสเปซเคส. อยู่ในการ์ดรายการไม่ได้แล้ว
+    // เพราะมันกรองทั้งสองฝั่ง ไม่ใช่แค่ฝั่งซ้าย.
+    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
+          <h2 className="mt-1.5 text-lg font-semibold leading-tight tracking-tight">ประวัติ</h2>
         </div>
-      </header>
-
-      {/* ── Filters ──
-          ชุดเดียวกับที่เวิร์กสเปซเคสใช้ เพราะที่นี่ก็อ่านเคสใบเดียวกัน. "ประเภท" เป็นช่องเดียว
-          ไม่ใช่ชิปชนิดเหตุการณ์ 12 ใบซ้อนกับ dropdown ประเภทเคสอีกอัน — สองระบบที่ทับกันบนจอเดียว
-          คือตัวกรองที่เถียงกันเอง (เลือกซ่อมแซม + ชิปรับเข้า = ว่างเสมอ). */}
-      <div className="border-b border-border bg-muted/30 px-5 py-4 sm:px-8">
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label="ประเภท">
-            <FilterSelect icon={ListFilter} value={typeFilter} onValueChange={setTypeFilter} options={typeOptions} />
-          </Field>
-          {/* สถานะเป็นคำถามของงาน ไม่ใช่ของของ — เลือกแล้วแถวรับเข้า/ย้ายที่ตั้งหายไปโดยตั้งใจ */}
-          <Field label="สถานะงาน">
-            <FilterSelect icon={CircleDot} value={state} onValueChange={setState} options={STATE_OPTIONS} />
-          </Field>
-          <Field label="ช่วงเวลา">
-            <FilterSelect icon={CalendarDays} value={range} onValueChange={setRange} options={RANGE_OPTIONS} />
-          </Field>
-          <div className="min-w-[180px] flex-1">
-            <p className="mb-1.5 text-[11px] text-muted-foreground">ค้นหา</p>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="เลขเคส, เรื่อง, ผู้ทำรายการ"
-                className="h-8 pl-8"
-              />
-            </div>
-          </div>
-          {dirty && (
-            <Button variant="outline" className="gap-1.5" onClick={clear}>
-              <FilterX className="size-4" /> ล้างตัวกรอง
-            </Button>
-          )}
-        </div>
+        {/* ไฟล์ได้ชุดเดียวกับที่กรองอยู่บนจอ ไม่ใช่ทั้งประวัติเสมอ — ปุ่มส่งออกที่ไม่ฟังตัวกรอง
+            คือไฟล์ที่ต้องมาเถียงกันทีหลังว่าทำไมเลขไม่ตรงกับหน้าจอ. */}
+        <ExportButtons reportType="item-history" filters={exportFilters()} />
       </div>
+      {/* "ประเภท" เป็นช่องเดียว ไม่ใช่ชิปชนิดเหตุการณ์ 12 ใบซ้อนกับ dropdown ประเภทเคสอีกอัน —
+          สองระบบที่ทับกันบนจอเดียวคือตัวกรองที่เถียงกันเอง (เลือกซ่อมแซม + ชิปรับเข้า = ว่างเสมอ). */}
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="ประเภท">
+          <FilterSelect icon={ListFilter} value={typeFilter} onValueChange={setTypeFilter} options={typeOptions} />
+        </Field>
+        {/* สถานะเป็นคำถามของงาน ไม่ใช่ของของ — เลือกแล้วแถวรับเข้า/ย้ายที่ตั้งหายไปโดยตั้งใจ */}
+        <Field label="สถานะงาน">
+          <FilterSelect icon={CircleDot} value={state} onValueChange={setState} options={STATE_OPTIONS} />
+        </Field>
+        <Field label="ช่วงเวลา">
+          <FilterSelect icon={CalendarDays} value={range} onValueChange={setRange} options={RANGE_OPTIONS} />
+        </Field>
+        <div className="min-w-[180px] flex-1">
+          <p className="mb-1.5 text-[11px] text-muted-foreground">ค้นหา</p>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="เลขเคส, เรื่อง, ผู้ทำรายการ"
+              className="h-8 pl-8"
+            />
+          </div>
+        </div>
+        {dirty && (
+          <Button variant="outline" className="gap-1.5" onClick={clear}>
+            <FilterX className="size-4" /> ล้างตัวกรอง
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 
+  const list = (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
       {loading ? (
         <div className="space-y-2 p-4 sm:p-6">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
@@ -284,18 +289,19 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           {dirty ? "ไม่มีรายการที่ตรงกับตัวกรอง" : "ยังไม่มีประวัติของพัสดุนี้"}
         </p>
       ) : (
-        <ol className="p-4 sm:p-6">
-          {events.map((u, i) => (
-            isTrip(u)
-              ? <CaseBlock key={`case:${u.id}`} trip={u} unit={unit} onSelect={setSelected} onOpenCase={setOpenCase} last={i === events.length - 1} />
-              : <MovementRow key={u.id} e={u} unit={unit} onSelect={setSelected} last={i === events.length - 1} />
-          ))}
+        <ol className="p-4 sm:p-5">
+          {events.map((u, i) => {
+            const key = unitKey(u);
+            const on = active != null && unitKey(active) === key;
+            return isTrip(u)
+              ? <CaseBlock key={key} trip={u} unit={unit} selected={on} onSelect={() => setSelected(key)} last={i === events.length - 1} />
+              : <MovementRow key={key} e={u} unit={unit} selected={on} onSelect={() => setSelected(key)} last={i === events.length - 1} />;
+          })}
         </ol>
       )}
 
-      {/* ── Footer / pagination ── */}
       {!loading && events.length > 0 && (
-        <div className="space-y-2 border-t border-border bg-muted/30 px-5 py-4 sm:px-8">
+        <div className="space-y-2 border-t border-border bg-muted/30 px-5 py-4">
           <p className="text-xs text-muted-foreground">
             แสดง <span className="font-semibold tabular-nums text-foreground">{events.length}</span> จาก{" "}
             <span className="tabular-nums">{total}</span> รายการ
@@ -317,37 +323,66 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           ))}
         </div>
       )}
-
-      {/* รายละเอียดเคสเต็มใบ — component ตัวเดียวกับที่หน้าเคสใช้ ไม่ใช่ของที่เขียนซ้ำไว้อีกหน้า.
-          เดิมปุ่มนี้เป็นลิงก์ออกไปแท็บเคสงานในหน้ารายงาน ซึ่งกำลังจะไม่มีแล้ว. */}
-      <Dialog open={!!openCase} onOpenChange={(o) => !o && setOpenCase(null)}>
-        <DialogContent className={DIALOG_SHELL_FIT}>
-          <DialogHeader>
-            <DialogTitle>รายละเอียดเคส</DialogTitle>
-            <DialogDescription className="sr-only">ขั้นตอน หลักฐาน และข้อมูลของเคสนี้</DialogDescription>
-          </DialogHeader>
-          <div className={DIALOG_BODY}>
-            {openCase && <CaseDetailPane caseId={openCase} onOpenCase={setOpenCase} canEdit={canEdit} />}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <EventDetailDialog
-        event={selected}
-        unit={unit}
-        canEdit={canEdit}
-        attachOverride={attachOverride}
-        onAttachChange={(key, urls) => setAttachOverride((m) => ({ ...m, [key]: urls }))}
-        onClose={() => setSelected(null)}
-      />
     </section>
+  );
+
+  // เคสใช้ CaseDetailPane ตัวเดียวกับหน้ารายการสิ่งที่ต้องทำ; กิจกรรมที่ไม่ใช่เคส (รับเข้า, ปรับสต๊อก,
+  // ย้ายที่ตั้ง) ไม่มีเคสให้เปิด จึงมีช่องของตัวเองที่ยึดที่เดียวกัน — ช่องขวาตอบแถวที่เลือกไว้เสมอ
+  // ไม่ว่าแถวนั้นจะเป็นงานหรือเป็นแค่ของที่ขยับ.
+  const detail = !active ? <EmptyPane /> : isTrip(active) ? (
+    <CaseDetailPane caseId={caseIdOf(active)} onOpenCase={() => {}} canEdit={canEdit} />
+  ) : (
+    <EventDetailPane
+      event={active}
+      unit={unit}
+      canEdit={canEdit}
+      attachOverride={attachOverride}
+      onAttachChange={(key, urls) => setAttachOverride((m) => ({ ...m, [key]: urls }))}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        {filters}
+        {active ? (
+          <div>
+            <Button variant="ghost" className="mb-2 gap-1.5" onClick={() => setSelected(null)}>
+              <ArrowLeft className="size-4" /> กลับไปรายการ
+            </Button>
+            {detail}
+          </div>
+        ) : list}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {filters}
+      {/* 1:2 เหมือนหน้ารายการสิ่งที่ต้องทำ — รายการมีแค่ชื่อ/วันที่/จำนวน ส่วนรายละเอียดคือที่ที่
+          ไทม์ไลน์กับหลักฐานอยู่จริง. minmax(0,…) ไม่ใช่ 1fr/2fr เปล่า: track ที่เป็น auto ปล่อยให้
+          ข้อความยาวดันคอลัมน์บวม.
+
+          แตกสองคอลัมน์ที่ xl ไม่ใช่ lg อย่างหน้ารายการสิ่งที่ต้องทำ: หน้านั้นกินความกว้างเต็มจอ
+          ส่วนตรงนี้อยู่ในหน้าที่มีแถบเมนูซ้ายกินไปแล้วราว 256px. ที่ 1024px คอลัมน์ซ้ายจึงเหลือ
+          233px ซึ่งตัดคำว่า "รับคืนจากซ่อม" เหลือ "รับคืนจาก…" ทุกแถว. ที่ 1280 ได้ ~330px
+          เท่ากับที่หน้าเคสได้ตอน 1024. */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        {list}
+        {detail}
+      </div>
+    </div>
   );
 }
 
-// ── Repair trip ───────────────────────────────────────────────────────────────
-// Closed trips arrive folded: the reader scanning a year of history wants the one line that
-// says "ซ่อมไปแล้ว จบ เท่าไหร่". An open one arrives expanded, because an open trip is the thing
-// somebody is waiting on and hiding its last step is hiding the answer.
+function EmptyPane() {
+  return (
+    <section className="grid place-items-center rounded-2xl border border-dashed border-border bg-card/40 py-24">
+      <p className="text-sm text-muted-foreground">เลือกรายการทางซ้ายเพื่อดูรายละเอียด</p>
+    </section>
+  );
+}
 
 const dayCount = (from: string) => Math.max(0, Math.floor((Date.now() - new Date(from).getTime()) / 86_400_000));
 
@@ -389,23 +424,6 @@ function CaseIcon({ trip, className }: { trip: RepairTrip; className?: string })
   return <Icon className={className} />;
 }
 
-/** เปิดเคสใบนี้เต็มๆ — อยู่หน้าเดิม ไม่เด้งออกไปไหน. หัวการ์ดกางขั้นตอน ปุ่มนี้เปิดรายละเอียด. */
-function CaseOpenButton({ trip, onOpenCase }: { trip: RepairTrip; onOpenCase: (id: string) => void }) {
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      onClick={(e) => { e.stopPropagation(); onOpenCase(caseIdOf(trip)); }}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onOpenCase(caseIdOf(trip)); } }}
-      title="เปิดเคสนี้"
-      aria-label={`เปิดเคส ${trip.code}`}
-      className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
-    >
-      <ExternalLink className="size-3.5" />
-    </span>
-  );
-}
-
 /** The rail every entry hangs off. `last` stops the line instead of running it off the end. */
 function Rail({ children, last, dot }: { children: ReactNode; last?: boolean; dot: ReactNode }) {
   return (
@@ -424,14 +442,13 @@ function Rail({ children, last, dot }: { children: ReactNode; last?: boolean; do
  * เพราะมันคือเคสเดียวกัน เลขเดียวกัน. เคสที่ปิดแล้วมาแบบพับ เคสที่ยังค้างมาแบบกาง — สิ่งที่ค้างอยู่คือ
  * สิ่งที่คนเปิดหน้านี้มาหา.
  */
-function CaseBlock({ trip, unit, onSelect, onOpenCase, last }: {
+function CaseBlock({ trip, unit, selected, onSelect, last }: {
   trip: RepairTrip;
   unit: string;
-  onSelect: (e: TimelineEvent) => void;
-  onOpenCase: (id: string) => void;
+  selected: boolean;
+  onSelect: () => void;
   last?: boolean;
 }) {
-  const [open, setOpen] = useState(!trip.done);
   const tone = tripTone(trip);
   return (
     <Rail
@@ -440,89 +457,45 @@ function CaseBlock({ trip, unit, onSelect, onOpenCase, last }: {
         <CaseIcon trip={trip} className="size-3.5" />
       </span>}
     >
-      <div className={cn("overflow-hidden rounded-xl border", trip.done ? "border-border" : "border-warning/40")}>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          className="flex w-full items-start gap-2 bg-muted/30 px-3 py-2.5 text-left transition hover:bg-muted/50"
-        >
-          {/* ประเภท → เรื่อง → เลขอ้างอิง. รหัสเคยนำหัวการ์ด ซึ่งอ่านแล้วรู้แค่ว่า "นี่คือเคส" —
-              RC-2569-0320 กับ RC-2569-0321 หน้าตาเหมือนกันเป๊ะ. ชื่อพัสดุไม่อยู่ที่นี่: หน้านี้คือ
-              หน้าของพัสดุตัวนั้นอยู่แล้ว เขียนซ้ำทุกการ์ดคือ noise (หน้า /cases เขียน เพราะปนหลายตัว). */}
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-sm font-semibold">{caseMeta(trip.caseType).name}</span>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", tone)}>
-                {trip.statusLabel || (trip.done ? caseMeta(trip.caseType).done : caseMeta(trip.caseType).open)}
-              </span>
-            </span>
-            {trip.subject && (
-              <span className="mt-0.5 block truncate text-sm text-foreground">{trip.subject}</span>
-            )}
-            <span className="mt-1 block truncate text-[11px] text-muted-foreground">
-              {trip.code && <><span className="font-mono">{trip.code}</span> · </>}
-              {tripMeta(trip, unit, true)} · {trip.steps.length} ขั้นตอน
-            </span>
-          </span>
-          <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-          {trip.code && <CaseOpenButton trip={trip} onOpenCase={onOpenCase} />}
-        </button>
-
-        {open && (
-          <ol className="divide-y divide-border">
-            {trip.steps.map((step) => (
-              <CaseStepRow key={step.id} e={step} unit={unit} onSelect={onSelect} />
-            ))}
-          </ol>
+      {/* เดิมการ์ดกางขั้นตอนอยู่ในตัวเอง แล้วมีปุ่มลิงก์ออกไปอีกหน้า. ตอนนี้ขั้นตอนอยู่ในช่องขวา
+          ทั้งหมด — กางซ้ำที่นี่ด้วยคือเล่าเรื่องเดียวกันสองที่บนจอเดียว. */}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected}
+        className={cn(
+          "w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left transition",
+          selected
+            ? "border-primary bg-primary/5"
+            : trip.done ? "border-border hover:bg-muted/40" : "border-warning/40 hover:bg-muted/40",
         )}
-      </div>
+      >
+        {/* ประเภท → เรื่อง → เลขอ้างอิง. รหัสเคยนำหัวการ์ด ซึ่งอ่านแล้วรู้แค่ว่า "นี่คือเคส" —
+            RC-2569-0320 กับ RC-2569-0321 หน้าตาเหมือนกันเป๊ะ. ชื่อพัสดุไม่อยู่ที่นี่: หน้านี้คือ
+            หน้าของพัสดุตัวนั้นอยู่แล้ว เขียนซ้ำทุกการ์ดคือ noise (หน้าเคสเขียน เพราะปนหลายตัว). */}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold">{caseMeta(trip.caseType).name}</span>
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", tone)}>
+            {trip.statusLabel || (trip.done ? caseMeta(trip.caseType).done : caseMeta(trip.caseType).open)}
+          </span>
+        </span>
+        {trip.subject && (
+          <span className="mt-0.5 block truncate text-sm text-foreground">{trip.subject}</span>
+        )}
+        <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+          {trip.code && <><span className="font-mono">{trip.code}</span> · </>}
+          {tripMeta(trip, unit, true)} · {trip.steps.length} ขั้นตอน
+        </span>
+      </button>
     </Rail>
   );
 }
 
-/** ขั้นตอนหนึ่งขั้นในเคส. จำนวนขึ้นเฉพาะตอนสต๊อกขยับจริง — ยอดของเคสอยู่บนหัวกล่องแล้ว. */
-function CaseStepRow({ e, unit, onSelect }: { e: TimelineEvent; unit: string; onSelect: (e: TimelineEvent) => void }) {
-  const moved = e.delta !== null || !!e.change;
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={() => onSelect(e)}
-        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2.5 text-left transition hover:bg-muted/30"
-      >
-        <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2">
-            <TypeChip type={e.type} />
-            <span className="truncate text-sm font-medium">{e.note}</span>
-          </span>
-          {e.subtitle && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{e.subtitle}</span>}
-          <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-            <Avatar name={e.user} />
-            {e.user}
-            <span className="tabular-nums">· {fmtDate(e.date, TH_DATE)} {timeOf(e.date)} น.</span>
-          </span>
-        </span>
-        {moved && (
-          <span className="shrink-0 text-right">
-            <Delta value={e.delta ?? e.qty} unit={unit} neutral={e.delta === null} />
-            <ChangeHint delta={e.delta} change={e.change} />
-          </span>
-        )}
-      </button>
-    </li>
-  );
-}
-
-/**
- * ความเคลื่อนไหวที่ไม่มีเคส — รับเข้า, เบิกสิ้นเปลือง, ปรับสต๊อก, ย้ายที่ตั้ง, สูญหาย. ของพวกนี้ไม่มีใคร
- * รออยู่และไม่มีจุดจบ จึงไม่ใช่เคส แต่ยังเป็นสิ่งที่เกิดกับของชิ้นนี้ และยอดคงเหลือของมันอ่านได้จาก
- * แถวพวกนี้เท่านั้น — นี่คือเหตุผลที่หน้านี้ไม่ใช่รายการเคสเฉยๆ.
- */
-function MovementRow({ e, unit, onSelect, last }: {
+function MovementRow({ e, unit, selected, onSelect, last }: {
   e: TimelineEvent;
   unit: string;
-  onSelect: (e: TimelineEvent) => void;
+  selected: boolean;
+  onSelect: () => void;
   last?: boolean;
 }) {
   return (
@@ -532,8 +505,12 @@ function MovementRow({ e, unit, onSelect, last }: {
     >
       <button
         type="button"
-        onClick={() => onSelect(e)}
-        className="group grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted/40"
+        onClick={onSelect}
+        aria-current={selected}
+        className={cn(
+          "group grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border px-3 py-2 text-left transition",
+          selected ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted/40",
+        )}
       >
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2">
@@ -569,31 +546,36 @@ const FOLDED_LABEL: Record<AttachRecordType, string> = {
   ItemStatusLog: "ไฟล์จากการเปลี่ยนสถานะของรายการนี้",
 };
 
-function EventDetailDialog({ event, unit, canEdit, attachOverride, onAttachChange, onClose }: {
-  event: TimelineEvent | null;
+/**
+ * รายละเอียดของกิจกรรมที่ไม่ใช่เคส — รับเข้า, ปรับสต๊อก, ย้ายที่ตั้ง, เปลี่ยนสถานะ.
+ *
+ * ยึดช่องขวาช่องเดียวกับ CaseDetailPane. เดิมเป็น dialog เพราะรายการเป็นคอลัมน์เดียว กดแล้ว
+ * ต้องมีที่ให้เนื้อหาไปโผล่; พอเป็นสองคอลัมน์แล้ว dialog กลายเป็นชั้นที่ต้องปิดก่อนถึงจะกดแถว
+ * ถัดไปได้ ทั้งที่ช่องที่มันจะไปอยู่ก็ว่างอยู่แล้ว.
+ */
+function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange }: {
+  event: TimelineEvent;
   unit: string;
   canEdit: boolean;
   attachOverride: Record<string, string[]>;
   onAttachChange: (key: string, urls: string[]) => void;
-  onClose: () => void;
 }) {
   // groups[0] is the record this timeline row IS; anything after it was folded in from a second
   // record telling the same event (a qty รับคืนจากซ่อม carries the closing MaintenanceRecord).
   // Only the first is editable — two identical "แนบเพิ่ม" buttons on one row is a choice nobody
   // can make, and the folded-in record is editable on its own บำรุงรักษา tab anyway. A folded-in
   // group with no files has nothing to say here, so it does not render at all.
-  const all = (event?.attachments ?? []).map((g) => ({ ...g, urls: attachOverride[attachKey(g)] ?? g.urls }));
+  const all = (event.attachments ?? []).map((g) => ({ ...g, urls: attachOverride[attachKey(g)] ?? g.urls }));
   const groups = all.filter((g, i) => i === 0 || g.urls.length > 0);
 
   return (
-    <Dialog open={!!event} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-md")}>
-        <DialogHeader>
-          <DialogTitle>รายละเอียดกิจกรรม</DialogTitle>
-          <DialogDescription className="sr-only">รายละเอียดของกิจกรรมในประวัติ</DialogDescription>
-        </DialogHeader>
-        {event && (
-          <div className={cn(DIALOG_BODY, "px-1")}>
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <header className="border-b border-border px-5 py-4">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
+        <h3 className="mt-1 text-base font-semibold leading-tight">{event.note}</h3>
+      </header>
+      <div className="px-5 py-4">
+        <div>
             <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
               <TypeChip type={event.type} />
               <Delta value={event.delta ?? event.qty} unit={unit} size="lg" neutral={event.delta === null} />
@@ -668,10 +650,9 @@ function EventDetailDialog({ event, unit, canEdit, attachOverride, onAttachChang
                 value={<span className="tabular-nums">{fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.</span>}
               />
             </dl>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </section>
   );
 }
 
