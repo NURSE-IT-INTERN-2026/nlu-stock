@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CaseDetailPane } from "@/components/cases/case-workspace";
 import { ExportButtons } from "@/components/reports/export-buttons";
 import type { AttachRecordType } from "@/lib/attachments";
+import { caseRangeOptions } from "@/lib/case-types";
 interface TimelineEvent {
   id: string;
   type: TimelineEventType;
@@ -129,13 +130,7 @@ const STATE_OPTIONS = [
   { value: "DONE", label: "เสร็จสิ้น" },
   { value: "CANCELLED", label: "ยกเลิก" },
 ];
-const RANGE_OPTIONS = [
-  { value: "all", label: "ทั้งหมด" },
-  { value: "7d", label: "7 วันล่าสุด" },
-  { value: "30d", label: "30 วันล่าสุด" },
-  { value: "90d", label: "90 วันล่าสุด" },
-  { value: "year", label: "ปีนี้" },
-];
+const RANGE_OPTIONS = caseRangeOptions();
 
 /** n = how many rows of that type; qty = how many units they moved (null = type never moves stock). */
 type Counts = Partial<Record<TimelineEventType, { n: number; qty: number | null }>>;

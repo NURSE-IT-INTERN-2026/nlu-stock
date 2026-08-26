@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import { CASE_TYPE_LABELS, type CaseState, type CaseType } from "@/lib/case-types";
+import { CASE_TYPE_LABELS, caseRangeOptions, type CaseState, type CaseType } from "@/lib/case-types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -49,13 +49,7 @@ const STATE_OPTIONS = [
   { value: "DONE", label: "เสร็จสิ้น" },
   { value: "CANCELLED", label: "ยกเลิก" },
 ];
-const RANGE_OPTIONS = [
-  { value: "all", label: "ทั้งหมด" },
-  { value: "7d", label: "7 วันล่าสุด" },
-  { value: "30d", label: "30 วันล่าสุด" },
-  { value: "90d", label: "90 วันล่าสุด" },
-  { value: "year", label: "ปีนี้" },
-];
+const RANGE_OPTIONS = caseRangeOptions();
 
 /**
  * เวิร์กสเปซเคส ตัวเดียว สามที่: /cases, แท็บประวัติของ /maintenance และของ /repairs.

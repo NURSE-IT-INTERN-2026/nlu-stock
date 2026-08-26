@@ -35,6 +35,23 @@ export function caseRangeStart(range: string | null): Date | undefined {
   return undefined;
 }
 
+/**
+ * ช่วงเวลาแบบมีทั้งต้นและปลาย. ค่าเดิม (7d/30d/90d/year) เปิดปลาย — "90 วันล่าสุด" จบที่ตอนนี้
+ * โดยนิยาม. ที่เพิ่มมาคือ `y2568` (ค.ศ. ใน value, พ.ศ. บนป้าย — เหมือน year select ของหน้ารายงาน):
+ * ปีที่จบไปแล้วต้องมีเพดาน ไม่งั้น "พ.ศ. 2568" อ่านว่า "ตั้งแต่ 2568" ซึ่งคือคนละตัวกรอง.
+ * `to` เป็น exclusive (lt) ตามที่ listCases ใช้อยู่แล้ว.
+ */
+export function caseRangeBounds(range: string | null): { from?: Date; to?: Date } {
+  const from = caseRangeStart(range);
+  if (from) return { from };
+  const m = range?.match(/^y(\d{4})$/);
+  if (m) {
+    const y = Number(m[1]);
+    return { from: new Date(y, 0, 1), to: new Date(y + 1, 0, 1) };
+  }
+  return {};
+}
+
 export type Attach = { recordType: AttachRecordType; recordId: string; urls: string[] };
 
 /**

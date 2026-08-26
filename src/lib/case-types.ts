@@ -22,3 +22,23 @@ export const CASE_STATE_LABELS: Record<CaseState, string> = {
   DONE: "เสร็จสิ้น",
   CANCELLED: "ยกเลิก",
 };
+
+/**
+ * ตัวเลือกของ dropdown "ช่วงเวลา" — ที่เดียว เพราะแท็บประวัติของพัสดุกับเวิร์กสเปซเคสต้องเสนอ
+ * ชุดเดียวกัน และค่า `y<ค.ศ.>` ต้องสะกดตรงกับที่ caseRangeBounds (src/lib/cases.ts) แปล.
+ * ปีย้อนหลังมีไว้ตัดกองประวัติที่โตขึ้นทุกปีให้เหลือทีละปี — label เป็น พ.ศ. เหมือนวันที่ทุกจุดในแอป.
+ */
+export function caseRangeOptions(): { value: string; label: string }[] {
+  const year = new Date().getFullYear();
+  return [
+    { value: "all", label: "ทั้งหมด" },
+    { value: "7d", label: "7 วันล่าสุด" },
+    { value: "30d", label: "30 วันล่าสุด" },
+    { value: "90d", label: "90 วันล่าสุด" },
+    { value: "year", label: "ปีนี้" },
+    ...Array.from({ length: 3 }, (_, i) => year - 1 - i).map((y) => ({
+      value: `y${y}`,
+      label: `พ.ศ. ${y + 543}`,
+    })),
+  ];
+}

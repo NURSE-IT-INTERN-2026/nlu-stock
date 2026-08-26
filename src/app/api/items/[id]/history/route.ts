@@ -10,7 +10,7 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 import type { AttachRecordType } from "@/lib/attachments";
 import { groupTimelineCases, type Booking, type TimelineCase } from "@/lib/timeline-cases";
-import { caseRangeStart, listCases, type CaseState } from "@/lib/cases";
+import { caseRangeBounds, listCases, type CaseState } from "@/lib/cases";
 
 // A history row as the table renders it. Three text fields, each with one job:
 //   note     — the bold title, the one thing worth scanning ("รับคืนจากซ่อม").
@@ -108,7 +108,7 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
   const typeFilter = searchParams.get("type");
   // ตัวกรองชุดเดียวกับที่เวิร์กสเปซเคสใช้ — หน้านี้เลิกเป็น "ประวัติที่กรองได้แค่ประเภท" แล้ว
   const stateFilter = searchParams.get("state") as CaseState | null;
-  const fromDate = caseRangeStart(searchParams.get("range"));
+  const { from: fromDate, to: toDate } = caseRangeBounds(searchParams.get("range"));
   const q = searchParams.get("q")?.trim().toLowerCase() || null;
   // Piece mode: only the sources that carry a subItemId can be scoped to one copy.
   // ReceiveRecord / StockAdjustment / LocationChangeLog are item-level and drop out.
@@ -493,8 +493,11 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
 
   let units = grouped;
   if (wanted) units = units.filter((u) => stepsOf(u).some((e) => wanted.has(e.type)));
-  // ช่วงเวลาวัดที่ขั้นตอนล่าสุด: เคสที่เปิดปีที่แล้วแต่เพิ่งปิดเมื่อวานคือความเคลื่อนไหวของสัปดาห์นี้
-  if (fromDate) units = units.filter((u) => stepsOf(u).some((e) => e.date >= fromDate));
+  // ช่วงเวลาวัดที่ขั้นตอนไหนก็ได้ที่ตกในช่วง: เคสที่เปิดปีที่แล้วแต่เพิ่งปิดเมื่อวานคือความเคลื่อนไหว
+  // ของสัปดาห์นี้ และนับเป็นของปีที่แล้วด้วยเมื่อกรองปีนั้น
+  if (fromDate || toDate)
+    units = units.filter((u) =>
+      stepsOf(u).some((e) => (!fromDate || e.date >= fromDate) && (!toDate || e.date < toDate)));
   // แถวที่ไม่ใช่เคสไม่มีสถานะให้กรอง — เลือกสถานะแล้วเหลือแต่งาน ไม่ใช่การเคลื่อนไหวของของ
   if (stateFilter) units = units.filter((u) => isCase(u) && caseOf(u)?.state === stateFilter);
   if (q) {

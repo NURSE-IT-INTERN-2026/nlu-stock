@@ -28,11 +28,12 @@ const SERIES = [
 type Datum = { month: string; label: string; total: number } & Record<string, number | string>;
 
 function ChartTooltip({
-  active, payload, colors,
+  active, payload, colors, unitWord,
 }: {
   active?: boolean;
   payload?: Array<{ dataKey: string; value: number; payload: Datum }>;
   colors: Record<string, string>;
+  unitWord: string;
 }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
@@ -40,7 +41,7 @@ function ChartTooltip({
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
       <p className="mb-1 font-medium text-foreground">
-        {monthLabel(row.month)} · รวม {row.total.toLocaleString()} หน่วย
+        {monthLabel(row.month)} · รวม {row.total.toLocaleString()} {unitWord}
       </p>
       {shown.length === 0 ? (
         <p className="text-muted-foreground">ไม่มีการใช้งาน</p>
@@ -63,11 +64,15 @@ export function UsageByMonthChart({
   months,
   hint,
   onSelect,
+  metric = "quantity",
 }: {
   months: UsageMonth[];
   hint: string;
   onSelect: (month: string) => void;
+  /** ยืมนับเป็นครั้ง (records) — จำนวนหน่วยของการยืมไม่บอกความถี่ (โน้ต requirement owner) */
+  metric?: "quantity" | "records";
 }) {
+  const unitWord = metric === "records" ? "ครั้ง" : "หน่วย";
   // One hook per series in a fixed order — useThemeColor re-resolves when the theme flips, and
   // a loop would break the rules-of-hooks contract the moment a series drops out.
   const colors: Record<string, string> = {
@@ -79,8 +84,12 @@ export function UsageByMonthChart({
   };
 
   const data: Datum[] = months.map((m) => {
-    const row: Datum = { month: m.month, label: monthLabelShort(m.month), total: m.totalQuantity };
-    for (const g of m.groups) row[g.group] = g.totalQuantity;
+    const row: Datum = {
+      month: m.month,
+      label: monthLabelShort(m.month),
+      total: metric === "records" ? m.records : m.totalQuantity,
+    };
+    for (const g of m.groups) row[g.group] = metric === "records" ? g.records : g.totalQuantity;
     return row;
   });
 
@@ -118,7 +127,7 @@ export function UsageByMonthChart({
         <div
           style={{ height: 280 }}
           role="img"
-          aria-label={`ยอดการใช้งานรายเดือน: ${data.map((d) => `${monthLabel(d.month)} ${d.total} หน่วย`).join(", ")}`}
+          aria-label={`ยอดการใช้งานรายเดือน: ${data.map((d) => `${monthLabel(d.month)} ${d.total} ${unitWord}`).join(", ")}`}
         >
           <ChartContainer>
             {({ width, height }) => (
@@ -127,12 +136,6 @@ export function UsageByMonthChart({
                 width={width}
                 height={height}
                 margin={{ top: 8, right: 8, bottom: 0, left: -12 }}
-                // activeIndex, not activePayload: recharts 3 stopped handing the row to the
-                // chart-level click handler and only names the tick that was hit.
-                onClick={(e) => {
-                  const hit = data[Number(e?.activeIndex)];
-                  if (hit) onSelect(hit.month);
-                }}
                 style={{ cursor: "pointer" }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -144,10 +147,16 @@ export function UsageByMonthChart({
                   width={48}
                   tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toLocaleString()}k` : String(v))}
                 />
-                <Tooltip content={<ChartTooltip colors={colors} />} cursor={{ fill: "var(--secondary)" }} />
+                <Tooltip content={<ChartTooltip colors={colors} unitWord={unitWord} />} cursor={{ fill: "var(--secondary)" }} />
+                {/* onClick อยู่บน <Bar> ไม่ใช่บน <BarChart>: chart-level click ของ recharts 3
+                    ส่ง activeIndex เป็น null และ `Number(null)` คือ 0 — คลิกเดือนไหนก็เปิดเดือน
+                    แรกเสมอโดยไม่มีอะไรฟ้อง. background โปร่งใสบนชั้นล่างสุดทำให้กดได้ทั้งความสูง
+                    ของแกน ไม่ใช่แค่บนกองที่เตี้ยของเดือนที่ใช้ของน้อย. */}
                 {active.map((s, i) => (
                   <Bar key={s.key} dataKey={s.key} stackId="usage" name={USAGE_GROUP_LABELS[s.key] ?? s.key}
                     fill={colors[s.key]} isAnimationActive={false}
+                    {...(i === 0 ? { background: { fill: "transparent" } } : {})}
+                    onClick={(d: { payload?: Datum }) => { if (d?.payload) onSelect(d.payload.month); }}
                     // เฉพาะแถบบนสุดของกองที่โค้งมุม ไม่งั้นทุกชั้นอ่านเป็นแท่งของตัวเอง
                     radius={i === active.length - 1 ? [6, 6, 0, 0] : undefined} />
                 ))}

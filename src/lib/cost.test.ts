@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { weightedUnitCost, writeOffValue } from "@/lib/cost";
+import { weightedUnitCost, writeOffValue, summariseLosses } from "@/lib/cost";
 
 test("weightedUnitCost weighs by quantity and ignores unpriced rows", () => {
   // The whole reason this is not a plain average: one cheap piece must not mark 10 down.
@@ -36,4 +36,27 @@ test("writeOffValue prefers the piece's own receipt over the item average", () =
 
   // ของฟรีจริงๆ ราคา 0 บาท ยังเป็นราคาที่กรอกไว้ ไม่ใช่ "ไม่มีข้อมูล" — ห้ามตกไปใช้ค่าเฉลี่ย
   assert.deepEqual(writeOffValue(0, 30000), { value: 0, exact: true });
+});
+
+test("summariseLosses keeps unpriced units out of the total but not out of the count", () => {
+  const e = (qty: number, value: number | null, exact = true) => ({
+    at: new Date("2026-03-01"), kind: "LOST" as const,
+    itemId: "i", itemCode: "C", itemName: "N", unitName: "ชิ้น", isConsumable: false,
+    qty, value, exact,
+  });
+
+  // ของที่ตีราคาไม่ได้ต้องอยู่ในจำนวน แต่ห้ามถูกนับเป็น ฿0 เข้ายอดเงิน — ไม่งั้น "หาย 8 ชิ้น
+  // มูลค่า ฿500" อ่านเหมือนราคาครบแล้ว ทั้งที่ครึ่งหนึ่งของกองยังไม่มีใครกรอกราคา
+  const s = summariseLosses([e(3, 300), e(5, null)]);
+  assert.equal(s.qty, 8);
+  assert.equal(s.unpricedQty, 5);
+  assert.equal(s.value, 300);
+  assert.equal(s.events, 2);
+
+  // แถวเดียวที่ตีจากราคาเฉลี่ยพอที่จะทำให้ทั้งยอดเป็นประมาณการ (แสดง ≈)
+  assert.equal(summariseLosses([e(1, 100), e(1, 100, false)]).exact, false);
+  assert.equal(summariseLosses([e(1, 100)]).exact, true);
+
+  // ไม่มีของหายเลย: ยอดเป็น 0 และ exact = true (ไม่มีอะไรให้ประมาณ) — การ์ดอ่าน qty ก่อนเสมอ
+  assert.equal(summariseLosses([]).qty, 0);
 });

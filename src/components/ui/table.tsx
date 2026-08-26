@@ -105,7 +105,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        // Datagrid density: 32px header, 36px rows. Height on th/td, never on tr —
+        // Datagrid density: 32px header and 32px rows. Height on th/td, never on tr —
         // a height on the row would drag the header row up to the body row's height too.
         "h-8 px-2 py-0 text-left align-middle text-xs font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
         className
@@ -120,7 +120,11 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "h-9 px-2 py-1 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        // h-8 เป็น "พื้นขั้นต่ำ" ไม่ใช่เพดาน — เซลล์ที่มีชิปหรือปุ่มข้างในยังดันแถวสูงขึ้นเองตามเนื้อหา.
+        // เดิมเป็น h-9 (36px) ทั้งที่ข้อความบรรทัดเดียวสูงจริง 30.9px (line-height 22.86 + py-1)
+        // ทุกแถวจึงลอยอยู่บนพื้นที่ว่าง 5px ที่ไม่มีอะไรอยู่ — วัดจากตารางออกจากคลัง 20/20 แถว
+        // ติดพื้น h-9 พอดีเป๊ะ แปลว่าไม่มีแถวไหนต้องการความสูงนั้นเลย
+        "h-8 px-2 py-1 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
