@@ -241,7 +241,7 @@ function MaintenanceShell() {
         {/* ── ตารางบำรุงรักษา ── */}
         {/* หัวเรื่อง ตัวกรอง ตาราง แบ่งหน้า = การ์ดใบเดียว ไม่ใช่สามก้อนลอยบนพื้นหลัง */}
         <section className="overflow-hidden rounded-2xl border bg-card">
-          <div className="border-b px-4 py-3">
+          <div className="px-4 pt-3">
             <h2 className="mb-3 text-lg font-semibold">ตารางบำรุงรักษา</h2>
 
             <ReportFilters
