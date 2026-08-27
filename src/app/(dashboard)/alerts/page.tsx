@@ -478,8 +478,8 @@ function AlertsContent() {
 
 /**
  * รายการสิ่งที่ต้องทำ — เวิร์กสเปซเคสตัวเดียวกับที่ /repairs, /maintenance และประวัติของพัสดุใช้
- * ต่างกันแค่ถูกล็อกไว้ที่งานที่ยังไม่จบ. กดแถวแล้วรายละเอียดเปิดข้างๆ ตรงนั้นเลย ไม่ต้องเด้งออก
- * ไปหน้าอื่นแล้วให้คนไล่หาแถวเดิมซ้ำอีกรอบ.
+ * ต่างกันแค่ถูกล็อกไว้ที่งานที่ยังไม่จบ. กดแถวแล้วรายละเอียดเปิดเป็น drawer ทับตารางตรงนั้น ปิดแล้ว
+ * กลับมาที่แถวเดิม — ไม่ต้องเด้งออกไปหน้าอื่นแล้วให้คนไล่หาแถวเดิมซ้ำอีกรอบ.
  */
 function TodoTab({ canEdit }: { canEdit: boolean }) {
   const [totals, setTotals] = useState<CaseTotalsJson | null>(null);
@@ -504,6 +504,7 @@ function TodoTab({ canEdit }: { canEdit: boolean }) {
 function exportFilters(query: string): Record<string, string | undefined> {
   const p = new URLSearchParams(query);
   p.delete("perPage");
+  p.delete("page");
   const type = p.get("type");
   p.delete("type");
   if (type) p.set("caseType", type);
