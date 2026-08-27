@@ -273,11 +273,11 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                   This just says which screen the damaged units are sitting on right now. */}
               {damagePending > 0 && (
                 <a
-                  href="/alerts?damagedPending=true"
+                  href="/repairs"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10 dark:text-danger-400"
                 >
                   <Flag className="size-4 shrink-0" />
-                  <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าแจ้งเตือน</span>
+                  <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าซ่อมแซม</span>
                 </a>
               )}
               {damageAtShop > 0 && (
