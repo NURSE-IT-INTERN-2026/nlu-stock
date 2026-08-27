@@ -33,7 +33,10 @@ export function OutstandingLoansTable() {
       }
       action={
         data && data.total > 0 ? (
-          <Link href="/alerts?overdueReturn=true" className="shrink-0 text-xs font-medium text-primary hover:underline">
+          // ไม่กรอง due=overdue: การ์ดนี้ขึ้นเมื่อ total > 0 ไม่ใช่ overdue > 0 — คลังที่มีของยืมออก
+          // 20 ชิ้นแต่ยังไม่เลยกำหนดสักชิ้น กดปุ่มนี้แล้วต้องเห็น 20 ชิ้นนั้น ไม่ใช่ลิสต์ว่าง.
+          // chip เกินกำหนด อยู่บน ReturnPanel ให้กดกรองเองได้อยู่แล้ว.
+          <Link href="/receive?tab=return" className="shrink-0 text-xs font-medium text-primary hover:underline">
             ทวงคืนทั้งหมด
           </Link>
         ) : undefined

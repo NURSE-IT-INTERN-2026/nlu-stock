@@ -38,8 +38,8 @@ export async function getAlertCounts(): Promise<AlertCounts> {
       },
     }),
     // Overdue maintenance = live tracked copies (schedule on SubItem) + flat items
-    // (schedule on Item). Pieces + items looks like mixed units but is not: this chip opens
-    // OverdueMaintenancePanel, and the maintenance-schedule report behind it emits exactly
+    // (schedule on Item). Pieces + items looks like mixed units but is not: the
+    // maintenance-schedule table this feeds (/maintenance, filter "overdue") emits exactly
     // one row per live copy and one per flat item. Keep the two shapes in step.
     Promise.all([
       prisma.subItem.count({
@@ -109,7 +109,24 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   // items. onLoan is not an alert — it is a normal state, filtered on /items instead.
   // openCases อยู่ในยอดรวมด้วย ไม่งั้นคลังที่มีแต่เคสค้างจะได้ total = 0 แล้วหน้า /alerts คืน
   // empty state ทิ้งไปทั้งหน้า ก่อนจะทันวาดแถบแท็บที่แท็บนั้นอยู่.
-  const total = lowStock + nearExpiry + overdueMaint + overdueReturn + damagedPending + dueCount + openCases;
+  //
+  // เกณฑ์ว่าอะไรบวกเข้ายอดรวมได้: **แท็บนั้นยังอยู่บน /alerts หรือเปล่า** — สี่ตัวแรกมีแท็บของตัวเอง
+  // บวก openCases ที่เป็นแท็บ `todo`. overdueReturn กับ damagedPending ไม่อยู่ในนี้ ทั้งที่ยัง
+  // คำนวณไว้ให้แถบบนหน้าแรกใช้: แท็บของมันย้ายไป /receive กับ /repairs แล้ว และของสองก้อนนั้น
+  // ถูกนับอยู่ใน openCases อยู่ก่อนแล้ว (isTodo รับ BORROW ที่เลยกำหนด, ชิ้น DAMAGED เปิดเป็นเคส
+  // REPAIR) — บวกเข้ามาอีกคือนับสองรอบ. ยอดรวมนี้เคยเป็น 1685 โดยที่ 286 ใบยืมเลยกำหนดถูกนับ
+  // ทั้งใน overdueReturn และใน openCases.
+  //
+  // สี่ตัวแรก **ไม่ใช่** เซ็ตเดียวกับที่แท็บ "ทั้งหมด" query (api/items `alerts=true`) แม้จะใช้
+  // เกณฑ์ตระกูลเดียวกัน: lowStock/nearExpiry/dueCount ตรงกันจริง แต่ overdueMaint ที่นี่นับ
+  // ชิ้น (SubItem.nextMaintenanceDate) รวมกับพัสดุแบบ flat ส่วน union ฝั่งโน้นดูแค่
+  // Item.nextMaintenanceDate — คนละหน่วยและคนละเซ็ต. ยอดรวมนี้ไม่เคยรับประกันว่าเท่ากับจำนวน
+  // แถวในแท็บไหน มันตอบแค่ "มีเรื่องค้างกี่เรื่อง".
+  //
+  // ผลพลอยที่รู้อยู่: ถ้า item alert เป็น 0 หมดแต่ openCases > 0 badge จะขึ้น N ทั้งที่ตารางใน
+  // แท็บ "ทั้งหมด" ว่าง — แถวพวกนั้นอยู่แท็บ `todo` ถัดไป. เป็น trade-off เดียวกับที่ย่อหน้าแรก
+  // เลือกไว้: badge ที่ไม่นับ openCases จะพาไป empty state ที่ทิ้งทั้งหน้า ซึ่งแย่กว่า.
+  const total = lowStock + nearExpiry + overdueMaint + dueCount + openCases;
 
   return {
     lowStock,

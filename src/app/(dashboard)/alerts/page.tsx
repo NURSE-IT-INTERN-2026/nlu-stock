@@ -21,9 +21,6 @@ import { usePageHeader } from "@/components/layout/page-header-context";
 import { getItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
-import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
-import { ReturnPanel } from "@/components/receive/return-panel";
-import { OverdueMaintenancePanel } from "@/components/items/overdue-maintenance-panel";
 import { CaseWorkspace } from "@/components/cases/case-workspace";
 import { ReportSummary, type SummaryStat } from "@/components/reports/report-summary";
 import { ExportButtons } from "@/components/reports/export-buttons";
@@ -56,7 +53,13 @@ interface ItemRecord {
 
 // `todo` เป็นแท็บเดียวที่แถวไม่ใช่พัสดุ แต่เป็นใบเคส — พัสดุชิ้นเดียวที่ทั้งชำรุดและเลยกำหนดคืน
 // เป็นสองงานที่ต้องทำคนละอย่าง ยุบเป็นแถวเดียวแล้วจะมีงานหนึ่งหายไปจากสายตา.
-type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "overdueMaint" | "overdueReturn" | "damagedPending" | "dueCount" | "todo";
+//
+// ทุกแท็บที่เหลือ render ตารางพัสดุ. คิวงานที่ต้องลงมือทำไม่อยู่ที่นี่แล้ว — เกินกำหนดคืนอยู่
+// /receive?tab=return&due=overdue, ชำรุดรอส่งซ่อมอยู่ /repairs, เกินกำหนดบำรุงอยู่ /maintenance.
+// สามแท็บนั้นเคยอยู่ที่นี่เป็นสำเนาแบบกดทำอะไรไม่ได้ของหน้าพวกนั้น: fetch ก้อนเดียวกัน จ่ายค่า
+// render เท่ากัน แล้วจบด้วยการเด้งคนไปอีกหน้าเพื่อกดปุ่ม. งานที่ค้างอยู่ยังเห็นได้ที่แท็บ
+// `todo` ซึ่งนับใบเคสจากที่มาเดียวกัน.
+type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "dueCount" | "todo";
 
 const ALERT_BADGE: Record<string, string> = {
   lowStock: "bg-orange-500/15 text-orange-700 border-orange-500/30",
@@ -69,8 +72,6 @@ const ALERT_LABEL: Record<string, string> = {
   lowStock: "ต่ำกว่าขั้นต่ำ",
   nearExpiry: "ใกล้หมดอายุ",
   overdueMaint: "เกินกำหนดซ่อมบำรุง",
-  overdueReturn: "คืนเกินกำหนด",
-  damagedPending: "ชำรุดรอดำเนินการ",
   dueCount: "ถึงรอบตรวจนับ",
 };
 
@@ -141,9 +142,6 @@ function AlertsContent() {
   const alertType: AlertTypeKey = useMemo(() => {
     if (searchParams.get("lowStock") === "true") return "lowStock";
     if (searchParams.get("nearExpiry") === "true") return "nearExpiry";
-    if (searchParams.get("overdueMaint") === "true") return "overdueMaint";
-    if (searchParams.get("overdueReturn") === "true") return "overdueReturn";
-    if (searchParams.get("damagedPending") === "true") return "damagedPending";
     if (searchParams.get("dueCount") === "true") return "dueCount";
     if (searchParams.get("todo") === "true") return "todo";
     return "all";
@@ -151,6 +149,8 @@ function AlertsContent() {
 
   const selectAlertType = useCallback((key: AlertTypeKey) => {
     const params = new URLSearchParams(searchParams.toString());
+    // แท็บที่ย้ายออกไปหน้าอื่นแล้วยังอยู่ในลิสต์นี้: bookmark เก่าที่ยังมี ?overdueReturn=true
+    // ติดมาต้องถูกล้างทิ้งตอนกดแท็บอื่น ไม่งั้นมันค้างใน URL ตลอดไป.
     for (const k of ["lowStock", "nearExpiry", "overdueMaint", "overdueReturn", "damagedPending", "dueCount", "todo"]) params.delete(k);
     if (key !== "all") params.set(key, "true");
     const qs = params.toString();
@@ -171,9 +171,8 @@ function AlertsContent() {
   const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); }, []);
 
   const fetchPage = useCallback(async (p: number) => {
-    // "แจ้งชำรุด", "เกินกำหนดคืน", and "เกินกำหนดซ่อม" render their own worklist panels below
-    // instead of the item table — skip the item fetch entirely while any is active.
-    if (alertType === "damagedPending" || alertType === "overdueReturn" || alertType === "overdueMaint" || alertType === "todo") {
+    // `todo` renders case rows, not items — skip the item fetch entirely while it is active.
+    if (alertType === "todo") {
       return { items: [], total: 0 };
     }
     const params: Record<string, string> = { page: String(p), perPage: String(perPage) };
@@ -198,15 +197,12 @@ function AlertsContent() {
 
   const alertChips: { key: AlertTypeKey; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: alerts.total },
-    // นำหน้าแท็บที่เหลือ: อีกหกแท็บบอกว่า "พัสดุตัวไหนผิดปกติ" แท็บนี้บอกว่า "ใครต้องไปทำอะไร"
+    // นำหน้าแท็บที่เหลือ: แท็บอื่นบอกว่า "พัสดุตัวไหนผิดปกติ" แท็บนี้บอกว่า "ใครต้องไปทำอะไร"
     // ซึ่งเป็นคำถามที่คนเปิดหน้านี้มาถามก่อน.
     { key: "todo", label: "รายการสิ่งที่ต้องทำ", count: alerts.openCases },
     { key: "lowStock", label: "ต่ำกว่าขั้นต่ำ", count: alerts.lowStock },
     { key: "nearExpiry", label: "ใกล้หมดอายุ", count: alerts.nearExpiry },
-    { key: "overdueMaint", label: "เกินกำหนดซ่อมบำรุง", count: alerts.overdueMaintenance },
     { key: "dueCount", label: "ถึงรอบตรวจนับ", count: alerts.dueCount },
-    { key: "overdueReturn", label: "เกินกำหนดคืน", count: alerts.overdueReturn },
-    { key: "damagedPending", label: "ชำรุด (รอส่งซ่อม)", count: alerts.damagedPending },
   ];
 
   // Reflect the active tab in the header breadcrumb ("การแจ้งเตือน › <tab>").
@@ -228,6 +224,14 @@ function AlertsContent() {
   }
 
   // No alerts at all → clean empty state, no tab strip / filter bar.
+  //
+  // ponytail: `total` ไม่มี overdueReturn/damagedPending อยู่ในนั้นแล้ว (ดู lib/alerts) หน้านี้จึง
+  // พูดว่า "ไม่มีรายการแจ้งเตือน" ได้ทั้งที่ยังมีของค้างคืน — ถ้า openCases ไม่ครอบสองก้อนนั้น.
+  // ตอนนี้ครอบอยู่ (isTodo รับ BORROW เลยกำหนด, ชิ้น DAMAGED เปิดเป็นเคส REPAIR) แต่มันจริง
+  // เพราะ implementation สามที่พ้องกัน ไม่ใช่เพราะโครงสร้างบังคับ. ถ้าวันไหนแก้จังหวะ stamp
+  // returnedAt หรือเกณฑ์ isTodo แล้วสองเซ็ตนั้นหลุดออกจากกัน gate นี้จะพังเงียบ — ตอนนั้นค่อย
+  // เปลี่ยนไปเช็ค `overdueReturn === 0 && damagedPending === 0` ตรงๆ พร้อมเทสที่ยันว่า
+  // openCases ⊇ overdueReturn ∪ damagedPending.
   if (alerts.total === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -238,18 +242,13 @@ function AlertsContent() {
     );
   }
 
-  // Panel branches (damagedPending / overdueReturn) own their internal scroll — give them a
-  // flex root that fills main so only the panel scrolls, not the page (no double scrollbar).
-  // overdueMaint is NOT here on purpose: it renders a plain page-flow table like the item tabs.
-  const isPanel = alertType === "damagedPending" || alertType === "overdueReturn";
-
   // Badge/detail column answers the active tab: a specific tab shows only its own type,
   // "ทั้งหมด" shows every reason the row is flagged.
   const typesFor = (item: ItemRecord) =>
     alertType === "all" ? item.alertTypes : item.alertTypes.filter((t) => t === alertType);
 
   return (
-    <div className={isPanel ? "flex flex-col h-full min-h-0 gap-3 sm:gap-6" : "space-y-3 sm:space-y-6"}>
+    <div className="space-y-3 sm:space-y-6">
       {/* Alert-type tabs — underline style, matches /settings. Sits ABOVE the filter
           bar so it reads as primary nav, distinct from the refinement pills below.
           Per-type color lives in the table badges; the tab strip stays uniform. */}
@@ -319,23 +318,7 @@ function AlertsContent() {
         </div>
       </div>
 
-      {alertType === "overdueMaint" ? (
-        <OverdueMaintenancePanel
-          profiles={profiles}
-          categories={categories}
-          locations={locations}
-          filter={filter}
-          onFilterChange={handleFilterChange}
-        />
-      ) : alertType === "damagedPending" ? (
-        <div className="flex-1 min-h-0">
-          <SubItemStatusPanel status="DAMAGED" emptyText="ไม่มีพัสดุที่แจ้งชำรุดอยู่" />
-        </div>
-      ) : alertType === "overdueReturn" ? (
-        <div className="flex-1 min-h-0">
-          <ReturnPanel initialChip="overdue" readOnly />
-        </div>
-      ) : alertType === "todo" ? (
+      {alertType === "todo" ? (
         <TodoTab canEdit={canManageStock(user?.role ?? "")} />
       ) : (
       <>
