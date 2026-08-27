@@ -276,9 +276,9 @@ function MaintenanceShell() {
           )}
           </div>
 
-          <div>
-            {/* คอลัมน์แรก/สุดท้ายเว้น 16px เท่าหัวเรื่อง ตัวกรอง และแถบแบ่งหน้า */}
-            <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)] [&_tr>*:first-child]:pl-4 [&_tr>*:last-child]:pr-4">
+          {/* ตารางเป็นกล่องของตัวเองในการ์ดใหญ่ เว้นขอบ 16px รอบด้าน ไม่ชนขอบการ์ด */}
+          <div className="m-4 overflow-hidden rounded-xl border">
+            <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
               <Table grid zebra className="table-fixed">
                 <TableHeader sticky>
                   <TableRow>
