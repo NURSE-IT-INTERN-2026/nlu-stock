@@ -16,6 +16,7 @@ import {
   CalendarRange, Wrench, X, Boxes, Package, Beaker, Hammer,
   Building2, Monitor, BookOpen, Puzzle, Search, type LucideIcon,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { USAGE_TYPE_LABELS } from "@/lib/constants";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import {
@@ -96,6 +97,8 @@ interface ReportFiltersProps {
   /** แถวบนสุดในการ์ดใบเดียวกัน — ที่ของ chip เลือก segment. มันคือตัวกรองอย่างหนึ่งเหมือนกัน
    *  การปล่อยให้ลอยอยู่นอกการ์ดทำให้อ่านเป็นหัวเรื่องที่ไม่มีบ้าน */
   leading?: ReactNode;
+  /** ทับกรอบการ์ดของตัวเอง เวลาถูกวางอยู่ในการ์ดใบใหญ่แล้ว */
+  className?: string;
 }
 
 interface Option {
@@ -188,7 +191,7 @@ function FilterSearch({
   );
 }
 
-export function ReportFilters({ config, values, onChange, actions, leading }: ReportFiltersProps) {
+export function ReportFilters({ config, values, onChange, actions, leading, className }: ReportFiltersProps) {
   const [categories, setCategories] = useState<CategoryLite[]>([]);
   const [locations, setLocations] = useState<Option[]>([]);
   const [staff, setStaff] = useState<Option[]>([]);
@@ -232,7 +235,7 @@ export function ReportFilters({ config, values, onChange, actions, leading }: Re
     : categories;
 
   return (
-    <div data-testid="report-filters" className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4">
+    <div data-testid="report-filters" className={cn("rounded-2xl border border-border/60 bg-card p-3 sm:p-4", className)}>
       {/* chip ซ้าย ปุ่ม export ขวา: แถวที่มีของอยู่ข้างเดียวอ่านเป็นที่ว่างครึ่งการ์ด และ export
           ก็เป็นของทั้งชุดข้อมูลที่ chip เลือกอยู่ ไม่ใช่ของตัวกรองบรรทัดล่าง */}
       {leading && (

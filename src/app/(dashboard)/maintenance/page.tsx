@@ -239,20 +239,21 @@ function MaintenanceShell() {
         </div>
 
         {/* ── ตารางบำรุงรักษา ── */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold sm:mb-4">ตารางบำรุงรักษา</h2>
+        {/* หัวเรื่อง ตัวกรอง ตาราง แบ่งหน้า = การ์ดใบเดียว ไม่ใช่สามก้อนลอยบนพื้นหลัง */}
+        <section className="overflow-hidden rounded-2xl border bg-card">
+          <div className="border-b px-4 py-3">
+            <h2 className="mb-3 text-lg font-semibold">ตารางบำรุงรักษา</h2>
 
-          <div className="mb-3 sm:mb-4">
             <ReportFilters
               config={{ dateRange: true, locations: true }}
               values={filters}
               onChange={setFilters}
               actions={<ExportButtons reportType="maintenance-schedule" filters={filters} />}
+              className="rounded-none border-0 bg-transparent p-0 sm:p-0"
             />
-          </div>
 
           {filter !== "all" && (
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 {filter === "overdue" ? "เกินกำหนดซ่อมบำรุง" : "ใกล้ถึงกำหนดซ่อมบำรุง"}
                 <button
@@ -273,9 +274,11 @@ function MaintenanceShell() {
               </button>
             </div>
           )}
+          </div>
 
-          <div className="overflow-hidden rounded-2xl border bg-card">
-            <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)]">
+          <div>
+            {/* คอลัมน์แรก/สุดท้ายเว้น 16px เท่าหัวเรื่อง ตัวกรอง และแถบแบ่งหน้า */}
+            <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-420px)] [&_tr>*:first-child]:pl-4 [&_tr>*:last-child]:pr-4">
               <Table grid zebra className="table-fixed">
                 <TableHeader sticky>
                   <TableRow>
