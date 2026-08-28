@@ -6,6 +6,7 @@ import { Upload, X, Loader2, Image as ImageIcon, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { uploadFile } from "@/lib/api";
 import { EVIDENCE_ACCEPT, MAX_EVIDENCE_FILES } from "@/lib/uploads";
+import { withBase } from "@/lib/base-path";
 
 export const isImageUrl = (url: string) => /\.(jpg|jpeg|png|webp)$/i.test(url);
 export const isPdfUrl = (url: string) => /\.pdf$/i.test(url);
@@ -72,7 +73,7 @@ export function FileUpload({ value, onChange, accept = EVIDENCE_ACCEPT, label = 
               <X className="h-3.5 w-3.5" />
             </button>
             {isImage ? (
-              <img src={value} alt="Preview" className="h-28 w-auto rounded object-contain mx-auto" />
+              <img src={withBase(value)} alt="Preview" className="h-28 w-auto rounded object-contain mx-auto" />
             ) : isPdf ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
                 <FileText className="h-5 w-5 shrink-0" />
@@ -127,7 +128,7 @@ export function FileUpload({ value, onChange, accept = EVIDENCE_ACCEPT, label = 
             <X className="h-3.5 w-3.5" />
           </Button>
           {isImage ? (
-            <img src={value} alt="Preview" className="h-24 w-auto rounded object-contain" />
+            <img src={withBase(value)} alt="Preview" className="h-24 w-auto rounded object-contain" />
           ) : isPdf ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <FileText className="h-5 w-5" />
@@ -221,10 +222,10 @@ export function FileUploadList({
                 <X className="h-3 w-3" />
               </button>
               {isImageUrl(url) ? (
-                <img src={url} alt={`หลักฐาน ${i + 1}`} className="size-16 rounded-md border border-border object-cover" />
+                <img src={withBase(url)} alt={`หลักฐาน ${i + 1}`} className="size-16 rounded-md border border-border object-cover" />
               ) : (
                 <a
-                  href={url}
+                  href={withBase(url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex size-16 flex-col items-center justify-center gap-0.5 rounded-md border border-border bg-muted/30 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"

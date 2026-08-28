@@ -14,6 +14,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { withBase } from "@/lib/base-path";
 
 type ImportType = "items-kru" | "items-bat" | "items-dur" | "items-con" | "items-kit" | "categories" | "locations" | "sub-items" | "kit-bom";
 
@@ -118,7 +119,7 @@ export function ImportTab() {
 
   async function downloadTemplate() {
     try {
-      const res = await fetch(`/api/settings/import?type=${importType}`);
+      const res = await fetch(withBase(`/api/settings/import?type=${importType}`));
       if (!res.ok) { toast.error("ดาวน์โหลดเทมเพลตไม่สำเร็จ"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

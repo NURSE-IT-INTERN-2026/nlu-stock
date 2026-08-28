@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getUnits } from "@/lib/api";
 import type { UnitOption } from "@/lib/api";
 import type { KitFormState } from "./types";
+import { withBase } from "@/lib/base-path";
 
 interface StepKitDetailsProps {
   form: KitFormState;
@@ -41,7 +42,7 @@ export function StepKitDetails({ form, onUpdate }: StepKitDetailsProps) {
   // preview code: NLU-KIT-NNN (server generate จริง ณ submit)
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/items/suggest-code?prefix=KIT`)
+    fetch(withBase(`/api/items/suggest-code?prefix=KIT`))
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (!cancelled && d?.suggestedCode) onUpdate({ code: d.suggestedCode as string });

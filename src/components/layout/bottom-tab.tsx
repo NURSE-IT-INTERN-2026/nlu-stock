@@ -16,6 +16,7 @@ import {
 import type { SessionUser } from "@/types";
 import { useAlerts } from "@/hooks/use-alerts";
 import { canManageStock } from "@/lib/roles";
+import { withBase } from "@/lib/base-path";
 
 const tabs = [
   { href: "/", label: "หน้าหลัก", icon: LayoutDashboard },
@@ -43,7 +44,7 @@ export function BottomTab({ user }: BottomTabProps) {
 
   async function handleLogout() {
     await logout();
-    window.location.href = "/login";
+    window.location.href = withBase("/login");
   }
 
   return (

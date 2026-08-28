@@ -4,6 +4,7 @@ import type { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult }
 // Role is NOT a Prisma enum — it comes from env allowlists.
 export { ROLES, type Role } from "@/lib/roles";
 import type { Role } from "@/lib/roles";
+import { BASE_PATH } from "@/lib/base-path";
 
 // ─── Item Condition (sub-item สภาพ) ───
 export const CONDITION_LABELS: Record<string, string> = {
@@ -312,8 +313,10 @@ export function formatSubCode(itemCode: string, subCode: string): string {
 // detail shell already honours ?copy=<subCode>, so no resolver route is needed.
 
 export function qrUrl(itemCode: string, subCode?: string | null): string {
+  // The fallback needs BASE_PATH spelled out: origin alone drops the subpath the app is
+  // served from, and a QR printed off that fallback would point at a 404.
   const base = process.env.NEXT_PUBLIC_APP_URL
-    || (typeof window !== "undefined" ? window.location.origin : "");
+    || (typeof window !== "undefined" ? window.location.origin + BASE_PATH : "");
   const q = subCode ? `?copy=${encodeURIComponent(subCode)}` : "";
   return `${base}/items/${encodeURIComponent(itemCode)}${q}`;
 }

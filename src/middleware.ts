@@ -42,8 +42,13 @@ function matchRoute(pathname: string): RouteRule | null {
 // Keep the scanned destination across the login bounce (external QR scan on a
 // phone that isn't signed in yet).
 function loginUrl(request: NextRequest) {
-  const url = new URL("/login", request.url);
-  url.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+  // clone() carries the basePath across; `new URL("/login", request.url)` resolves against
+  // the origin and silently drops it, landing on a 404 instead of the login page.
+  const url = request.nextUrl.clone();
+  const next = request.nextUrl.pathname + request.nextUrl.search;
+  url.search = "";
+  url.pathname = "/login";
+  url.searchParams.set("next", next);
   return url;
 }
 
@@ -79,7 +84,10 @@ export async function middleware(request: NextRequest) {
     // Check route rules
     const rule = matchRoute(pathname);
     if (rule?.allowedRoles && !rule.allowedRoles.includes(role)) {
-      return NextResponse.redirect(new URL("/", request.url));
+      const home = request.nextUrl.clone();
+      home.search = "";
+      home.pathname = "/";
+      return NextResponse.redirect(home);
     }
 
     return NextResponse.next();
