@@ -21,6 +21,11 @@ const maintenanceSchema = z.object({
   cost: z.number().min(0).optional().nullable(),
   nextMaintenanceAt: z.coerce.date().optional().nullable(),
   attachmentUrls: z.array(z.string()).default([]),
+  // ภายใน/ภายนอก. A PREVENTIVE round carries it straight from the form: ภายใน is recorded on
+  // the spot, ภายนอก arrives here only when the piece is being received back from the trip
+  // that parked it in กำลังบำรุงรักษา. CORRECTIVE ignores it and reads the ส่งซ่อม log instead —
+  // that venue is a fact already on record, not something the receiving form gets to restate.
+  repairVenue: z.enum(["INTERNAL", "EXTERNAL"]).optional().nullable(),
   subItemId: z.string().optional().nullable(),
   // The แจ้งชำรุด booking this job closes, for non-tracked (qty) stock. Its presence is what
   // makes this a qty repair: the job hands that exact booking's units back (or writes them
@@ -107,7 +112,7 @@ export async function POST(
           attachmentUrls: data.attachmentUrls,
           nextMaintenanceAt: nextAt ?? undefined,
           subItemId: data.subItemId ?? undefined,
-          repairVenue: venueLog?.repairVenue ?? undefined,
+          repairVenue: venueLog?.repairVenue ?? data.repairVenue ?? undefined,
         },
       });
 
@@ -220,22 +225,26 @@ export async function POST(
         // Re-derive item status/qty from the aggregated sub-item statuses.
         await recomputeItemCounts(tx, itemId);
       } else {
-        // Flat (non-tracked) item: schedule lives on the Item. DISPOSED is set here;
-        // AVAILABLE is left to qty derivation (recompute) below.
-        if (newStatus === ItemStatus.DISPOSED) {
-          const cur = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } });
-          if (cur.status !== newStatus) {
-            await tx.item.update({ where: { id: itemId }, data: { status: newStatus } });
-            await tx.itemStatusLog.create({
-              data: {
-                itemId,
-                previousStatus: cur.status,
-                newStatus,
-                reason,
-                changedBy: auth.user.userId,
-              },
-            });
-          }
+        // Flat (non-tracked) item: schedule lives on the Item. DISPOSED is set here, and so is
+        // the release from กำลังบำรุงรักษา — recomputeItemCounts keeps a manual hold instead of
+        // re-deriving it (lib/status-utils isManualHold), so an item sent out for an external
+        // round would sit there forever with nothing able to clear it. Every other AVAILABLE
+        // is still left to qty derivation below.
+        const cur = await tx.item.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } });
+        const mustSetStatus =
+          cur.status !== newStatus &&
+          (newStatus === ItemStatus.DISPOSED || cur.status === ItemStatus.PENDING_MAINTENANCE);
+        if (mustSetStatus) {
+          await tx.item.update({ where: { id: itemId }, data: { status: newStatus } });
+          await tx.itemStatusLog.create({
+            data: {
+              itemId,
+              previousStatus: cur.status,
+              newStatus,
+              reason,
+              changedBy: auth.user.userId,
+            },
+          });
         }
 
         await tx.item.update({

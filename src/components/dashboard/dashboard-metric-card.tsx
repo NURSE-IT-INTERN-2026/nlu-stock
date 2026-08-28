@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, Package, Wrench, CalendarClock, Undo2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Package, Wrench, CalendarClock, Undo2, Truck } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   AlertTriangle,
@@ -11,6 +11,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Wrench,
   CalendarClock,
   Undo2,
+  Truck,
 };
 
 const BADGE_BG: Record<string, string> = {
@@ -18,6 +19,7 @@ const BADGE_BG: Record<string, string> = {
   "text-info-500": "bg-info-500/10",
   "text-danger-500": "bg-danger-500/10",
   "text-success": "bg-success/10",
+  "text-sky-500": "bg-sky-500/10",
 };
 
 interface DashboardMetricCardProps {

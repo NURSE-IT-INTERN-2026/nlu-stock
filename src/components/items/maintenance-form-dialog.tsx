@@ -20,10 +20,11 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { motion } from "motion/react";
 import { Loader2, Search, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { FileUploadList } from "@/components/shared/file-upload";
-import { createMaintenance, searchDispenseItems } from "@/lib/api";
+import { createMaintenance, searchDispenseItems, updateItemStatus } from "@/lib/api";
 import { MAINT_RESULT_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,15 @@ interface Props {
   // Display-ready lines from the ชำรุด/ส่งซ่อม logs — shown read-only in place of the
   // ปัญหา/อาการ input, since the staff receiving the piece shouldn't retype what was reported.
   repairInfo?: { damage: string | null; venue: string | null; note: string | null; sentAt: string | null };
+  // PREVENTIVE only. The piece is already out at a vendor (สถานะ กำลังบำรุงรักษา) and this
+  // dialog receives it back, so there is no ภายใน/ภายนอก left to choose — the trip picked it.
+  receiving?: boolean;
+  // แก้ข้อมูลของเที่ยวที่ยังเปิดอยู่ (ยังไม่รับคืน). ฟอร์มหน้าตาเหมือนใบส่ง แต่ไม่ให้เลือก
+  // ภายใน/ภายนอก อีก — ของออกไปแล้ว การเปลี่ยนใจตรงนี้แปลว่าแก้ประวัติ ไม่ใช่แก้ข้อมูล
+  editSend?: boolean;
+  // เที่ยวที่ส่งไป อ่านจาก ItemStatusLog แถวล่าสุด — โชว์อ่านอย่างเดียวตอนรับคืน คนรับไม่ต้อง
+  // พิมพ์ซ้ำสิ่งที่คนส่งบันทึกไว้แล้ว (เหมือน repairInfo ของ flow ส่งซ่อม)
+  sentInfo?: { note: string | null; sentAt: string | null };
   onSuccess: () => void;
 }
 
@@ -56,7 +66,7 @@ interface SearchItem {
   category: { name: string; category: string };
 }
 
-export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, subItemLabelTitle = "ชิ้น", adjustmentId, maintenanceCycleMonths, fromRepair, repairInfo, onSuccess }: Props) {
+export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, subItemId, subItemLabel, subItemLabelTitle = "ชิ้น", adjustmentId, maintenanceCycleMonths, fromRepair, repairInfo, receiving, editSend, sentInfo, onSuccess }: Props) {
   // ── Item selection ──
   const hasDefaultItem = !!itemId;
   const [selectedItemId, setSelectedItemId] = useState<string | null>(itemId ?? null);
@@ -73,6 +83,10 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   // the same table cost-by-venue reporting reads.
   const type: "PREVENTIVE" | "CORRECTIVE" = fromRepair ? "CORRECTIVE" : "PREVENTIVE";
   const [result, setResult] = useState<"AVAILABLE" | "DISPOSED">("AVAILABLE");
+  // บำรุงรักษาที่ไหน. ภายใน = ช่างในหน่วยงานทำเอง จบในครั้งเดียว บันทึกผลเลย.
+  // ภายนอก = ของออกจากหน่วยงานไป ต้องรอกลับมาก่อนถึงจะรู้ผล จึงเดินเหมือน flow ส่งซ่อมทุกประการ:
+  // ส่งออกไปก่อน (สถานะ กำลังบำรุงรักษา) แล้วค่อยกลับมาบันทึกผลตอนรับคืน.
+  const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL">("INTERNAL");
   const [performedAt, setPerformedAt] = useState(new Date().toISOString().split("T")[0]);
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
@@ -87,8 +101,13 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
       setSelectedItemId(itemId ?? null);
       setSearchQuery("");
       setSearchResults([]);
+      // The dialog is one instance reused by every row, so the venue has to be re-armed per
+      // open — otherwise the last row's ภายนอก silently sends the next one out too.
+      setVenue(receiving || editSend ? "EXTERNAL" : "INTERNAL");
+      // แก้ข้อมูล = เปิดของเดิมมาแก้ ไม่ใช่พิมพ์ใหม่ทั้งหมด
+      if (editSend) setDescription(sentInfo?.note ?? "");
     }
-  }, [open, itemId]);
+  }, [open, itemId, receiving, editSend, sentInfo?.note]);
 
   // ── Item search ──
   const doSearch = useCallback(async (q: string) => {
@@ -125,14 +144,39 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   })();
   const nextMaintenanceAt = nextOverride ?? autoNext;
 
+  // ส่งบำรุงรักษาภายนอก — ยังไม่ใช่การบันทึกผล ของแค่ออกจากหน่วยงานไป. เขียนแค่สถานะ
+  // (พร้อมใช้งาน → กำลังบำรุงรักษา) เหมือน ส่งซ่อม; MaintenanceRecord จะเกิดตอนรับคืน
+  // ซึ่งเป็นตอนเดียวที่รู้ผล ค่าใช้จ่าย และรอบถัดไป.
+  const sending = !fromRepair && !receiving && (editSend || venue === "EXTERNAL");
+
   const handleSubmit = async () => {
     const targetId = selectedItemId;
     if (!targetId) {
       toast.error("กรุณาเลือกพัสดุ");
       return;
     }
+    if (sending && !description.trim()) {
+      toast.error("กรุณาระบุหน่วยงานผู้รับงานและรายการที่ให้ดำเนินการ");
+      return;
+    }
     setSubmitting(true);
     try {
+      if (sending) {
+        await updateItemStatus(targetId, {
+          newStatus: "PENDING_MAINTENANCE",
+          subItemId: subItemId ?? undefined,
+          // The edit is the same trip: it appends a PENDING_MAINTENANCE → PENDING_MAINTENANCE
+          // log row, and the server keeps reading the departure row for "ออกไปกี่วันแล้ว".
+          notes: `${editSend ? "แก้ข้อมูลส่งบำรุงรักษา" : "ส่งบำรุงรักษาภายนอก"} — ${description.trim()}`,
+          imageUrls: attachmentUrls,
+          repairVenue: "EXTERNAL",
+          repairNote: description.trim(),
+        });
+        toast.success(editSend ? "แก้ข้อมูลแล้ว" : "ส่งบำรุงรักษาภายนอกแล้ว");
+        resetAndClose();
+        onSuccess();
+        return;
+      }
       await createMaintenance(targetId, {
         type,
         result,
@@ -147,8 +191,11 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
         attachmentUrls,
         subItemId: subItemId ?? undefined,
         adjustmentId: adjustmentId ?? undefined,
+        // CORRECTIVE reads its venue off the ส่งซ่อม log; a PREVENTIVE round has no log to read
+        // when it was done in-house, so the form is the only place that knows.
+        repairVenue: fromRepair ? undefined : venue,
       });
-      toast.success("บันทึกการบำรุงรักษาแล้ว");
+      toast.success(receiving ? "รับคืนจากบำรุงรักษาแล้ว" : "บันทึกการบำรุงรักษาแล้ว");
       resetAndClose();
       onSuccess();
     } catch (err) {
@@ -160,6 +207,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
 
   const resetAndClose = () => {
     setResult("AVAILABLE");
+    setVenue("INTERNAL");
     setPerformedAt(new Date().toISOString().split("T")[0]);
     setDescription("");
     setCost("");
@@ -191,10 +239,28 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               </div>
               <div>
                 <p className="text-base font-semibold text-foreground">
-                  {fromRepair ? "บันทึกการบำรุงรักษาหรือซ่อมแซมพัสดุ" : "บันทึกการบำรุงรักษา"}
+                  {fromRepair
+                    ? "บันทึกการบำรุงรักษาหรือซ่อมแซมพัสดุ"
+                    : receiving
+                      ? "รับคืนจากบำรุงรักษาภายนอก"
+                      : editSend
+                        ? "แก้ข้อมูลส่งบำรุงรักษา"
+                        : sending
+                          ? "ส่งบำรุงรักษาภายนอก"
+                          : "บันทึกการบำรุงรักษา"}
                 </p>
                 {/* Says where repairs go now that ซ่อมแซม is no longer pickable here. */}
-                {!fromRepair && <p className="text-xs text-muted-foreground">ตรวจบำรุงตามรอบ · งานซ่อมให้แจ้งชำรุดแล้วส่งซ่อม</p>}
+                {!fromRepair && (
+                  <p className="text-xs text-muted-foreground">
+                    {receiving
+                      ? "รับพัสดุคืนแล้ว · บันทึกผลการบำรุงรักษารอบนี้"
+                      : editSend
+                        ? `เที่ยวเดิม${sentInfo?.sentAt ? ` · ส่งเมื่อ ${sentInfo.sentAt}` : ""} · วันที่ส่งไม่เปลี่ยน`
+                        : sending
+                          ? "พัสดุออกจากหน่วยงาน · บันทึกผลเมื่อรับคืน"
+                          : "ตรวจบำรุงตามรอบ · งานซ่อมให้แจ้งชำรุดแล้วส่งซ่อม"}
+                  </p>
+                )}
               </div>
             </div>
             <button
@@ -273,6 +339,47 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               </div>
             )}
 
+            {/* ภายใน = จบตรงนี้ บันทึกผลเลย. ภายนอก = ของต้องออกไปก่อน ฟอร์มจึงเปลี่ยนเป็นใบส่ง
+                และช่องที่ยังไม่มีคำตอบ (ค่าใช้จ่าย, รอบถัดไป) หายไปจนกว่าจะรับคืน — เหมือน ส่งซ่อม
+                ทุกประการ. รับคืนไม่ต้องเลือกอีก เพราะเที่ยวที่ส่งไปเลือกไว้แล้ว. */}
+            {!fromRepair && !receiving && !editSend && (
+              <div className="space-y-2">
+                <Label>บำรุงรักษาที่</Label>
+                {/* สองตัวเลือกเห็นพร้อมกันเสมอ ไม่ใช่ on/off ที่ต้องเดาว่า "ปิด" แปลว่าอะไร —
+                    ปุ่มที่เลือกอยู่มีแถบเลื่อนตามไป (layoutId) */}
+                <div role="group" aria-label="บำรุงรักษาที่" className="relative flex rounded-xl border bg-secondary/60 p-1">
+                  {([["INTERNAL", "ภายใน NLU"], ["EXTERNAL", "ภายนอก NLU"]] as const).map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setVenue(v)}
+                      aria-pressed={venue === v}
+                      className={cn(
+                        "relative flex-1 rounded-lg px-3 py-1.5 text-sm transition-colors",
+                        venue === v ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {venue === v && (
+                        <motion.span
+                          layoutId="maint-venue-toggle"
+                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                          className="absolute inset-0 rounded-lg border bg-card shadow-sm"
+                        />
+                      )}
+                      <span className="relative">{label}</span>
+                    </button>
+                  ))}
+                </div>
+                {/* หมายเหตุเปลี่ยนตามที่เลือก — ผู้ใช้ต้องอ่านได้ทันทีว่ากดแล้วเกิดอะไร
+                    ไม่ใช่ต้องเดาจากชื่อตัวเลือก */}
+                <p className="text-xs text-muted-foreground">
+                  {sending
+                    ? "ส่งพัสดุออกไปบำรุงรักษากับหน่วยงานภายนอก NLU · บันทึกผลเมื่อรับคืน"
+                    : "ดำเนินการบำรุงรักษาภายใน NLU · บันทึกผลได้ทันที"}
+                </p>
+              </div>
+            )}
+
             {/* ผลการตรวจ exists only on the repair path. บำรุงรักษา is care for a piece that
                 still works — its outcome is always พร้อมใช้งาน, so there is nothing to pick.
                 ตัดจำหน่าย has exactly two doors: สูญหาย, and ซ่อมไม่ได้ — this one. */}
@@ -293,14 +400,36 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>{fromRepair ? "วันที่รับคืนจากการซ่อม" : "วันที่ดำเนินการ"}</Label>
-              <DatePicker
-                value={performedAt}
-                onChange={setPerformedAt}
-                className="h-9 bg-card"
-              />
-            </div>
+            {/* ส่งออกไปยังไม่มี "วันที่ดำเนินการ" ให้กรอก — วันที่ส่งคือวันนี้ และ log บันทึกให้เอง
+                เหมือน repairSentAt ของ ส่งซ่อม. */}
+            {!sending && (
+              <div className="space-y-2">
+                <Label>{fromRepair ? "วันที่รับคืนจากการซ่อม" : receiving ? "วันที่รับคืนจากบำรุงรักษา" : "วันที่ดำเนินการ"}</Label>
+                <DatePicker
+                  value={performedAt}
+                  onChange={setPerformedAt}
+                  className="h-9 bg-card"
+                />
+              </div>
+            )}
+
+            {receiving && (
+              <div className="space-y-2">
+                <Label>ข้อมูลการส่งบำรุงรักษา</Label>
+                <dl className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm space-y-1.5">
+                  {([
+                    ["ส่งบำรุงรักษาที่", "ภายนอก NLU"],
+                    ["รายละเอียด", sentInfo?.note],
+                    ["วันที่ส่ง", sentInfo?.sentAt],
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="flex gap-2">
+                      <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                      <dd className="min-w-0 text-foreground">{value || "—"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
 
             {fromRepair && (
               <div className="space-y-2">
@@ -324,17 +453,19 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
             )}
 
             <div className="space-y-2">
-              <Label>{fromRepair ? "ข้อมูลการดำเนินการซ่อมแซม" : "รายละเอียดงานที่ทำ"}</Label>
+              <Label required={sending}>
+                {fromRepair ? "ข้อมูลการดำเนินการซ่อมแซม" : sending ? "หน่วยงานผู้รับงานและรายการที่ให้ดำเนินการ" : "รายละเอียดงานที่ทำ"}
+              </Label>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="งานที่ดำเนินการ..."
+                placeholder={sending ? "ระบุหน่วยงานผู้รับงาน และรายการที่ให้ดำเนินการ..." : "งานที่ดำเนินการ..."}
                 rows={2}
                 className="bg-card"
               />
             </div>
 
-            <div className={cn("grid grid-cols-1 gap-3", !fromRepair && "sm:grid-cols-2")}>
+            <div className={cn("grid grid-cols-1 gap-3", !fromRepair && !sending && "sm:grid-cols-2", sending && "hidden")}>
               <div className="space-y-2">
                 <Label>{fromRepair ? "ค่าใช้จ่ายในการซ่อมแซมครั้งนี้ (฿)" : "ค่าใช้จ่ายในการบำรุงรักษา (฿)"}</Label>
                 <Input
@@ -351,7 +482,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
                   the server leaves the existing due date untouched (lib/maintenance
                   nextDateAfterJob). A piece that had no due date at all still gets its first
                   one there, otherwise it would drop off the schedule for good. */}
-              {!fromRepair && (
+              {!fromRepair && !sending && (
                 <div className="space-y-2">
                   <Label>รอบครั้งถัดไป</Label>
                   <DatePicker
@@ -379,7 +510,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
             <Button variant="ghost" onClick={resetAndClose}>ยกเลิก</Button>
             <Button disabled={submitting || !selectedItemId} onClick={handleSubmit} className="gap-1.5">
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              บันทึก
+              {editSend ? "บันทึกการแก้ไข" : sending ? "ส่งบำรุงรักษา" : receiving ? "บันทึกรับคืน" : "บันทึก"}
             </Button>
           </div>
         </div>

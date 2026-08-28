@@ -32,7 +32,7 @@ export type DistributionRow = {
    * It used to be four, with ส่งซ่อม folded into ถูกใช้งาน — that made ถูกใช้งาน mean
    * "not available, reason unstated" and hid the one state staff act on.
    */
-  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "UNDER_REPAIR" | "DAMAGED";
+  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "PENDING_MAINTENANCE" | "UNDER_REPAIR" | "DAMAGED";
   /** Loan rows only — when it went out, so ของค้างนาน is visible at a glance. */
   since?: Date;
   dueAt?: Date | null;
@@ -58,6 +58,7 @@ const GONE: ReadonlySet<ItemStatus> = new Set([ItemStatus.DISPOSED, ItemStatus.L
 const SUB_ITEM_STATE: Partial<Record<ItemStatus, DistributionRow["state"]>> = {
   [ItemStatus.AVAILABLE]: "AVAILABLE",
   [ItemStatus.UNDER_REPAIR]: "UNDER_REPAIR",
+  [ItemStatus.PENDING_MAINTENANCE]: "PENDING_MAINTENANCE",
   [ItemStatus.DAMAGED]: "DAMAGED",
 };
 

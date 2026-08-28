@@ -13,7 +13,7 @@ export interface DistributionRow {
   // Mirrors DistributionRow["state"] in lib/distribution.ts. Kept separate because the
   // server type carries Date and this one sees the JSON-serialised strings — add new
   // states to both.
-  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "UNDER_REPAIR" | "DAMAGED";
+  state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "PENDING_MAINTENANCE" | "UNDER_REPAIR" | "DAMAGED";
   since?: string | null;
   dueAt?: string | null;
   unlocated?: boolean;
@@ -42,6 +42,8 @@ export const STATE_META: Record<DistributionRow["state"], { label: string; dot: 
   // made this row mean "not available, reason unstated"; it has its own row now.
   IN_USE: { label: STATUS_LABELS.IN_USE, dot: "bg-chart-3" },
   ON_LOAN: { label: STATUS_LABELS.ON_LOAN, dot: "bg-primary" },
+  // ออกไปบำรุงข้างนอกแล้วยังไม่กลับ — คนละแถวกับส่งซ่อม เพราะของไม่ได้พัง แค่ไม่อยู่.
+  PENDING_MAINTENANCE: { label: STATUS_LABELS.PENDING_MAINTENANCE, dot: "bg-sky-500" },
   UNDER_REPAIR: { label: STATUS_LABELS.UNDER_REPAIR, dot: "bg-chart-4" },
   // Sitting in the storeroom but unusable — the reason the สถานะ column has to exist.
   DAMAGED: { label: STATUS_LABELS.DAMAGED, dot: "bg-warning" },

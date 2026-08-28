@@ -6,8 +6,9 @@ import { motion } from "motion/react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClipboardList, History, X } from "lucide-react";
+import { ClipboardList, History, PackageCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -28,6 +29,9 @@ import { CaseWorkspace } from "@/components/cases/case-workspace";
 interface Summary {
   overdue: number;
   dueSoon: number;
+  // ส่งออกไปบำรุงข้างนอกแล้วยังไม่ได้กลับมา — นับแยก และไม่ถูกนับซ้ำในสองใบแรก
+  // (api/maintenance/summary อธิบายไว้ว่าทำไม).
+  inMaintenance: number;
   completedThisMonth: number;
 }
 
@@ -44,8 +48,13 @@ interface ScheduleRow {
   lastMaintenanceDate: string;
   nextMaintenanceDate: string;
   maintenanceCycleMonths: number;
+  // overdue | due-soon | in-maintenance | normal — เซิร์ฟเวอร์ตัดสินให้แล้ว รวมถึงกรณีของ
+  // อยู่ข้างนอก ซึ่งชนะวันที่เสมอ (api/reports/maintenance-schedule)
   maintenanceStatus: string;
   subItemStatus: string | null;
+  // เติมเฉพาะแถวที่ยังอยู่ข้างนอก (maintenanceStatus === "in-maintenance")
+  sentAt: string | null;
+  sentNote: string | null;
 }
 
 // ── Helpers ──
@@ -63,6 +72,7 @@ function fmtThaiDate(dateStr: string): string {
 const STATUS_META = {
   overdue: { label: "เกินกำหนดซ่อมบำรุง", variant: "destructive", tone: "text-destructive" },
   "due-soon": { label: "ใกล้ถึงกำหนดซ่อมบำรุง", variant: "secondary", tone: "text-amber-600 dark:text-amber-400" },
+  "in-maintenance": { label: "กำลังบำรุงรักษา", variant: "secondary", tone: "text-sky-600 dark:text-sky-400" },
   normal: { label: "ปกติ", variant: "outline", tone: "text-muted-foreground" },
 } as const satisfies Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; tone: string }>;
 
@@ -75,10 +85,14 @@ function statusMeta(status: string) {
 // ภาพรวม (กำหนดการตามรอบ) · ประวัติ (รอบที่ทำไปแล้ว). Both halves of ONE question: อะไรถึงรอบ
 // บำรุงรักษาเมื่อไหร่. ของพัง/ค้างซ่อมเป็นคนละคำถาม และอยู่ที่ /repairs — เอามาปนกันแล้วผู้ใช้ที่มา
 // ด้วย intent เดียวต้องอ่านผ่านอีก intent หนึ่งทุกครั้ง.
-type MaintTab = "overview" | "history";
+// แท็บรับคืนแยกจากภาพรวมเพราะเป็นคนละกริยา: ภาพรวมคือ "อ่านว่าอะไรถึงรอบ" (planning),
+// รับคืนคือ "ลงมือปิดงานที่ค้างอยู่" (worklist) — และของที่อยู่ข้างนอกไม่มีวันโผล่ในหัวคนที่
+// เปิดตารางกำหนดการมาดู. คู่ขนานกับ /repairs ที่แยกคิวค้างซ่อมออกจากประวัติ.
+type MaintTab = "overview" | "receive" | "history";
 
 const MAINT_TABS = [
   { value: "overview", label: "ภาพรวม", icon: ClipboardList },
+  { value: "receive", label: "รับคืนจากบำรุงรักษา", icon: PackageCheck },
   { value: "history", label: "ประวัติการบำรุงรักษา", icon: History },
 ] as const;
 
@@ -107,11 +121,11 @@ function MaintenanceShell() {
     return () => setDetail(null);
   }, [activeLabel, setDetail]);
 
-  const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, completedThisMonth: 0 });
+  const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, inMaintenance: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [schedulePage, setSchedulePage] = useState(1);
-  const [filter, setFilter] = useState<"all" | "overdue" | "due-soon">("all");
+  const [filter, setFilter] = useState<"all" | "overdue" | "due-soon" | "in-maintenance">("all");
   const [filters, setFilters] = useState<FilterValues>({});
 
   // Dialog state
@@ -121,6 +135,10 @@ function MaintenanceShell() {
   const [dialogCycle, setDialogCycle] = useState<number | undefined>();
   const [dialogSubItemId, setDialogSubItemId] = useState<string | undefined>();
   const [dialogSubLabel, setDialogSubLabel] = useState<string | undefined>();
+  // แถวที่ของอยู่ข้างนอก → ฟอร์มเดียวกันแต่เป็นใบรับคืน ไม่ใช่ใบส่ง
+  const [dialogReceiving, setDialogReceiving] = useState(false);
+  const [dialogSentInfo, setDialogSentInfo] = useState<{ note: string | null; sentAt: string | null } | undefined>();
+  const [dialogEditSend, setDialogEditSend] = useState(false);
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -151,12 +169,17 @@ function MaintenanceShell() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // ของที่ส่งออกไปแล้วยังไม่ได้คืน — worklist ของแท็บรับคืน. มาจาก scheduleItems ชุดเดียวกับ
+  // ตารางภาพรวม ไม่ยิง API เพิ่ม: แถวยังอยู่ในกำหนดการอยู่แล้ว (nextMaintenanceDate ไม่ถูกแตะ
+  // จนกว่าจะบันทึกผล) และ /maintenance คือประตูเดียวที่ส่งของออกไปได้.
+  const outRows = scheduleItems.filter((i) => i.maintenanceStatus === "in-maintenance");
+
   const filteredSchedule = filter === "all"
     ? scheduleItems
     : scheduleItems.filter((i) => i.maintenanceStatus === filter);
   const pagedSchedule = filteredSchedule.slice((schedulePage - 1) * PAGE_SIZE.COMPACT, schedulePage * PAGE_SIZE.COMPACT);
 
-  const toggleFilter = (target: "overdue" | "due-soon") => {
+  const toggleFilter = (target: "overdue" | "due-soon" | "in-maintenance") => {
     setFilter((f) => (f === target ? "all" : target));
     setSchedulePage(1);
   };
@@ -166,13 +189,20 @@ function MaintenanceShell() {
     setSchedulePage(1);
   };
 
-  const openRecordDialog = (row: ScheduleRow) => {
+  const openRecordDialog = (row: ScheduleRow, mode: "record" | "edit" = "record") => {
+    setDialogEditSend(mode === "edit");
+    setDialogSentInfo(
+      row.maintenanceStatus === "in-maintenance"
+        ? { note: row.sentNote, sentAt: row.sentAt ? fmtThaiDate(row.sentAt) : null }
+        : undefined,
+    );
     setDialogItemId(row.itemId);
     setDialogItemLabel(`${row.code} – ${row.name}`);
     setDialogCycle(row.maintenanceCycleMonths);
     // Tracked copy → record against that specific piece; the dialog shows the "ชิ้น:" row.
     setDialogSubItemId(row.subItemId ?? undefined);
     setDialogSubLabel(row.subItemId ? row.code : undefined);
+    setDialogReceiving(mode === "record" && row.maintenanceStatus === "in-maintenance");
     setDialogOpen(true);
   };
 
@@ -195,6 +225,12 @@ function MaintenanceShell() {
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {label}
+                {value === "receive" && outRows.length > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[10px] font-bold tabular-nums",
+                    isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                  )}>{outRows.length}</span>
+                )}
                 {isActive && (
                   <motion.span
                     layoutId="maintenance-tab"
@@ -210,7 +246,8 @@ function MaintenanceShell() {
 
       <div className={cn("space-y-4 sm:space-y-8 pb-4", tab !== "overview" && "hidden")}>
         {/* ── Summary cards ── */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        {/* flex-wrap + grow, ไม่ใช่ grid ตายตัว — การ์ดกินเต็มแถวเสมอไม่ว่าจะกี่ใบ */}
+        <div className="flex flex-wrap gap-2 sm:gap-4 [&>*]:min-w-[9rem] [&>*]:flex-1 [&>*]:grow">
           <DashboardMetricCard
             title="เกินกำหนดซ่อมบำรุง"
             value={summary.overdue}
@@ -228,6 +265,15 @@ function MaintenanceShell() {
             color="text-orange-500"
             onClick={summary.dueSoon > 0 ? () => toggleFilter("due-soon") : undefined}
             active={filter === "due-soon"}
+          />
+          <DashboardMetricCard
+            title="กำลังบำรุงรักษา"
+            value={summary.inMaintenance}
+            subtitle={filter === "in-maintenance" ? "กดเพื่อยกเลิก" : summary.inMaintenance > 0 ? "ส่งออกไปแล้วยังไม่ได้คืน" : undefined}
+            iconName="Truck"
+            color="text-sky-500"
+            onClick={summary.inMaintenance > 0 ? () => toggleFilter("in-maintenance") : undefined}
+            active={filter === "in-maintenance"}
           />
           <DashboardMetricCard
             title="กำหนดการซ่อมบำรุงเดือนนี้"
@@ -255,7 +301,7 @@ function MaintenanceShell() {
           {filter !== "all" && (
             <div className="mt-3 flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                {filter === "overdue" ? "เกินกำหนดซ่อมบำรุง" : "ใกล้ถึงกำหนดซ่อมบำรุง"}
+                {statusMeta(filter).label}
                 <button
                   type="button"
                   onClick={clearFilter}
@@ -406,6 +452,67 @@ function MaintenanceShell() {
 
       </div>
 
+      {/* ── รับคืนจากบำรุงรักษา ── */}
+      {/* การ์ดต่อแถว ไม่ใช่ตาราง: คิวนี้ตอบคำถามเดียว "ของอยู่ข้างนอกมากี่วันแล้ว และจะรับคืนมั้ย"
+          คอลัมน์ที่เหลือของตารางกำหนดการไม่ช่วยตอบ */}
+      <div className={cn("pb-4", tab !== "receive" && "hidden")}>
+        <section className="overflow-hidden rounded-2xl border bg-card">
+          <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-3">
+            <h2 className="text-lg font-semibold">รอรับคืนจากบำรุงรักษา</h2>
+            <span className="text-xs text-muted-foreground tabular-nums">{outRows.length} รายการ</span>
+          </div>
+          <div className="divide-y divide-border border-t">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="px-4 py-3"><Skeleton className="h-10 w-full" /></div>
+              ))
+            ) : outRows.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                ไม่มีพัสดุที่ส่งบำรุงรักษาภายนอกค้างอยู่
+              </div>
+            ) : outRows.map((row) => {
+              // ส่งไปแล้วกี่วัน — บวกเสมอ ต่างจากตารางกำหนดการที่นับถอยหลังหาวันครบรอบ
+              const daysOut = row.sentAt ? Math.max(0, -daysUntil(row.sentAt)) : null;
+              return (
+                <div key={row.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium leading-tight">{row.name}</span>
+                      <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">
+                        กำลังบำรุงรักษา
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <Link href={`/items/${row.itemId}`} className="font-mono hover:text-foreground hover:underline">{row.code}</Link>
+                      {row.location && <span className="truncate">{row.location}</span>}
+                      {row.sentAt && (
+                        <span className="tabular-nums">
+                          ส่งเมื่อ {fmtThaiDate(row.sentAt)}
+                          {daysOut !== null && ` · ${daysOut} วัน`}
+                        </span>
+                      )}
+                    </div>
+                    {row.sentNote && (
+                      <p className="text-xs text-muted-foreground/90 line-clamp-2">{row.sentNote}</p>
+                    )}
+                  </div>
+                  {/* แก้ข้อมูล = เที่ยวเดิม (พิมพ์ชื่อร้านผิด, เพิ่มรายการที่ให้ทำ) — วันที่ส่งไม่ขยับ
+                      คู่ขนานกับ แก้ข้อมูลส่งซ่อม ของ flow ซ่อม */}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openRecordDialog(row, "edit")}>
+                      แก้ข้อมูล
+                    </Button>
+                    <Button size="sm" onClick={() => openRecordDialog(row)}>
+                      บันทึกรับคืน
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
       {/* ตรวจบำรุงตามรอบ only — ซ่อมแซม answers the other page's question and lives at
           /repairs?tab=history. Both tabs are the same workspace as /cases, reading the same
           source: แท็บภาพรวมข้างบนคือ "ถึงรอบเมื่อไหร่" (สิ่งที่ต้องทำ), แท็บนี้คือ "ทำอะไรไปแล้ว". */}
@@ -417,6 +524,9 @@ function MaintenanceShell() {
       <MaintenanceFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        receiving={dialogReceiving}
+        editSend={dialogEditSend}
+        sentInfo={dialogSentInfo}
         itemId={dialogItemId}
         itemLabel={dialogItemLabel}
         subItemId={dialogSubItemId}

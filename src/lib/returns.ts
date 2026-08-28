@@ -37,11 +37,22 @@ export function isLoanEdge(log: { previousStatus: ItemStatus; newStatus: ItemSta
 // which of the three verbs wrote it — "ตรงยอด" has no such pair and stays visible.
 const ADJUST_MIRROR_REASON = /^(ปรับสต็อก|ตรวจนับ|แก้ยอด)( Lot .+)?: \d+ → \d+/;
 
+// Statuses that end a "loan edge" without a เบิก/รับคืน row standing in for it, so the status
+// log is the only record and must survive the duplicate test.
+//   DISPOSED — ยกเลิกชุด retires a KIT set and hands its pieces back, closing each one's
+//              นำไปใช้งาน record; those ReturnRecords only say the pieces came home.
+//   PENDING_MAINTENANCE — ส่งบำรุงรักษาภายนอก on a non-tracked item. Its status is ON_LOAN
+//              whenever ANY of its units are out (which is most of the time — lib/status-utils
+//              isManualHold), so the send reads as a loan edge and was being swallowed whole:
+//              ประวัติ showed the piece coming back from a trip it never recorded leaving on.
+const KEPT_LOAN_EDGE: ReadonlySet<ItemStatus> = new Set([
+  ItemStatus.DISPOSED,
+  ItemStatus.PENDING_MAINTENANCE,
+]);
+
 /**
  * Whether an item's ประวัติ should drop this status log as a duplicate.
- * A loan edge that ends on DISPOSED is kept: ยกเลิกชุด retires a KIT set and hands its pieces
- * back, closing each one's นำไปใช้งาน record, and those ReturnRecords only say the pieces came
- * home — nothing else in the history would explain the set copy itself leaving.
+ * Edges landing on KEPT_LOAN_EDGE above are kept whatever they came from.
  *
  * A same-status row is judged on its reason, not on the loan test: it is an annotation, not a
  * transition, so no เบิก/รับคืน row was ever written in its place. Qty stock stamps its
@@ -51,7 +62,7 @@ const ADJUST_MIRROR_REASON = /^(ปรับสต็อก|ตรวจนั�
  */
 export function isDuplicateOfLoanRow(log: { previousStatus: ItemStatus; newStatus: ItemStatus; reason?: string | null }): boolean {
   if (log.previousStatus === log.newStatus) return ADJUST_MIRROR_REASON.test(log.reason ?? "");
-  return isLoanEdge(log) && log.newStatus !== ItemStatus.DISPOSED;
+  return isLoanEdge(log) && !KEPT_LOAN_EDGE.has(log.newStatus);
 }
 
 /**

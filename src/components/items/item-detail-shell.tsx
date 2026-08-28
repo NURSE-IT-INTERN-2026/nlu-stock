@@ -110,6 +110,7 @@ const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: strin
   AVAILABLE: { label: "พร้อมใช้งาน", bar: "bg-success", dot: "bg-success" },
   ON_LOAN: { label: "ถูกยืม", bar: "bg-primary", dot: "bg-primary" },
   IN_USE: { label: "กำลังใช้งาน", bar: "bg-chart-3", dot: "bg-chart-3" },
+  PENDING_MAINTENANCE: { label: "กำลังบำรุงรักษา", bar: "bg-sky-500", dot: "bg-sky-500" },
   UNDER_REPAIR: { label: "ส่งซ่อม", bar: "bg-warning", dot: "bg-warning" },
   DAMAGED: { label: "ชำรุด", bar: "bg-warning", dot: "bg-warning" },
 };
@@ -119,6 +120,7 @@ const STATUS_META: Record<string, { icon: typeof CheckCircle2; tone: Tone }> = {
   AVAILABLE: { icon: CheckCircle2, tone: "success" },
   ON_LOAN: { icon: Undo2, tone: "primary" },
   IN_USE: { icon: ShoppingCart, tone: "primary" },
+  PENDING_MAINTENANCE: { icon: Wrench, tone: "primary" },
   UNDER_REPAIR: { icon: Wrench, tone: "warning" },
   DAMAGED: { icon: ShieldAlert, tone: "warning" },
   LOST: { icon: XCircle, tone: "destructive" },
@@ -656,7 +658,7 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   // on NLU-DUR-003 it claimed 89 ถูกยืม when 5 were borrowed and 84 were stationed in rooms.
   // A pile has no per-piece status to count, but the open records do say where the stock went.
   const byState: Record<DistributionRow["state"], number> = {
-    AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, UNDER_REPAIR: 0, DAMAGED: 0,
+    AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, PENDING_MAINTENANCE: 0, UNDER_REPAIR: 0, DAMAGED: 0,
   };
   for (const r of distribution ?? []) byState[r.state] += r.qty;
   // Whatever the records still don't account for. Every named state above is backed by open
@@ -665,9 +667,9 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   // overstated, and it is how a drift between totalQty and the ledgers becomes visible.
   const accounted = Object.values(byState).reduce((a, b) => a + b, 0);
   const unaccounted = Math.max(0, total - accounted);
-  // All five render, zeros included — a missing row reads as "not applicable" instead of
-  // "none", and these are the same five rows StatusSummary shows for a tracked piece.
-  // Why five and not six: USAGE_STATUS_ORDER in lib/constants.ts, which owns the list.
+  // All of them render, zeros included — a missing row reads as "not applicable" instead of
+  // "none", and these are the same rows StatusSummary shows for a tracked piece.
+  // Which states and why: USAGE_STATUS_ORDER in lib/constants.ts, which owns the list.
   const segments = [
     ...USAGE_STATUS_ORDER.map((key) => ({ key, ...STATE_META[key], count: byState[key] })),
     ...(unaccounted > 0
