@@ -10,6 +10,14 @@ const loginSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // This route hands out a session for any allowlisted address with no proof the caller
+  // owns it — that was the whole login story before OAuth. Production goes through
+  // /api/auth/cmu now; this stays only so the login page's dev shortcuts and the e2e
+  // suite can skip the provider round-trip.
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const body = await request.json();
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
@@ -23,7 +31,7 @@ export async function POST(request: NextRequest) {
   // (every movement record needs a user to point at).
   const role = roleForEmail(email);
   if (!role) {
-    return NextResponse.json({ error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน ติดต่อผู้ดูแลระบบ" }, { status: 403 });
+    return NextResponse.json({ error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, { status: 403 });
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });

@@ -3,7 +3,8 @@ import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { COOKIE_NAME, getJwtSecret } from "@/lib/auth-config";
 
-const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/session"];
+// startsWith match, so "/api/auth/cmu" covers the callback under it too.
+const publicPaths = ["/login", "/api/auth/cmu", "/api/auth/login", "/api/auth/logout", "/api/auth/session"];
 
 interface RouteRule {
   path: string;
