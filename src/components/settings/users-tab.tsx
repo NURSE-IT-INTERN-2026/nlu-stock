@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 interface UserRecord {
   id: string;
@@ -51,6 +53,8 @@ export function UsersTab() {
   const [editing, setEditing] = useState<UserRecord | null>(null);
   const [form, setForm] = useState({ email: "", name: "" });
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -61,16 +65,18 @@ export function UsersTab() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // แบ่งหน้าฝั่ง server จริง ไม่ใช่ตัดจาก array ที่โหลดมา — route คุม perPage อยู่แล้ว
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSettingsUsers();
-      setUsers((data as { users?: UserRecord[] } & UserRecord[]).users || (data as UserRecord[]));
+      const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT });
+      setUsers(data.users as UserRecord[]);
+      setTotal(data.total);
     } catch {
       toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
-  }, []);
+  }, [page]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -279,6 +285,9 @@ export function UsersTab() {
             ))}
           </TableBody>
         </Table>
+        {total > 0 && (
+          <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="คน" />
+        )}
       </div>
 
       {isDesktop ? (

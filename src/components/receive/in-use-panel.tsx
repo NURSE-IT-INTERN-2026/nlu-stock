@@ -12,6 +12,9 @@ import { fmtDate, TH_DAY } from "@/lib/format";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { getInUseRecords, type InUseRecord } from "@/lib/api";
 import { ReturnToStoreDialog } from "@/components/receive/return-to-store-dialog";
+import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 /**
  * The คืนเข้าคลัง tab: everything currently นำไปใช้งาน, whatever its dispense type.
@@ -43,6 +46,19 @@ export function InUsePanel() {
 
   useEffect(() => { load(); }, [load]);
 
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? rows.filter((r) =>
+        r.item.name.toLowerCase().includes(q) ||
+        r.item.code.toLowerCase().includes(q) ||
+        (r.subItem?.subCode.toLowerCase().includes(q) ?? false) ||
+        (r.location ? locationLabel(r.location).toLowerCase().includes(q) : false))
+    : rows;
+
+  // ค้างนอกคลังนับจากผลค้นหาทั้งชุด ไม่ใช่แค่หน้าปัจจุบัน — ตัวเลขสรุปต้องไม่ขยับตามการเปิดหน้า
+  const totalOut = filtered.reduce((sum, r) => sum + (r.quantity - r.resolvedQty), 0);
+  const { page, setPage, paged, total } = useClientPage(filtered, PAGE_SIZE.DEFAULT, q);
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -61,17 +77,6 @@ export function InUsePanel() {
       </div>
     );
   }
-
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? rows.filter((r) =>
-        r.item.name.toLowerCase().includes(q) ||
-        r.item.code.toLowerCase().includes(q) ||
-        (r.subItem?.subCode.toLowerCase().includes(q) ?? false) ||
-        (r.location ? locationLabel(r.location).toLowerCase().includes(q) : false))
-    : rows;
-
-  const totalOut = filtered.reduce((sum, r) => sum + (r.quantity - r.resolvedQty), 0);
 
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
@@ -95,9 +100,15 @@ export function InUsePanel() {
           {filtered.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-10">ไม่พบ &ldquo;{query}&rdquo;</p>
           ) : (
-            filtered.map((r) => <InUseRow key={r.id} row={r} onResolved={load} />)
+            paged.map((r) => <InUseRow key={r.id} row={r} onResolved={load} />)
           )}
         </div>
+        {/* -mx-4 กิน px-4 ของ CardContent คืน เพื่อให้เส้น border-t ของแถบแบ่งหน้าพาดเต็มการ์ด */}
+        {filtered.length > 0 && (
+          <div className="shrink-0 -mx-4">
+            <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

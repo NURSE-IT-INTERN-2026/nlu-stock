@@ -333,8 +333,18 @@ export function getUsers() {
   return request<UserOption[]>("/api/users");
 }
 
-export function getSettingsUsers() {
-  return request<UserOption[]>("/api/settings/users");
+/**
+ * /api/settings/users แบ่งหน้าฝั่ง server เสมอ (perPage default 20) — ผู้เรียกต้องส่ง page
+ * และอ่าน total ไม่งั้นคนที่ 21 ขึ้นไปหายเงียบโดยไม่มีอะไรบอก
+ */
+export function getSettingsUsers(params?: { page?: number; perPage?: number }) {
+  const qs = new URLSearchParams({
+    page: String(params?.page ?? 1),
+    perPage: String(params?.perPage ?? 20),
+  }).toString();
+  return request<{ users: UserOption[]; page: number; perPage: number; total: number }>(
+    `/api/settings/users?${qs}`,
+  );
 }
 
 export function updateSettingsUser(id: string, data: Record<string, unknown>) {

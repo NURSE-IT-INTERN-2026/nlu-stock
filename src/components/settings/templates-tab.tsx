@@ -24,6 +24,9 @@ import {
   updateDispenseTemplate, deleteDispenseTemplate, searchDispenseItems,
   type TemplateSummary,
 } from "@/lib/api";
+import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 interface EditorLine {
   itemId: string;
@@ -48,6 +51,7 @@ export function TemplatesTab() {
   const [lines, setLines] = useState<EditorLine[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TemplateSummary | null>(null);
+  const { page, setPage, paged, total } = useClientPage(templates ?? [], PAGE_SIZE.DEFAULT);
 
   const [query, setQuery] = useState("");
   const debounced = useDebounce(query, 300);
@@ -182,7 +186,7 @@ export function TemplatesTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {templates.map((t) => (
+              {paged.map((t) => (
                 <TableRow key={t.id} className="cursor-pointer" onClick={() => void openEdit(t.id)}>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{t.lineCount} รายการ</TableCell>
@@ -201,6 +205,7 @@ export function TemplatesTab() {
               ))}
             </TableBody>
           </Table>
+          <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} unit="เทมเพลต" />
         </div>
       )}
 
