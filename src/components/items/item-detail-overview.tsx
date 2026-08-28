@@ -282,11 +282,11 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               )}
               {damageAtShop > 0 && (
                 <a
-                  href="/receive?tab=repair"
+                  href="/repairs?tab=receive"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning-700 transition-colors hover:bg-warning/10 dark:text-warning-200"
                 >
                   <Wrench className="size-4 shrink-0" />
-                  <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้ารับเข้า-คืนพัสดุ</span>
+                  <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้าซ่อมแซม</span>
                 </a>
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (

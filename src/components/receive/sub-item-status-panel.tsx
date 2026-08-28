@@ -442,7 +442,7 @@ function QtyRepairRow({ row, stage, showStage, onResolved }: { row: PendingRepai
             <AlertDialogHeader>
               <AlertDialogTitle>ยืนยันการ{actionLabel}</AlertDialogTitle>
               <AlertDialogDescription>
-                ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ
+                ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้าซ่อมแซม
               </AlertDialogDescription>
             </AlertDialogHeader>
             {/* Direct child of AlertDialogContent (not Header) so the separator's -mx-4 reaches
@@ -701,7 +701,7 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
               <AlertDialogTitle>ยืนยันการ{actionLabel}</AlertDialogTitle>
               <AlertDialogDescription>
                 {isDamaged ? (
-                  <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
+                  <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้าซ่อมแซม</>
                 ) : (
                   <>บันทึก <span className="font-medium text-foreground">{row.item.name}</span> ({effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}) เป็น &ldquo;พร้อมใช้งาน&rdquo; ทันที — รายการนี้จะเข้าประวัติ ไม่สามารถแก้ไขย้อนหลังได้</>
                 )}
