@@ -1,10 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 import dotenv from "dotenv";
+import { BASE_PATH } from "./src/lib/base-path";
 
 dotenv.config({ path: ".env.test", override: true });
 
 const PORT = 4517;
-const baseURL = `http://localhost:${PORT}`;
+// basePath means nothing is served at the origin root, so both the specs' goto("/…") and
+// the webServer readiness probe have to go through the subpath or they land on a 404.
+const baseURL = `http://localhost:${PORT}${BASE_PATH}`;
 
 export default defineConfig({
   testDir: "./e2e",

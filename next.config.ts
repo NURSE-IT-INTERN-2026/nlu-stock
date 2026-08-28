@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import { BASE_PATH } from "./src/lib/base-path";
 
 const nextConfig: NextConfig = {
+  // Served from a subpath on the faculty server; the CMU OAuth callback is registered
+  // against it. See src/lib/base-path.ts for what Next does NOT prefix on its own.
+  basePath: BASE_PATH,
   env: {
     JWT_SECRET: process.env.JWT_SECRET,
   },

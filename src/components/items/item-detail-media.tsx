@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { uploadFile, updateItem } from "@/lib/api";
 
 import { IMAGE_ACCEPT } from "@/lib/uploads";
+import { withBase } from "@/lib/base-path";
 // 1 cover + 2 extras. Existing items that already hold more are not rewritten —
 // the surplus is simply not rendered, and the next save trims it.
 const MAX_IMAGES = 3;
@@ -307,7 +308,7 @@ function Thumb({ src, alt, canAct, onOpen, onRemove, className }: {
         className,
       )}
     >
-      <img src={src} alt={alt} loading="lazy" className="size-full object-cover" />
+      <img src={withBase(src)} alt={alt} loading="lazy" className="size-full object-cover" />
       {canAct && (
         <button
           type="button"

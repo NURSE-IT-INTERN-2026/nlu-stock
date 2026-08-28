@@ -23,6 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { returnItem } from "@/lib/api";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 import { DistributionTable, distributionTotal, type DistributionRow } from "@/components/items/distribution-table";
+import { withBase } from "@/lib/base-path";
 
 /** One open แจ้งชำรุด booking — as served by GET /api/items/:id (`openDamage`). */
 export interface OpenDamage {
@@ -245,7 +246,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               {isCountDurable && (
                 <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={() => setStationOpen(true)} disabled={item.availableQty <= 0} />
               )}
-              <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={() => { window.location.href = `/receive?item=${item.id}`; }} />
+              <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={() => { window.location.href = withBase(`/receive?item=${item.id}`); }} />
               {/* One tile for every qty correction — the dialog asks WHAT happened
                   (ตรวจนับ / ตัดจำหน่าย / สูญหาย / อื่นๆ) and picks the input from that.
                   Tracked items still book discrepancies per piece, so they keep a menu. */}

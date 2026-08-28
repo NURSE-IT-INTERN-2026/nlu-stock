@@ -3,6 +3,7 @@
  * Replaces scattered `fetch("/api/...")` calls with typed, centralized functions.
  */
 
+import { withBase } from "@/lib/base-path";
 import { scopeQuery, type DashboardScope } from "@/lib/dashboard-scope";
 import type { AttachRecordType } from "@/lib/attachments";
 import type { CaseState, CaseType } from "@/lib/case-types";
@@ -65,7 +66,7 @@ export class ApiError extends Error {
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const isFormData = init?.body instanceof FormData;
-  const res = await fetch(url, {
+  const res = await fetch(withBase(url), {
     ...init,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
@@ -79,7 +80,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     // JWT still passes middleware but the API rejects it. Bounce to /login so a stale
     // session self-heals into a fresh one instead of looping on failed writes.
     if (res.status === 401 && typeof window !== "undefined" && !url.startsWith("/api/auth/")) {
-      window.location.href = "/login";
+      window.location.href = withBase("/login");
     }
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error || `Request failed (${res.status})`);
@@ -146,7 +147,7 @@ export function login(email: string, password: string) {
 }
 
 export function logout() {
-  return fetch("/api/auth/logout", {
+  return fetch(withBase("/api/auth/logout"), {
     method: "POST",
     headers: { "ngrok-skip-browser-warning": "any" },
   });
@@ -961,7 +962,7 @@ export function deleteSubItem(subItemId: string) {
 // ─── Upload ───
 
 export function uploadFile(formData: FormData) {
-  return fetch("/api/upload", {
+  return fetch(withBase("/api/upload"), {
     method: "POST",
     body: formData,
     headers: { "ngrok-skip-browser-warning": "any" },

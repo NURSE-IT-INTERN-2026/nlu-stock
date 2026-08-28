@@ -16,6 +16,7 @@ import { logout } from "@/lib/api";
 import { ROLE_LABELS, labelFor, type Role } from "@/lib/constants";
 import type { SessionUser } from "@/types";
 import { usePageHeader } from "@/components/layout/page-header-context";
+import { withBase } from "@/lib/base-path";
 
 interface HeaderProps {
   title: string;
@@ -88,7 +89,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
 
   async function handleLogout() {
     await logout();
-    window.location.href = "/login";
+    window.location.href = withBase("/login");
   }
 
   return (

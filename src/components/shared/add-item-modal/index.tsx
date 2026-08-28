@@ -31,6 +31,7 @@ import { StepSelect } from "../category-select-modal/step-select";
 import { StepCreateName } from "../category-select-modal/step-create-name";
 import { StepCreateConfirm } from "../category-select-modal/step-create-confirm";
 import { StepConfirmExisting } from "../category-select-modal/step-confirm-existing";
+import { withBase } from "@/lib/base-path";
 
 const STEP_TITLES: Record<WizardStep, string> = {
   details: "ข้อมูลพัสดุ",
@@ -203,7 +204,7 @@ export function AddItemModal({
     // Auto-generate code only for flat types — builders handle themselves
     if (!isItemTracked && profile?.code) {
       try {
-        const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(profile.code)}`);
+        const res = await fetch(withBase(`/api/items/suggest-code?prefix=${encodeURIComponent(profile.code)}`));
         if (res.ok) {
           const data = await res.json();
           if (data.suggestedCode) {
