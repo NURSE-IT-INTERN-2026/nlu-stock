@@ -13,7 +13,7 @@ assert.equal(canTransition("UNDER_REPAIR", "DISPOSED"), true);
 
 // The repair-details self-edit (ภายใน → ภายนอก) — status doesn't move but it's a real edge.
 assert.equal(canTransition("UNDER_REPAIR", "UNDER_REPAIR"), true);
-assert.equal(canTransition("AVAILABLE", "AVAILABLE"), false, "ไม่มี self-edge อื่นนอกจาก UNDER_REPAIR");
+assert.equal(canTransition("AVAILABLE", "AVAILABLE"), false, "self-edge มีแค่ UNDER_REPAIR กับ PENDING_MAINTENANCE");
 
 // ยกเลิกคำขอชำรุด is ADMIN-only, and it's the ONLY edge a role unlocks.
 assert.equal(canTransition("DAMAGED", "AVAILABLE"), false);
@@ -27,6 +27,17 @@ assert.equal(canTransition("LOST", "AVAILABLE"), true, "เจอของที
 // Still terminal to anything but AVAILABLE.
 assert.equal(canTransition("DISPOSED", "DAMAGED"), false);
 assert.equal(canTransition("DISPOSED", "LOST"), false);
+
+// ส่งบำรุงรักษาภายนอก: พร้อมใช้งาน → กำลังบำรุงรักษา → พร้อมใช้งาน (ผ่านการบันทึกผลบำรุงรักษา).
+assert.equal(canTransition("AVAILABLE", "PENDING_MAINTENANCE"), true);
+assert.equal(canTransition("PENDING_MAINTENANCE", "AVAILABLE"), true, "รับคืนจากบำรุงรักษาภายนอก");
+assert.equal(canTransition("PENDING_MAINTENANCE", "DAMAGED"), true, "ช่างตรวจแล้วพบว่าชำรุด");
+assert.equal(canTransition("ON_LOAN", "PENDING_MAINTENANCE"), false, "ต้องคืนก่อนถึงส่งบำรุงได้");
+// แก้ข้อมูลส่งบำรุงรักษา — เที่ยวเดิม ไม่ใช่เที่ยวใหม่ (คู่ขนานกับ self-edge ของ UNDER_REPAIR).
+assert.equal(canTransition("PENDING_MAINTENANCE", "PENDING_MAINTENANCE"), true);
+// ...but no button offers it: the send is driven by /maintenance, which alone collects the trip.
+assert.equal(allowedTargets("AVAILABLE").includes("PENDING_MAINTENANCE"), false);
+assert.equal(allowedTargets("AVAILABLE", { isSuperAdmin: true }).includes("PENDING_MAINTENANCE"), false);
 
 // allowedTargets adds the admin edge without duplicating.
 assert.deepEqual([...allowedTargets("DAMAGED")].sort(), ["DISPOSED", "UNDER_REPAIR"]);

@@ -23,6 +23,10 @@ enum ItemStatus {
   AVAILABLE
   ON_LOAN
   IN_USE
+  // ส่งบำรุงรักษาภายนอก — the piece has physically left and nobody can use it until it is
+  // back. Only ever set by the EXTERNAL leg of a preventive round (ภายใน is recorded on the
+  // spot and never parks here), and cleared by the MaintenanceRecord that receives it.
+  PENDING_MAINTENANCE
   DAMAGED
   UNDER_REPAIR
   LOST
@@ -55,7 +59,9 @@ enum MaintenanceResult {
   DISPOSED
 }
 
-// Where a damaged piece is sent for repair (set on the DAMAGED → UNDER_REPAIR log row).
+// Where a piece is worked on. Set on the DAMAGED → UNDER_REPAIR log row (ส่งซ่อม) and on the
+// AVAILABLE → PENDING_MAINTENANCE one (ส่งบำรุงรักษาภายนอก), and denormalized onto the
+// MaintenanceRecord that closes either trip so cost-by-venue reporting needs no fuzzy join.
 enum RepairVenue {
   INTERNAL
   EXTERNAL

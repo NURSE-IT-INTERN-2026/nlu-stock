@@ -33,11 +33,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // closeOpenLoan); a piece that stays put keeps its link.
     const leavingKitSet = !!subItem.inKitSubItemId && data.newStatus !== ItemStatus.IN_USE;
 
-    // UNDER_REPAIR → UNDER_REPAIR is a real edit (แก้ข้อมูลส่งซ่อม: ภายใน → ภายนอก) that
-    // appends a log row, so it must survive the same-status short-circuit below.
-    const isRepairEdit =
-      subItem.status === ItemStatus.UNDER_REPAIR && data.newStatus === ItemStatus.UNDER_REPAIR;
-    if (data.newStatus === subItem.status && !isRepairEdit) return json(subItem); // no-op: no log, no recompute
+    // A self-edge is a real edit that appends a log row, so it must survive the same-status
+    // short-circuit below: แก้ข้อมูลส่งซ่อม (UNDER_REPAIR, ภายใน → ภายนอก) and
+    // แก้ข้อมูลส่งบำรุงรักษา (PENDING_MAINTENANCE, corrected shop / scope).
+    const isTripEdit =
+      data.newStatus === subItem.status && canTransition(subItem.status, data.newStatus);
+    if (data.newStatus === subItem.status && !isTripEdit) return json(subItem); // no-op: no log, no recompute
 
     if (!canTransition(subItem.status, data.newStatus, { isSuperAdmin: auth.user.role === "SUPERADMIN" })) {
       return error(
@@ -98,7 +99,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return json(result, 201);
   }
 
-  if (data.newStatus === item.status) return error("New status is the same as current");
+  // Same short-circuit as the tracked branch, same exception: a self-edge (แก้ข้อมูลส่งซ่อม /
+  // แก้ข้อมูลส่งบำรุงรักษา) is an edit to a trip that is still open, not a no-op.
+  if (data.newStatus === item.status && !canTransition(item.status, data.newStatus)) {
+    return error("New status is the same as current");
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.item.update({

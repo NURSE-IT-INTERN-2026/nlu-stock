@@ -998,7 +998,7 @@ export function getAttachmentLog(recordType: AttachRecordType, recordId: string)
 // ─── Maintenance ───
 
 export function getMaintenanceSummary() {
-  return request<{ overdue: number; dueSoon: number; completedThisMonth: number }>(
+  return request<{ overdue: number; dueSoon: number; inMaintenance: number; completedThisMonth: number }>(
     "/api/maintenance/summary",
   );
 }

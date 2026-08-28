@@ -323,10 +323,12 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
         const to = isKit && r.newStatus === "DISPOSED" ? "ยกเลิกชุด" : (STATUS_LABELS[r.newStatus] ?? r.newStatus);
         events.push({
           id: r.id,
-          // repairVenue is only ever written by a ส่งซ่อม (and by the edits to one), on both
-          // paths: the piece's DAMAGED → UNDER_REPAIR row, and the qty booking's same-status
-          // audit row. That single column is the whole test — no status matching needed.
-          type: r.repairVenue ? "REPAIR_SENT" : "STATUS_CHANGE",
+          // repairVenue is written by a ส่งซ่อม (and by the edits to one) on both paths — the
+          // piece's DAMAGED → UNDER_REPAIR row and the qty booking's same-status audit row —
+          // and ALSO by ส่งบำรุงรักษาภายนอก, which is not a repair. The status is what tells
+          // them apart, and it has to: REPAIR_SENT is what lib/timeline-cases opens a ซ่อม case
+          // from, so typing a maintenance trip that way invents a repair nobody reported.
+          type: r.repairVenue && r.newStatus !== "PENDING_MAINTENANCE" ? "REPAIR_SENT" : "STATUS_CHANGE",
           date: r.changedAt,
           delta: null,
           // A qty ส่งซ่อม is the one status row about a count rather than a single piece.
@@ -336,6 +338,10 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
           // "ชำรุด → ซ่อมบำรุง", which is the status machine talking, not what anyone did.
           note: r.repairVenue && r.newStatus === "UNDER_REPAIR"
             ? `ส่งซ่อม${r.repairVenue === "EXTERNAL" ? "ภายนอก" : "ภายใน"}`
+            // Same reasoning one line up: name the action, not the status machine's arrow.
+            // Same-status here is แก้ข้อมูลส่งบำรุงรักษา — the trip did not leave twice.
+            : r.newStatus === "PENDING_MAINTENANCE"
+            ? (sameStatus ? "แก้ข้อมูลส่งบำรุงรักษา" : "ส่งบำรุงรักษาภายนอก")
             : sameStatus
               // Legacy qty rows packed the whole line into `reason`
               // ("ส่งซ่อมภายนอก 47 ชิ้น · <repairNote>"); the writer now keeps qty and the note
@@ -348,7 +354,9 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
           notes: joinNotes(
             r.damageNote,
             // The headline already is the reason in that case — printing it twice is noise.
-            sameStatus ? null : r.reason,
+            // ส่งบำรุงรักษาภายนอก is the same situation: its reason IS the headline, and the
+            // shop note it repeats is already sitting in `subtitle`.
+            sameStatus || r.newStatus === "PENDING_MAINTENANCE" ? null : r.reason,
           ),
           user: r.changer.name,
           attachments: [{ recordType: "ItemStatusLog", recordId: r.id, urls: r.imageUrls }],
