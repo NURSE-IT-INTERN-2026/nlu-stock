@@ -35,6 +35,8 @@ interface ReportDataTableProps<T> {
   /** Server-paged callers pass their own <Pagination/> here so it renders inside the Card
       instead of floating on the page wash below it. Replaces the client-side pager. */
   footer?: React.ReactNode;
+  /** Override the table's own card chrome when it is nested inside a bigger card. */
+  className?: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,6 +49,7 @@ export function ReportDataTable<T extends Record<string, any>>({
   onRowClick,
   token,
   footer,
+  className,
 }: ReportDataTableProps<T>) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
@@ -77,7 +80,7 @@ export function ReportDataTable<T extends Record<string, any>>({
 
   if (loading) {
     return (
-      <Card className="py-0">
+      <Card className={cn("py-0", className)}>
         <div className="p-8 text-center text-sm text-muted-foreground">
           กำลังโหลด…
         </div>
@@ -87,7 +90,7 @@ export function ReportDataTable<T extends Record<string, any>>({
 
   if (data.length === 0) {
     return (
-      <Card className="py-0">
+      <Card className={cn("py-0", className)}>
         <div className="p-8 text-center text-sm text-muted-foreground">
           {emptyMessage}
         </div>
@@ -97,7 +100,7 @@ export function ReportDataTable<T extends Record<string, any>>({
 
   return (
     // py-0: Card's own pt-4 showed as a bare white band above the tinted header.
-    <Card className="py-0">
+    <Card className={cn("py-0", className)}>
       {/* One table at every width. The stacked label→value cards this replaced turned a
           six-column row into six lines, so a phone screen held one row and a half; a table
           that scrolls sideways shows the shape of the data even when it does not all fit.

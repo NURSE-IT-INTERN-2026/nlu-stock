@@ -153,22 +153,36 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
 
   return (
     <div className="space-y-4">
-      {!compact && <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ: setQ }} />}
-      <p className="text-sm font-semibold">
-        รายการเคส <span className="text-muted-foreground tabular-nums">({total} เคส)</span>
-      </p>
-      {/* ตารางเดิมของหน้ารายงาน: row click + คีย์บอร์ด + สถานะว่าง/กำลังโหลด + เลื่อนแนวนอนบนจอแคบ
-          มีครบแล้ว ตารางเจ้าที่สองไม่มีอะไรใหม่ให้. pageSize ต้องเท่า perPage ที่ขอจาก server เพราะ
-          ตารางหั่นข้อมูลของตัวเองอีกชั้น — ตัวเลขไม่ตรงกันเมื่อไหร่ แถวท้ายหายเงียบๆ */}
-      <ReportDataTable
-        columns={CASE_COLUMNS}
-        data={cases}
-        loading={loading}
-        pageSize={PAGE_SIZE.DEFAULT}
-        emptyMessage="ไม่มีเคสตามตัวกรองนี้"
-        onRowClick={(c) => setSelected(c.id)}
-        footer={<Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="เคส" />}
-      />
+      {/* หัวเรื่อง ตัวกรอง ตาราง แบ่งหน้า = การ์ดใบเดียว ไม่ใช่สามก้อนลอยบนพื้นหลัง —
+          แบบเดียวกับตารางบำรุงรักษาที่หน้า /maintenance แท็บภาพรวม */}
+      <section className="overflow-hidden rounded-2xl border bg-card">
+        {/* ไม่มีหัวเรื่อง: แท็บที่กดเข้ามาบอกแล้วว่านี่คือเคสอะไร และแถบแบ่งหน้าใต้ตารางนับให้แล้ว
+            ("รายการทั้งหมด N เคส") — บรรทัด "รายการเคส (604 เคส)" พูดซ้ำทั้งสองอย่างในที่เดียว */}
+        {!compact && (
+          <div className="px-4 pt-4">
+            <Filters
+              {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ: setQ }}
+              className="rounded-none border-0 bg-transparent p-0"
+            />
+          </div>
+        )}
+        {/* ตารางเป็นกล่องของตัวเองในการ์ดใหญ่ เว้นขอบ 16px รอบด้าน ไม่ชนขอบการ์ด.
+            ตารางเดิมของหน้ารายงาน: row click + คีย์บอร์ด + สถานะว่าง/กำลังโหลด + เลื่อนแนวนอนบนจอแคบ
+            มีครบแล้ว ตารางเจ้าที่สองไม่มีอะไรใหม่ให้. pageSize ต้องเท่า perPage ที่ขอจาก server เพราะ
+            ตารางหั่นข้อมูลของตัวเองอีกชั้น — ตัวเลขไม่ตรงกันเมื่อไหร่ แถวท้ายหายเงียบๆ */}
+        <div className="m-4">
+          <ReportDataTable
+            columns={CASE_COLUMNS}
+            data={cases}
+            loading={loading}
+            pageSize={PAGE_SIZE.DEFAULT}
+            emptyMessage="ไม่มีเคสตามตัวกรองนี้"
+            onRowClick={(c) => setSelected(c.id)}
+            footer={<Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="เคส" />}
+            className="rounded-xl border shadow-none"
+          />
+        </div>
+      </section>
       <Sheet open={!!active} onOpenChange={(o) => { if (!o) setSelected(null); }}>
         {/* ความกว้างชุดเดียวคุมครบทุกจอ — มือถือเต็มจอ, แท็บเล็ตกับเดสก์ท็อป 520px — จึงไม่ต้องมี
             branch isMobile/isTablet ให้ดูแล. 520 ไม่ใช่ 384 เพราะหัวเคสมีสองบรรทัด + ป้ายสองอัน และ
@@ -206,7 +220,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
   );
 }
 
-function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ }: {
+function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ, className }: {
   type: string; setType: (v: string) => void;
   state: string; setState: (v: string) => void;
   range: string; setRange: (v: string) => void;
@@ -215,11 +229,13 @@ function Filters({ type, setType, state, setState, range, setRange, dirty, clear
   todo?: boolean;
   /** โหมดตาราง: ช่องค้นหาย้ายมาอยู่กับตัวกรองตัวอื่น เพราะหัวการ์ดที่เคยถือมันไว้ไม่มีแล้ว */
   q?: string; onQ?: (v: string) => void;
+  /** ตัวกรองอยู่ในการ์ดใหญ่แล้ว — ผู้เรียกถอดกรอบของตัวมันเองออกผ่านตรงนี้ */
+  className?: string;
 }) {
   const typeOptions = todo ? TODO_TYPE_OPTIONS : TYPE_OPTIONS;
   const label = (opts: { value: string; label: string }[], v: string) => opts.find((o) => o.value === v)?.label ?? "";
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
+    <div className={cn("flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4", className)}>
       {/* A page that asks one question offers no way to ask another — the ประเภทเคส picker only
           appears where more than one type can show up. */}
       {!lockType && (
