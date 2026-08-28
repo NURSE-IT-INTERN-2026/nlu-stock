@@ -43,6 +43,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 function UnitRowTr({ unit, onEdit, onDelete }: { unit: UnitRow; onEdit: (u: UnitRow) => void; onDelete: (u: UnitRow) => void }) {
   const items = unit._count?.items ?? 0;
@@ -81,6 +84,7 @@ export function UnitsTab() {
   const [editing, setEditing] = useState<UnitRow | null>(null);
   const [name, setName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<UnitRow | null>(null);
+  const { page, setPage, paged, total } = useClientPage(units, PAGE_SIZE.DEFAULT);
 
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -253,11 +257,14 @@ export function UnitsTab() {
                   <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มหน่วยนับ</Button>
                 </div>
               </TableCell></TableRow>
-            ) : units.map((unit) => (
+            ) : paged.map((unit) => (
               <UnitRowTr key={unit.id} unit={unit} onEdit={openEdit} onDelete={setDeleteTarget} />
             ))}
           </TableBody>
         </Table>
+        {units.length > 0 && (
+          <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} unit="หน่วยนับ" />
+        )}
       </div>
 
       {isDesktop ? (

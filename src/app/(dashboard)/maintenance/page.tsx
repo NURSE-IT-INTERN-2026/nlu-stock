@@ -14,6 +14,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
@@ -173,6 +174,9 @@ function MaintenanceShell() {
   // ตารางภาพรวม ไม่ยิง API เพิ่ม: แถวยังอยู่ในกำหนดการอยู่แล้ว (nextMaintenanceDate ไม่ถูกแตะ
   // จนกว่าจะบันทึกผล) และ /maintenance คือประตูเดียวที่ส่งของออกไปได้.
   const outRows = scheduleItems.filter((i) => i.maintenanceStatus === "in-maintenance");
+  const {
+    page: outPage, setPage: setOutPage, paged: pagedOutRows,
+  } = useClientPage(outRows, PAGE_SIZE.COMPACT);
 
   const filteredSchedule = filter === "all"
     ? scheduleItems
@@ -470,7 +474,7 @@ function MaintenanceShell() {
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 ไม่มีพัสดุที่ส่งบำรุงรักษาภายนอกค้างอยู่
               </div>
-            ) : outRows.map((row) => {
+            ) : pagedOutRows.map((row) => {
               // ส่งไปแล้วกี่วัน — บวกเสมอ ต่างจากตารางกำหนดการที่นับถอยหลังหาวันครบรอบ
               const daysOut = row.sentAt ? Math.max(0, -daysUntil(row.sentAt)) : null;
               return (
@@ -510,6 +514,9 @@ function MaintenanceShell() {
               );
             })}
           </div>
+          {outRows.length > 0 && (
+            <Pagination page={outPage} total={outRows.length} pageSize={PAGE_SIZE.COMPACT} onChange={setOutPage} />
+          )}
         </section>
       </div>
 
