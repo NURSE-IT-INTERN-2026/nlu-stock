@@ -369,11 +369,21 @@ async function phaseReturns() {
 
   // Tracked loans: ปกติ / ชำรุด / สูญหาย.
   const outcomes = ["AVAILABLE", "AVAILABLE", "AVAILABLE", "DAMAGED", "LOST"] as const;
+  const RETURN_NOTE: Record<(typeof outcomes)[number], string | null> = {
+    AVAILABLE: null,
+    DAMAGED: "ฝาครอบมีรอยแตก ใช้งานต่อไม่ได้",
+    LOST: "ผู้ยืมแจ้งว่าหาไม่พบ",
+  };
   for (const [i, loan] of openLoans.slice(0, n(16)).entries()) {
     const status = outcomes[i % outcomes.length];
+    // The note is the ONE thing on a return that isn't already a column — it goes into the
+    // log as "คืนพร้อมระบุ: ชำรุด (<note>)" and onto the case step beside a label that already
+    // says รับคืน (ชำรุด). Echoing the status here printed it three times in one line, so the
+    // smoke data now says what a staff member would actually write, and nothing on ปกติ.
+    const note = RETURN_NOTE[status];
     const res = await POST("/api/returns", {
       entries: [{ dispenseRecordId: loan.recordId, subItemId: loan.subItemId, status }],
-      note: `รับคืน (${status})`,
+      ...(note ? { note } : {}),
     });
     check(`รับคืนรายชิ้น ${status}`, res.ok, JSON.stringify(res.json));
     if (!res.ok) continue;
