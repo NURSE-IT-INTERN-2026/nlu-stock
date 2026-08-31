@@ -2,7 +2,7 @@
 export { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
 import type { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
 // Role is NOT a Prisma enum — it comes from env allowlists.
-export { ROLES, type Role } from "@/lib/roles";
+export { ROLES, ENV_ROLES, type Role, type EnvRole } from "@/lib/roles";
 import type { Role } from "@/lib/roles";
 import { BASE_PATH } from "@/lib/base-path";
 
@@ -21,6 +21,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   SUPERADMIN: "ผู้ดูแลระบบ",
   ADMIN: "ผู้ดูแล",
   EXECUTIVE: "ผู้บริหาร",
+  // นศ./บุคลากรคณะที่ผ่าน CMU OAuth แต่ไม่อยู่ใน env list ไหน — ยืมเองได้อย่างเดียว
+  BORROWER: "ผู้ยืม",
 };
 
 // ─── Maintenance ───

@@ -57,6 +57,8 @@ interface FormState {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
+  selfBorrowable: boolean;
+  selfBorrowLimit: number;
   icon: string;
   color: string;
   description: string;
@@ -64,7 +66,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: "", code: "", dispenseType: "CONSUMABLE",
-  assetTracking: false, setTracking: false,
+  assetTracking: false, setTracking: false, selfBorrowable: true, selfBorrowLimit: 1,
   icon: "Package", color: PROFILE_COLOR_OPTIONS[0].value, description: "",
 };
 
@@ -109,11 +111,16 @@ export function ProfilesTab() {
     setEditing(p);
     setForm({
       name: p.name, code: p.code, dispenseType: p.dispenseType,
-      assetTracking: p.assetTracking, setTracking: p.setTracking,
+      assetTracking: p.assetTracking, setTracking: p.setTracking, selfBorrowable: p.selfBorrowable ?? true, selfBorrowLimit: p.selfBorrowLimit ?? 1,
       icon: p.icon, color: p.color, description: p.description ?? "",
     });
     setDialogOpen(true);
   }
+
+  // A profile with items in it: code/ประเภทการเบิกจ่าย/ติดตาม* are frozen (the API enforces
+  // it too). ให้เบิก-ยืมเอง is NOT in that set — it changes who may take stock out, not how
+  // the stock is modelled, so it stays editable and its fields sit outside the frozen block.
+  const locked = (editing?._count?.items ?? 0) > 0;
 
   async function handleSave() {
     setSaving(true);
@@ -124,17 +131,24 @@ export function ProfilesTab() {
           description: form.description || undefined,
           icon: form.icon,
           color: form.color,
-          // behavior fields only apply if no items; API enforces otherwise (409)
-          code: form.code,
-          dispenseType: form.dispenseType,
-          assetTracking: form.assetTracking,
-          setTracking: form.setTracking,
+          // Behaviour fields are rejected with a 409 once the profile has items, and the API
+          // decides that on their PRESENCE, not on whether they changed — so sending them
+          // unconditionally made every edit of a stocked profile fail, including edits that
+          // only touched the name. Send them only when they actually differ.
+          ...(locked ? {} : {
+            code: form.code,
+            dispenseType: form.dispenseType,
+            assetTracking: form.assetTracking,
+            setTracking: form.setTracking,
+          }),
+          selfBorrowable: form.selfBorrowable,
+          selfBorrowLimit: Number(form.selfBorrowLimit) || 1,
         });
         toast.success("อัปเดตประเภทสำเร็จ");
       } else {
         await createProfile({
           name: form.name, code: form.code, dispenseType: form.dispenseType,
-          assetTracking: form.assetTracking, setTracking: form.setTracking,
+          assetTracking: form.assetTracking, setTracking: form.setTracking, selfBorrowable: form.selfBorrowable, selfBorrowLimit: Number(form.selfBorrowLimit) || 1,
           icon: form.icon, color: form.color, description: form.description || undefined,
         });
         toast.success("สร้างประเภทสำเร็จ");
@@ -237,16 +251,47 @@ export function ProfilesTab() {
               <Label htmlFor="p-asset" className="text-sm">ติดตามทรัพย์สิน (จัดซื้อ/บำรุงรักษา)</Label>
               <p className="text-xs text-muted-foreground">เปิดถ้าต้องขึ้นทะเบียนครุภัณฑ์ กรอกข้อมูลผู้ขาย ราคา รับประกัน และรอบซ่อมบำรุง</p>
             </div>
-            <Switch id="p-asset" checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
+            <Switch id="p-asset" disabled={locked} checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
           </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
               <Label htmlFor="p-set" className="text-sm">ติดตามเป็นชุด</Label>
               <p className="text-xs text-muted-foreground">ใช้เมื่อ 1 หน่วยที่รับเข้าประกอบด้วยหลายชิ้นย่อย เช่น หนังสือ 1 ชุด มี 6 เล่ม</p>
             </div>
-            <Switch id="p-set" checked={form.setTracking} onCheckedChange={(v) => setForm({ ...form, setTracking: v })} />
+            <Switch id="p-set" disabled={locked} checked={form.setTracking} onCheckedChange={(v) => setForm({ ...form, setTracking: v })} />
           </div>
-          {editing && <p className="text-xs text-amber-600 mt-1">⚠ เปลี่ยนพฤติกรรมไม่ได้ถ้าประเภทนี้มีพัสดุอยู่</p>}
+          {/* Sits with the two switches it applies to, not at the bottom of the box — under
+              the ยืมเอง fields it read as a warning about them, which is the opposite of true. */}
+          {locked && <p className="text-xs text-amber-600">⚠ ล็อกไว้เพราะประเภทนี้มีพัสดุอยู่แล้ว</p>}
+        </div>
+
+        <div className="space-y-2 rounded-lg border bg-card p-3">
+          <div>
+            <p className="text-sm font-medium">การเบิก-ยืมเอง</p>
+            <p className="text-xs text-muted-foreground">แก้ได้ตลอด แม้ประเภทนี้จะมีพัสดุอยู่แล้ว</p>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5 pr-2">
+              <Label htmlFor="p-selfborrow" className="text-sm">ให้เบิก-ยืมเองผ่าน QR</Label>
+              <p className="text-xs text-muted-foreground">ปิดถ้าของประเภทนี้ต้องผ่านเจ้าหน้าที่เสมอ เช่น ชุดสอนที่ต้องตรวจของในชุดก่อนจ่าย</p>
+            </div>
+            <Switch id="p-selfborrow" checked={form.selfBorrowable} onCheckedChange={(v) => setForm({ ...form, selfBorrowable: v })} />
+          </div>
+          {form.selfBorrowable && (
+            <div className="space-y-1.5">
+              <Label htmlFor="p-selfborrow-limit" className="text-sm">เบิก-ยืมเองได้ครั้งละไม่เกิน</Label>
+              <Input
+                id="p-selfborrow-limit"
+                type="number"
+                min={1}
+                value={form.selfBorrowLimit}
+                onChange={(e) => setForm({ ...form, selfBorrowLimit: parseInt(e.target.value) || 1 })}
+              />
+              {/* Set here, not on the item: 918 rows is not a form anyone fills in. An item
+                  that needs a different number overrides it in แก้ไขข้อมูล. */}
+              <p className="text-xs text-muted-foreground">ใช้กับทุกพัสดุในประเภทนี้ ยกเว้นชิ้นที่ตั้งค่าเฉพาะไว้เอง</p>
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="p-icon">ไอคอนและสี</Label>
@@ -322,6 +367,7 @@ export function ProfilesTab() {
                     <div className="flex flex-wrap gap-1">
                       {p.assetTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ทรัพย์สิน</Badge>}
                       {p.setTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ชุด</Badge>}
+                      {!p.selfBorrowable && <Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">ไม่ให้ยืมเอง</Badge>}
                     </div>
                   </TableCell>
                   <TableCell className="text-xs px-2 tabular-nums">{p._count?.subCategories ?? 0}</TableCell>

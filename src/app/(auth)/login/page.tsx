@@ -23,6 +23,12 @@ const quickLogins = [
   { label: "SuperAdmin", email: "superadmin@nlu.ac.th", role: "SUPERADMIN" },
   { label: "Admin", email: "admin@nlu.ac.th", role: "ADMIN" },
   { label: "Executive", email: "executive@nlu.ac.th", role: "EXECUTIVE" },
+  // Neither is in any allowlist — the CMU claims are what earn them the role, exactly as a
+  // real account would. Two of them because นศ. and บุคลากร reach BORROWER by different
+  // signals: the student by faculty code, the staffer by department name (their code is
+  // unknown — no one here has an account to look it up with).
+  { label: "ผู้ยืม (นศ.)", email: "student@cmu.ac.th", role: "BORROWER", claims: { orgCode: "12", accountType: "StudentAccount" } },
+  { label: "ผู้ยืม (บุคลากร)", email: "staff@cmu.ac.th", role: "BORROWER", claims: { orgCode: "4501", orgName: "ภาควิชาการพยาบาลศัลยศาสตร์", accountType: "MISEmployee" } },
 ];
 
 export default function LoginPage() {
@@ -43,11 +49,11 @@ export default function LoginPage() {
     window.location.href = withBase(`/api/auth/cmu?next=${encodeURIComponent(safeNext())}`);
   }
 
-  async function handleDevLogin(loginEmail: string) {
+  async function handleDevLogin(loginEmail: string, claims?: { orgCode?: string; orgName?: string; accountType?: string }) {
     setLoading(true);
     setError("");
     try {
-      await login(loginEmail, "");
+      await login(loginEmail, "", claims);
       router.push(safeNext());
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Network error");
@@ -91,14 +97,14 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {quickLogins.map((q) => (
                 <Button
                   key={q.email}
                   variant="outline"
                   size="sm"
                   disabled={loading}
-                  onClick={() => handleDevLogin(q.email)}
+                  onClick={() => handleDevLogin(q.email, q.claims)}
                 >
                   {q.label}
                 </Button>

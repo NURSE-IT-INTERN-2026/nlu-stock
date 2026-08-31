@@ -108,10 +108,14 @@ export interface ProfileOption {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
   setTracking: boolean;
+  /** ยืมเอง — ปิดทั้งประเภท และตั้งเพดานที่ item ส่วนใหญ่ใช้. See lib/self-borrow.ts. */
+  selfBorrowable: boolean;
+  selfBorrowLimit: number;
   icon: string;
   color: string;
   sortOrder: number;
   isActive: boolean;
+  /** items counted through CategoryType — the profiles GET assembles it. */
   _count?: { subCategories: number; items: number };
 }
 
@@ -139,10 +143,15 @@ export interface UserOption {
 
 // ─── Auth ───
 
-export function login(email: string, password: string) {
+/** Dev-only shortcut route. The claims stand in for what CMU would send. */
+export function login(
+  email: string,
+  password: string,
+  claims?: { orgCode?: string; orgName?: string; accountType?: string },
+) {
   return request<{ user: unknown }>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...claims }),
   });
 }
 
@@ -204,6 +213,8 @@ export function createProfile(data: {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking?: boolean;
   setTracking?: boolean;
+  selfBorrowable?: boolean;
+  selfBorrowLimit?: number;
   icon?: string;
   color: string;
   description?: string;
@@ -338,14 +349,32 @@ export function getUsers() {
  * /api/settings/users แบ่งหน้าฝั่ง server เสมอ (perPage default 20) — ผู้เรียกต้องส่ง page
  * และอ่าน total ไม่งั้นคนที่ 21 ขึ้นไปหายเงียบโดยไม่มีอะไรบอก
  */
-export function getSettingsUsers(params?: { page?: number; perPage?: number }) {
+export function getSettingsUsers(params?: { page?: number; perPage?: number; role?: string }) {
   const qs = new URLSearchParams({
     page: String(params?.page ?? 1),
     perPage: String(params?.perPage ?? 20),
+    ...(params?.role && params.role !== "ALL" ? { role: params.role } : {}),
   }).toString();
   return request<{ users: UserOption[]; page: number; perPage: number; total: number }>(
     `/api/settings/users?${qs}`,
   );
+}
+
+/** ยืมเอง — นศ./บุคลากรกดยืมจากหน้าพัสดุที่สแกนมา. Staff get 403; they use the เบิก/ยืม screen. */
+export function selfBorrow(data: {
+  itemId: string;
+  quantity?: number;
+  subItemId?: string | null;
+  usageType: string;
+  courseCode?: string | null;
+  usageNote?: string | null;
+  /** จำนวนวัน ไม่ใช่วันที่ — see lib/self-borrow.ts. */
+  days?: number;
+}) {
+  return request<{ success: boolean; id: string }>("/api/borrow", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export function updateSettingsUser(id: string, data: Record<string, unknown>) {

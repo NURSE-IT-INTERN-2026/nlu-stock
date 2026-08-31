@@ -31,6 +31,11 @@ const itemBaseSchema = z.object({
   storageRequirements: z.string().max(500).optional().nullable(),
   // Book/Toy set size
   setSize: z.number().int().min(1).default(1),
+  // ยืมเอง — the per-item OFF switch and its per-borrow cap. The profile rule in
+  // lib/self-borrow.ts still overrules both; these can only ever close, never open.
+  selfBorrowable: z.boolean().default(true),
+  // null = ตามประเภท. Only an exception carries its own number.
+  selfBorrowLimit: z.number().int().min(1).optional().nullable(),
 });
 
 export const itemCreateSchema = itemBaseSchema;

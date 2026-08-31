@@ -178,6 +178,14 @@ model CategoryProfile {
   dispenseType  DispenseType
   assetTracking Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
   setTracking   Boolean      @default(false) // โชว์ setSize (BOOK/TOY)
+  // ยืมเอง — ปิดทั้งประเภทได้ในคลิกเดียว. Lives here and not only on Item so a decision about
+  // a whole ประเภท (KIT ต้องผ่านเจ้าหน้าที่ เพราะระบบไม่ตัดของสิ้นเปลืองในชุดให้) survives the
+  // next item somebody adds to it. Item.selfBorrowable narrows further; neither can widen.
+  selfBorrowable Boolean     @default(true)
+  // เพดานต่อการกด 1 ครั้ง สำหรับทั้งประเภท. Item.selfBorrowLimit overrides per item; null
+  // there = follow this. Same shape as countCycleMonths, for the same reason: nobody is
+  // going to set a number on 918 rows one at a time.
+  selfBorrowLimit Int        @default(1)
   icon          String       @default("Package")
   color         String       @default("bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200")
   sortOrder     Int          @default(0)
@@ -248,11 +256,21 @@ model Item {
   storageRequirements String?
 
   // Book/Toy set size — volumes per set; 1 = single.
-  // No borrowLimit/borrowable here: both were write-only for their whole life (nothing
-  // read them to allow or deny a loan) while the UI promised "0 = ห้ามยืม". What actually
-  // stops a loan is the piece's status — dispense rejects any SubItem that is not
-  // AVAILABLE, and ตั้งใช้ในห้อง (IN_USE) is how a piece is kept off the loan pool.
   setSize Int @default(1)
+
+  // These replace the old borrowLimit/borrowable, which were dropped for being write-only —
+  // nothing ever read them, while the UI promised "0 = ห้ามยืม". They are NOT a gate on
+  // เบิก/ยืม by staff: that is still the piece's status (dispense rejects any SubItem that
+  // is not AVAILABLE, and ตั้งใช้ในห้อง keeps a piece off the loan pool). They govern
+  // self-service only, and /api/borrow is the reader that makes them mean something.
+
+  // ยืมเอง (นศ./บุคลากรสแกน QR แล้วกดยืมเอง ไม่ผ่านเจ้าหน้าที่). Per-item OFF switch — it
+  // narrows CategoryProfile.selfBorrowable and can never widen it. See lib/self-borrow.ts.
+  selfBorrowable  Boolean @default(true)
+  // Max units one person may take in a single self-borrow. null = ใช้ค่าของประเภท
+  // (CategoryProfile.selfBorrowLimit) — see selfBorrowLimitFor in lib/self-borrow.ts.
+  // Only meaningful for COUNT/CONSUMABLE; tracked items go out one piece at a time anyway.
+  selfBorrowLimit Int?
 
   // Stock count cycle (ตรวจนับ). countCycleMonths null = use the profile default
   // (CONSUMABLE 3 months, everything else 12) — see src/lib/stock-count.ts. Set a

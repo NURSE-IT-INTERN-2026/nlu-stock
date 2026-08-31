@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { NumericInput } from "@/components/shared/numeric-input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EditDialogShell } from "@/components/shared/edit-dialog-shell";
@@ -50,6 +51,8 @@ interface SettingsItem {
   countCycleMonths: number | null;
   storageRequirements: string | null;
   setSize: number;
+  selfBorrowable: boolean;
+  selfBorrowLimit: number | null;
   _count: { subItems: number; dispenseRecords: number; receiveRecords: number };
 }
 
@@ -64,6 +67,9 @@ interface FormState {
   countCycleMonths: string; // "" = follow the profile default (3 mo consumable, 12 mo rest)
   storageRequirements: string;
   setSize: number;
+  selfBorrowable: boolean;
+  /** "" = ตามประเภท — kept as a string so an emptied box stays empty instead of snapping to 1. */
+  selfBorrowLimit: string;
 }
 
 const emptyForm: FormState = {
@@ -77,6 +83,8 @@ const emptyForm: FormState = {
   countCycleMonths: "",
   storageRequirements: "",
   setSize: 1,
+  selfBorrowable: true,
+  selfBorrowLimit: "",
 };
 
 function prefillFrom(item: SettingsItem): FormState {
@@ -103,6 +111,8 @@ function prefillFrom(item: SettingsItem): FormState {
     countCycleMonths: item.countCycleMonths != null ? String(item.countCycleMonths) : "",
     storageRequirements: item.storageRequirements || "",
     setSize: item.setSize ?? 1,
+    selfBorrowable: item.selfBorrowable ?? true,
+    selfBorrowLimit: item.selfBorrowLimit == null ? "" : String(item.selfBorrowLimit),
   };
 }
 
@@ -185,6 +195,7 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
       vendorContact: form.vendorContact || null,
       vendorPhone: form.vendorPhone || null,
       storageRequirements: form.storageRequirements || null,
+      selfBorrowLimit: form.selfBorrowLimit === "" ? null : Number(form.selfBorrowLimit),
     };
 
     try {
@@ -327,6 +338,37 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                         className="h-10 text-foreground bg-muted/50 border border-input shadow-none font-mono"
                       />
                     </div>
+                  )}
+                  {/* Hidden only when the whole ประเภท is closed — an item switch that cannot
+                      change the answer is worse than no switch (lib/self-borrow.ts). */}
+                  {(profile?.selfBorrowable ?? true) && (
+                    <>
+                      <div className="col-span-2 flex items-center justify-between gap-3 rounded-lg border border-input bg-muted/50 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <Label className="text-[11px] font-medium text-foreground">ให้ยืมเองผ่าน QR</Label>
+                          <p className="text-[11px] text-muted-foreground">นศ./บุคลากรสแกนแล้วกดยืมได้เอง ไม่ผ่านเจ้าหน้าที่</p>
+                        </div>
+                        <Switch
+                          checked={form.selfBorrowable}
+                          onCheckedChange={(v) => setForm({ ...form, selfBorrowable: v })}
+                        />
+                      </div>
+                      {form.selfBorrowable && !form.trackIndividually && (
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-medium text-muted-foreground">เบิก-ยืมเองได้ครั้งละไม่เกิน</Label>
+                          {/* Blank = ตามประเภท, same contract as รอบตรวจนับ two fields down.
+                              A number here is an exception, not the normal way to configure. */}
+                          <Input
+                            type="number"
+                            min={1}
+                            value={form.selfBorrowLimit}
+                            onChange={(e) => setForm({ ...form, selfBorrowLimit: e.target.value })}
+                            placeholder={profile ? `ค่าเริ่มต้นจากประเภท: ${profile.selfBorrowLimit}` : "ค่าเริ่มต้นจากประเภท"}
+                            className="h-10 text-foreground bg-muted/50 border border-input shadow-none"
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-medium text-muted-foreground">จำนวนขั้นต่ำ</Label>
