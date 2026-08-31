@@ -24,7 +24,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       category: { include: { profile: true } },
       location: true,
       issueUnit: true,
-      subItems: { orderBy: { subCode: "asc" } },
+      // location + the one open loan per piece so the detail page can render the sub-code
+      // table off this response. Those two used to come from a second call to
+      // /api/settings/items/:id/sub-items, which is requireAdmin — so the table sat empty
+      // and the count read "0 ชิ้น" for every EXECUTIVE and BORROWER who opened a copy.
+      subItems: {
+        orderBy: { subCode: "asc" },
+        include: {
+          location: true,
+          dispenseRecords: {
+            where: { returnedAt: null },
+            orderBy: { dispensedAt: "desc" },
+            take: 1,
+            include: { staff: { select: { name: true } } },
+          },
+        },
+      },
       // receivedDate breaks the tie between date-coded lots, which carry no expiry.
       lots: { orderBy: [{ expiryDate: "asc" }, { receivedDate: "asc" }] },
       dispenseRecords: {
