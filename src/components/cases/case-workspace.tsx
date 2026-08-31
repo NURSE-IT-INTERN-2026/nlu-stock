@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import {
-  Wrench, ShieldCheck, ShoppingCart, MonitorCog, ClipboardCheck, SearchX, Search, FilterX, ChevronRight, ArrowLeft,
-  CalendarDays, ListFilter, CircleDot, Paperclip, Link2,
+  Wrench, ShieldCheck, ShoppingCart, MonitorCog, ClipboardCheck, SearchX, Search, FilterX, ChevronRight,
+  CalendarDays, ListFilter, CircleDot, Paperclip, Link2, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCases, getCaseDetail, recoverStock, type CaseSummaryJson, type CaseDetailJson, type CaseTotalsJson } from "@/lib/api";
@@ -12,13 +12,16 @@ import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import { CASE_TYPE_LABELS, type CaseState, type CaseType } from "@/lib/case-types";
+import { CASE_TYPE_LABELS, caseRangeOptions, type CaseState, type CaseType } from "@/lib/case-types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AttachmentList } from "@/components/shared/attachment-list";
-import { useIsMobile } from "@/hooks/use-is-mobile";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { ReportDataTable, type Column } from "@/components/reports/report-data-table";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 // หน้านี้ตอบคำถามเดียว: "งานนี้เกิดอะไรขึ้นบ้าง". ไม่ใช่ feed ของ log — log ทุกบรรทัดอยู่ใต้เคสที่มันเกิด
 // เสมอ จึงไม่มีคำถามว่า "บรรทัดนี้ของเคสไหน" ให้ต้องเดา. ที่มาของเคสอยู่ใน src/lib/cases.ts
@@ -49,18 +52,17 @@ const STATE_OPTIONS = [
   { value: "DONE", label: "เสร็จสิ้น" },
   { value: "CANCELLED", label: "ยกเลิก" },
 ];
-const RANGE_OPTIONS = [
-  { value: "all", label: "ทั้งหมด" },
-  { value: "7d", label: "7 วันล่าสุด" },
-  { value: "30d", label: "30 วันล่าสุด" },
-  { value: "90d", label: "90 วันล่าสุด" },
-  { value: "year", label: "ปีนี้" },
-];
+const RANGE_OPTIONS = caseRangeOptions();
 
 /**
- * เวิร์กสเปซเคส ตัวเดียว สามที่: /cases, แท็บประวัติของ /maintenance และของ /repairs.
- * `lockType` คือความต่างทั้งหมด — หน้าที่ถามคำถามเดียวไม่ต้องมี dropdown ให้เลือกประเภท และที่
- * สำคัญกว่านั้นคือ ทั้งสามที่อ่านจากที่มาเดียวกัน จึงไม่มีทางเป็น log คนละกองที่ไม่ตรงกัน.
+ * เวิร์กสเปซเคส ตัวเดียว สามที่: รายการสิ่งที่ต้องทำของ /alerts, แท็บประวัติของ /maintenance และ
+ * ของ /repairs. `lockType` คือความต่างทั้งหมด — หน้าที่ถามคำถามเดียวไม่ต้องมี dropdown ให้เลือก
+ * ประเภท และที่สำคัญกว่านั้นคือ ทั้งสามที่อ่านจากที่มาเดียวกัน จึงไม่มีทางเป็น log คนละกองที่ไม่ตรงกัน.
+ *
+ * หน้าตาเป็นตารางเต็มความกว้าง กดแถวแล้วรายละเอียดเปิดเป็น drawer ทางขวา. เดิมเป็นสองช่อง 1:2 ซึ่ง
+ * บังคับให้รายการอยู่ในคอลัมน์ ~341px — กว้างพอสำหรับสี่บรรทัดต่อเคสเท่านั้น รหัสเคสกับผู้แจ้งจึง
+ * หล่นหายทั้งที่เป็นสองอย่างที่คนตามงานถามถึงที่สุด. ตารางคืนความกว้างนั้นให้ ส่วนรายละเอียดมาเมื่อ
+ * ถูกเรียก แทนที่จะกินครึ่งจอค้างไว้ตลอดเวลาเผื่อว่าจะมีคนอ่าน.
  */
 export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId, compact, canEdit, onTotals }: {
   itemId?: string;
@@ -71,6 +73,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
    * "กำลังดำเนินการ" อยู่แล้ว dropdown สถานะจึงหายไป — ตัวกรองที่มีค่าเดียวให้เลือกไม่ใช่ตัวกรอง.
    */
   todo?: boolean;
+  /** เปิดหน้ามาพร้อม drawer ของเคสใบนี้ — ลิงก์จากประวัติของพัสดุชี้มาที่เคสตรงๆ */
   initialCaseId?: string;
   /** Embedded in an item tab: no filter bar — a scoped list of three has nothing to filter. */
   compact?: boolean;
@@ -80,7 +83,6 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
    *  neither: a list scoped to one พัสดุ has nothing to total and nothing to export. */
   onTotals?: (totals: CaseTotalsJson, query: string) => void;
 }) {
-  const isMobile = useIsMobile();
   const [type, setType] = useState<string>(lockType ?? "all");
   const [state, setState] = useState("all");
   const [range, setRange] = useState("all");
@@ -90,6 +92,9 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(initialCaseId ?? null);
+  // แบ่งหน้าที่ server เพราะตัวแบ่งหน้าอยู่ใต้ตารางให้เห็น — เลข 7 ที่กดได้ต้องพาไปถึงเคสที่ 137 จริง.
+  // เดิมขอ 50 ใบรวดแล้วไม่ส่ง page เลย หัวรายการจึงเขียนว่า "137 เคส" ทั้งที่เลื่อนได้แค่ 50.
+  const [page, setPage] = useState(1);
 
   // Held in a ref, not a dependency: callers pass an inline arrow, and a new function identity
   // every render would refire the fetch below forever.
@@ -106,7 +111,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
 
   useEffect(() => {
     let live = true;
-    const p = new URLSearchParams({ perPage: "50" });
+    const p = new URLSearchParams({ perPage: String(PAGE_SIZE.DEFAULT), page: String(page) });
     if (type !== "all") p.set("type", type);
     if (state !== "all") p.set("state", state);
     if (range !== "all") p.set("range", range);
@@ -127,80 +132,110 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
       }
     })();
     return () => { live = false; };
-  }, [type, state, range, search, todo, itemId, subItemId]);
+  }, [type, state, range, search, todo, itemId, subItemId, page]);
+
+  // ตัวกรองใหม่ = ชุดผลลัพธ์ใหม่ หน้าที่ 4 ของชุดเก่าจึงไม่มีความหมาย และมักว่างเปล่า
+  useEffect(() => { setPage(1); }, [type, state, range, search]);
 
   // Derived, not stored: a selection that the newest filter excludes must not survive as state
-  // the user cannot navigate back to. Falling through to the first row keeps the desktop pane
-  // filled without an effect that writes state on every list change.
+  // the user cannot navigate back to — drawer ที่ยังเปิดค้างอยู่บนเคสที่ตารางไม่มีแล้ว คือหน้าจอที่
+  // ปิดแล้วหาทางกลับไม่เจอ. ไม่มีการเลือกแถวแรกให้เอง: drawer ที่เด้งขึ้นมาเองตั้งแต่เปิดหน้าคือ
+  // แผงที่ทับตารางทั้งที่ยังไม่มีใครกดอะไร.
   const active = useMemo(() => {
     if (selected && cases.some((c) => c.id === selected)) return selected;
     // A deep link from an item's ประวัติ names a case the default filters may not list. Honour it
     // rather than silently dropping the reader on some other case.
     if (selected === initialCaseId && initialCaseId) return initialCaseId;
-    if (isMobile) return null;
-    return cases[0]?.id ?? null;
-  }, [cases, selected, isMobile, initialCaseId]);
+    return null;
+  }, [cases, selected, initialCaseId]);
 
   const clear = () => { setType(lockType ?? "all"); setState("all"); setRange("all"); setQ(""); };
 
-  const list = (
-    <CaseList
-      cases={cases}
-      total={total}
-      loading={loading}
-      selected={active}
-      onSelect={setSelected}
-      q={q}
-      onQ={setQ}
-      compact={compact}
-    />
-  );
-
-  if (isMobile) {
-    return (
-      <div className="space-y-4">
-        <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear, todo }} />
-        {active ? (
-          <div>
-            <Button variant="ghost" className="mb-2 gap-1.5" onClick={() => setSelected(null)}>
-              <ArrowLeft className="size-4" /> กลับไปรายการเคส
-            </Button>
-            <CaseDetailPane caseId={active} onOpenCase={setSelected} canEdit={canEdit} />
-          </div>
-        ) : list}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      {!compact && <Filters {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo }} />}
-      {/* 1:2 — รายการเคสได้หนึ่งส่วน รายละเอียดได้สองส่วน เพราะที่นี่คือที่ที่ timeline กับ fields อยู่
-          จริง ส่วนแถวในรายการมีแค่ชื่อ+รหัส+วันที่. แตกสองคอลัมน์ที่ lg ไม่ใช่ xl: 1024px หาร 1:2
-          ให้รายการ ~341px ซึ่งเท่ากับความกว้างคงที่ที่ใช้อยู่เดิม จึงไม่มีเหตุให้รอถึง 1280px.
-          minmax(0,…) ไม่ใช่ 1fr/2fr เปล่า — track ที่เป็น auto ปล่อยให้ข้อความยาวดันคอลัมน์บวม. */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        {list}
-        {active
-          ? <CaseDetailPane caseId={active} onOpenCase={setSelected} canEdit={canEdit} />
-          : <EmptyPane />}
-      </div>
+      {/* หัวเรื่อง ตัวกรอง ตาราง แบ่งหน้า = การ์ดใบเดียว ไม่ใช่สามก้อนลอยบนพื้นหลัง —
+          แบบเดียวกับตารางบำรุงรักษาที่หน้า /maintenance แท็บภาพรวม */}
+      <section className="overflow-hidden rounded-2xl border bg-card">
+        {/* ไม่มีหัวเรื่อง: แท็บที่กดเข้ามาบอกแล้วว่านี่คือเคสอะไร และแถบแบ่งหน้าใต้ตารางนับให้แล้ว
+            ("รายการทั้งหมด N เคส") — บรรทัด "รายการเคส (604 เคส)" พูดซ้ำทั้งสองอย่างในที่เดียว */}
+        {!compact && (
+          <div className="px-4 pt-4">
+            <Filters
+              {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ: setQ }}
+              className="rounded-none border-0 bg-transparent p-0"
+            />
+          </div>
+        )}
+        {/* ตารางเป็นกล่องของตัวเองในการ์ดใหญ่ เว้นขอบ 16px รอบด้าน ไม่ชนขอบการ์ด.
+            ตารางเดิมของหน้ารายงาน: row click + คีย์บอร์ด + สถานะว่าง/กำลังโหลด + เลื่อนแนวนอนบนจอแคบ
+            มีครบแล้ว ตารางเจ้าที่สองไม่มีอะไรใหม่ให้. pageSize ต้องเท่า perPage ที่ขอจาก server เพราะ
+            ตารางหั่นข้อมูลของตัวเองอีกชั้น — ตัวเลขไม่ตรงกันเมื่อไหร่ แถวท้ายหายเงียบๆ */}
+        <div className="m-4">
+          <ReportDataTable
+            columns={CASE_COLUMNS}
+            data={cases}
+            loading={loading}
+            pageSize={PAGE_SIZE.DEFAULT}
+            emptyMessage="ไม่มีเคสตามตัวกรองนี้"
+            onRowClick={(c) => setSelected(c.id)}
+            footer={<Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="เคส" />}
+            className="rounded-xl border shadow-none"
+          />
+        </div>
+      </section>
+      <Sheet open={!!active} onOpenChange={(o) => { if (!o) setSelected(null); }}>
+        {/* ความกว้างชุดเดียวคุมครบทุกจอ — มือถือเต็มจอ, แท็บเล็ตกับเดสก์ท็อป 520px — จึงไม่ต้องมี
+            branch isMobile/isTablet ให้ดูแล. 520 ไม่ใช่ 384 เพราะหัวเคสมีสองบรรทัด + ป้ายสองอัน และ
+            แท็บสี่อันต่อกันจนเบียด; ไม่ใช่ 768 เพราะ drawer ที่กินครึ่งจอ 1440px ก็คือสองช่องแบบเดิม
+            ที่เพิ่งเลิกใช้. ทางแก้คือขยายแผง ไม่ใช่หดฟอนต์ — ข้อมูลครบบนแผงที่อ่านแล้วล้าไม่ได้แก้อะไร.
+
+            prefix ต้องเป็น data-[side=right]:sm: ให้ตรงกับ default ของ SheetContent เป๊ะ ไม่งั้น
+            tailwind-merge มองเป็นคนละคีย์แล้วปล่อยรอดมาทั้งคู่ จากนั้น attribute selector ก็ชนะ plain
+            class ทุกครั้ง — แผงจะค้างที่ max-w-sm เงียบๆ. กับดักเดียวกับคอมเมนต์เรื่อง h-auto ใน
+            src/components/ui/sheet.tsx */}
+        <SheetContent
+          side="right"
+          className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[520px]"
+          showCloseButton={false}
+        >
+          {/* ปุ่มปิดสำเร็จรูปของ Sheet เป็น absolute top-3 right-3 ซึ่งตกลงมาทับปุ่มลงมือบนหัวเคสพอดี.
+              แถบหัวของตัวเองถูกกว่าการยัด padding ข้ามคอมโพเนนต์ไปเว้นที่ให้ปุ่มที่ CaseDetailPane
+              ไม่รู้ว่ามีอยู่. */}
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2.5">
+            <SheetTitle className="text-sm font-semibold">รายละเอียดเคส</SheetTitle>
+            <SheetClose render={<Button variant="ghost" size="icon-sm" />}>
+              <X className="size-4" />
+              <span className="sr-only">ปิด</span>
+            </SheetClose>
+          </div>
+          <SheetDescription className="sr-only">ไทม์ไลน์ รายละเอียด หลักฐาน และเคสที่เกี่ยวข้องของเคสที่เลือก</SheetDescription>
+          {/* min-h-0 คู่กับ flex-1: flex child ที่ basis 0% ในพ่อที่สูงไม่แน่นอนจะไม่ยอมหด แล้วไทม์ไลน์
+              ยาวๆ จะดันแผงทะลุจอแทนที่จะเลื่อนอยู่ข้างใน */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {active && <CaseDetailPane bare caseId={active} onOpenCase={setSelected} canEdit={canEdit} />}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
-function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo }: {
+function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ, className }: {
   type: string; setType: (v: string) => void;
   state: string; setState: (v: string) => void;
   range: string; setRange: (v: string) => void;
   dirty: boolean; clear: () => void;
   lockType?: CaseType;
   todo?: boolean;
+  /** โหมดตาราง: ช่องค้นหาย้ายมาอยู่กับตัวกรองตัวอื่น เพราะหัวการ์ดที่เคยถือมันไว้ไม่มีแล้ว */
+  q?: string; onQ?: (v: string) => void;
+  /** ตัวกรองอยู่ในการ์ดใหญ่แล้ว — ผู้เรียกถอดกรอบของตัวมันเองออกผ่านตรงนี้ */
+  className?: string;
 }) {
   const typeOptions = todo ? TODO_TYPE_OPTIONS : TYPE_OPTIONS;
   const label = (opts: { value: string; label: string }[], v: string) => opts.find((o) => o.value === v)?.label ?? "";
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
+    <div className={cn("flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4", className)}>
       {/* A page that asks one question offers no way to ask another — the ประเภทเคส picker only
           appears where more than one type can show up. */}
       {!lockType && (
@@ -222,6 +257,19 @@ function Filters({ type, setType, state, setState, range, setRange, dirty, clear
           {RANGE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
         </FilterSelect>
       </Field>
+      {onQ && (
+        <Field label="ค้นหา">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q ?? ""}
+              onChange={(e) => onQ(e.target.value)}
+              placeholder="ค้นหาเคส / รหัส / พัสดุ…"
+              className="h-9 rounded-lg pl-8 sm:w-[240px]"
+            />
+          </div>
+        </Field>
+      )}
       {dirty && (
         <Button variant="outline" className="ml-auto gap-1.5" onClick={clear}>
           <FilterX className="size-4" /> ล้างตัวกรอง
@@ -261,91 +309,6 @@ function FilterSelect({ icon: Icon, value, onValueChange, selectedLabel, childre
 }
 
 // ── รายการเคส ─────────────────────────────────────────────────────────────────
-function CaseList({ cases, total, loading, selected, onSelect, q, onQ, compact }: {
-  cases: CaseSummaryJson[];
-  total: number;
-  loading: boolean;
-  selected: string | null;
-  onSelect: (id: string) => void;
-  q: string;
-  onQ: (v: string) => void;
-  compact?: boolean;
-}) {
-  return (
-    <section className="flex max-h-[calc(100vh-13rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <header className="border-b border-border px-4 py-3.5">
-        <h2 className="text-sm font-semibold">
-          รายการเคส <span className="text-muted-foreground tabular-nums">({total} เคส)</span>
-        </h2>
-        {!compact && (
-          <div className="relative mt-2.5">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => onQ(e.target.value)}
-              placeholder="ค้นหาเคส / รหัส / พัสดุ…"
-              className="h-9 rounded-lg pl-8"
-            />
-          </div>
-        )}
-      </header>
-
-      {/* overflow-auto alone: pairing it with overflow-hidden clips the rounded corners AND
-          kills the scroll. max-h on the section, not flex-1 — a flex child with basis 0% in an
-          indefinite parent ignores an explicit height. */}
-      <div className="overflow-auto">
-        {loading ? (
-          <div className="space-y-2 p-3">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
-          </div>
-        ) : cases.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">ไม่มีเคสตามตัวกรองนี้</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {cases.map((c) => {
-              const meta = TYPE_META[c.type];
-              const Icon = meta.icon;
-              const on = selected === c.id;
-              return (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(c.id)}
-                    className={cn(
-                      "relative grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3 text-left transition",
-                      on ? "bg-primary/5" : "hover:bg-muted/40",
-                    )}
-                  >
-                    {on && <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-primary" />}
-                    <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", meta.tone)}>
-                      <Icon className="size-4" />
-                    </span>
-                    {/* ทำอะไร → เรื่องอะไร → กับของชิ้นไหน → เลขอ้างอิง. รหัสเคสเคยนำหัวแถว ซึ่งทำให้
-                        รายการเคสยี่สิบเคสอ่านเหมือนกันหมดจนกว่าจะไล่สายตาลงบรรทัดที่สาม. */}
-                    <span className="min-w-0">
-                      <span className="block truncate text-[11px] font-medium text-muted-foreground">
-                        {CASE_TYPE_LABELS[c.type]}
-                      </span>
-                      <span className="mt-0.5 block truncate text-sm font-medium">{c.subject}</span>
-                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                        {c.title}{c.qty != null ? ` · ${c.qty} ${c.unit}` : ""}
-                      </span>
-                      <span className="mt-1 block truncate text-[11px] text-muted-foreground">
-                        <span className="font-mono">{c.code}</span> · {fmtDate(c.updatedAt, TH_DATE)}
-                      </span>
-                    </span>
-                    <StatePill c={c} />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function StatePill({ c }: { c: CaseSummaryJson }) {
   return (
     // จุดนำหน้าเหมือนกับป้ายสถานะบนหัวเคส — ทึบ+จุด แปลว่าสถานะ ทั้งในรายการและในเคส
@@ -356,13 +319,51 @@ function StatePill({ c }: { c: CaseSummaryJson }) {
   );
 }
 
-function EmptyPane() {
-  return (
-    <section className="grid place-items-center rounded-2xl border border-dashed border-border bg-card/40 py-24">
-      <p className="text-sm text-muted-foreground">เลือกเคสทางซ้ายเพื่อดูรายละเอียด</p>
-    </section>
-  );
-}
+// ── ตารางเคส (โหมด drawer) ────────────────────────────────────────────────────
+// คิวงานอ่านแบบกวาดสายตาเทียบกันทีละคอลัมน์ ซึ่งการ์ดสี่บรรทัดในคอลัมน์ ~341px ทำไม่ได้ — มันใส่ได้
+// แค่ประเภท/เรื่อง/พัสดุ/วันที่ ส่วนผู้แจ้งกับรหัสเคสหล่นหายไปทั้งที่เป็นสองอย่างที่คนตามงานถามถึงที่สุด.
+//
+// nowrap เป็นค่าตั้งต้นของ TableCell ซึ่งถูกกับคอลัมน์ที่ขาดกลางคำไม่ได้ — รหัสเคส, สถานะ, ประเภท,
+// วันที่ — แต่พอเจ็ดคอลัมน์ nowrap พร้อมกัน ความกว้างรวมทะลุ 1440px แล้วคอลัมน์อัปเดตโดนขอบตัดเป็น
+// "24 ส.ค. 256" ทั้งที่ยังไม่มี drawer เปิดด้วยซ้ำ. ทางออกไม่ใช่หดฟอนต์หรือบีบทุกคอลัมน์ให้พอดีจอ —
+// ตารางนี้มีไว้สแกน — แต่คือปล่อยสามคอลัมน์ที่เป็นประโยคให้ห่อบรรทัดได้ แล้วมันจะดูดส่วนเกินไปเอง
+// ก่อนที่คอลัมน์ที่ขาดไม่ได้จะโดนเบียด. min-w กันไม่ให้ห่อจนเหลือคำละบรรทัด — "ตรวจเช็คตามรอบ
+// ประจำปี" ซึ่งเป็นเรื่องที่ซ้ำบ่อยที่สุด วัดได้ 186px จึงห่อทิ้ง "ปี" ไว้บรรทัดล่างลำพังที่ 150 และ 170. ผู้แจ้งกลับไป nowrap หลังลองแล้ว: มันเป็น
+// คอลัมน์ที่ห่อง่ายที่สุด เบราว์เซอร์จึงเลือกมันก่อนเสมอ แล้ว "Admin User" กลายเป็นสองบรรทัดทุกแถว
+// ทั้งตาราง — ความสูงแถวคูณสอง แลกกับที่ว่างไม่กี่สิบพิกเซล
+const CASE_COLUMNS: Column<CaseSummaryJson>[] = [
+  {
+    key: "type",
+    header: "ประเภท",
+    render: (c) => {
+      const { icon: Icon, tone } = TYPE_META[c.type];
+      return (
+        <span className="inline-flex items-center gap-1.5">
+          <span className={cn("grid size-5 shrink-0 place-items-center rounded", tone)}>
+            <Icon className="size-3" />
+          </span>
+          {CASE_TYPE_LABELS[c.type]}
+        </span>
+      );
+    },
+  },
+  { key: "code", header: "รหัสเคส", className: "font-mono text-xs", render: (c) => c.code },
+  { key: "subject", header: "เรื่อง", className: "min-w-[190px] font-medium whitespace-normal", render: (c) => c.subject },
+  {
+    key: "title",
+    header: "พัสดุ",
+    className: "min-w-[200px] whitespace-normal",
+    render: (c) => `${c.title}${c.qty != null ? ` · ${c.qty} ${c.unit}` : ""}`,
+  },
+  { key: "state", header: "สถานะ", render: (c) => <StatePill c={c} /> },
+  { key: "openedBy", header: "ผู้แจ้ง", className: "text-muted-foreground", render: (c) => c.openedBy || "—" },
+  {
+    key: "updatedAt",
+    header: "อัปเดต",
+    className: "tabular-nums text-muted-foreground",
+    render: (c) => fmtDate(c.updatedAt, TH_DATE),
+  },
+];
 
 // ── รายละเอียดเคส ─────────────────────────────────────────────────────────────
 const DETAIL_TABS = [
@@ -380,10 +381,12 @@ type DetailTab = (typeof DETAIL_TABS)[number]["value"];
  * รายละเอียดเคสหนึ่งใบ. Exported เพราะประวัติของพัสดุเปิดเคสด้วยตัวนี้เหมือนกัน — คนละหน้า แต่ต้อง
  * เป็นเคสใบเดียวกันที่หน้าตาเหมือนกันเป๊ะ ไม่ใช่ของสองอันที่ค่อยๆ เพี้ยนออกจากกัน.
  */
-export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
+export function CaseDetailPane({ caseId, onOpenCase, canEdit, bare }: {
   caseId: string;
   onOpenCase: (id: string) => void;
   canEdit?: boolean;
+  /** อยู่ใน Sheet แล้ว: การ์ดซ้อนในแผงคือเส้นขอบสองชั้นที่ไม่ได้แบ่งอะไรเพิ่ม */
+  bare?: boolean;
 }) {
   const [data, setData] = useState<CaseDetailJson | null>(null);
   const [loading, setLoading] = useState(true);
@@ -395,6 +398,7 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
   // แนบเพิ่ม/ลบ answers with the record's array as it stands. Keyed by the record, not by the
   // step, so an edit survives switching tabs without refetching the whole case.
   const [edited, setEdited] = useState<Record<string, string[]>>({});
+  const shell = bare ? "" : "rounded-2xl border border-border bg-card";
 
   useEffect(() => {
     let live = true;
@@ -427,7 +431,7 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
 
   if (loading) {
     return (
-      <section className="space-y-3 rounded-2xl border border-border bg-card p-5">
+      <section className={cn("space-y-3 p-5", shell)}>
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-40 w-full rounded-xl" />
@@ -436,7 +440,7 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
   }
   if (!data) {
     return (
-      <section className="grid place-items-center rounded-2xl border border-border bg-card py-24">
+      <section className={cn("grid place-items-center py-24", shell)}>
         <p className="text-sm text-muted-foreground">ไม่พบเคสนี้</p>
       </section>
     );
@@ -447,7 +451,7 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
 
   return (
     <div>
-      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <section className={cn("overflow-hidden", shell)}>
         <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
           <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", meta.tone)}>
             <Icon className="size-5" />
@@ -471,7 +475,12 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit }: {
             {/* The subject is the heading; the code sits with the other reference numbers below
                 it. Someone opening a case wants to know what it is about, then quote its number. */}
             <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight">{data.subject}</h2>
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">
+            {/* line-clamp-2 ไม่ใช่ truncate: ชื่อพัสดุยาวๆ อย่าง "เครื่องควบคุมการให้สารละลายทาง
+                หลอดเลือดดำโดยใช้กระบอกฉีดยา" ไม่มีทางพอบรรทัดเดียวไม่ว่าแผงจะกว้างแค่ไหน หัวเคสจึง
+                ตัดคำตอบของ "เคสนี้เรื่องของชิ้นไหน" ทิ้งทุกครั้ง ทั้งที่ชื่อเต็มนอนอยู่ในแท็บรายละเอียด
+                ห่างไปคลิกเดียว. สองบรรทัดพอสำหรับชื่อที่ยาวที่สุดในคลัง และยังกันหัวเคสไม่ให้ยืดจน
+                ไทม์ไลน์ถูกดันตกจอ */}
+            <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
               {data.title}{data.qty != null ? ` · ${data.qty} ${data.unit}` : ""}
             </p>
             <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">

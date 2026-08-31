@@ -45,6 +45,15 @@ export function statusOptionsFor(dispenseType?: "CONSUMABLE" | "COUNT" | "ITEM" 
   return (Object.keys(STATUS_LABELS) as ItemStatus[]).filter((s) => !WRITTEN_OFF.has(s));
 }
 
+/**
+ * The ONE door into กำลังบำรุงรักษา is ส่งบำรุงรักษาภายนอก on /maintenance, because that is the
+ * only screen that collects what the trip needs to be complete — the venue, the note, and the
+ * round it belongs to. Same lesson as CORRECTIVE: a status anyone can pick by hand produces
+ * half-records in the table reporting reads. It stays in ALLOWED_TRANSITIONS (the send must
+ * pass canTransition) and out of allowedTargets (no button offers it).
+ */
+export const FLOW_ONLY: ReadonlySet<ItemStatus> = new Set<ItemStatus>(["PENDING_MAINTENANCE"]);
+
 // ─── Lifecycle state machine (tracked pieces only) ───
 // Which status a per-unit SubItem may move to. Skipping a step is refused because
 // ItemStatusLog is the only record of what happened to a piece — a jump straight to
@@ -59,9 +68,16 @@ export function statusOptionsFor(dispenseType?: "CONSUMABLE" | "COUNT" | "ITEM" 
 // Non-tracked items (COUNT/CONSUMABLE) never reach here — they have no per-piece identity,
 // so damage is a qty adjustment (StockAdjustment), not a status.
 export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
-  AVAILABLE: ["ON_LOAN", "IN_USE", "DAMAGED", "LOST", "DISPOSED"],
+  AVAILABLE: ["ON_LOAN", "IN_USE", "PENDING_MAINTENANCE", "DAMAGED", "LOST", "DISPOSED"],
   ON_LOAN: ["AVAILABLE", "DAMAGED", "LOST"],
   IN_USE: ["AVAILABLE", "DAMAGED", "LOST"],
+  // ส่งบำรุงรักษาภายนอก. Back in service is the normal exit and it comes through the
+  // MaintenanceRecord that receives the piece, not through the status screen. DAMAGED/DISPOSED
+  // are what an inspection at the vendor can turn up: it was actually broken, or it is scrap.
+  // The self-edge is แก้ข้อมูลส่งบำรุงรักษา, exactly like UNDER_REPAIR's: the trip is still the
+  // same trip, so it appends a log row instead of restarting the clock (a corrected shop name
+  // must not make a piece that has been out for three weeks read as sent today).
+  PENDING_MAINTENANCE: ["AVAILABLE", "DAMAGED", "DISPOSED", "PENDING_MAINTENANCE"],
   DAMAGED: ["UNDER_REPAIR", "DISPOSED"],
   UNDER_REPAIR: ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"],
   LOST: ["AVAILABLE"],
@@ -85,7 +101,7 @@ export function canTransition(
 
 /** Targets reachable from `from` — use this to build/filter the status buttons a user sees. */
 export function allowedTargets(from: ItemStatus, opts?: { isSuperAdmin?: boolean }): ItemStatus[] {
-  const base = [...ALLOWED_TRANSITIONS[from]];
+  const base = ALLOWED_TRANSITIONS[from].filter((s) => !FLOW_ONLY.has(s));
   if (opts?.isSuperAdmin) {
     for (const [f, t] of SUPERADMIN_ONLY) if (f === from && !base.includes(t)) base.push(t);
   }

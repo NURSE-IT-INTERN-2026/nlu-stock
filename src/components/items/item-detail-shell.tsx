@@ -11,12 +11,11 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon,
   Undo2, Package, Tag, FolderTree, Layers, MapPin, ClipboardList,
   QrCode, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2,
-  CalendarDays, User2, ShieldAlert, Home, Printer,
-} from "lucide-react";
+  CalendarDays, User2, ShieldAlert, Home, Printer, HandCoins} from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
-import { canManageStock } from "@/lib/roles";
+import { canManageStock, isSelfBorrower } from "@/lib/roles";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { lotDisplay } from "@/lib/lot-code";
@@ -28,11 +27,13 @@ import {
   USAGE_STATUS_ORDER, STATUS_PILLS, recipientLabel,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
-import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
+import { getItem, getSubItem, returnItem, updateSubItemFields } from "@/lib/api";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
 import type { OpenDamage } from "@/components/items/item-detail-overview";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
+import { SelfBorrowDialog } from "@/components/dispense/self-borrow-dialog";
+import { isSelfBorrowable } from "@/lib/self-borrow";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { OpenRepairBanner } from "@/components/items/open-repair-banner";
@@ -49,10 +50,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 // ── Types ──
 
-interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null }
+interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
-interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null }
+interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null; location: LocationType | null; dispenseRecords: DispenseRecord[] }
 interface LotType { id: string; lotNumber: string; expiryDate: string | null; receivedQty: number; remainingQty: number }
 
 interface ItemData {
@@ -61,6 +62,7 @@ interface ItemData {
   issueUnit: { id: string; name: string }; minThreshold: number;
   location: LocationType | null; imageUrl: string | null; description: string | null;
   images: string[]; availableQty: number; totalQty: number;
+  selfBorrowable: boolean; selfBorrowLimit: number | null;
   subItems: SubItemRecord[]; lots: LotType[];
   model: string | null; purchaseDate: string | null; purchasePrice: number | null;
   vendorCompany: string | null; vendorContact: string | null; vendorPhone: string | null;
@@ -82,17 +84,13 @@ interface ParentItem {
   id: string; code: string; name: string; nameEn: string | null; trackIndividually: boolean;
   imageUrl: string | null; maintenanceCycleMonths: number;
   lastMaintenanceDate: string | null; nextMaintenanceDate: string | null;
-  category: { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null };
+  category: { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null };
   location: LocationType | null; issueUnit: { id: string; name: string };
 }
 interface DispenseRecord { id: string; quantity: number; dispensedAt: string; returnedAt: string | null; usageType: string | null; courseCode?: string | null; usageNote: string | null; notes: string | null; recipient?: string | null; loanType?: string | null; staff: { name: string } }
-// Sibling row as served by GET /api/settings/items/:id/sub-items — location + the one
-// open dispense record (returnedAt: null, take 1), which is what the table needs.
-interface SiblingRow {
-  id: string; subCode: string; status: ItemStatus;
-  location: LocationType | null;
-  dispenseRecords: DispenseRecord[];
-}
+// The sub-code table's row. Same shape the item response serves, so it reads straight off
+// item.subItems — no second request, and no admin-only endpoint in a read every role makes.
+type SiblingRow = SubItemRecord;
 interface StatusLog { id: string; previousStatus: ItemStatus; newStatus: ItemStatus; reason: string | null; changedAt: string; imageUrls: string[]; repairVenue: "INTERNAL" | "EXTERNAL" | null; changer: { name: string } }
 interface MaintenanceRecord { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }
 interface SubItemData {
@@ -110,6 +108,7 @@ const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: strin
   AVAILABLE: { label: "พร้อมใช้งาน", bar: "bg-success", dot: "bg-success" },
   ON_LOAN: { label: "ถูกยืม", bar: "bg-primary", dot: "bg-primary" },
   IN_USE: { label: "กำลังใช้งาน", bar: "bg-chart-3", dot: "bg-chart-3" },
+  PENDING_MAINTENANCE: { label: "กำลังบำรุงรักษา", bar: "bg-sky-500", dot: "bg-sky-500" },
   UNDER_REPAIR: { label: "ส่งซ่อม", bar: "bg-warning", dot: "bg-warning" },
   DAMAGED: { label: "ชำรุด", bar: "bg-warning", dot: "bg-warning" },
 };
@@ -119,6 +118,7 @@ const STATUS_META: Record<string, { icon: typeof CheckCircle2; tone: Tone }> = {
   AVAILABLE: { icon: CheckCircle2, tone: "success" },
   ON_LOAN: { icon: Undo2, tone: "primary" },
   IN_USE: { icon: ShoppingCart, tone: "primary" },
+  PENDING_MAINTENANCE: { icon: Wrench, tone: "primary" },
   UNDER_REPAIR: { icon: Wrench, tone: "warning" },
   DAMAGED: { icon: ShieldAlert, tone: "warning" },
   LOST: { icon: XCircle, tone: "destructive" },
@@ -156,11 +156,14 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const copy = searchParams.get("copy");
   const { user } = useSession();
   const canAct = canManageStock(user?.role ?? "");
+  // ยืมเอง on a tracked piece. The item page has its own copy of this in ItemDetailOverview;
+  // piece mode renders PieceOverview instead and never reaches it, which is why a หนังสือ or
+  // a ครุภัณฑ์ showed no button at all while a วัสดุคงทน did.
+  const [pieceBorrowOpen, setPieceBorrowOpen] = useState(false);
 
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [siblings, setSiblings] = useState<SiblingRow[]>([]);
   const [tab, setTab] = useState<string>("overview");
   // "item" = non-tracked aggregate; "piece" = tracked (a copy); "empty" = tracked with 0 subs.
   const [mode, setMode] = useState<"item" | "piece" | "empty">("item");
@@ -252,13 +255,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     if (mode === "piece" && sub) QRCode.toDataURL(qrUrl(sub.item.code, isMulti ? sub.subCode : null), { width: 128, margin: 1 }).then(setQrDataUrl).catch(() => {});
   }, [mode, isMulti, sub]);
 
-  // Piece siblings
-  const parentId = sub?.item.id;
-  const fetchSiblings = useCallback(async () => {
-    if (!parentId) return;
-    try { setSiblings((await getSubItems(parentId)) as SiblingRow[]); } catch {}
-  }, [parentId]);
-  useEffect(() => { if (mode === "piece") fetchSiblings(); }, [mode, fetchSiblings]);
+  // Piece siblings — already on the item fetched above, so refreshing the item refreshes the
+  // table with it. Empty in item/empty mode, where no sub-code table renders.
+  const siblings: SiblingRow[] = mode === "piece" ? item?.subItems ?? [] : [];
 
   const onReturn = async (subItemId?: string) => {
     if (!sub) return;
@@ -267,7 +266,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     try {
       await returnItem(sub.item.id, { subItemId: id });
       toast.success("คืนพัสดุย่อยแล้ว");
-      await Promise.all([fetchSub(), fetchSiblings()]);
+      await Promise.all([fetchSub(), fetchItem()]);
     } catch { toast.error("คืนไม่สำเร็จ"); }
     finally { setReturning(null); }
   };
@@ -443,6 +442,22 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   sub={sub}
                   isMulti={isMulti}
                   canAct={canAct}
+                  // Only this exact copy, and only while it is on the shelf.
+                  canSelfBorrow={
+                    isSelfBorrower(user?.role ?? "") &&
+                    sub.status === "AVAILABLE" &&
+                    !!item &&
+                    isSelfBorrowable({
+                      selfBorrowable: item.selfBorrowable,
+                      selfBorrowLimit: item.selfBorrowLimit,
+                      availableQty: item.availableQty,
+                      trackIndividually: item.trackIndividually,
+                      dispenseType: item.category.profile?.dispenseType ?? "ITEM",
+                      profileSelfBorrowable: item.category.profile?.selfBorrowable ?? false,
+                      profileSelfBorrowLimit: item.category.profile?.selfBorrowLimit ?? 1,
+                    })
+                  }
+                  onSelfBorrow={() => setPieceBorrowOpen(true)}
                   qrDataUrl={qrDataUrl}
                   onStation={() => setStationOpen(true)}
                   onReportDamage={() => setStatusAction("DAMAGED")}
@@ -495,6 +510,21 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
       )}
 
       {/* ── Piece-mode dialogs ── */}
+      {mode === "piece" && sub && item && (
+        <SelfBorrowDialog
+          open={pieceBorrowOpen}
+          onOpenChange={setPieceBorrowOpen}
+          itemId={item.id}
+          itemCode={isMulti ? formatSubCode(item.code, sub.subCode) : item.code}
+          itemName={sub.name ?? item.name}
+          issueUnit={item.issueUnit.name}
+          max={1}
+          isTracked
+          isConsume={false}
+          subItemId={sub.id}
+          onDone={() => { fetchSub(); fetchItem(); }}
+        />
+      )}
       {mode === "piece" && sub && (
         <>
           <MaintenanceFormDialog open={maintOpen} onOpenChange={setMaintOpen} itemId={sub.item.id} itemLabel={sub.item.name} subItemId={sub.id} subItemLabel={isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code} maintenanceCycleMonths={sub.item.maintenanceCycleMonths} onSuccess={fetchSub} />
@@ -503,7 +533,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
             onOpenChange={(o) => { if (!o) { setStatusAction(null); setStatusTarget(null); } }}
             itemId={sub.item.id} itemCode={sub.item.code} status={statusAction ?? "DAMAGED"} trackIndividually
             subItems={[statusTarget ?? { id: sub.id, subCode: sub.subCode, status: sub.status }]}
-            onSuccess={async () => { await Promise.all([fetchSub(), fetchSiblings()]); }}
+            onSuccess={async () => { await Promise.all([fetchSub(), fetchItem()]); }}
           />
           <EditItemDialog open={editOpen} itemId={sub.item.id} subItem={{ id: sub.id, serialNumber: sub.serialNumber, condition: sub.condition, notes: sub.notes, locationId: sub.location?.id ?? null }} onOpenChange={setEditOpen} onSaved={fetchSub} />
           <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={sub.item.id} itemCode={sub.item.code} itemName={sub.item.name} subItemId={sub.id} onSuccess={fetchSub} />
@@ -656,7 +686,7 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   // on NLU-DUR-003 it claimed 89 ถูกยืม when 5 were borrowed and 84 were stationed in rooms.
   // A pile has no per-piece status to count, but the open records do say where the stock went.
   const byState: Record<DistributionRow["state"], number> = {
-    AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, UNDER_REPAIR: 0, DAMAGED: 0,
+    AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, PENDING_MAINTENANCE: 0, UNDER_REPAIR: 0, DAMAGED: 0,
   };
   for (const r of distribution ?? []) byState[r.state] += r.qty;
   // Whatever the records still don't account for. Every named state above is backed by open
@@ -665,9 +695,9 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   // overstated, and it is how a drift between totalQty and the ledgers becomes visible.
   const accounted = Object.values(byState).reduce((a, b) => a + b, 0);
   const unaccounted = Math.max(0, total - accounted);
-  // All five render, zeros included — a missing row reads as "not applicable" instead of
-  // "none", and these are the same five rows StatusSummary shows for a tracked piece.
-  // Why five and not six: USAGE_STATUS_ORDER in lib/constants.ts, which owns the list.
+  // All of them render, zeros included — a missing row reads as "not applicable" instead of
+  // "none", and these are the same rows StatusSummary shows for a tracked piece.
+  // Which states and why: USAGE_STATUS_ORDER in lib/constants.ts, which owns the list.
   const segments = [
     ...USAGE_STATUS_ORDER.map((key) => ({ key, ...STATE_META[key], count: byState[key] })),
     ...(unaccounted > 0
@@ -892,8 +922,9 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
 }
 
 // ── Piece overview tab (detail rows + manage tiles + QR) ──
-function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
-  sub: SubItemData; isMulti: boolean; canAct: boolean; qrDataUrl: string;
+function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, onSelfBorrow, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
+  sub: SubItemData; isMulti: boolean; canAct: boolean; canSelfBorrow: boolean; qrDataUrl: string;
+  onSelfBorrow: () => void;
   onStation: () => void; onReportDamage: () => void; onStatus: (s: "AVAILABLE" | "LOST" | "DISPOSED") => void; onEdit: () => void; onReceive: () => void;
 }) {
   const [printOpen, setPrintOpen] = useState(false);
@@ -973,7 +1004,20 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <SectionHeader title="QR code" />
+            {canSelfBorrow ? (
+              <>
+                <SectionHeader title="ยืมพัสดุ" />
+                {/* No numbers here — the dialog states them and is where they change. The whole
+                    page is already about this one copy, and its code sits in the dialog header. */}
+                <div className="p-4 sm:p-5">
+                  <Button className="w-full" onClick={onSelfBorrow}>
+                    <HandCoins className="size-4 mr-1" />ยืมพัสดุนี้
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <SectionHeader title="QR code" />
+            )}
             {qrBlock}
           </div>
         )}

@@ -4,6 +4,8 @@ import { profileUpdateSchema } from "@/lib/validators";
 import { NextRequest } from "next/server";
 
 // Behavior fields can only change while the profile has no items (see validators/profile.ts).
+// selfBorrowable/selfBorrowLimit are deliberately NOT here: they decide who may take stock
+// out, not how the stock is modelled, so they stay editable for a profile full of items.
 const BEHAVIOR_FIELDS = ["code", "dispenseType", "assetTracking", "setTracking"] as const;
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,8 +17,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (parseError) return parseError;
   if (!data) return error("No data");
 
-  const touchesBehavior = BEHAVIOR_FIELDS.some((f) => f in (data as Record<string, unknown>));
-  if (touchesBehavior) {
+  // Compare against the stored row rather than testing for the key's presence. The edit form
+  // posts the whole profile every time, so presence alone meant every save on a stocked
+  // profile was a 409 — including one that only renamed it, or that flipped ให้เบิก-ยืมเอง.
+  const current = await prisma.categoryProfile.findUnique({ where: { id } });
+  if (!current) return notFound("Profile not found");
+
+  const patch = data as Record<string, unknown>;
+  const changesBehavior = BEHAVIOR_FIELDS.some(
+    (f) => f in patch && patch[f] !== (current as Record<string, unknown>)[f],
+  );
+  if (changesBehavior) {
     const itemCount = await prisma.item.count({
       where: { category: { profileId: id } },
     });

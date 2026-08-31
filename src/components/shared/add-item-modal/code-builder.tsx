@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NumericInput } from "@/components/shared/numeric-input";
+import { withBase } from "@/lib/base-path";
 
 export interface CodeMeta {
   copyCount: number;
@@ -44,7 +45,7 @@ export function CodeBuilder({
   const fetchNext = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/items/suggest-code?prefix=${encodeURIComponent(prefix)}`);
+      const res = await fetch(withBase(`/api/items/suggest-code?prefix=${encodeURIComponent(prefix)}`));
       if (res.ok) {
         const data = await res.json();
         setRunning(data.nextNumber ?? "001");

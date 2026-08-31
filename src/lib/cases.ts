@@ -12,7 +12,7 @@
 // เคสยืมมีสองสถานะซ้อนกันโดยตั้งใจ: สถานะรวมของทั้งเคส (ใช้ในหน้ารายการเคส) กับสถานะรายบรรทัด
 // (ใช้ตอนการ์ดไปโผล่ในประวัติของพัสดุชิ้นเดียว — ชามรูปไตที่คืนแล้วต้องอ่านว่าจบ ถึงเคสรวมจะยังค้างชิ้นอื่น).
 import { prisma } from "@/lib/prisma";
-import { AdjustmentReason, ItemStatus, LoanType, MaintenanceType } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus, LoanType, MaintenanceType, RepairVenue } from "@/generated/prisma/enums";
 import type { AttachRecordType } from "@/lib/attachments";
 import { CASE_PREFIX, type CaseType, type CaseState } from "@/lib/case-types";
 import { codesFor, sourceKey } from "@/lib/case-codes";
@@ -33,6 +33,23 @@ export function caseRangeStart(range: string | null): Date | undefined {
   if (range === "90d") return new Date(d.getTime() - 90 * 86_400_000);
   if (range === "year") return new Date(d.getFullYear(), 0, 1);
   return undefined;
+}
+
+/**
+ * ช่วงเวลาแบบมีทั้งต้นและปลาย. ค่าเดิม (7d/30d/90d/year) เปิดปลาย — "90 วันล่าสุด" จบที่ตอนนี้
+ * โดยนิยาม. ที่เพิ่มมาคือ `y2568` (ค.ศ. ใน value, พ.ศ. บนป้าย — เหมือน year select ของหน้ารายงาน):
+ * ปีที่จบไปแล้วต้องมีเพดาน ไม่งั้น "พ.ศ. 2568" อ่านว่า "ตั้งแต่ 2568" ซึ่งคือคนละตัวกรอง.
+ * `to` เป็น exclusive (lt) ตามที่ listCases ใช้อยู่แล้ว.
+ */
+export function caseRangeBounds(range: string | null): { from?: Date; to?: Date } {
+  const from = caseRangeStart(range);
+  if (from) return { from };
+  const m = range?.match(/^y(\d{4})$/);
+  if (m) {
+    const y = Number(m[1]);
+    return { from: new Date(y, 0, 1), to: new Date(y + 1, 0, 1) };
+  }
+  return {};
 }
 
 export type Attach = { recordType: AttachRecordType; recordId: string; urls: string[] };
@@ -992,22 +1009,61 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
     const m = await prisma.maintenanceRecord.findUnique({ ...maintArgs, where: { id: src } });
     if (!m || m.type !== MaintenanceType.PREVENTIVE) return null;
     const s = maintSummary(m);
+    // ภายนอกเป็นงานสองขั้น ไม่ใช่จุดเดียวเหมือนภายใน: ของออกจากหน่วยงานไปก่อน แล้วค่อยกลับมา
+    // บันทึกผล. ขั้นแรกไม่มีที่อยู่ใน maintenance_records — มันคือแถว log ตอนส่ง — ถ้าไม่ดึงมา
+    // ไทม์ไลน์จะเล่าว่าของกลับมาจากทริปที่ไม่เคยเห็นว่าออกไป.
+    // Newest first, so [0] is the last correction (แก้ข้อมูลส่งบำรุงรักษา appends a
+    // PENDING_MAINTENANCE → PENDING_MAINTENANCE row) and the last row that ENTERED the status
+    // is the departure. The step shows the departure's date with the correction's text — the
+    // trip left when it left, and says what it now says.
+    const sentLogs =
+      m.repairVenue === RepairVenue.EXTERNAL
+        ? await prisma.itemStatusLog.findMany({
+            where: {
+              itemId: m.itemId,
+              subItemId: m.subItemId ?? null,
+              newStatus: ItemStatus.PENDING_MAINTENANCE,
+              changedAt: { lte: m.createdAt },
+            },
+            orderBy: { changedAt: "desc" },
+            select: { id: true, previousStatus: true, changedAt: true, repairNote: true, imageUrls: true, changer: { select: { name: true } } },
+          })
+        : [];
+    const latest = sentLogs[0] ?? null;
+    const departed = sentLogs.find((l) => l.previousStatus !== ItemStatus.PENDING_MAINTENANCE) ?? latest;
+    const sent = latest && departed ? { ...latest, changedAt: departed.changedAt, by: departed.changer.name } : null;
+    const venueLabel = m.repairVenue === RepairVenue.EXTERNAL ? "ภายนอก NLU" : "ภายใน NLU";
     return finish(
       s,
-      [step({
-        key: "done",
-        label: "บำรุงรักษา",
-        at: m.performedAt,
-        by: m.performer.name,
-        detail: join(m.issue, m.description),
-        cost: m.cost,
-        attachments: [{ recordType: "MaintenanceRecord", recordId: m.id, urls: m.attachmentUrls }],
-      })],
+      [
+        ...(sent
+          ? [step({
+              key: "sent",
+              label: "ส่งบำรุงรักษาภายนอก",
+              at: sent.changedAt,
+              by: sent.by,
+              detail: sent.repairNote,
+              attachments: [{ recordType: "ItemStatusLog", recordId: sent.id, urls: sent.imageUrls }],
+            })]
+          : []),
+        step({
+          key: "done",
+          label: sent ? "รับคืนจากบำรุงรักษา" : "บำรุงรักษา",
+          at: m.performedAt,
+          by: m.performer.name,
+          detail: join(m.issue, m.description),
+          cost: m.cost,
+          attachments: [{ recordType: "MaintenanceRecord", recordId: m.id, urls: m.attachmentUrls }],
+        }),
+      ],
       [
         { label: "รายการพัสดุ", value: m.item.name },
         { label: "รหัสพัสดุ", value: m.item.code },
         ...(m.subItem ? [{ label: "รหัสย่อย", value: m.subItem.subCode }] : []),
+        // แถวเก่าก่อนมีคอลัมน์นี้เป็น null — ไม่เดาให้ว่าเป็นภายใน
+        ...(m.repairVenue ? [{ label: "บำรุงรักษาที่", value: venueLabel }] : []),
         { label: "วันที่บำรุง", value: m.performedAt.toLocaleDateString("th-TH") },
+        ...(sent ? [{ label: "วันที่ส่ง", value: sent.changedAt.toLocaleDateString("th-TH") }] : []),
         { label: "ผู้ดำเนินการ", value: m.performer.name },
         ...(m.nextMaintenanceAt ? [{ label: "รอบถัดไป", value: m.nextMaintenanceAt.toLocaleDateString("th-TH") }] : []),
         ...(m.cost != null ? [{ label: "ค่าใช้จ่าย", value: `฿${m.cost.toLocaleString("th-TH")}` }] : []),

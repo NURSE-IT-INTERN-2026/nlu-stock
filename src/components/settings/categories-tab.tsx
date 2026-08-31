@@ -53,6 +53,9 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CategorySelectModal } from "@/components/shared/category-select-modal";
+import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 interface CategoryType {
   id: string;
@@ -182,6 +185,7 @@ export function CategoriesTab() {
   }
 
   const filtered = filterProfile === "ALL" ? categories : categories.filter((c) => c.profile?.id === filterProfile);
+  const { page, setPage, paged, total } = useClientPage(filtered, PAGE_SIZE.DEFAULT, filterProfile);
 
   if (loading) return (
     <div className="space-y-4">
@@ -302,11 +306,14 @@ export function CategoriesTab() {
                   <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มหมวดหมู่</Button>
                 </div>
               </TableCell></TableRow>
-            ) : filtered.map((cat) => (
+            ) : paged.map((cat) => (
               <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDelete} />
             ))}
           </TableBody>
         </Table>
+        {filtered.length > 0 && (
+          <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} unit="หมวดหมู่" />
+        )}
       </div>
 
       {isDesktop ? (

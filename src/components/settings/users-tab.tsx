@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/sheet";
 import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { ENV_ROLES } from "@/lib/roles";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +35,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 interface UserRecord {
   id: string;
@@ -51,6 +55,9 @@ export function UsersTab() {
   const [editing, setEditing] = useState<UserRecord | null>(null);
   const [form, setForm] = useState({ email: "", name: "" });
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [roleFilter, setRoleFilter] = useState<string>("ALL");
 
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -61,16 +68,18 @@ export function UsersTab() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // แบ่งหน้าฝั่ง server จริง ไม่ใช่ตัดจาก array ที่โหลดมา — route คุม perPage อยู่แล้ว
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSettingsUsers();
-      setUsers((data as { users?: UserRecord[] } & UserRecord[]).users || (data as UserRecord[]));
+      const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT, role: roleFilter });
+      setUsers(data.users as UserRecord[]);
+      setTotal(data.total);
     } catch {
       toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
-  }, []);
+  }, [page, roleFilter]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -214,6 +223,17 @@ export function UsersTab() {
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มผู้ใช้งาน</Button>
       </div>
 
+      {/* บทบาทมาจาก env ไม่ใช่คอลัมน์ — route แปลง role กลับเป็นรายชื่ออีเมลแล้วค่อยกรอง */}
+      <Tabs value={roleFilter} onValueChange={(v) => { setRoleFilter(v as string); setPage(1); }}>
+        {/* w-full + flex-1 ของ trigger: 4 ช่องแบ่งรางเท่าๆ กัน min-w-0 กันป้ายไทยดันรางล้นจอแคบ */}
+        <TabsList className="w-full min-w-0">
+          <TabsTrigger value="ALL" className="min-w-0">ทั้งหมด</TabsTrigger>
+          {ENV_ROLES.map((r) => (
+            <TabsTrigger key={r} value={r} className="min-w-0">{ROLE_LABELS[r]}</TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
         <Table grid zebra className="table-fixed">
           <TableHeader sticky>
@@ -279,6 +299,9 @@ export function UsersTab() {
             ))}
           </TableBody>
         </Table>
+        {total > 0 && (
+          <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="คน" />
+        )}
       </div>
 
       {isDesktop ? (

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { History, Wrench } from "lucide-react";
+import { History, PackageCheck, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
@@ -13,10 +13,14 @@ import { CaseWorkspace } from "@/components/cases/case-workspace";
 // (/maintenance). ซ่อม is unplanned — something broke, and the only question is what is still
 // open. Two intents, two pages: this one never shows a schedule, and that one never shows a
 // repair queue. They meet only in maintenance_records, where a finished job of either kind lands.
-type RepairTab = "worklist" | "history";
+// รับคืนจากส่งซ่อม ย้ายมาจาก /receive: นั่นคือหน้า "ของเข้าคลัง" ซึ่งเป็นคนละกริยากับการปิดงานซ่อม
+// และคนที่ตามงานซ่อมอยู่ต้องข้ามไปอีกหน้าเพื่อปิดงานที่ตัวเองเปิดไว้เอง. ตอนนี้เที่ยวซ่อมทั้งเที่ยว
+// (แจ้งชำรุด → ส่งซ่อม → รับคืน) อยู่หน้าเดียว.
+type RepairTab = "worklist" | "receive" | "history";
 
 const REPAIR_TABS = [
   { value: "worklist", label: "ค้างซ่อม", icon: Wrench },
+  { value: "receive", label: "รับคืนจากส่งซ่อม", icon: PackageCheck },
   { value: "history", label: "ประวัติ", icon: History },
 ] as const;
 
@@ -85,9 +89,17 @@ function RepairsShell() {
         </nav>
       </div>
 
-      {/* Mounted on both tabs, not just its own, so the tab badge is right before anyone clicks it. */}
+      {/* Mounted on every tab, not just its own, so the tab badge is right before anyone clicks it. */}
       <div className={cn("pb-4", tab !== "worklist" && "hidden")}>
         <SubItemStatusPanel status="ALL" onCount={setOpenJobs} emptyText="ไม่มีรายการค้างซ่อม" />
+      </div>
+
+      {/* ค้างซ่อม (ALL) รวมของที่ยังไม่ได้ส่งด้วย; แท็บนี้เหลือเฉพาะเที่ยวที่ส่งไปแล้ว ซึ่งเป็น
+          รายการเดียวที่ "รับคืน" ได้จริง — คนที่มาปิดงานไม่ต้องอ่านผ่านคิวที่ยังไม่ถึงคิวตัวเอง. */}
+      <div className={cn("pb-4", tab !== "receive" && "hidden")}>
+        {tab === "receive" && (
+          <SubItemStatusPanel status="UNDER_REPAIR" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
+        )}
       </div>
 
       {/* ประวัติ = เคสซ่อมทั้งหมด อ่านจากที่มาเดียวกับหน้า /cases. เดิมที่นี่ list บันทึกซ่อมดิบๆ ซึ่งคือ

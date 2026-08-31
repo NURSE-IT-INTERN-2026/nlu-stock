@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, Hammer, BarChart3, Settings, LogOut, Bell } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Truck, MoreHorizontal, Wrench, Hammer, BarChart3, Settings, LogOut, Bell, QrCode } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { logout } from "@/lib/api";
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/sheet";
 import type { SessionUser } from "@/types";
 import { useAlerts } from "@/hooks/use-alerts";
-import { canManageStock } from "@/lib/roles";
+import { canManageStock, isSelfBorrower } from "@/lib/roles";
+import { withBase } from "@/lib/base-path";
 
 const tabs = [
   { href: "/", label: "หน้าหลัก", icon: LayoutDashboard },
@@ -39,11 +40,16 @@ export function BottomTab({ user }: BottomTabProps) {
   }
 
   const canStock = canManageStock(user.role);
-  const visibleTabs = tabs.filter((t) => !t.stockOnly || canStock);
+  const isBorrower = isSelfBorrower(user.role);
+  // Borrowers get the scanner, not the catalogue — /items is staff-only and middleware
+  // bounces them off it.
+  const visibleTabs = isBorrower
+    ? [{ href: "/scan", label: "สแกน QR", icon: QrCode, stockOnly: false }]
+    : tabs.filter((t) => !t.stockOnly || canStock);
 
   async function handleLogout() {
     await logout();
-    window.location.href = "/login";
+    window.location.href = withBase("/login");
   }
 
   return (
@@ -115,13 +121,15 @@ export function BottomTab({ user }: BottomTabProps) {
                     ซ่อมแซม
                   </SheetClose>
                 )}
-                <SheetClose
-                  nativeButton={false}
-                  render={<Link href="/reports" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  รายงาน
-                </SheetClose>
+                {!isBorrower && (
+                  <SheetClose
+                    nativeButton={false}
+                    render={<Link href="/reports" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-accent" />}
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    รายงาน
+                  </SheetClose>
+                )}
                 {user.role === "SUPERADMIN" && (
                   <SheetClose
                     nativeButton={false}

@@ -5,14 +5,14 @@ import PDFDocument from "pdfkit";
 import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { fmtDate, monthLabel } from "@/lib/format";
-import { stockValueRows } from "@/lib/cost";
+import { stockValueRows, lossEvents } from "@/lib/cost";
 import type { UsageType } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 import { USAGE_TYPE_LABELS, STATUS_LABELS, effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { parseDispenseKind, DISPENSE_KIND_LABELS } from "@/lib/dispense-kind";
 import { kindWhere } from "@/lib/dispense-kind-where";
-import { groupUsageByMonth } from "@/lib/usage-by-subject";
-import { caseRangeStart, listCases } from "@/lib/cases";
+import { groupUsageByMonth, groupInUseSnapshot } from "@/lib/usage-by-subject";
+import { caseRangeBounds, listCases } from "@/lib/cases";
 import { itemHistory } from "@/app/api/items/[id]/history/route";
 import { CASE_PREFIX, CASE_STATE_LABELS, CASE_TYPE_LABELS, type CaseState, type CaseType } from "@/lib/case-types";
 
@@ -195,9 +195,12 @@ const REPORT_TITLES: Record<ReportType, string> = {
   "item-history": "ประวัติพัสดุ",
 };
 
-const SIDE_LABELS: Record<string, string> = {
-  consumable: "สิ้นเปลือง",
-  durable: "คงทน + ครุภัณฑ์",
+// สองรายงานที่ส่งออกได้ทีละฝั่ง แบ่งของออกเป็นสองก้อนคนละแบบ จึงมีป้ายคนละชุด: มูลค่าคงคลัง
+// แบ่งเป็นตัวพัสดุ (สิ้นเปลือง/คงทน) ส่วนค่าใช้จ่ายรายปีแบ่งเป็นก้อนงบ ซึ่งฝั่งหลังถือค่าซ่อม
+// กับค่าตรวจบำรุงด้วย — เรียกมันว่า "คงทน + ครุภัณฑ์" จะผิด เพราะค่าบริการไม่ใช่ครุภัณฑ์
+const SIDE_LABELS: Record<string, Record<string, string>> = {
+  "stock-balance": { consumable: "สิ้นเปลือง", durable: "คงทน + ครุภัณฑ์" },
+  "annual-cost": { consumable: "สิ้นเปลือง", other: "อื่นๆ" },
 };
 
 async function fetchReportData(type: ReportType, params: URLSearchParams) {
@@ -483,7 +486,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const filters: Record<string, unknown>[] = [kindWhere(kind)];
       const dateFrom = params.get("dateFrom");
       const dateTo = params.get("dateTo");
-      if (dateFrom || dateTo) {
+      // นำไปใช้งานไม่รับช่วงวันที่ — เหตุผลเดียวกับหน้าจอ (api/reports/usage-by-subject)
+      if (kind !== "inuse" && (dateFrom || dateTo)) {
         filters.push({
           dispensedAt: {
             ...(dateFrom && { gte: new Date(dateFrom) }),
@@ -501,8 +505,27 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       // จะตอบ "เดือนไหนใช้เยอะ" ไม่ได้ ทั้งที่เป็นคำถามแรกของรายงาน. ละเอียดถึงระดับพัสดุหนึ่งแถว
       // เพื่อให้ pivot ใน Excel ได้ทุกแกน (เดือน / ประเภท / วิชา / พัสดุ) โดยไม่ต้องออกไฟล์ซ้ำ
       // และทุกคอลัมน์ยังสั้นพอที่ PDF จะจัดหน้าได้.
-      const months = await groupUsageByMonth(where, kind === "inuse" ? "location" : "usage");
-      const subjectHeader = kind === "inuse" ? "สถานที่" : "วิชา / กิจกรรม";
+      // นำไปใช้งานเป็นภาพนิ่ง ไม่ใช่ไทม์ไลน์ — ไฟล์จึงเป็น อาคาร → ห้อง → พัสดุ ที่ยังตั้งอยู่
+      // ตอนนี้ ไม่มีคอลัมน์เดือน. คอลัมน์เดือนที่ทุกแถวเป็นเดือนเดียวกันคือคอลัมน์ที่โกหก.
+      if (kind === "inuse") {
+        const { buildings } = await groupInUseSnapshot(where);
+        return buildings.flatMap((b) =>
+          b.rows.flatMap((room) =>
+            room.items.map((it) => ({
+              "อาคาร / ชั้น": b.label,
+              สถานที่: room.label,
+              รหัสพัสดุ: it.code,
+              รายการพัสดุ: it.name,
+              จำนวนครั้ง: it.records,
+              จำนวนที่ตั้งอยู่: it.quantity,
+              หน่วยนับ: it.unit,
+            })),
+          ),
+        );
+      }
+
+      const months = await groupUsageByMonth(where);
+      const subjectHeader = "วิชา / กิจกรรม";
 
       return months.flatMap((m) =>
         m.groups.flatMap((g) =>
@@ -527,6 +550,18 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const categoryId = params.get("categoryId");
       const startOfYear = new Date(year, 0, 1);
       const endOfYear = new Date(year, 11, 31, 23, 59, 59);
+      // หน้าจอแยกสองก้อนงบ (สิ้นเปลือง / อื่นๆ) ไฟล์ต้องเป็นก้อนเดียวกับที่คนกดปุ่มเห็นอยู่ —
+      // ไฟล์ที่รวมสองก้อนกลับเข้าด้วยกันคือไฟล์ที่ตอบคนละคำถามกับจอที่มันถูก export ออกมา
+      const isConsumable: Prisma.ItemWhereInput = {
+        category: { profile: { dispenseType: "CONSUMABLE" } },
+      };
+      // NOT ไม่ใช่ `not:` — พัสดุที่ยังไม่ผูก profile ต้องตกไปฝั่งอื่นๆ ไม่ใช่หายไปจากทั้งสองฝั่ง.
+      // ไม่ส่ง side มาเลย = ทั้งสองฝั่ง ซึ่งเป็นพฤติกรรมเดิมของ endpoint นี้ — การเดาให้เป็น
+      // สิ้นเปลืองจะตัดข้อมูลครึ่งหนึ่งทิ้งเงียบๆ ให้ลิงก์เก่าที่ยังไม่รู้จักพารามิเตอร์นี้
+      const sideItem: Prisma.ItemWhereInput =
+        params.get("side") === "consumable" ? isConsumable
+        : params.get("side") === "other" ? { NOT: isConsumable }
+        : {};
 
       // Mirrors api/reports/annual-cost: one row per receipt, whatever kind of พัสดุ it was.
       // The sheet has to agree with the screen it was exported from, so it reads the same
@@ -535,7 +570,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         where: {
           receivedAt: { gte: startOfYear, lte: endOfYear },
           unitCost: { not: null },
-          item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
+          item: { AND: [{ isActive: true, ...(categoryId ? { categoryId } : {}) }, sideItem] },
         },
         select: {
           quantity: true, unitCost: true, receivedAt: true,
@@ -550,14 +585,12 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         take: 10000,
       });
 
-      const maintWhere: Record<string, unknown> = {
-        performedAt: { gte: startOfYear, lte: endOfYear },
-        cost: { not: null },
-      };
-      if (categoryId) maintWhere.item = { categoryId };
-
       const repairs = await prisma.maintenanceRecord.findMany({
-        where: maintWhere,
+        where: {
+          performedAt: { gte: startOfYear, lte: endOfYear },
+          cost: { not: null },
+          item: { AND: [categoryId ? { categoryId } : {}, sideItem] },
+        },
         include: { item: { select: { code: true, name: true, category: { select: { name: true } } } }, performer: { select: { name: true } } },
         take: 10000,
       });
@@ -589,7 +622,25 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         ผู้ดำเนินการ: r.performer.name,
       }));
 
-      return [...purchaseRows, ...repairRows].sort((a, b) => b.วันที่.localeCompare(a.วันที่));
+      // ของที่หายออกจากคลังปีนี้ — อยู่ในไฟล์เดียวกันเพราะการ์ดบนหน้าจอมันอยู่แถวเดียวกัน แต่
+      // คอลัมน์ ประเภท แยกไว้ชัด: เงินที่จ่ายกับของที่เสียไปบวกกันไม่ได้ (lib/cost lossEvents)
+      const lossRows = (await lossEvents(prisma, { gte: startOfYear, lte: endOfYear },
+        { AND: [categoryId ? { categoryId } : {}, sideItem] }))
+        .map((e) => ({
+          ประเภท: e.kind === "LOST" ? "สูญหาย" : "ตัดจำหน่าย",
+          รหัสพัสดุ: e.itemCode,
+          รายการพัสดุ: e.itemName,
+          หมวดหมู่: "",
+          ล็อต: "",
+          จำนวน: e.qty,
+          // ตีราคาไม่ได้ = 0 ในช่องเงิน ซึ่งอ่านผิดไม่ได้เพราะคอลัมน์จำนวนยังบอกว่ามีของหายจริง
+          เป็นเงิน: e.value ?? 0,
+          วันที่: fmtDate(e.at, "yyyy-MM-dd"),
+          ผู้ดำเนินการ: "",
+        }));
+
+      return [...purchaseRows, ...repairRows, ...lossRows]
+        .sort((a, b) => b.วันที่.localeCompare(a.วันที่));
     }
 
     case "maintenance-schedule": {
@@ -634,7 +685,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       // `type` ถูกจองไว้เป็นชนิดรายงานแล้ว ประเภทเคสจึงเดินทางมาในชื่อ caseType
       const type = params.get("caseType");
       const state = params.get("state");
-      const from = caseRangeStart(params.get("range"));
+      const { from, to } = caseRangeBounds(params.get("range"));
       const rows = await listCases({
         ...(type && type in CASE_PREFIX ? { type: type as CaseType } : {}),
         ...(state && state in CASE_STATE_LABELS ? { state: state as CaseState } : {}),
@@ -643,6 +694,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         // งานที่ยังมีคนรออยู่ — เกณฑ์เดียวกับที่แท็บ รายการสิ่งที่ต้องทำ แสดง ไม่ใช่ state=OPEN เปล่าๆ
         ...(params.get("todo") === "true" ? { todo: true } : {}),
         ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
       });
 
       return rows.map((c) => ({
@@ -736,8 +788,8 @@ export async function GET(request: NextRequest) {
   const kind = type === "dispense-history" || type === "usage-by-subject"
     ? parseDispenseKind(params.get("kind"))
     : null;
-  // เหตุผลเดียวกันกับ kind: มูลค่าคงคลังส่งออกได้สองฝั่ง ชื่อไฟล์กับหัวเรื่องต้องบอกว่าฝั่งไหน
-  const side = type === "stock-balance" ? SIDE_LABELS[params.get("side") ?? ""] ?? null : null;
+  // เหตุผลเดียวกันกับ kind: สองรายงานนี้ส่งออกได้ทีละฝั่ง ชื่อไฟล์กับหัวเรื่องต้องบอกว่าฝั่งไหน
+  const side = SIDE_LABELS[type]?.[params.get("side") ?? ""] ?? null;
   const suffix = kind ? `-${kind}` : side ? `-${params.get("side")}` : "";
   const filename = `${type}${suffix}-${new Date().toISOString().slice(0, 10)}`;
   const title = REPORT_TITLES[type]

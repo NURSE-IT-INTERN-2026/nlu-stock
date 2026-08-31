@@ -97,55 +97,175 @@ export async function groupUsageBySubject(where: Record<string, unknown>): Promi
     .sort((a, b) => b.totalQuantity - a.totalQuantity);
 }
 
-
-/** id → "อาคาร / ชั้น / ห้อง / รายละเอียด", for the two groupers that bucket by room. */
-async function locationNames(ids: (string | null)[]): Promise<Map<string, string>> {
-  const unique = [...new Set(ids.filter((id): id is string => !!id))];
-  if (unique.length === 0) return new Map();
-  const locations = await prisma.location.findMany({
-    where: { id: { in: unique } },
-    select: { id: true, building: true, floor: true, room: true, detail: true },
-  });
-  return new Map(locations.map((l) => [l.id, locationLabel(l)]));
-}
-
 /**
- * นำไปใช้งาน ไม่มีวิชาให้จัดกลุ่ม — station-in-room-dialog ถามแค่ห้อง และ validators/dispense
- * ยกเว้น usageType ให้ INUSE โดยตั้งใจ (ห้องคือเหตุผลอยู่แล้ว). แกนที่แยกแถวพวกนี้ออกจากกันได้
- * จริงจึงเป็นสถานที่ ไม่ใช่ usageType — จัดกลุ่มด้วย usageType จะได้แท่งเดียวที่ไม่บอกอะไร.
+ * ต้นทุนของสิ้นเปลืองที่เบิกไป แยกตามวิชา/กิจกรรม — "ปีนี้วิชาไหนกินของไปเท่าไร".
  *
- * รูปแถวเหมือน UsageBySubjectRow ทุกช่อง เพื่อให้ตาราง กราฟ และไฟล์ export ตัวเดียวกันรับได้
- * ทั้งสามส่วนโดยไม่ต้องมีโค้ดคนละชุด.
+ * ค่าใช้จ่ายรายปีเดิมตอบได้แค่ว่าคลังจ่ายเงินซื้ออะไรเข้ามา ซึ่งเป็นคำถามของคนซื้อ ไม่ใช่ของคนที่
+ * ต้องตั้งงบให้แต่ละวิชา. ของที่ซื้อเข้ามาปีนี้กับของที่ถูกใช้ไปปีนี้เป็นคนละก้อนเงินโดยสิ้นเชิง.
+ *
+ * ตีราคาแบบเดียวกับฝั่งสิ้นเปลืองของ stockValueRows: ล็อตที่เบิกออกไปจริงก่อน แล้วตกไปที่ราคา
+ * เฉลี่ยของรายการ. หน่วยที่ไม่มีทั้งสองอย่างนับแยกไว้ที่ unpricedQty ไม่ใช่คิดเป็น 0 บาท —
+ * ราคาที่ยังไม่มีใครกรอกไม่ใช่ของฟรี.
  */
-export async function groupInUseByLocation(where: Record<string, unknown>): Promise<UsageBySubjectRow[]> {
-  // itemId อยู่ในคีย์เพื่อจะนับชนิดพัสดุต่อห้องเท่านั้น แล้วยุบกลับเป็นห้องละแถวข้างล่าง
-  const groups = await prisma.dispenseRecord.groupBy({
-    by: ["locationId", "itemId"],
+export type SubjectCostRow = {
+  key: string;
+  label: string;
+  courseCode: string | null;
+  qty: number;
+  value: number;
+  /** จำนวนหน่วยที่ตีราคาไม่ได้เลย จึงไม่อยู่ใน value */
+  unpricedQty: number;
+  records: number;
+  itemCount: number;
+};
+
+export async function consumableCostBySubject(
+  where: Record<string, unknown>,
+): Promise<SubjectCostRow[]> {
+  const records = await prisma.dispenseRecord.findMany({
     where,
-    _sum: { quantity: true },
-    _count: { _all: true },
+    select: {
+      quantity: true,
+      usageType: true,
+      courseCode: true,
+      usageNote: true,
+      notes: true,
+      itemId: true,
+      lot: { select: { unitCost: true } },
+      item: { select: { purchasePrice: true } },
+    },
   });
 
-  const nameOf = await locationNames(groups.map((g) => g.locationId));
+  const merged = new Map<string, SubjectCostRow & { items: Set<string> }>();
+  for (const r of records) {
+    // แถวที่ไม่ได้เลือกการใช้งานต้องมีที่อยู่ ไม่งั้นยอดรวมของตารางไม่เท่ากับที่เบิกจริง
+    const { key, label } = r.usageType
+      ? subjectIdentity(r)
+      : { key: "NONE", label: "ไม่ระบุการใช้งาน" };
 
-  const merged = new Map<string, UsageBySubjectRow & { items: Set<string> }>();
-  for (const g of groups) {
-    const key = g.locationId ?? "";
-    // แถวเก่าที่เขียนก่อน locationId ถูกบังคับ ยังต้องเห็นได้ ไม่งั้นยอดรวมไม่ตรงกับจำนวนที่นำออกจริง
-    const label = (g.locationId && nameOf.get(g.locationId)) || "ไม่ระบุสถานที่";
     const row = merged.get(key) ?? {
-      key, usageType: null, courseCode: null, label,
-      totalQuantity: 0, records: 0, itemCount: 0, items: new Set<string>(),
+      key, label, courseCode: r.usageType === "COURSE" ? r.courseCode : null,
+      qty: 0, value: 0, unpricedQty: 0, records: 0, itemCount: 0, items: new Set<string>(),
     };
-    row.totalQuantity += g._sum.quantity ?? 0;
-    row.records += g._count._all;
-    row.items.add(g.itemId);
+    const price = r.lot?.unitCost ?? r.item.purchasePrice;
+    row.qty += r.quantity;
+    if (price == null) row.unpricedQty += r.quantity;
+    else row.value += r.quantity * price;
+    row.records += 1;
+    row.items.add(r.itemId);
     merged.set(key, row);
   }
 
   return [...merged.values()]
     .map(({ items, ...r }) => ({ ...r, itemCount: items.size }))
-    .sort((a, b) => b.totalQuantity - a.totalQuantity);
+    .sort((a, b) => b.value - a.value || b.qty - a.qty);
+}
+
+/**
+ * นำไปใช้งาน = ของที่ **ตั้งอยู่ตอนนี้** ไม่ใช่เหตุการณ์ที่เคยเกิด.
+ *
+ * segment นี้เคยนับใบตั้งตามช่วงเวลาเหมือนอีกสอง segment ซึ่งตอบคำถามผิดข้อ: ของที่ตั้งไว้ปีที่แล้ว
+ * และยังอยู่ในห้องนั้นวันนี้หายไปจากรายงานทันทีที่ตัวกรองเป็น "ปีนี้" ทั้งที่มันคือของที่ยังไม่กลับคลัง.
+ * คำถามจริงคือ "ตอนนี้ของอยู่ไหนบ้าง" — เป็นภาพนิ่ง ไม่มีแกนเวลา จึงไม่รับตัวกรองช่วงวันที่.
+ *
+ * นับเฉพาะใบที่ยังเปิด (returnedAt = null) และเหลือของจริง (quantity − resolvedQty > 0) —
+ * เกณฑ์เดียวกับ lib/distribution.ts countedRows ที่หน้าพัสดุใช้แจกแจงที่ตั้ง.
+ *
+ * โครงเป็น อาคาร → ห้อง → พัสดุ ตามรูป UsageMonthGroup เป๊ะ เพื่อให้ UsageDetailDialog ตัวเดิม
+ * รับได้โดยไม่ต้องมีกล่องรายละเอียดคนละใบ.
+ */
+export type InUseSnapshot = {
+  /** หนึ่งแถวต่อห้อง — ตารางบนหน้าจอและไฟล์ export อ่านชุดนี้ */
+  rows: UsageBySubjectRow[];
+  /** อาคาร → ห้อง → พัสดุ — กราฟและกล่องรายละเอียดอ่านชุดนี้ */
+  buildings: UsageMonthGroup[];
+};
+
+export async function groupInUseSnapshot(
+  where: Record<string, unknown>,
+): Promise<InUseSnapshot> {
+  const records = await prisma.dispenseRecord.findMany({
+    where: { ...where, returnedAt: null },
+    select: {
+      quantity: true,
+      resolvedQty: true,
+      locationId: true,
+      item: { select: { id: true, code: true, name: true, issueUnit: { select: { name: true } } } },
+    },
+  });
+
+  const ids = [...new Set(records.map((r) => r.locationId).filter((id): id is string => !!id))];
+  const locations = ids.length
+    ? await prisma.location.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, building: true, floor: true, room: true, detail: true },
+      })
+    : [];
+  const placeOf = new Map(locations.map((l) => [l.id, l]));
+
+  type RoomAcc = Omit<UsageMonthRow, "items"> & { items: Map<string, UsageMonthItem> };
+  type BuildingAcc = Omit<UsageMonthGroup, "rows"> & { rows: Map<string, RoomAcc> };
+  const buildings = new Map<string, BuildingAcc>();
+
+  for (const r of records) {
+    const qty = r.quantity - r.resolvedQty;
+    if (qty <= 0) continue;
+
+    const place = r.locationId ? placeOf.get(r.locationId) : undefined;
+    // แถวเก่าที่เขียนก่อนระบบบังคับให้เลือกห้องยังต้องเห็น ไม่งั้นยอดรวมไม่เท่ากับของที่ออกไปจริง
+    const buildingKey = place ? `${place.building}|${place.floor}` : "";
+    const buildingLabel = place
+      ? [place.building, place.floor].filter(Boolean).join(" / ")
+      : "ไม่ระบุสถานที่";
+    const roomKey = r.locationId ?? "";
+    const roomLabel = place ? locationLabel(place) : "ไม่ระบุสถานที่";
+
+    const building = buildings.get(buildingKey) ?? {
+      group: buildingKey, label: buildingLabel, records: 0, totalQuantity: 0, rows: new Map(),
+    };
+    buildings.set(buildingKey, building);
+    building.records += 1;
+    building.totalQuantity += qty;
+
+    const room = building.rows.get(roomKey) ?? {
+      key: roomKey, label: roomLabel, records: 0, totalQuantity: 0, items: new Map(),
+    };
+    building.rows.set(roomKey, room);
+    room.records += 1;
+    room.totalQuantity += qty;
+
+    const entry = room.items.get(r.item.id) ?? {
+      code: r.item.code, name: r.item.name, unit: r.item.issueUnit.name, quantity: 0, records: 0,
+    };
+    entry.quantity += qty;
+    entry.records += 1;
+    room.items.set(r.item.id, entry);
+  }
+
+  const grouped = [...buildings.values()]
+    .map((b) => ({
+      ...b,
+      rows: [...b.rows.values()]
+        .map((r) => ({ ...r, items: [...r.items.values()].sort((a, z) => z.quantity - a.quantity) }))
+        .sort((a, z) => z.totalQuantity - a.totalQuantity),
+    }))
+    .sort((a, z) => z.totalQuantity - a.totalQuantity);
+
+  // ตารางเป็นรายห้อง — itemCount คือ "ห้องนี้มีของกี่ชนิด" ตรงกับหัวคอลัมน์ที่ใช้ร่วมกับอีกสอง segment
+  const rows: UsageBySubjectRow[] = grouped
+    .flatMap((b) => b.rows)
+    .map((r) => ({
+      key: r.key,
+      usageType: null,
+      courseCode: null,
+      label: r.label,
+      totalQuantity: r.totalQuantity,
+      records: r.records,
+      itemCount: r.items.length,
+    }))
+    .sort((a, z) => z.totalQuantity - a.totalQuantity);
+
+  return { rows, buildings: grouped };
 }
 
 // ─── Monthly breakdown ───────────────────────────────────────────────────────────────────
@@ -170,20 +290,16 @@ function bump(t: { records: number; totalQuantity: number }, qty: number) {
 }
 
 /**
- * เดือน → กลุ่ม → วิชา/กิจกรรม/ห้อง → พัสดุ.
+ * เดือน → กลุ่ม → วิชา/กิจกรรม → พัสดุ.
  *
- * mode = "location" คือ นำไปใช้งาน ซึ่งไม่มี usageType (validators/dispense ยกเว้นให้โดยตั้งใจ)
- * — กลุ่มจึงเหลือกลุ่มเดียวและห้องไปเป็นแถวข้างใน แทนที่จะเป็นซีรีส์ในกราฟห้องละสี ซึ่งพอมี
- * สิบห้องก็อ่านไม่ออกแล้ว.
+ * เบิกใช้กับยืมเท่านั้น. นำไปใช้งานเคยเดินผ่านที่นี่ด้วย (mode = "location") แต่มันไม่ใช่บัญชี
+ * เหตุการณ์รายเดือน — มันคือภาพนิ่งว่าตอนนี้ของอยู่ห้องไหน ซึ่งไปอยู่ที่ groupInUseSnapshot แล้ว.
  *
  * ponytail: อ่านแถวดิบมานับใน JS ไม่ใช่ GROUP BY date_trunc ใน SQL — คลังนี้มีราวสามพันแถวต่อปี
  * และการนับใน JS ใช้ `where` ก้อนเดียวกับที่ทุกส่วนของ report นี้ใช้ จึงไม่มีทางนับคนละชุดกับ
  * ตารางที่อยู่ข้างๆ. ถ้าตารางนี้โตถึงหลักแสนแถวค่อยย้ายไป date_trunc.
  */
-export async function groupUsageByMonth(
-  where: Record<string, unknown>,
-  mode: "usage" | "location",
-): Promise<UsageMonth[]> {
+export async function groupUsageByMonth(where: Record<string, unknown>): Promise<UsageMonth[]> {
   const records = await prisma.dispenseRecord.findMany({
     where,
     select: {
@@ -193,14 +309,9 @@ export async function groupUsageByMonth(
       courseCode: true,
       usageNote: true,
       notes: true,
-      locationId: true,
       item: { select: { id: true, code: true, name: true, issueUnit: { select: { name: true } } } },
     },
   });
-
-  const nameOf = mode === "location"
-    ? await locationNames(records.map((r) => r.locationId))
-    : new Map<string, string>();
 
   const months = new Map<string, MonthAcc>();
 
@@ -212,14 +323,12 @@ export async function groupUsageByMonth(
     months.set(month.month, month);
     bump(month, r.quantity);
 
-    const [groupKey, rowKey, rowLabel] = mode === "location"
-      ? ["INUSE", r.locationId ?? "", (r.locationId && nameOf.get(r.locationId)) || "ไม่ระบุสถานที่"]
-      : (() => {
-          const g = r.usageType ?? "NONE";
-          if (g === "NONE") return ["NONE", "NONE", "ไม่ระบุการใช้งาน"];
-          const { key, label } = subjectIdentity(r);
-          return [g, key, label];
-        })();
+    const [groupKey, rowKey, rowLabel] = (() => {
+      const g = r.usageType ?? "NONE";
+      if (g === "NONE") return ["NONE", "NONE", "ไม่ระบุการใช้งาน"];
+      const { key, label } = subjectIdentity(r);
+      return [g, key, label];
+    })();
 
     const group = month.groups.get(groupKey) ?? {
       group: groupKey, label: USAGE_GROUP_LABELS[groupKey] ?? groupKey,

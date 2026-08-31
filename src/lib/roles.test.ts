@@ -3,7 +3,7 @@
 // which list an email lands in, and which writes an EXECUTIVE is allowed.
 import assert from "node:assert";
 // Safe to set after import: the lists are read on every call, not at module load.
-import { roleForEmail, canManageStock } from "@/lib/roles";
+import { roleForEmail, canManageStock, emailsForRole, roleForProfile } from "@/lib/roles";
 
 process.env.SUPERADMIN_EMAILS = " Boss@NU.ac.th ,two@nu.ac.th";
 process.env.ADMIN_EMAILS = "store@nu.ac.th";
@@ -42,5 +42,55 @@ assert.equal(execMayWrite("/api/receive"), false);
 assert.equal(execMayWrite("/api/items/abc/status"), false, "แจ้งชำรุด is admin work");
 assert.equal(execMayWrite("/api/items/abc/adjust"), false);
 assert.equal(execMayWrite("/api/settings/users"), false);
+
+// The /settings role filter matches on these lists — normalised the same way roleForEmail does.
+assert.deepEqual(emailsForRole("SUPERADMIN"), ["boss@nu.ac.th", "two@nu.ac.th"]);
+assert.deepEqual(emailsForRole("EXECUTIVE"), ["dean@nu.ac.th"]);
+
+// ── ยืมเอง: the faculty gate ──────────────────────────────────────────
+// นศ. carry the faculty code itself; staff carry a department code beneath it.
+process.env.BORROWER_ORG_PREFIXES = "12";
+process.env.BORROWER_ORG_NAMES = "พยาบาล";
+const nursing = (
+  accountType: string | null,
+  orgCode: string | null,
+  opts: { orgName?: string | null; email?: string } = {},
+) => roleForProfile({
+  email: opts.email ?? "someone@cmu.ac.th",
+  accountType,
+  orgCode,
+  orgName: opts.orgName ?? null,
+});
+
+assert.equal(nursing("StudentAccount", "12"), "BORROWER");
+assert.equal(nursing("MISEmployee", "1203"), "BORROWER", "staff sit on a department code under the faculty");
+assert.equal(nursing("AlumniAccount", "12"), null, "a graduate keeps the faculty org — account type is what goes stale");
+assert.equal(nursing("StudentAccount", "07"), null, "another faculty");
+assert.equal(nursing("StudentAccount", null), null);
+assert.equal(nursing(null, "12"), null, "no claims (id_token-only provider) must not grant anything");
+
+// The name is the safety net for the staff department codes nobody here has ever seen.
+assert.equal(
+  nursing("MISEmployee", "4501", { orgName: "ภาควิชาการพยาบาลศัลยศาสตร์" }),
+  "BORROWER",
+  "a department code outside the prefix still gets in on the faculty name",
+);
+assert.equal(nursing("MISEmployee", "4501", { orgName: "ภาควิชาชีวเคมี" }), null, "another faculty's department");
+// ...but the net only catches accounts the type check already passed.
+assert.equal(nursing("AlumniAccount", "4501", { orgName: "ภาควิชาการพยาบาลศัลยศาสตร์" }), null);
+
+// An env list always wins, whatever the provider says about the account.
+assert.equal(nursing("StudentAccount", "12", { email: "boss@nu.ac.th" }), "SUPERADMIN");
+assert.equal(nursing("AlumniAccount", "99", { email: "store@nu.ac.th" }), "ADMIN");
+
+// Both lists unset = nobody self-borrows. Fail closed, same as an empty email list.
+process.env.BORROWER_ORG_PREFIXES = "";
+process.env.BORROWER_ORG_NAMES = "";
+assert.equal(nursing("StudentAccount", "12"), null);
+assert.equal(nursing("MISEmployee", "12", { orgName: "ภาควิชาการพยาบาลศัลยศาสตร์" }), null);
+process.env.BORROWER_ORG_PREFIXES = "12";
+process.env.BORROWER_ORG_NAMES = "พยาบาล";
+
+assert.equal(canManageStock("BORROWER"), false, "borrowers must not touch stock");
 
 console.log("# roles: all assertions passed");

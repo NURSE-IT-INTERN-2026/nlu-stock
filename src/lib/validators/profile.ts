@@ -13,6 +13,9 @@ export const profileCreateSchema = z.object({
   description: z.string().max(500).optional(),
   dispenseType: z.nativeEnum(DispenseType),
   assetTracking: z.boolean().default(false),
+  // ยืมเอง — ปิดทั้งประเภท. Narrowed further per item; see lib/self-borrow.ts.
+  selfBorrowable: z.boolean().default(true),
+  selfBorrowLimit: z.number().int().min(1).default(1),
   setTracking: z.boolean().default(false),
   icon: z.string().min(1).default("Package"),
   color: z.string().min(1),
@@ -32,5 +35,7 @@ export const profileUpdateSchema = z.object({
   code: z.string().regex(codeRegex).optional(),
   dispenseType: z.nativeEnum(DispenseType).optional(),
   assetTracking: z.boolean().optional(),
+  selfBorrowable: z.boolean().optional(),
+  selfBorrowLimit: z.number().int().min(1).optional(),
   setTracking: z.boolean().optional(),
 });

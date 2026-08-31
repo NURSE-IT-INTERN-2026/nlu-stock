@@ -4,19 +4,22 @@ import type { AlertCounts } from "@/lib/alerts";
 
 // Ordered by how urgent the work is, not by count — a rank driven by count would put
 // ถึงรอบตรวจนับ (every item that never had a count date) first and bury the four overdue
-// returns. Labels match the /alerts tab each one opens (alerts/page.tsx `alertChips`), and
-// `param` must match the query key that page reads.
+// returns.
+//
+// `href` เต็มไม่ใช่ชื่อ query param: สามอันนี้ไม่ได้เปิด /alerts แล้ว — คิวงานที่ต้องลงมือทำย้าย
+// ไปหน้าของตัวเอง (/receive, /repairs, /maintenance) ซึ่งกดคืน/ส่งซ่อมได้จริง ต่างจากแท็บสำเนา
+// แบบอ่านอย่างเดียวที่เคยอยู่บน /alerts. ที่เหลือยังชี้แท็บบน /alerts ตาม `alertChips`.
 //
 // ponytail: onLoan is deliberately absent. It is a normal state, not an alert — the alert is
 // overdueReturn. The old metric card labelled onLoan "ค้างส่งคืน", which overstated it.
 const TYPES = [
-  { param: "overdueReturn", label: "เกินกำหนดคืน", key: "overdueReturn", urgent: true },
-  { param: "overdueMaint", label: "เกินกำหนดซ่อมบำรุง", key: "overdueMaintenance", urgent: true },
-  { param: "lowStock", label: "ต่ำกว่าขั้นต่ำ", key: "lowStock", urgent: false },
-  { param: "damagedPending", label: "ชำรุด (รอส่งซ่อม)", key: "damagedPending", urgent: false },
-  { param: "nearExpiry", label: "ใกล้หมดอายุ", key: "nearExpiry", urgent: false },
-  { param: "dueCount", label: "ถึงรอบตรวจนับ", key: "dueCount", urgent: false },
-] as const satisfies ReadonlyArray<{ param: string; label: string; key: keyof AlertCounts; urgent: boolean }>;
+  { href: "/receive?tab=return&due=overdue", label: "เกินกำหนดคืน", key: "overdueReturn", urgent: true },
+  { href: "/maintenance", label: "เกินกำหนดซ่อมบำรุง", key: "overdueMaintenance", urgent: true },
+  { href: "/alerts?lowStock=true", label: "ต่ำกว่าขั้นต่ำ", key: "lowStock", urgent: false },
+  { href: "/repairs", label: "ชำรุด (รอส่งซ่อม)", key: "damagedPending", urgent: false },
+  { href: "/alerts?nearExpiry=true", label: "ใกล้หมดอายุ", key: "nearExpiry", urgent: false },
+  { href: "/alerts?dueCount=true", label: "ถึงรอบตรวจนับ", key: "dueCount", urgent: false },
+] as const satisfies ReadonlyArray<{ href: string; label: string; key: keyof AlertCounts; urgent: boolean }>;
 
 export function DashboardAlertBar({ counts }: { counts: AlertCounts }) {
   const open = TYPES.filter((t) => counts[t.key] > 0);
@@ -53,8 +56,8 @@ export function DashboardAlertBar({ counts }: { counts: AlertCounts }) {
       <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {open.map((t) => (
           <Link
-            key={t.param}
-            href={`/alerts?${t.param}=true`}
+            key={t.key}
+            href={t.href}
             className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="whitespace-nowrap text-muted-foreground">{t.label}</span>

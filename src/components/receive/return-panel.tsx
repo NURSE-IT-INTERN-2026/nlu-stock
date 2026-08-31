@@ -9,6 +9,9 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight, RotateCcw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { getOpenBorrows, type OpenBorrow } from "@/lib/api";
 import { ReturnLoanDetail, type LoanGroup } from "@/components/receive/return-loan-detail";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
@@ -139,6 +142,12 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
       })
     : chipFiltered;
   const shownOutstanding = filteredGroups.reduce((s, g) => s + g.records.reduce((a, r) => a + outstandingOf(r), 0), 0);
+  // ยอดค้างคืนด้านบนนับทั้งผลกรอง ไม่ใช่เฉพาะหน้านี้ — เปิดหน้า 2 แล้วตัวเลขต้องไม่ลด
+  const { page, setPage, paged: pagedGroups, total: pageTotal } = useClientPage(
+    filteredGroups,
+    PAGE_SIZE.DEFAULT,
+    `${q}|${chip}|${usage}`,
+  );
 
   if (loading) {
     return (
@@ -244,7 +253,7 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
         <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-1 pr-1 sm:gap-1.5">
           {filteredGroups.length === 0 ? (
             <div className="text-center py-10 text-sm text-muted-foreground">ไม่พบ &ldquo;{query}&rdquo;</div>
-          ) : filteredGroups.map((g) => {
+          ) : pagedGroups.map((g) => {
           const head = g.records[0];
           const total = g.records.reduce((s, r) => s + r.quantity, 0);
           const outstanding = g.records.reduce((s, r) => s + outstandingOf(r), 0);
@@ -283,6 +292,12 @@ export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue"
           );
         })}
         </div>
+        {/* -mx-4 กิน px-4 ของ CardContent คืน ให้เส้น border-t พาดเต็มการ์ด */}
+        {filteredGroups.length > 0 && (
+          <div className="shrink-0 -mx-4">
+            <Pagination page={page} total={pageTotal} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} unit="รายการยืม" />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

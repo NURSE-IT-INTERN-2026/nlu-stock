@@ -2,8 +2,9 @@
 export { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult, UsageType } from "@/generated/prisma/enums";
 import type { ItemStatus, AdjustmentReason, MaintenanceType, MaintenanceResult } from "@/generated/prisma/enums";
 // Role is NOT a Prisma enum — it comes from env allowlists.
-export { ROLES, type Role } from "@/lib/roles";
+export { ROLES, ENV_ROLES, type Role, type EnvRole } from "@/lib/roles";
 import type { Role } from "@/lib/roles";
+import { BASE_PATH } from "@/lib/base-path";
 
 // ─── Item Condition (sub-item สภาพ) ───
 export const CONDITION_LABELS: Record<string, string> = {
@@ -20,6 +21,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   SUPERADMIN: "ผู้ดูแลระบบ",
   ADMIN: "ผู้ดูแล",
   EXECUTIVE: "ผู้บริหาร",
+  // นศ./บุคลากรคณะที่ผ่าน CMU OAuth แต่ไม่อยู่ใน env list ไหน — ยืมเองได้อย่างเดียว
+  BORROWER: "ผู้ยืม",
 };
 
 // ─── Maintenance ───
@@ -187,6 +190,7 @@ export const STATUS_LABELS = {
   AVAILABLE: "พร้อมใช้งาน",
   ON_LOAN: "ถูกยืม",
   IN_USE: "ถูกใช้งาน",
+  PENDING_MAINTENANCE: "กำลังบำรุงรักษา",
   DAMAGED: "ชำรุด",
   UNDER_REPAIR: "ส่งซ่อม",
   LOST: "สูญหาย",
@@ -197,6 +201,7 @@ export const STATUS_COLORS = {
   AVAILABLE: "#22c55e",
   ON_LOAN: "#3b82f6",
   IN_USE: "#6366f1",
+  PENDING_MAINTENANCE: "#0ea5e9",
   DAMAGED: "#ef4444",
   UNDER_REPAIR: "#f59e0b",
   LOST: "#a855f7",
@@ -207,6 +212,7 @@ export const STATUS_PILLS = {
   AVAILABLE: "bg-success/15 text-success border-success/30",
   ON_LOAN: "bg-info-500/15 text-info-500 border-info-500/30",
   IN_USE: "bg-indigo-500/15 text-indigo-500 border-indigo-500/30",
+  PENDING_MAINTENANCE: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
   DAMAGED: "bg-destructive/15 text-destructive border-destructive/30",
   UNDER_REPAIR: "bg-warning/15 text-warning-foreground border-warning/30",
   LOST: "bg-purple-500/15 text-purple-500 border-purple-500/30",
@@ -217,6 +223,7 @@ export const STATUS_VARIANTS = {
   AVAILABLE: "default",
   ON_LOAN: "secondary",
   IN_USE: "secondary",
+  PENDING_MAINTENANCE: "secondary",
   DAMAGED: "destructive",
   UNDER_REPAIR: "secondary",
   LOST: "destructive",
@@ -232,12 +239,12 @@ export const STATUS_VARIANTS = {
  * LOST/DISPOSED are absent because they are written off: not counted in the total, not
  * rendered. They still show in ประวัติสูญหาย and in the รายชิ้น legend below the breakdown.
  *
- * ถึงรอบบำรุงรักษาไม่ใช่สถานะ และไม่เคยเป็น: ของที่ถึงรอบยังพร้อมใช้งานอยู่ มันถูกชี้ด้วยวันที่
- * (Item/SubItem.nextMaintenanceDate) ที่หน้า /maintenance และ /alerts ไม่ใช่ด้วยสถานะของชิ้น.
- * เคยมีค่า PENDING_MAINTENANCE ค้างอยู่ใน enum จาก model แรกที่คิดแบบนั้น — ลบทิ้งไปแล้ว
- * (migration 20260824090000) หลังพิสูจน์ว่าไม่มี write path และฐานข้อมูลไม่มีสักแถว.
+ * ถึงรอบบำรุงรักษายังไม่ใช่สถานะ: ของที่ถึงรอบยังพร้อมใช้งานอยู่ มันถูกชี้ด้วยวันที่
+ * (Item/SubItem.nextMaintenanceDate) ที่หน้า /maintenance และ /alerts.
+ * PENDING_MAINTENANCE คนละเรื่อง — มันไม่ได้แปลว่า "ถึงรอบ" แต่แปลว่า "ส่งออกไปบำรุงข้างนอกแล้ว
+ * ยังไม่กลับมา" ซึ่งเป็นที่อยู่จริงของชิ้นนั้น เหมือน UNDER_REPAIR ทุกประการ จึงมีบักเก็ตของตัวเอง.
  */
-export const USAGE_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "UNDER_REPAIR", "DAMAGED"] as const;
+export const USAGE_STATUS_ORDER = ["AVAILABLE", "ON_LOAN", "IN_USE", "PENDING_MAINTENANCE", "UNDER_REPAIR", "DAMAGED"] as const;
 
 // Non-tracked items (consumable / COUNT durable) have no per-unit lifecycle status —
 // their stock state derives from available/total. COUNT (ยืม-คืน) has a middle "on loan"
@@ -308,8 +315,10 @@ export function formatSubCode(itemCode: string, subCode: string): string {
 // detail shell already honours ?copy=<subCode>, so no resolver route is needed.
 
 export function qrUrl(itemCode: string, subCode?: string | null): string {
+  // The fallback needs BASE_PATH spelled out: origin alone drops the subpath the app is
+  // served from, and a QR printed off that fallback would point at a 404.
   const base = process.env.NEXT_PUBLIC_APP_URL
-    || (typeof window !== "undefined" ? window.location.origin : "");
+    || (typeof window !== "undefined" ? window.location.origin + BASE_PATH : "");
   const q = subCode ? `?copy=${encodeURIComponent(subCode)}` : "";
   return `${base}/items/${encodeURIComponent(itemCode)}${q}`;
 }

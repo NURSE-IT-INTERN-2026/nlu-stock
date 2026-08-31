@@ -28,6 +28,9 @@ import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialo
 import { FileUploadList } from "@/components/shared/file-upload";
 import { AttachmentList } from "@/components/shared/attachment-list";
 import { useSession } from "@/components/layout/auth-guard";
+import { Pagination } from "@/components/shared/pagination";
+import { useClientPage } from "@/hooks/use-client-page";
+import { PAGE_SIZE } from "@/lib/pagination-constants";
 
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 const fmtDay = (iso: string) => fmtDate(iso, TH_DATE);
@@ -165,27 +168,6 @@ export function SubItemStatusPanel({
     onCount?.(total);
   }, [total, onCount]);
 
-  if (loading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
-      </div>
-    );
-  }
-
-  if (rows.length === 0 && qtyRows.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-          {status === "DAMAGED" ? <Send className="h-6 w-6 text-muted-foreground" /> : <Wrench className="h-6 w-6 text-muted-foreground" />}
-        </div>
-        <p className="text-sm text-muted-foreground">{emptyText}</p>
-      </div>
-    );
-  }
-
   const q = query.trim().toLowerCase();
   const filteredRows = q
     ? rows.filter(({ row: r }) => {
@@ -216,6 +198,30 @@ export function SubItemStatusPanel({
     ...filteredQty.map(({ stage, row: r }) => ({ key: `q${r.id}`, stage, at: r.repairSentAt ?? r.adjustedAt, node: <QtyRepairRow row={r} stage={stage} showStage={showStage} onResolved={load} /> })),
   ].sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || b.at.localeCompare(a.at));
 
+  const { page, setPage, paged, total: pageTotal } = useClientPage(merged, PAGE_SIZE.DEFAULT, q);
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (rows.length === 0 && qtyRows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+          {status === "DAMAGED" ? <Send className="h-6 w-6 text-muted-foreground" /> : <Wrench className="h-6 w-6 text-muted-foreground" />}
+        </div>
+        <p className="text-sm text-muted-foreground">{emptyText}</p>
+      </div>
+    );
+  }
+
+
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
       <CardContent className="flex flex-col flex-1 min-h-0 gap-3">
@@ -236,9 +242,15 @@ export function SubItemStatusPanel({
           {merged.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-10">ไม่พบ &ldquo;{query}&rdquo;</p>
           ) : (
-            merged.map((m) => <div key={m.key}>{m.node}</div>)
+            paged.map((m) => <div key={m.key}>{m.node}</div>)
           )}
         </div>
+        {/* -mx-4 กิน px-4 ของ CardContent คืน ให้เส้น border-t พาดเต็มการ์ด */}
+        {merged.length > 0 && (
+          <div className="shrink-0 -mx-4">
+            <Pagination page={page} total={pageTotal} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -442,7 +454,7 @@ function QtyRepairRow({ row, stage, showStage, onResolved }: { row: PendingRepai
             <AlertDialogHeader>
               <AlertDialogTitle>ยืนยันการ{actionLabel}</AlertDialogTitle>
               <AlertDialogDescription>
-                ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ
+                ส่ง <span className="font-medium text-foreground">{row.item.name}</span> {row.qty} {unit} ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้าซ่อมแซม
               </AlertDialogDescription>
             </AlertDialogHeader>
             {/* Direct child of AlertDialogContent (not Header) so the separator's -mx-4 reaches
@@ -701,7 +713,7 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
               <AlertDialogTitle>ยืนยันการ{actionLabel}</AlertDialogTitle>
               <AlertDialogDescription>
                 {isDamaged ? (
-                  <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้ารับเข้า-คืนพัสดุ</>
+                  <>ส่ง <span className="font-medium text-foreground">{row.item.name}</span> ไปซ่อม เมื่อซ่อมเสร็จ กรุณากด &ldquo;รับคืนจากส่งซ่อม&rdquo; ที่หน้าซ่อมแซม</>
                 ) : (
                   <>บันทึก <span className="font-medium text-foreground">{row.item.name}</span> ({effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}) เป็น &ldquo;พร้อมใช้งาน&rdquo; ทันที — รายการนี้จะเข้าประวัติ ไม่สามารถแก้ไขย้อนหลังได้</>
                 )}

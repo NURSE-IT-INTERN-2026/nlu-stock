@@ -1,5 +1,6 @@
 import { Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBase } from "@/lib/base-path";
 
 /**
  * An item's photo, or an honest blank when it has none.
@@ -15,7 +16,7 @@ import { cn } from "@/lib/utils";
  */
 export function ItemThumb({ src, alt, className }: { src?: string | null; alt: string; className?: string }) {
   if (src) {
-    return <img src={src} alt={alt} loading="lazy" className={cn("size-full object-cover", className)} />;
+    return <img src={withBase(src)} alt={alt} loading="lazy" className={cn("size-full object-cover", className)} />;
   }
   return (
     <div

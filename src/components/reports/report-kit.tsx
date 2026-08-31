@@ -18,13 +18,20 @@ export const tokenText: Record<Token, string> = {
   lost: "text-lost", ready: "text-stockin",
 };
 
-/** For anywhere the colour has to be a value rather than a class — inline `style`, recharts. */
-export const tokenVar: Record<Token, string> = {
-  issue: "var(--issue)", borrow: "var(--borrow)", inuse: "var(--inuse)",
-  stockin: "var(--stockin)", damage: "var(--damage)", repair: "var(--repair)",
-  dispose: "var(--dispose)", maintain: "var(--maintain)", value: "var(--value)",
-  lost: "var(--lost)", ready: "var(--stockin)",
+/** ชื่อ custom property ล้วน — สำหรับ `useThemeColor`, ซึ่งอ่านผ่าน getPropertyValue จึงรับได้
+ *  เฉพาะชื่อ ไม่ใช่ `var(...)`. ส่ง tokenVar เข้าไปแทนจะได้ค่าว่าง แล้วตกไปเป็นสีเทา fallback
+ *  เงียบๆ — กราฟยังวาดออกมาได้ แค่ผิดสี ซึ่งไม่มีอะไรเตือน. */
+export const tokenCssVar: Record<Token, string> = {
+  issue: "--issue", borrow: "--borrow", inuse: "--inuse",
+  stockin: "--stockin", damage: "--damage", repair: "--repair",
+  dispose: "--dispose", maintain: "--maintain", value: "--value",
+  lost: "--lost", ready: "--stockin",
 };
+
+/** For anywhere the colour has to be a value rather than a class — inline `style`, CSS. */
+export const tokenVar: Record<Token, string> = Object.fromEntries(
+  Object.entries(tokenCssVar).map(([k, v]) => [k, `var(${v})`]),
+) as Record<Token, string>;
 
 /** A wash of the token colour over the card, not a flat fill: the tokens are tuned to be
  *  readable *as text*, so at full strength they swallow whatever sits on top of them. */

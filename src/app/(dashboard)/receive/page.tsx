@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2, Wrench } from "lucide-react";
+import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2 } from "lucide-react";
 import { motion } from "motion/react";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,6 @@ const uid = () =>
   crypto.randomUUID?.() ?? `r${crypto.getRandomValues(new Uint32Array(2)).join("-")}`;
 import { AddItemModal } from "@/components/shared/add-item-modal";
 import { ReturnPanel } from "@/components/receive/return-panel";
-import { SubItemStatusPanel } from "@/components/receive/sub-item-status-panel";
 import { InUsePanel } from "@/components/receive/in-use-panel";
 import { usePageHeader } from "@/components/layout/page-header-context";
 
@@ -84,13 +83,14 @@ export default function ReceivePage() {
   );
 }
 
-type ReceiveTab = "receive" | "in_use" | "return" | "repair";
+// รับคืนจากส่งซ่อม ย้ายไป /repairs?tab=receive — ปิดงานซ่อมเป็นเรื่องของเที่ยวซ่อม ไม่ใช่ของเข้าคลัง.
+// ลิงก์เก่า (?tab=repair) ยัง redirect ให้ ดูใน ReceiveShell.
+type ReceiveTab = "receive" | "in_use" | "return";
 
 const RECEIVE_TABS = [
   { value: "receive", label: "นำเข้าคลัง", icon: ArrowDownToLine },
   { value: "in_use", label: "คืนเข้าคลัง", icon: PackageCheck },
   { value: "return", label: "รับคืนจากใบยืม", icon: Undo2 },
-  { value: "repair", label: "รับคืนจากส่งซ่อม", icon: Wrench },
 ] as const;
 
 function ReceiveShell() {
@@ -111,6 +111,11 @@ function ReceiveShell() {
     setDetail(activeLabel ?? null);
     return () => setDetail(null);
   }, [activeLabel, setDetail]);
+  // Bookmarks, the item-detail link and anything else pointing at the old tab land on the
+  // page it moved to rather than silently on นำเข้าคลัง, which would look like a lost click.
+  useEffect(() => {
+    if (rawTab === "repair") router.replace("/repairs?tab=receive");
+  }, [rawTab, router]);
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0">
@@ -149,10 +154,8 @@ function ReceiveShell() {
           <ReceiveContent />
         ) : tab === "in_use" ? (
           <InUsePanel />
-        ) : tab === "return" ? (
-          <ReturnPanel initialChip={initialDueChip} />
         ) : (
-          <SubItemStatusPanel status="UNDER_REPAIR" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
+          <ReturnPanel initialChip={initialDueChip} />
         )}
       </div>
     </div>

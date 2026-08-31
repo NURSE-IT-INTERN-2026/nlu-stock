@@ -33,6 +33,7 @@ import { effectiveCode, locationLabel, recipientLabel } from "@/lib/constants";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 
 import { EVIDENCE_ACCEPT, MAX_EVIDENCE_FILES } from "@/lib/uploads";
+import { withBase } from "@/lib/base-path";
 export interface LoanGroup {
   key: string;
   records: OpenBorrow[];
@@ -433,7 +434,7 @@ export function ReturnLoanDetail({
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {proofs.map((url, i) => (
                   <div key={url + i} className="group relative aspect-square overflow-hidden rounded-md border">
-                    <img src={url} alt={`หลักฐาน ${i + 1}`} className="h-full w-full object-cover" />
+                    <img src={withBase(url)} alt={`หลักฐาน ${i + 1}`} className="h-full w-full object-cover" />
                     <button
                       type="button"
                       onClick={() => setProofs((p) => p.filter((_, idx) => idx !== i))}
@@ -608,7 +609,7 @@ function TrackedRows({
                       <div className="flex items-center gap-2 flex-wrap">
                         {(rowPhotos[r.id] ?? []).map((url, i) => (
                           <div key={url + i} className="group relative size-12 overflow-hidden rounded-md border">
-                            <img src={url} alt={`หลักฐาน ${i + 1}`} className="size-full object-cover" />
+                            <img src={withBase(url)} alt={`หลักฐาน ${i + 1}`} className="size-full object-cover" />
                             <button
                               type="button"
                               onClick={() => onRemovePhoto(r.id, i)}

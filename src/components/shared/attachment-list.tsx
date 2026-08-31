@@ -15,6 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { ComponentProps } from "react";
+import { withBase } from "@/lib/base-path";
 
 export type AttachTarget = { recordType: AttachRecordType; recordId: string };
 
@@ -143,11 +144,11 @@ export function AttachmentList({
                     className="block overflow-hidden rounded-md border border-border transition-colors hover:border-primary"
                     aria-label={`ดูรูปหลักฐาน ${images.indexOf(url) + 1} ขนาดเต็ม`}
                   >
-                    <img src={url} alt={`รูปภาพ ${images.indexOf(url) + 1}`} className="size-16 object-cover" />
+                    <img src={withBase(url)} alt={`รูปภาพ ${images.indexOf(url) + 1}`} className="size-16 object-cover" />
                   </button>
                 ) : (
                   <a
-                    href={url}
+                    href={withBase(url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex h-16 items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
@@ -226,7 +227,7 @@ export function AttachmentList({
           >
             <X className="h-4 w-4" />
           </button>
-          <img src={lightbox} alt="รูปหลักฐาน" className="max-h-full max-w-full rounded-md object-contain" />
+          <img src={withBase(lightbox)} alt="รูปหลักฐาน" className="max-h-full max-w-full rounded-md object-contain" />
         </div>
       )}
     </>

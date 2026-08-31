@@ -15,6 +15,7 @@ import { DIALOG_SHELL, DIALOG_SHELL_FIT, DIALOG_BODY, Dialog, DialogContent, Dia
 import { NumericInput } from "@/components/shared/numeric-input";
 import { StepComponents } from "@/components/shared/create-kit-modal/step-components";
 import type { ComponentRow } from "@/components/shared/create-kit-modal/types";
+import { withBase } from "@/lib/base-path";
 import { STATUS_LABELS, type ItemStatus } from "@/lib/constants";
 import { useCart, buildCartItem, toDispenseableItem, type DispenseSearchItem } from "@/components/dispense/cart-context";
 import {
@@ -460,7 +461,7 @@ function PrefillCartButton({
     setLoading(true);
     try {
       const ids = consumables.map((c) => c.itemId).join(",");
-      const res = await fetch(`/api/dispense/items?ids=${encodeURIComponent(ids)}&perPage=100`);
+      const res = await fetch(withBase(`/api/dispense/items?ids=${encodeURIComponent(ids)}&perPage=100`));
       if (!res.ok) throw new Error("โหลดรายการไม่สำเร็จ");
       const { items } = (await res.json()) as { items: DispenseSearchItem[] };
 

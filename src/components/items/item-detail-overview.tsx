@@ -8,14 +8,14 @@ import {
   Package, QrCode, ArrowDownToLine, Home,
   Flag, Undo2, Pencil,
   Hash, Tag, Layers, ClipboardList, FolderTree,
-  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2, Wrench,
+  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2, Wrench, HandCoins,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { countCycleFor } from "@/lib/stock-count";
 import { formatSubCode, qrUrl, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
-import { canManageStock } from "@/lib/roles";
+import { canManageStock, isSelfBorrower } from "@/lib/roles";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
 import { ActionTile } from "@/components/items/action-tile";
@@ -23,6 +23,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { returnItem } from "@/lib/api";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 import { DistributionTable, distributionTotal, type DistributionRow } from "@/components/items/distribution-table";
+import { withBase } from "@/lib/base-path";
+import { isSelfBorrowable, isConsumeOnly, selfBorrowMax } from "@/lib/self-borrow";
+import { SelfBorrowDialog } from "@/components/dispense/self-borrow-dialog";
 
 /** One open แจ้งชำรุด booking — as served by GET /api/items/:id (`openDamage`). */
 export interface OpenDamage {
@@ -44,7 +47,7 @@ interface SubItemRecord {
   serialNumber: string | null;
 }
 
-interface CategoryType { id: string; name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; name: string } | null }
+interface CategoryType { id: string; name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; name: string; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
 interface ItemData {
@@ -63,6 +66,9 @@ interface ItemData {
   storageRequirements: string | null;
   availableQty: number;
   totalQty: number;
+  /** ยืมเอง switches — see lib/self-borrow.ts. null limit = ตามประเภท. */
+  selfBorrowable: boolean;
+  selfBorrowLimit: number | null;
   subItems: SubItemRecord[];
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   countCycleMonths: number | null;
@@ -106,6 +112,24 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       return acc;
     }, {} as Record<string, number>);
   }, [item.trackIndividually, item.subItems]);
+
+  // ── ยืมเอง (BORROWER only) ──
+  const isBorrower = isSelfBorrower(userRole);
+  const borrowRule = {
+    selfBorrowable: item.selfBorrowable,
+    selfBorrowLimit: item.selfBorrowLimit,
+    availableQty: item.availableQty,
+    trackIndividually: item.trackIndividually,
+    dispenseType: item.category.profile?.dispenseType ?? "COUNT",
+    // Absent profile = closed. A missing relation is not a licence to hand stock out.
+    profileSelfBorrowable: item.category.profile?.selfBorrowable ?? false,
+    profileSelfBorrowLimit: item.category.profile?.selfBorrowLimit ?? 1,
+  };
+  const canSelfBorrow = isBorrower && isSelfBorrowable(borrowRule);
+  const borrowMax = selfBorrowMax(borrowRule);
+  // เบิกใช้ vs ยืม — the card and the dialog have to say which one the button does.
+  const borrowIsConsume = isConsumeOnly(borrowRule);
+  const [borrowOpen, setBorrowOpen] = useState(false);
 
   // ── QR ──
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -245,7 +269,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
               {isCountDurable && (
                 <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={() => setStationOpen(true)} disabled={item.availableQty <= 0} />
               )}
-              <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={() => { window.location.href = `/receive?item=${item.id}`; }} />
+              <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={() => { window.location.href = withBase(`/receive?item=${item.id}`); }} />
               {/* One tile for every qty correction — the dialog asks WHAT happened
                   (ตรวจนับ / ตัดจำหน่าย / สูญหาย / อื่นๆ) and picks the input from that.
                   Tracked items still book discrepancies per piece, so they keep a menu. */}
@@ -273,20 +297,20 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                   This just says which screen the damaged units are sitting on right now. */}
               {damagePending > 0 && (
                 <a
-                  href="/alerts?damagedPending=true"
+                  href="/repairs"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10 dark:text-danger-400"
                 >
                   <Flag className="size-4 shrink-0" />
-                  <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าแจ้งเตือน</span>
+                  <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าซ่อมแซม</span>
                 </a>
               )}
               {damageAtShop > 0 && (
                 <a
-                  href="/receive?tab=repair"
+                  href="/repairs?tab=receive"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning-700 transition-colors hover:bg-warning/10 dark:text-warning-200"
                 >
                   <Wrench className="size-4 shrink-0" />
-                  <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้ารับเข้า-คืนพัสดุ</span>
+                  <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้าซ่อมแซม</span>
                 </a>
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (
@@ -299,7 +323,26 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <SectionHeader title="QR code" />
+            {canSelfBorrow ? (
+              <>
+                <SectionHeader title={borrowIsConsume ? "เบิกพัสดุ" : "ยืมพัสดุ"} />
+                {/* จำนวน and กำหนดคืน are stated in the confirm dialog, where they can also be
+                    changed. Repeating them here said the same numbers twice and got one of them
+                    wrong the moment the date became adjustable. The only thing this card knows
+                    that the dialog cannot say is that there is nothing to open it for. */}
+                <div className="p-4 sm:p-5">
+                  {borrowMax <= 0 ? (
+                    <p className="text-sm text-muted-foreground">ตอนนี้ไม่มีของพร้อมจ่าย</p>
+                  ) : (
+                    <Button className="w-full" onClick={() => setBorrowOpen(true)}>
+                      <HandCoins className="size-4 mr-1" />{borrowIsConsume ? "เบิกพัสดุนี้" : "ยืมพัสดุนี้"}
+                    </Button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <SectionHeader title="QR code" />
+            )}
             {qrBlock}
           </div>
         )}
@@ -340,6 +383,20 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       )}
 
       <QrPrintDialog open={printOpen} onClose={() => setPrintOpen(false)} items={printItems} />
+      {canSelfBorrow && (
+        <SelfBorrowDialog
+          open={borrowOpen}
+          onOpenChange={setBorrowOpen}
+          itemId={item.id}
+          itemCode={item.code}
+          itemName={item.name}
+          issueUnit={item.issueUnit.name}
+          max={borrowMax}
+          isTracked={item.trackIndividually}
+          isConsume={borrowIsConsume}
+          onDone={onRefresh}
+        />
+      )}
       {isCountDurable && (
         <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={item.id} itemCode={item.code} itemName={item.name} availableQty={item.availableQty} issueUnit={item.issueUnit.name} onSuccess={onRefresh} />
       )}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { walkPieceCases, summariseCases, isOverdue, isTodo, type CaseSummary, type CaseType } from "./cases";
+import { walkPieceCases, summariseCases, isOverdue, isTodo, caseRangeBounds, type CaseSummary, type CaseType } from "./cases";
 import { formatCode } from "./case-codes";
 
 const at = (day: number) => new Date(`2026-03-${String(day).padStart(2, "0")}T03:00:00Z`);
@@ -176,4 +176,21 @@ test("summariseCases reports zeros rather than NaN when nothing matches", () => 
   assert.equal(totals.serviceCost, 0);
   assert.equal(totals.lostCases, 0);
   assert.equal(totals.lostValue, 0);
+});
+
+test("caseRangeBounds closes a finished year but leaves the rolling ranges open-ended", () => {
+  // ปีที่จบไปแล้วต้องมีเพดาน — ไม่มี `to` แล้ว "พ.ศ. 2568" จะอ่านว่า "ตั้งแต่ 2568 เป็นต้นมา"
+  // ซึ่งเป็นคนละตัวกรอง และจะลากงานของปีนี้เข้ามาทั้งกอง
+  const y = caseRangeBounds("y2025");
+  assert.deepEqual(y.from, new Date(2025, 0, 1));
+  assert.deepEqual(y.to, new Date(2026, 0, 1)); // exclusive — listCases ใช้ lt
+
+  // "90 วันล่าสุด" จบที่ตอนนี้โดยนิยาม การใส่เพดานให้มันคือการตัดของที่เพิ่งเกิดทิ้ง
+  assert.equal(caseRangeBounds("90d").to, undefined);
+  assert.notEqual(caseRangeBounds("90d").from, undefined);
+
+  // ค่าที่ไม่รู้จัก (bookmark เก่า) = ไม่กรอง ไม่ใช่ error
+  assert.deepEqual(caseRangeBounds("all"), {});
+  assert.deepEqual(caseRangeBounds(null), {});
+  assert.deepEqual(caseRangeBounds("y20xx"), {});
 });
