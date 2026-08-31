@@ -160,11 +160,11 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
           // เหตุผล lives in usageNote; notes is where กิจกรรม/อื่นๆ wrote it before that, and
           // where นำไปใช้งาน still writes it (lib/constants recipientLabel uses the same order).
           const reason = r.usageNote?.trim() || r.notes?.trim() || null;
-          // เบิกสิ้นเปลือง is not a case — nothing comes back and nobody is waiting on it.
-          if (type !== "DISPENSE") {
-            loanKeyOf.set(r.id, r.id);
-            loanOutstanding.set(r.id, Math.max(0, r.quantity - r.resolvedQty));
-          }
+          // ทุกบรรทัดของใบเบิกเป็นเคส รวมของสิ้นเปลือง — มันไม่มีอะไรให้ปิด แต่มีเลขให้อ้างถึง
+          // และหน้าตาที่เหมือนบรรทัดอื่นในใบเดียวกัน. ยอดค้างของ CONSUME เป็น 0 เสมอ ไม่ใช่
+          // quantity - resolvedQty: ไม่มีใครต้องคืนของสิ้นเปลือง มันจึงปิดตั้งแต่วินาทีที่ออก.
+          loanKeyOf.set(r.id, r.id);
+          loanOutstanding.set(r.id, r.loanType === "CONSUME" ? 0 : Math.max(0, r.quantity - r.resolvedQty));
           events.push({
             id: r.id,
             type,
@@ -481,6 +481,8 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
   const loanCaseOf = (e: TimelineEvent) => {
     const key = loanKeyOf.get(e.id);
     if (!key) return null;
+    // "BORROW" ที่นี่คือชื่อตารางต้นทาง ไม่ใช่ประเภทที่จะแสดง — ไอดีเคสของ ยืม/ตั้งใช้/เบิก
+    // ขึ้นต้นด้วยคำนี้ทั้งหมด (ดู src/lib/cases.ts) และประเภทจริงถูกเขียนทับด้านล่างจาก listCases.
     return { key, type: "BORROW" as const, done: (loanOutstanding.get(key) ?? 0) === 0 };
   };
 

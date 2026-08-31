@@ -27,10 +27,13 @@ import { PAGE_SIZE } from "@/lib/pagination-constants";
  * One card per record, not per room: two batches sent to the same room on different days
  * stay apart so ของค้างนาน is visible, and a return resolves one record's quantity anyway.
  */
-export function InUsePanel() {
+export function InUsePanel({ initialQuery }: {
+  /** มาจาก ?q= — ลิงก์จากเคสหนึ่งใบเจาะจงว่าอยากเห็นของชิ้นไหน ไม่ใช่คิวทั้งกอง. */
+  initialQuery?: string;
+} = {}) {
   const [rows, setRows] = useState<InUseRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
 
   const load = useCallback(async () => {
     setLoading(true);

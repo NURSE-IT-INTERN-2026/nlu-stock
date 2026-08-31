@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
   RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight,
-  ListFilter, CircleDot, CalendarDays, FilterX, Search, ArrowLeft,
+  ListFilter, CircleDot, CalendarDays, FilterX, Search, ArrowLeft, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
@@ -21,6 +21,7 @@ import { AttachmentList } from "@/components/shared/attachment-list";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { CaseDetailPane } from "@/components/cases/case-workspace";
 import { ExportButtons } from "@/components/reports/export-buttons";
 import type { AttachRecordType } from "@/lib/attachments";
@@ -156,6 +157,10 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   const [unit, setUnit] = useState("");
   // แถวที่เลือกอยู่ — เคสหรือกิจกรรมก็คีย์เดียวกัน เพราะทั้งคู่ยึดช่องรายละเอียดช่องเดียวกัน
   const [selected, setSelected] = useState<string | null>(null);
+  // เคสของ**พัสดุตัวอื่น** ที่กดข้ามมาจากในเคสที่เปิดอยู่ — บรรทัดอื่นของใบเบิกใบเดียวกัน หรือ
+  // งานซ่อมที่การคืนครั้งนั้นเปิดไว้. เลือกในลิสต์ซ้ายไม่ได้เพราะแก้วน้ำไม่มีอยู่ในประวัติของ
+  // ชามรูปไตตั้งแต่แรก จึงต้องมีที่ของมันเอง.
+  const [peek, setPeek] = useState<string | null>(null);
   const perPage = PAGE_SIZE.DEFAULT;
 
   // A keystroke per request would put one full history build behind every letter.
@@ -322,7 +327,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   // ย้ายที่ตั้ง) ไม่มีเคสให้เปิด จึงมีช่องของตัวเองที่ยึดที่เดียวกัน — ช่องขวาตอบแถวที่เลือกไว้เสมอ
   // ไม่ว่าแถวนั้นจะเป็นงานหรือเป็นแค่ของที่ขยับ.
   const detail = !active ? <EmptyPane /> : isTrip(active) ? (
-    <CaseDetailPane caseId={caseIdOf(active)} onOpenCase={() => {}} canEdit={canEdit} />
+    <CaseDetailPane caseId={caseIdOf(active)} onOpenCase={setPeek} canEdit={canEdit} />
   ) : (
     <EventDetailPane
       event={active}
@@ -331,6 +336,40 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
       attachOverride={attachOverride}
       onAttachChange={(key, urls) => setAttachOverride((m) => ({ ...m, [key]: urls }))}
     />
+  );
+
+  /**
+   * เคสที่กดข้ามมา. แผงเดียวกับที่หน้า /cases ใช้บนมือถือ — แผงลอยไม่ใช่หน้าใหม่ เพราะคนที่กด
+   * มาดูแก้วน้ำกำลังอ่านประวัติของชามรูปไตค้างไว้ ทั้งตัวกรองและหน้าที่เปิดอยู่. พาออกไปอีกหน้า
+   * แล้วกดกลับ = เริ่มอ่านใหม่ตั้งแต่ต้น.
+   *
+   * `onOpenCase` ของแผงชี้กลับมาที่ตัวเอง: จากใบเบิกใบเดียวกันข้ามไปได้อีกทอด โดยไม่ซ้อนแผงเพิ่ม
+   * — มันคือ state ตัวเดียวที่เปลี่ยนค่า.
+   */
+  const peekSheet = (
+    <Sheet open={!!peek} onOpenChange={(o) => { if (!o) setPeek(null); }}>
+      {/* ความกว้างชุดเดียวกับหน้า /cases — หัวเคสสองบรรทัด + ป้ายสองอัน + แท็บสี่อัน ไม่พอที่ 384 */}
+      <SheetContent
+        side="right"
+        className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[520px]"
+        showCloseButton={false}
+      >
+        {/* ปุ่มปิดสำเร็จรูปของ Sheet เป็น absolute top-3 right-3 ซึ่งตกทับปุ่มลงมือบนหัวเคสพอดี */}
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2.5">
+          <SheetTitle className="text-sm font-semibold">รายละเอียดเคส</SheetTitle>
+          <SheetClose render={<Button variant="ghost" size="icon-sm" />}>
+            <X className="size-4" />
+            <span className="sr-only">ปิด</span>
+          </SheetClose>
+        </div>
+        <SheetDescription className="sr-only">ไทม์ไลน์ รายละเอียด หลักฐาน และเคสที่เกี่ยวข้องของเคสที่กดข้ามมา</SheetDescription>
+        {/* min-h-0 คู่กับ flex-1: flex child ที่ basis 0% ในพ่อที่สูงไม่แน่นอนจะไม่ยอมหด แล้ว
+            ไทม์ไลน์ยาวๆ จะดันแผงทะลุจอแทนที่จะเลื่อนอยู่ข้างใน */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {peek && <CaseDetailPane bare caseId={peek} onOpenCase={setPeek} canEdit={canEdit} />}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 
   if (isMobile) {
@@ -345,6 +384,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
             {detail}
           </div>
         ) : list}
+        {peekSheet}
       </div>
     );
   }
@@ -364,6 +404,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         {list}
         {detail}
       </div>
+      {peekSheet}
     </div>
   );
 }
@@ -385,9 +426,15 @@ const tripTone = (trip: RepairTrip) => trip.done
 const CASE_META: Record<string, { icon: typeof Package; name: string; done: string; open: string }> = {
   REPAIR: { icon: Wrench, name: "งานซ่อม", done: "ปิดงานแล้ว", open: "ยังไม่ปิด" },
   BORROW: { icon: ArrowUpFromLine, name: "การยืม", done: "คืนครบแล้ว", open: "ยังไม่คืนครบ" },
+  // เบิกใช้ปิดตั้งแต่เกิด — `open` จึงเขียนเหมือน `done` ไม่ใช่ปล่อยว่าง: ป้ายที่ว่างเปล่าอ่านเหมือน
+  // ข้อมูลหาย ส่วนคำว่า "ยังไม่..." จะบอกว่ามีอะไรค้างอยู่ ทั้งที่ไม่มี.
+  DISPENSE: { icon: ShoppingCart, name: "การเบิกใช้", done: "เบิกออกแล้ว", open: "เบิกออกแล้ว" },
   INUSE: { icon: MonitorCog, name: "ตั้งใช้ในห้อง", done: "คืนเข้าพัสดุแล้ว", open: "ยังตั้งใช้อยู่" },
   MAINTENANCE: { icon: Wrench, name: "บำรุงรักษา", done: "เสร็จสิ้น", open: "ยังไม่ปิด" },
 };
+
+/** คำกริยาหน้าวันที่เปิดเคส — "ยืม 31 ส.ค." ไม่ใช่ "แจ้ง 31 ส.ค." ซึ่งเป็นภาษาของงานซ่อม. */
+const OPENED_VERB: Record<string, string> = { BORROW: "ยืม", INUSE: "ตั้งใช้", DISPENSE: "เบิก" };
 
 /** เคสประเภทที่ยังไม่มีหน้าตาของตัวเอง อ่านเป็นงานซ่อมไว้ก่อน ดีกว่าพังทั้งแถว. */
 const caseMeta = (t: string) => CASE_META[t] ?? CASE_META.REPAIR;
@@ -400,7 +447,7 @@ const caseIdOf = (trip: RepairTrip) => `${trip.caseType}:${trip.id}`;
  * eye stop. On mobile there are no columns to carry them, so `full` puts them back.
  */
 function tripMeta(trip: RepairTrip, unit: string, full = false): string {
-  const opened = trip.caseType === "BORROW" ? "ยืม" : "แจ้ง";
+  const opened = OPENED_VERB[trip.caseType] ?? "แจ้ง";
   return [
     full && trip.qty != null ? `${trip.qty}${unit ? ` ${unit}` : ""}` : null,
     trip.done
@@ -541,10 +588,22 @@ const FOLDED_LABEL: Record<AttachRecordType, string> = {
 /**
  * รายละเอียดของกิจกรรมที่ไม่ใช่เคส — รับเข้า, ปรับสต๊อก, ย้ายที่ตั้ง, เปลี่ยนสถานะ.
  *
- * ยึดช่องขวาช่องเดียวกับ CaseDetailPane. เดิมเป็น dialog เพราะรายการเป็นคอลัมน์เดียว กดแล้ว
- * ต้องมีที่ให้เนื้อหาไปโผล่; พอเป็นสองคอลัมน์แล้ว dialog กลายเป็นชั้นที่ต้องปิดก่อนถึงจะกดแถว
- * ถัดไปได้ ทั้งที่ช่องที่มันจะไปอยู่ก็ว่างอยู่แล้ว.
+ * ยึดช่องขวาช่องเดียวกับ CaseDetailPane และ **หน้าตาเดียวกัน**: หัวเดียวกัน แถบแท็บเดียวกัน
+ * ลำดับแท็บเดียวกัน. ก่อนหน้านี้ช่องนี้เป็นตาราง label/value เปล่าๆ ผลคือช่องขวาพูดสองภาษา —
+ * กดแถวหนึ่งได้การ์ดมีหัวมีแท็บ กดแถวถัดไปได้ตารางเปล่า ทั้งที่คนอ่านถามคำถามเดียวกันทั้งสองครั้ง.
+ *
+ * ที่ยังต่างคือเลขเคส: กิจกรรมพวกนี้ไม่มีเลข เพราะไม่มีอะไรให้อ้างถึง — มันเกิดครั้งเดียวจบ
+ * ไม่มีสถานะ ไม่มีใครรออยู่ปลายทาง. เปลือกเหมือนกันได้โดยไม่ต้องประดิษฐ์เคสให้ของที่ไม่มี lifecycle.
+ *
+ * แท็บ "เกี่ยวข้อง" ไม่มีที่นี่: เคสอ้างถึงเคสอื่นได้ (การคืนที่เปิดงานซ่อม) กิจกรรมเดี่ยวไม่มีเส้น
+ * แบบนั้นเลยสักเส้น และแท็บที่ว่างเปล่าทุกครั้งคือแท็บที่สอนคนอ่านให้เลิกกดแท็บ.
  */
+const EVENT_TABS = [
+  { value: "timeline", label: "ไทม์ไลน์" },
+  { value: "info", label: "รายละเอียด" },
+  { value: "files", label: "หลักฐาน" },
+] as const;
+
 function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange }: {
   event: TimelineEvent;
   unit: string;
@@ -552,6 +611,11 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
   attachOverride: Record<string, string[]>;
   onAttachChange: (key: string, urls: string[]) => void;
 }) {
+  const [tab, setTab] = useState<(typeof EVENT_TABS)[number]["value"]>("timeline");
+  // กลับไปแท็บแรกทุกครั้งที่เปลี่ยนแถว — แท็บที่คนเปิดค้างไว้บนแถวก่อนหน้าไม่ได้บอกอะไรเกี่ยวกับ
+  // แถวใหม่. เหมือน CaseDetailPane ที่ setTab("timeline") ทุกครั้งที่เคสเปลี่ยน.
+  useEffect(() => { setTab("timeline"); }, [event.id]);
+
   // groups[0] is the record this timeline row IS; anything after it was folded in from a second
   // record telling the same event (a qty รับคืนจากซ่อม carries the closing MaintenanceRecord).
   // Only the first is editable — two identical "แนบเพิ่ม" buttons on one row is a choice nobody
@@ -559,90 +623,141 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
   // group with no files has nothing to say here, so it does not render at all.
   const all = (event.attachments ?? []).map((g) => ({ ...g, urls: attachOverride[attachKey(g)] ?? g.urls }));
   const groups = all.filter((g, i) => i === 0 || g.urls.length > 0);
+  const fileCount = groups.reduce((n, g) => n + g.urls.length, 0);
+  // แท็บหลักฐานยังอยู่ตอนที่ยังไม่มีไฟล์ ถ้าคนคนนั้นแนบได้ — ที่ว่างคือที่ที่ปุ่มแนบเพิ่มอยู่.
+  const showFiles = groups.length > 0 && (fileCount > 0 || canEdit);
+  const tabs = EVENT_TABS.filter((t) => t.value !== "files" || showFiles);
+
+  const meta = TYPE_META[event.type] ?? TYPE_META.ADJUSTMENT;
+  const Icon = meta.icon;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      <header className="border-b border-border px-5 py-4">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">กิจกรรม</p>
-        <h3 className="mt-1 text-base font-semibold leading-tight">{event.note}</h3>
+      <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", meta.chip)}>
+          <Icon className="size-5" />
+        </span>
+        <div className="min-w-0">
+          {/* ป้ายเส้นขอบ+ไอคอน = ประเภท ตามกฎเดียวกับหัวเคส. ป้ายทึบ+จุด (= สถานะ) ไม่มีที่นี่:
+              กิจกรรมเดี่ยวไม่มีสถานะให้รายงาน และป้ายที่เขียนว่า "บันทึกแล้ว" ทุกใบคือหมึกที่
+              ไม่ได้แยกอะไรออกจากอะไร. */}
+          <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+            <Icon className="size-3" />
+            {EVENT_TYPE_LABELS[event.type] ?? event.type}
+          </span>
+          <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight">{event.note}</h2>
+          {event.subtitle && <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{event.subtitle}</p>}
+          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground tabular-nums">
+            {fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.
+          </p>
+        </div>
+        {/* ที่เดียวกับปุ่มปิดเคสบนหัวเคส — มุมนี้คือ "สิ่งที่แถวนี้ทำกับของ" */}
+        <div className="col-start-2 sm:col-start-3 sm:row-start-1 sm:text-right">
+          <Delta value={event.delta ?? event.qty} unit={unit} size="lg" neutral={event.delta === null} />
+        </div>
       </header>
-      <div className="px-5 py-4">
-        <div>
-            <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
-              <TypeChip type={event.type} />
-              <Delta value={event.delta ?? event.qty} unit={unit} size="lg" neutral={event.delta === null} />
-            </div>
-            <dl className="divide-y divide-border">
-              <DetailRow label="รายการ" value={<span className="font-medium text-foreground">{event.note}</span>} />
-              {event.subtitle && <DetailRow label="รายละเอียด" value={event.subtitle} />}
-              {event.change && (
-                <DetailRow
-                  label="จำนวนคงเหลือ"
-                  value={
-                    <span className="tabular-nums">
-                      <span className="text-muted-foreground">{event.change.from}</span>
-                      <span className="mx-1.5 text-muted-foreground">→</span>
-                      <span className="font-semibold text-foreground">{event.change.to}</span>
-                      {unit && <span className="ml-1 text-xs text-muted-foreground">{unit}</span>}
-                    </span>
-                  }
-                />
-              )}
-              {event.cost != null && (
-                <DetailRow
-                  label="ค่าซ่อม"
-                  value={<span className="tabular-nums">{event.cost.toLocaleString("th-TH")} บาท</span>}
-                />
-              )}
-              {event.notes && <DetailRow label="หมายเหตุ" value={<span className="whitespace-pre-wrap">{event.notes}</span>} />}
-              {/* The row shows up whenever the event owns an evidence column — an empty one is
-                  where แนบเพิ่ม lives. With nothing attached and no right to attach, it stays hidden. */}
-              {groups.length > 0 && (groups.some((g) => g.urls.length > 0) || canEdit) && (
-                <DetailRow
-                  label="หลักฐานแนบ"
-                  value={
-                    <div className="space-y-2">
-                      {groups.map((g, i) =>
-                        i === 0 ? (
-                          <AttachmentList
-                            key={attachKey(g)}
-                            urls={g.urls}
-                            target={{ recordType: g.recordType, recordId: g.recordId }}
-                            canEdit={canEdit}
-                            onChange={(urls) => onAttachChange(attachKey(g), urls)}
-                          />
-                        ) : (
-                          // Folded in from another record of the same event. Read-only here and
-                          // labelled with where it came from, so "แนบเพิ่ม" is never ambiguous
-                          // about which record it would write to. The ประวัติ popover still works.
-                          <div key={attachKey(g)} className="space-y-1.5 border-t border-dashed border-border pt-2">
-                            <p className="text-[11px] text-muted-foreground">{FOLDED_LABEL[g.recordType]}</p>
-                            <AttachmentList
-                              urls={g.urls}
-                              target={{ recordType: g.recordType, recordId: g.recordId }}
-                            />
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  }
-                />
-              )}
+
+      <div className="flex gap-1 overflow-x-auto border-b border-border bg-muted/30 px-3">
+        {tabs.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => setTab(t.value)}
+            className={cn(
+              "relative shrink-0 px-3 py-2.5 text-sm font-medium transition",
+              tab === t.value ? "text-primary" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+            {t.value === "files" && fileCount > 0 && (
+              <span className="ml-1.5 text-[11px] tabular-nums text-muted-foreground">{fileCount}</span>
+            )}
+            {tab === t.value && <span aria-hidden className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" />}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-5">
+        {/* ขั้นเดียว เพราะกิจกรรมนี้มีขั้นเดียวจริงๆ — ไม่ใช่ไทม์ไลน์ที่ยังโหลดไม่เสร็จ. เส้นเชื่อม
+            จึงไม่มี: เส้นที่ลากลงไปหาที่ว่างคือคำสัญญาว่ามีขั้นถัดไป. */}
+        {tab === "timeline" && (
+          <ol>
+            <Rail last dot={<span aria-hidden className={cn("mt-1.5 size-3 shrink-0 rounded-full", meta.rail)} />}>
+              <p className="text-sm font-semibold leading-tight">{event.note}</p>
+              {event.subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{event.subtitle}</p>}
+              {event.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">{event.notes}</p>}
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                <Avatar name={event.user} />
+                {event.user}
+                <span className="tabular-nums">· {fmtDate(event.date, TH_DATE)} {timeOf(event.date)} น.</span>
+              </p>
+            </Rail>
+          </ol>
+        )}
+
+        {tab === "info" && (
+          <dl className="divide-y divide-border">
+            <DetailRow label="รายการ" value={<span className="font-medium text-foreground">{event.note}</span>} />
+            {event.subtitle && <DetailRow label="รายละเอียด" value={event.subtitle} />}
+            {event.change && (
               <DetailRow
-                label="ผู้ดำเนินการ"
+                label="จำนวนคงเหลือ"
                 value={
-                  <span className="inline-flex items-center gap-2">
-                    <Avatar name={event.user} />
-                    {event.user}
+                  <span className="tabular-nums">
+                    <span className="text-muted-foreground">{event.change.from}</span>
+                    <span className="mx-1.5 text-muted-foreground">→</span>
+                    <span className="font-semibold text-foreground">{event.change.to}</span>
+                    {unit && <span className="ml-1 text-xs text-muted-foreground">{unit}</span>}
                   </span>
                 }
               />
+            )}
+            {event.cost != null && (
               <DetailRow
-                label="วันที่ / เวลา"
-                value={<span className="tabular-nums">{fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.</span>}
+                label="ค่าซ่อม"
+                value={<span className="tabular-nums">{event.cost.toLocaleString("th-TH")} บาท</span>}
               />
-            </dl>
-        </div>
+            )}
+            {event.notes && <DetailRow label="หมายเหตุ" value={<span className="whitespace-pre-wrap">{event.notes}</span>} />}
+            <DetailRow
+              label="ผู้ดำเนินการ"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  <Avatar name={event.user} />
+                  {event.user}
+                </span>
+              }
+            />
+            <DetailRow
+              label="วันที่ / เวลา"
+              value={<span className="tabular-nums">{fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.</span>}
+            />
+          </dl>
+        )}
+
+        {tab === "files" && (
+          <div className="space-y-2">
+            {groups.map((g, i) =>
+              i === 0 ? (
+                <AttachmentList
+                  key={attachKey(g)}
+                  urls={g.urls}
+                  target={{ recordType: g.recordType, recordId: g.recordId }}
+                  canEdit={canEdit}
+                  onChange={(urls) => onAttachChange(attachKey(g), urls)}
+                />
+              ) : (
+                // Folded in from another record of the same event. Read-only here and
+                // labelled with where it came from, so "แนบเพิ่ม" is never ambiguous
+                // about which record it would write to. The ประวัติ popover still works.
+                <div key={attachKey(g)} className="space-y-1.5 border-t border-dashed border-border pt-2">
+                  <p className="text-[11px] text-muted-foreground">{FOLDED_LABEL[g.recordType]}</p>
+                  <AttachmentList urls={g.urls} target={{ recordType: g.recordType, recordId: g.recordId }} />
+                </div>
+              ),
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

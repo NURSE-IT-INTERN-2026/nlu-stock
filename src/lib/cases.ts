@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/prisma";
 import { AdjustmentReason, ItemStatus, LoanType, MaintenanceType, RepairVenue } from "@/generated/prisma/enums";
 import type { AttachRecordType } from "@/lib/attachments";
-import { CASE_PREFIX, type CaseType, type CaseState } from "@/lib/case-types";
+import { CASE_PREFIX, CASE_TYPE_LABELS, type CaseType, type CaseState } from "@/lib/case-types";
 import { codesFor, sourceKey } from "@/lib/case-codes";
 import { USAGE_TYPE_LABELS } from "@/lib/constants";
 import { writeOffValue } from "@/lib/cost";
@@ -207,9 +207,11 @@ export type CaseDetail = CaseSummary & {
   attachments: Attach[];
 };
 
-// ชนิดที่ต้องกลับเข้าคลัง. CONSUME ไม่อยู่ในนี้ — เบิกใช้ออกไปแล้วไม่กลับ จึงไม่มีอะไรให้ปิด.
+// ทั้งสามชนิดของตาราง dispense เป็นเคส. CONSUME ไม่มีอะไรให้ปิด — มันเกิดมา DONE — แต่การไม่มี
+// lifecycle ไม่ได้แปลว่าไม่มีตัวตน: บรรทัดเบิกใช้อยู่ในใบเดียวกับบรรทัดยืม และต้องอ้างถึงได้ด้วย
+// เลขเคสเหมือนกัน ไม่งั้นครึ่งใบมีชื่อเรียก อีกครึ่งไม่มี.
 // Mutable on purpose: an `as const` array here is readonly, which Prisma's `in` filter rejects.
-const LOAN_KINDS: LoanType[] = [LoanType.BORROW, LoanType.INUSE];
+const LOAN_KINDS: LoanType[] = [LoanType.BORROW, LoanType.INUSE, LoanType.CONSUME];
 
 // ── Case codes ────────────────────────────────────────────────────────────────
 // เลขมาจากตาราง case_codes จ่ายครั้งเดียวไม่เปลี่ยนอีก — ดูเหตุผลใน src/lib/case-codes.ts.
@@ -222,7 +224,7 @@ function caseSourceKey(caseId: string): string {
   // REPAIR มาได้จากสองตาราง: ใบแจ้งชำรุดของของนับจำนวน กับ log →ชำรุด ของชิ้นที่ติดตามรายชิ้น.
   // แยกด้วย prefix ของ cuid ไม่ได้ จึงให้ตัวเรียกบอกมาแทน — ดู repairSourceKey.
   if (type === "MAINTENANCE") return sourceKey("maint", row);
-  if (type === "BORROW" || type === "INUSE") return sourceKey("disp", row);
+  if (type === "BORROW" || type === "INUSE" || type === "DISPENSE") return sourceKey("disp", row);
   // เคสสูญหายพาชื่อตารางมาในไอดีอยู่แล้ว เพราะมันมาได้จากสองตาราง (log:… / adj:…)
   if (type === "LOST") return row;
   return sourceKey("adj", row); // REPAIR: overridden below where the kind is known
@@ -274,7 +276,7 @@ async function documentFor(l: LoanRow): Promise<CaseDocument | null> {
       const outstanding = Math.max(0, r.quantity - r.resolvedQty);
       const consume = r.loanType === LoanType.CONSUME;
       return {
-        caseId: consume ? null : `BORROW:${r.id}`,
+        caseId: `BORROW:${r.id}`,
         itemId: r.item.id,
         itemCode: r.item.code,
         name: r.item.name,
@@ -282,7 +284,7 @@ async function documentFor(l: LoanRow): Promise<CaseDocument | null> {
         qty: r.quantity,
         unit: r.item.issueUnit.name,
         kind: consume ? "เบิกใช้" : r.loanType === LoanType.INUSE ? "ตั้งใช้ในห้อง" : "ยืม",
-        statusLabel: consume ? "จ่ายออกแล้ว" : outstanding === 0 ? "คืนครบแล้ว" : `ค้าง ${outstanding}`,
+        statusLabel: consume ? "เบิกออกแล้ว" : outstanding === 0 ? "คืนครบแล้ว" : `ค้าง ${outstanding}`,
       };
     }),
   };
@@ -559,13 +561,17 @@ const loanArgs = {
 
 type LoanRow = Awaited<ReturnType<typeof prisma.dispenseRecord.findMany<typeof loanArgs>>>[number];
 
-const loanType = (l: LoanRow): CaseType => (l.loanType === LoanType.INUSE ? "INUSE" : "BORROW");
+const loanType = (l: LoanRow): CaseType =>
+  l.loanType === LoanType.INUSE ? "INUSE" : l.loanType === LoanType.CONSUME ? "DISPENSE" : "BORROW";
 
 /** ตั้งใช้ในห้องไม่มีกำหนดคืน — อายุการตั้งจึงเป็นตัวเดียวที่บอกได้ว่ามันค้างนานผิดปกติหรือยัง. */
 const AGEING_DAYS = 180;
 
 function loanSummary(l: LoanRow): CaseSummary {
-  const outstanding = Math.max(0, l.quantity - l.resolvedQty);
+  // เบิกใช้ไม่มียอดค้าง ไม่ว่า resolvedQty จะเป็นเท่าไหร่: ไม่มีใครต้องคืนของสิ้นเปลือง การอ่าน
+  // quantity - resolvedQty ตรงๆ จะได้เคสที่ค้างตลอดกาลทุกใบ แล้วมันจะไปโผล่ในกองที่ยังไม่จบ.
+  const consume = l.loanType === LoanType.CONSUME;
+  const outstanding = consume ? 0 : Math.max(0, l.quantity - l.resolvedQty);
   const overdue = !!l.dueAt && l.dueAt < new Date() && outstanding > 0;
   const lastReturn = l.returns.reduce<Date | null>(
     (max, r) => (!max || r.returnedAt > max ? r.returnedAt : max), null);
@@ -580,9 +586,11 @@ function loanSummary(l: LoanRow): CaseSummary {
     subject: join(
       l.usageType ? USAGE_TYPE_LABELS[l.usageType] : null,
       l.usageNote?.trim() || l.notes?.trim() || null,
-    ) ?? (inRoom ? "ตั้งใช้ในห้อง" : "ยืมใช้งาน"),
+    ) ?? (consume ? "เบิกใช้" : inRoom ? "ตั้งใช้ในห้อง" : "ยืมใช้งาน"),
     state: outstanding > 0 ? "OPEN" : "DONE",
-    statusLabel: outstanding === 0
+    statusLabel: consume
+      ? "เบิกออกแล้ว"
+      : outstanding === 0
       ? (inRoom ? "คืนเข้าพัสดุแล้ว" : "คืนครบแล้ว")
       // เกินกำหนดใช้กับ ยืม เท่านั้น. ตั้งใช้ในห้องไม่มีกำหนดให้เกิน จึงวัดด้วยอายุแทน —
       // ไม่งั้นของที่ตั้งค้างมาปีนึงกับของที่เพิ่งตั้งเมื่อวานอ่านเหมือนกันเป๊ะ.
@@ -595,7 +603,7 @@ function loanSummary(l: LoanRow): CaseSummary {
     qty: l.quantity,
     unit: l.item.issueUnit.name,
     cost: null,
-    dueAt: inRoom ? null : l.dueAt,
+    dueAt: inRoom || consume ? null : l.dueAt,
     openedAt: l.dispensedAt,
     updatedAt: lastReturn ?? l.dispensedAt,
     openedBy: l.staff.name,
@@ -664,7 +672,7 @@ export type CaseFilter = {
 async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceIds: Set<string> }> {
   // ยืม กับ ตั้งใช้ในห้อง อ่านจากตารางเดียวกัน แยกกันตอนสรุป — โหลดทั้งคู่เมื่อถามหาอย่างใดอย่างหนึ่ง
   const want = (t: CaseType) => !f.type || f.type === t;
-  const wantLoans = want("BORROW") || want("INUSE");
+  const wantLoans = want("BORROW") || want("INUSE") || want("DISPENSE");
   const itemWhere = f.itemId ? { itemId: f.itemId } : {};
   const subWhere = f.subItemId ? { subItemId: f.subItemId } : {};
 
@@ -901,11 +909,14 @@ function pieceSteps(c: PieceCase): CaseStep[] {
 
 function loanSteps(l: LoanRow): CaseStep[] {
   const first = l;
-  const outstanding = Math.max(0, l.quantity - l.resolvedQty);
+  const consume = l.loanType === LoanType.CONSUME;
+  // เบิกใช้จบในขั้นเดียว: ไม่มีรับคืน และไม่มี "รอรับคืน" ให้ค้าง — ไทม์ไลน์ที่ต่อขั้นรออยู่
+  // ข้างล่างคือการบอกว่ายังมีคนต้องไปทำอะไรสักอย่าง ทั้งที่ไม่มี.
+  const outstanding = consume ? 0 : Math.max(0, l.quantity - l.resolvedQty);
   const steps: CaseStep[] = [
     step({
       key: "out",
-      label: first.loanType === LoanType.INUSE ? "ตั้งใช้ในห้อง" : "ยืมออก",
+      label: consume ? "เบิกออก" : first.loanType === LoanType.INUSE ? "ตั้งใช้ในห้อง" : "ยืมออก",
       at: first.dispensedAt,
       by: first.staff.name,
       detail: join(
@@ -1073,7 +1084,7 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
     );
   }
 
-  if (type === "BORROW" || type === "INUSE") {
+  if (type === "BORROW" || type === "INUSE" || type === "DISPENSE") {
     const l = await prisma.dispenseRecord.findFirst({ ...loanArgs, where: { ...loanArgs.where, id: src } });
     if (!l) return null;
     const s = loanSummary(l);
@@ -1086,9 +1097,9 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
         { label: "รายการพัสดุ", value: l.item.name },
         { label: "รหัสพัสดุ", value: l.item.code + (l.subItem ? `-${l.subItem.subCode}` : "") },
         { label: "จำนวน", value: `${l.quantity} ${l.item.issueUnit.name}` },
-        { label: "ประเภทการยืม", value: l.loanType === LoanType.INUSE ? "ตั้งใช้ในห้อง" : "ยืม" },
+        { label: "ประเภท", value: CASE_TYPE_LABELS[s.type] },
         { label: "ผู้ยืม / ผู้เบิก", value: l.staff.name },
-        { label: "วันที่ยืม", value: l.dispensedAt.toLocaleDateString("th-TH") },
+        { label: l.loanType === LoanType.CONSUME ? "วันที่เบิก" : "วันที่ยืม", value: l.dispensedAt.toLocaleDateString("th-TH") },
         ...(l.dueAt ? [{ label: "กำหนดคืน", value: l.dueAt.toLocaleDateString("th-TH") }] : []),
         ...(l.usageNote ? [{ label: "วัตถุประสงค์", value: l.usageNote }] : []),
         ...(place ? [{ label: "สถานที่", value: place }] : []),

@@ -45,6 +45,13 @@ export type Booking = { openedAt: Date; closedAt: Date | null; qty: number };
 
 // A trip needs at least two rows to be worth a card — a lone แจ้งชำรุด with nothing after it is
 // still just one event, and boxing it would add a frame that says nothing.
+//
+// เกณฑ์นี้ใช้กับเคสที่ต้อง**เดา**สมาชิกเท่านั้น (งานซ่อม): แถวเดียวโดดๆ อาจเป็นเศษของทริปที่จับคู่
+// ไม่ได้ การตีกรอบให้มันคือการรับประกันเรื่องที่ยังไม่รู้. เคสที่ชี้ตัวเองมาแล้ว (`known` — ยืม/
+// ตั้งใช้/เบิก บอกผ่าน dispense record ของมันเอง) ไม่มีอะไรให้เดา แถวแรกก็เป็นเคสเต็มใบตั้งแต่
+// วินาทีที่มันเกิด — และเป็นใบเดียวกับที่ /cases เปิดอยู่แล้ว. ก่อนหน้านี้เกณฑ์นี้กินทั้งสองแบบ
+// ผลคือการยืมที่ยังไม่คืนสักชิ้น (ค้างอยู่ = ใบที่คนตามหา) กลับเป็นแถวเปล่าไม่มีเลขเคส ส่วนใบที่
+// คืนครบแล้วได้การ์ด — สลับกับที่ควรเป็น.
 const MIN_TRIP_STEPS = 2;
 
 function buildTrip<T extends TripStep>(
@@ -119,6 +126,8 @@ export function groupTimelineCases<T extends TripStep>(
   const tripOf = new Map<string, string>(); // event id → case id
   const typeOf = new Map<string, string>();
   const doneIds = new Set<string>();
+  /** เคสที่ผู้เรียกชี้มาเอง — ไม่ต้องผ่านเกณฑ์จำนวนขั้นตอน. */
+  const knownIds = new Set<string>();
   const closingIds = new Set(closedBy.values());
 
   if (known) {
@@ -127,6 +136,7 @@ export function groupTimelineCases<T extends TripStep>(
       if (!k) continue;
       tripOf.set(e.id, k.key);
       typeOf.set(k.key, k.type);
+      knownIds.add(k.key);
       if (k.done) doneIds.add(k.key);
     }
   }
@@ -174,7 +184,7 @@ export function groupTimelineCases<T extends TripStep>(
   for (const e of events) {
     const id = tripOf.get(e.id);
     const group = id ? steps.get(id) : undefined;
-    if (!id || !group || group.length < MIN_TRIP_STEPS) { units.push(e); continue; }
+    if (!id || !group || (group.length < MIN_TRIP_STEPS && !knownIds.has(id))) { units.push(e); continue; }
     if (emitted.has(id)) continue;
     emitted.add(id);
     const type = typeOf.get(id) ?? "REPAIR";

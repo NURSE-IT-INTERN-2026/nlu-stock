@@ -110,3 +110,23 @@ test("a lone แจ้งชำรุด with nothing after it is not boxed as a
   const [only] = groupTimelineCases(events, bookings, new Map());
   assert.ok(!("steps" in only));
 });
+
+// เกณฑ์สองขั้นตอนกันการเดาผิดของงานซ่อม ไม่ใช่กติกาสากล: การยืมที่ยังไม่มีใครคืนสักชิ้นคือใบที่
+// คนตามหามากที่สุด และมันชี้เคสของตัวเองมาแล้ว จึงต้องเป็นการ์ดตั้งแต่แถวแรก.
+test("a known case is a card from its first step, unlike a guessed repair trip", () => {
+  const events = [step("disp1", "BORROW", 2, { qty: 6 })];
+  const [only] = groupTimelineCases(events, new Map(), new Map(), (e) =>
+    e.id === "disp1" ? { key: "disp1", type: "BORROW", done: false } : null);
+  assert.ok("steps" in only);
+  assert.equal(only.caseType, "BORROW");
+  assert.equal(only.done, false);
+  assert.deepEqual(only.steps.map((s) => s.id), ["disp1"]);
+});
+
+test("เบิกใช้ closes on its own row — one step, done", () => {
+  const events = [step("disp2", "DISPENSE", 3, { qty: 2 })];
+  const [only] = groupTimelineCases(events, new Map(), new Map(), () =>
+    ({ key: "disp2", type: "DISPENSE", done: true }));
+  assert.ok("steps" in only);
+  assert.equal(only.done, true);
+});

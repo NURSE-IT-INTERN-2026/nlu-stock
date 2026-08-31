@@ -100,6 +100,9 @@ function ReceiveShell() {
   const tab: ReceiveTab =
     RECEIVE_TABS.some((t) => t.value === rawTab) ? (rawTab as ReceiveTab) : "receive";
   const initialDueChip = searchParams.get("due") === "overdue" ? "overdue" : undefined;
+  // ลิงก์ "ไปหน้ารับคืน" จากเคสส่งรหัสพัสดุมาใน ?q= — แผงค้นด้วยรหัสอยู่แล้ว คนกดจึงลงตรงใบที่
+  // ตัวเองกำลังดู ไม่ใช่คิวค้างคืนทั้งกองแล้วต้องหาเอง.
+  const initialQuery = searchParams.get("q") ?? undefined;
   const changeTab = (value: ReceiveTab) => {
     const params = new URLSearchParams(searchParams);
     params.set("tab", value);
@@ -153,9 +156,9 @@ function ReceiveShell() {
         {tab === "receive" ? (
           <ReceiveContent />
         ) : tab === "in_use" ? (
-          <InUsePanel />
+          <InUsePanel initialQuery={initialQuery} />
         ) : (
-          <ReturnPanel initialChip={initialDueChip} />
+          <ReturnPanel initialChip={initialDueChip} initialQuery={initialQuery} />
         )}
       </div>
     </div>

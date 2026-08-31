@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import {
-  Wrench, ShieldCheck, ShoppingCart, MonitorCog, ClipboardCheck, SearchX, Search, FilterX, ChevronRight,
-  CalendarDays, ListFilter, CircleDot, Paperclip, Link2, X,
+  Wrench, ShieldCheck, ShoppingCart, MonitorCog, PackageMinus, ClipboardCheck, SearchX, Search, FilterX, ChevronRight,
+  CalendarDays, ListFilter, CircleDot, Paperclip, Link2, ArrowUpRight, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCases, getCaseDetail, recoverStock, type CaseSummaryJson, type CaseDetailJson, type CaseTotalsJson } from "@/lib/api";
@@ -31,7 +32,26 @@ const TYPE_META: Record<CaseType, { icon: typeof Wrench; tone: string; ring: str
   MAINTENANCE: { icon: ShieldCheck, tone: "bg-success/10 text-success-700 dark:text-success-200", ring: "bg-success" },
   BORROW: { icon: ShoppingCart, tone: "bg-primary/10 text-primary", ring: "bg-primary" },
   INUSE: { icon: MonitorCog, tone: "bg-info-500/10 text-info-700 dark:text-info-200", ring: "bg-info-500" },
+  DISPENSE: { icon: PackageMinus, tone: "bg-destructive/10 text-destructive dark:text-danger-400", ring: "bg-destructive" },
   LOST: { icon: SearchX, tone: "bg-destructive/10 text-destructive dark:text-danger-400", ring: "bg-destructive" },
+};
+
+/**
+ * หน้างานที่ปิดเคสประเภทนั้นได้จริง — ลิงก์ออก ไม่ใช่ปุ่มลงมือ.
+ *
+ * เคสรู้ว่ามันยังไม่จบ แต่ที่ที่จบมันได้อยู่คนละหน้า และหน้าพวกนั้นถือ validation ของตัวเอง
+ * (จำนวนที่คืน สภาพของ ล็อตไหน ชิ้นไหน) การย้ายปุ่มลงมือมาไว้บนเคสคือการลอก validation ชุดที่สอง
+ * มาไว้อีกที่ ซึ่งจะเริ่มต่างจากของจริงในอีกไม่กี่เดือน — ดู CaseAction ใน src/lib/cases.ts
+ * ที่อธิบายว่าทำไมปุ่มลงมือมีแค่กรณีที่ไม่มีหน้างานรองรับ.
+ *
+ * `q` = รหัสพัสดุ ทั้งสองแผงปลายทางค้นด้วยรหัสอยู่แล้ว คนกดจึงลงตรงใบของตัวเอง ไม่ใช่คิวทั้งกอง.
+ * ซ่อมไม่มี q: คิวค้างซ่อมเป็นรายชิ้นและไม่มีช่องค้นให้ป้อน — ลิงก์ไปแท็บที่ถูกก็พอ.
+ * บำรุงรักษา/เบิกใช้ไม่อยู่ในนี้เพราะเกิดมา DONE, สูญหายมีปุ่ม "เรียกคืน" ของตัวเองอยู่แล้ว.
+ */
+const CASE_WORK_LINK: Partial<Record<CaseType, { href: (code: string) => string; label: string }>> = {
+  BORROW: { href: (c) => `/receive?tab=return&q=${encodeURIComponent(c)}`, label: "ไปหน้ารับคืน" },
+  INUSE: { href: (c) => `/receive?tab=in_use&q=${encodeURIComponent(c)}`, label: "ไปหน้าคืนเข้าคลัง" },
+  REPAIR: { href: () => "/repairs?tab=worklist", label: "ไปหน้าค้างซ่อม" },
 };
 
 const STATE_TONE: Record<CaseState, string> = {
@@ -45,7 +65,8 @@ const TYPE_OPTIONS = [
   ...(Object.keys(CASE_TYPE_LABELS) as CaseType[]).map((t) => ({ value: t, label: CASE_TYPE_LABELS[t] })),
 ];
 // โหมดสิ่งที่ต้องทำเสนอเฉพาะประเภทที่โผล่ในนั้นได้จริง — ตัวเลือกที่กดแล้วว่างเปล่าเสมอไม่ใช่ตัวกรอง
-const TODO_TYPE_OPTIONS = TYPE_OPTIONS.filter((o) => o.value !== "INUSE");
+// เบิกใช้ไม่อยู่ในนั้นเหมือนตั้งใช้ในห้อง: มันเกิดมา DONE จึงไม่มีวันเป็นงานที่ค้าง (ดู TODO_TYPES)
+const TODO_TYPE_OPTIONS = TYPE_OPTIONS.filter((o) => o.value !== "INUSE" && o.value !== "DISPENSE");
 const STATE_OPTIONS = [
   { value: "all", label: "ทั้งหมด" },
   { value: "OPEN", label: "กำลังดำเนินการ" },
@@ -493,6 +514,26 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit, bare }: {
               <ClipboardCheck className="size-4" /> {data.action.label}
             </Button>
           )}
+          {/* เคสที่ยังไม่จบและมีหน้างานรองรับ: พาไป ไม่ลงมือแทน. ปิดแล้วปุ่มหายเอง เพราะไม่มีอะไร
+              ให้ไปทำต่อ.
+
+              ADMIN/SUPERADMIN เท่านั้น. `canEdit` คือ canManageStock(role) ที่ทุกที่ที่เรียก
+              (item-detail-shell, alerts) — ไม่ใช่ flag ของตัวเอง — และปลายทางทั้งสองหน้าถูก
+              middleware กันไว้ด้วย STOCK_ROLES อยู่แล้ว (src/middleware.ts). ลิงก์ที่โผล่ให้
+              role ที่เดินเข้าไปไม่ได้คือลิงก์ที่พาไปหน้า "ไม่มีสิทธิ์" — แย่กว่าไม่มีลิงก์. */}
+          {!data.action && canEdit && data.state === "OPEN" && CASE_WORK_LINK[data.type] && (
+            <Button
+              variant="outline"
+              // ปุ่มนี้ render เป็น <a> ไม่ใช่ <button> — Base UI ตั้ง nativeButton ไว้ true
+              // เป็น default แล้วเตือนว่า semantics ของปุ่มหายไป. มันควรเป็นลิงก์จริงๆ: กดค้าง
+              // เพื่อเปิดแท็บใหม่ได้ คัดลอกที่อยู่ได้ ไม่ใช่ปุ่มที่แอบ navigate.
+              nativeButton={false}
+              className="col-start-2 mt-2 w-fit gap-1.5 sm:col-start-3 sm:row-start-1 sm:mt-0"
+              render={<Link href={CASE_WORK_LINK[data.type]!.href(data.itemCode)} />}
+            >
+              <ArrowUpRight className="size-4" /> {CASE_WORK_LINK[data.type]!.label}
+            </Button>
+          )}
         </header>
 
         <div className="flex gap-1 overflow-x-auto border-b border-border bg-muted/30 px-3">
@@ -693,8 +734,9 @@ function InfoTab({ data, onOpenCase }: { data: CaseDetailJson; onOpenCase: (id: 
  * เอกสารต้นทางของเคสนี้ — ใบเบิก/ยืมใบเดียวที่จ่ายของออกหลายรายการ.
  *
  * นี่คือที่ที่ตอบว่า "ใบนี้มีอะไรอีกบ้าง" โดยไม่ต้องเอาของอีกเก้ารายการมาปนอยู่ในเคสของชามรูปไต:
- * แต่ละบรรทัดมีเคสของตัวเอง มีสถานะของตัวเอง กดข้ามไปได้. บรรทัดเบิกใช้ไม่มีเคส จึงกดไม่ได้ —
- * ของสิ้นเปลืองออกไปแล้วไม่กลับ ไม่มีอะไรให้ติดตาม.
+ * แต่ละบรรทัดมีเคสของตัวเอง มีสถานะของตัวเอง กดข้ามไปได้ — รวมบรรทัดเบิกใช้ ซึ่งเป็นเคส DS-
+ * ที่เกิดมาปิดแล้ว: ไม่มีอะไรให้ติดตามก็จริง แต่มีเลขให้อ้างถึงและมีหลักฐานให้เปิดดู. ครึ่งใบกดได้
+ * อีกครึ่งกดไม่ได้คือใบที่คนอ่านต้องจำเองว่าแถวไหนเป็นแถวไหน.
  */
 function DocumentBlock({ doc, currentId, onOpenCase }: {
   doc: NonNullable<CaseDetailJson["document"]>;

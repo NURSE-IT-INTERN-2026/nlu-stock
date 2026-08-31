@@ -75,11 +75,16 @@ const CHIP_STYLES: Record<"all" | "overdue" | "near", { active: string; idle: st
   near: { active: "bg-amber-600 text-white border-amber-600", idle: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
 };
 
-export function ReturnPanel({ initialChip, readOnly }: { initialChip?: "overdue" | "near"; readOnly?: boolean }) {
+export function ReturnPanel({ initialChip, initialQuery, readOnly }: {
+  initialChip?: "overdue" | "near";
+  /** มาจาก ?q= — ลิงก์จากเคสหนึ่งใบเจาะจงว่าอยากเห็นใบไหน ไม่ใช่คิวทั้งกอง. */
+  initialQuery?: string;
+  readOnly?: boolean;
+}) {
   const [records, setRecords] = useState<OpenBorrow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [chip, setChip] = useState<"all" | "overdue" | "near">(initialChip ?? "all");
   // เหตุผล reads as the รายวิชา / กิจกรรม it went out for (lib/constants recipientLabel), so
   // "ตามคืนของวิชาที่จบเทอมแล้ว" is a filter on the same field the rows are named by.

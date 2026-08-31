@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
 import { caseRangeBounds, listCases, summariseCases, type CaseFilter, type CaseState, type CaseType } from "@/lib/cases";
 
-const TYPES = new Set(["REPAIR", "MAINTENANCE", "BORROW", "INUSE", "LOST"]);
+const TYPES = new Set(["REPAIR", "MAINTENANCE", "BORROW", "INUSE", "DISPENSE", "LOST"]);
 const STATES = new Set(["OPEN", "DONE", "CANCELLED"]);
 
 export async function GET(request: NextRequest) {

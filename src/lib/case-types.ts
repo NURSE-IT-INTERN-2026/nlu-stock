@@ -4,17 +4,21 @@
 // ยืมมีกำหนดคืนและปิดที่หน้ารับคืน ส่วนตั้งใช้ในห้องไม่มีกำหนดคืนเลยสักแถว (0 จาก 676) และปิดผ่าน
 // หน้าสถานะ. รวมกันแล้วคำว่า "เกินกำหนด" คำนวณไม่ได้ตลอดกาลกับครึ่งนึงของกอง — ของที่ตั้งค้างมา
 // 358 วันจึงเงียบสนิท ทั้งที่เป็นข้อมูลที่ระบบมีอยู่แล้ว.
-export type CaseType = "REPAIR" | "MAINTENANCE" | "BORROW" | "INUSE" | "LOST";
+// เบิกใช้ (CONSUME) เป็นเคสด้วย ทั้งที่ไม่มีอะไรให้ปิด: ของออกไปแล้วไม่กลับ เคสจึงเกิดมาเป็น DONE
+// ทุกใบ. เหตุผลไม่ใช่ lifecycle แต่เป็นตัวตน — ใบเบิกต้องอ้างถึงได้ด้วยเลขเหมือนการยืมในใบเดียวกัน
+// และหน้าที่แสดงมันต้องพูดภาษาเดียวกับเคสอื่น ไม่ใช่ตกไปเป็นแถวเปล่าๆ ที่ไม่มีชื่อให้เรียก.
+export type CaseType = "REPAIR" | "MAINTENANCE" | "BORROW" | "INUSE" | "DISPENSE" | "LOST";
 export type CaseState = "OPEN" | "DONE" | "CANCELLED";
 
 export const CASE_PREFIX: Record<CaseType, string> = {
-  REPAIR: "RC", MAINTENANCE: "MC", BORROW: "BR", INUSE: "IU", LOST: "LC",
+  REPAIR: "RC", MAINTENANCE: "MC", BORROW: "BR", INUSE: "IU", DISPENSE: "DS", LOST: "LC",
 };
 export const CASE_TYPE_LABELS: Record<CaseType, string> = {
   REPAIR: "ซ่อมแซม",
   MAINTENANCE: "บำรุงรักษา",
   BORROW: "ยืมพัสดุ",
   INUSE: "ตั้งใช้ในห้อง",
+  DISPENSE: "เบิกใช้",
   LOST: "สูญหาย",
 };
 export const CASE_STATE_LABELS: Record<CaseState, string> = {
