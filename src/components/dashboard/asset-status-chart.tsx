@@ -49,7 +49,16 @@ export function AssetStatusChart() {
       // a taller neighbour's height only spreads those five rows down a 300px column.
       className="h-fit"
       title="สถานะครุภัณฑ์ & ของคงทน"
-      hint={total > 0 ? `สัดส่วนสถานะรายชิ้น จากทั้งหมด ${total.toLocaleString("th-TH")} ชิ้น` : "สัดส่วนสถานะรายชิ้น"}
+      // "เฉพาะของที่ติดตามรายชิ้น", not "จากทั้งหมด": the route groups SubItem, so this counts
+      // only items with trackIndividually — 244 more items on this tab hold their stock as a
+      // qty counter with no per-piece status and are absent from the donut entirely. Saying
+      // "ทั้งหมด" over a number that leaves out the larger pile is what makes it disagree with
+      // every other ชิ้น on the tab. The empty state below already said this; the hint did not.
+      hint={
+        total > 0
+          ? `สัดส่วนสถานะรายชิ้น เฉพาะของที่ติดตามรายชิ้น ${total.toLocaleString("th-TH")} ชิ้น`
+          : "สัดส่วนสถานะรายชิ้น"
+      }
     >
       {isLoading ? (
         <div className="flex flex-col items-center gap-5 sm:flex-row">

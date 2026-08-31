@@ -14,6 +14,11 @@ import { parseScope, scopeDispenseWhere } from "@/lib/dashboard-scope-where";
  *
  * Rows written before locationId was required still exist with NULL and a free-text room in
  * notes; they get one honest "ไม่ระบุที่ตั้ง" bar instead of vanishing from the total.
+ *
+ * Counted in ชิ้น, not ครั้ง. "อะไรอยู่ห้องไหน" is a question about stock, and one record can
+ * station 20 pieces — a count of records answers how many times someone filled a form. It is
+ * also the unit tab-summary's `outstanding` and the flow chart already speak, so the tab does
+ * not print two different sizes for the same pile.
  */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -26,7 +31,9 @@ export async function GET(request: NextRequest) {
   const groups = await prisma.dispenseRecord.groupBy({
     by: ["locationId"],
     where: { ...scope, returnedAt: null },
-    _count: { _all: true },
+    // quantity minus resolvedQty, summed separately because groupBy cannot subtract: a
+    // part-returned record still stands in the room for what is left of it.
+    _sum: { quantity: true, resolvedQty: true },
   });
 
   const locations = await prisma.location.findMany({
@@ -41,10 +48,11 @@ export async function GET(request: NextRequest) {
       return {
         locationId: g.locationId,
         label: loc ? locationLabel(loc) : "ไม่ระบุที่ตั้ง",
-        records: g._count._all,
+        units: Math.max((g._sum.quantity ?? 0) - (g._sum.resolvedQty ?? 0), 0),
       };
     })
-    .sort((a, b) => b.records - a.records || a.label.localeCompare(b.label, "th"));
+    .filter((r) => r.units > 0)
+    .sort((a, b) => b.units - a.units || a.label.localeCompare(b.label, "th"));
 
   // The chart shows a top slice; `total` lets it say "แสดง 5 จาก N จุด" rather than let a
   // reader assume the five bars are every room stock is sitting in.

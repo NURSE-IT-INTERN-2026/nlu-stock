@@ -53,8 +53,13 @@ export function LoanDurationChart() {
             : "กราฟจะแสดงเมื่อมีการคืนครั้งแรก"
         }
       >
+        {/* flex-1 + min-h, not a fixed h-[240px]: Panel is h-full, so in a multi-column row the
+            card is stretched to its tallest neighbour and a fixed-height chart left ~140px of
+            empty card under it. Growing the plot is the honest use of that space — four bars
+            read better tall than short. min-h carries the height when the parent is NOT
+            stretched (single column, mobile), where flex-1's 0% basis would collapse it. */}
         <div
-          className="h-[240px] w-full"
+          className="min-h-[240px] w-full flex-1"
           role="img"
           aria-label={`ระยะเวลาการยืม: ${rows.map((r) => `${r.name} ${r.count} ครั้ง`).join(", ")}`}
         >

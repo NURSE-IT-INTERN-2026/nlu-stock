@@ -67,7 +67,7 @@ export const StationByRoomSchema = z.object({
   rows: z.array(z.object({
     locationId: z.string().nullable(),
     label: z.string(),
-    records: z.number(),
+    units: z.number(),
   })),
   total: z.number(),
 });
@@ -92,10 +92,10 @@ export const InUseSummarySchema = z.object({
 });
 
 export const FlowMonthlySchema = z.object({
-  rows: z.array(z.object({ month: z.string(), out: z.number(), back: z.number() })),
+  rows: z.array(z.object({ month: z.string(), out: z.number(), back: z.number(), outstanding: z.number() })),
   totalOut: z.number(),
   totalBack: z.number(),
-  gap: z.number(),
+  outstanding: z.number(),
 });
 
 export const LoanDurationSchema = z.object({

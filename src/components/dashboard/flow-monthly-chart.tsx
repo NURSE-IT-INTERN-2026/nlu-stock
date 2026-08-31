@@ -1,6 +1,6 @@
 "use client";
 
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { Activity } from "lucide-react";
 import { useThemeColor } from "@/lib/resolve-color";
 import { ChartContainer } from "./chart-container";
@@ -23,7 +23,7 @@ function ChartTooltip({
       {payload.map((p) => (
         <p key={p.name} className="flex items-center gap-1.5 text-muted-foreground">
           <span className="size-2 rounded-full" style={{ background: p.color }} />
-          {p.name}: <span className="font-semibold text-foreground">{p.value.toLocaleString("th-TH")} ครั้ง</span>
+          {p.name}: <span className="font-semibold text-foreground">{p.value.toLocaleString("th-TH")} ชิ้น</span>
         </p>
       ))}
     </div>
@@ -36,7 +36,15 @@ function ChartTooltip({
  *
  * The gap between the two areas is the whole message: lines that track each other mean stock
  * comes home, a widening mouth means it does not. That is why both live on one chart instead
- * of two cards, and why the third chip is the difference rather than a third total.
+ * of two cards.
+ *
+ * ค้างสะสม is a Line, not a third Area: it is a level (how much is out right now) while the
+ * other two are flows (how much moved this month), and only the flows are worth shading.
+ *
+ * All three are ชิ้น. They used to be ครั้ง, which made the ค้าง number un-plottable — a
+ * count of loans minus a count of return events is not a quantity of anything, and on real
+ * data it printed negative. The route carries the balance forward instead of subtracting
+ * the two totals.
  */
 export function FlowMonthlyChart({
   title,
@@ -54,6 +62,7 @@ export function FlowMonthlyChart({
   const { data, isLoading, error, refetch } = useFlowMonthly();
   const outColor = useThemeColor("--chart-1");
   const backColor = useThemeColor("--chart-2");
+  const gapColor = useThemeColor("--warning");
   const rows = data?.rows ?? [];
   const empty = rows.every((r) => r.out === 0 && r.back === 0);
 
@@ -69,6 +78,9 @@ export function FlowMonthlyChart({
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Dot style={{ background: backColor }} /> {backLabel}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Dot style={{ background: gapColor }} /> {gapLabel}
             </span>
           </div>
         ) : undefined
@@ -88,7 +100,9 @@ export function FlowMonthlyChart({
           {[
             [outLabel, data?.totalOut ?? 0, "text-chart-1"],
             [backLabel, data?.totalBack ?? 0, "text-chart-2"],
-            [gapLabel, data?.gap ?? 0, "text-warning"],
+            // The latest point of the line, not a 12-month sum — the other two chips total a
+            // flow, this one reads a level, and summing a level would be meaningless.
+            [gapLabel, data?.outstanding ?? 0, "text-warning"],
           ].map(([label, value, cls]) => (
             <div key={label as string} className="rounded-xl bg-secondary/50 px-3 py-2">
               <p className="text-[11px] text-muted-foreground">{label as string}</p>
@@ -101,11 +115,11 @@ export function FlowMonthlyChart({
         <div
           className="h-[260px] w-full"
           role="img"
-          aria-label={`${title}: ${rows.map((r) => `${r.month} ${outLabel} ${r.out} ${backLabel} ${r.back}`).join(", ")}`}
+          aria-label={`${title} (ชิ้น): ${rows.map((r) => `${r.month} ${outLabel} ${r.out} ${backLabel} ${r.back} ${gapLabel} ${r.outstanding}`).join(", ")}`}
         >
           <ChartContainer>
             {({ width, height }) => (
-              <AreaChart data={rows} width={width} height={height} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+              <ComposedChart data={rows} width={width} height={height} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
                 <defs>
                   <linearGradient id="flowOut" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={outColor} stopOpacity={0.35} />
@@ -122,7 +136,8 @@ export function FlowMonthlyChart({
                 <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)" }} />
                 <Area type="monotone" dataKey="out" name={outLabel} stroke={outColor} strokeWidth={2} fill="url(#flowOut)" isAnimationActive={false} />
                 <Area type="monotone" dataKey="back" name={backLabel} stroke={backColor} strokeWidth={2} fill="url(#flowBack)" isAnimationActive={false} />
-              </AreaChart>
+                <Line type="monotone" dataKey="outstanding" name={gapLabel} stroke={gapColor} strokeWidth={2} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+              </ComposedChart>
             )}
           </ChartContainer>
         </div>

@@ -7,11 +7,16 @@ import { LoanType } from "@/generated/prisma/enums";
 const MONTH_LABELS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
 /**
- * ออก vs กลับ per month for ยืม (ยืมออก / คืนแล้ว) and นำไปใช้งาน (นำออกใช้ / นำกลับคลัง).
+ * ออก vs กลับ per month for ยืม (ยืมออก / คืนแล้ว) and นำไปใช้งาน (นำออกใช้ / นำกลับคลัง),
+ * plus what is still out at the end of each month.
  *
- * Counted in ครั้ง. The gap between the two lines is the point of the chart: two lines that
- * track each other mean stock comes back, a widening gap means it does not — which a single
- * "ยืมออกเดือนนี้" number cannot show no matter how big it is printed.
+ * Counted in ชิ้น (SUM quantity), not ครั้ง: a third of the loans here move more than one
+ * piece and the biggest moves 20, so "40 ครั้ง" says nothing about how much stock left the
+ * room. It is also what makes `outstanding` addable — see below.
+ *
+ * The gap between the two lines is the point of the chart: two lines that track each other
+ * mean stock comes back, a widening gap means it does not — which a single "ยืมออกเดือนนี้"
+ * number cannot show no matter how big it is printed.
  *
  * The return side reads ReturnRecord, not DispenseRecord.returnedAt, because a part return
  * leaves the dispense row open: a 12-chair loan with 8 chairs back has to show 8 coming home
@@ -34,14 +39,29 @@ export async function GET(request: NextRequest) {
       ? { dispenseRecord: { loanType: "INUSE" as const } }
       : { OR: [{ dispenseRecordId: null }, { dispenseRecord: { loanType: { in: [LoanType.BORROW, LoanType.CONSUME] } } }] };
 
-  const [out, back] = await Promise.all([
+  const backWhere = { item: scopeItemWhere(scope), ...returnLink };
+
+  // The two `lt: start` sums are the opening balance — everything dispensed before the window
+  // minus everything returned before it. Without them the running total would start at 0 and
+  // read as "nothing was out a year ago", and a return inside the window whose loan predates
+  // it would drive the line negative. This is why the balance is carried rather than derived
+  // from the 12 visible months.
+  const [out, back, outBefore, backBefore] = await Promise.all([
     prisma.dispenseRecord.findMany({
       where: { ...scopeDispenseWhere(scope), dispensedAt: { gte: start } },
-      select: { dispensedAt: true },
+      select: { dispensedAt: true, quantity: true },
     }),
     prisma.returnRecord.findMany({
-      where: { returnedAt: { gte: start }, item: scopeItemWhere(scope), ...returnLink },
-      select: { returnedAt: true },
+      where: { returnedAt: { gte: start }, ...backWhere },
+      select: { returnedAt: true, quantity: true },
+    }),
+    prisma.dispenseRecord.aggregate({
+      where: { ...scopeDispenseWhere(scope), dispensedAt: { lt: start } },
+      _sum: { quantity: true },
+    }),
+    prisma.returnRecord.aggregate({
+      where: { returnedAt: { lt: start }, ...backWhere },
+      _sum: { quantity: true },
     }),
   ]);
 
@@ -54,18 +74,23 @@ export async function GET(request: NextRequest) {
 
   for (const r of out) {
     const b = bucketOf(r.dispensedAt);
-    if (b) b.out += 1;
+    if (b) b.out += r.quantity;
   }
   for (const r of back) {
     const b = bucketOf(r.returnedAt);
-    if (b) b.back += 1;
+    if (b) b.back += r.quantity;
   }
 
-  const rows = buckets.map(({ month, out, back }) => ({ month, out, back }));
+  // ค้าง is a level, not a flow: the running balance at each month end, which is the only
+  // form of it that can be plotted beside ออก/กลับ and still be true. The last point equals
+  // api/dashboard/tab-summary's `outstanding` — same number reached from the ledger instead
+  // of from the open rows, so the chart and the KPI card cannot disagree.
+  let balance = (outBefore._sum.quantity ?? 0) - (backBefore._sum.quantity ?? 0);
+  const rows = buckets.map(({ month, out, back }) => {
+    balance += out - back;
+    return { month, out, back, outstanding: balance };
+  });
   const totalOut = rows.reduce((n, r) => n + r.out, 0);
   const totalBack = rows.reduce((n, r) => n + r.back, 0);
-  // Difference over the window, not the live outstanding count — a return of something
-  // borrowed 13 months ago lands here without its ยืมออก, so this can read low. It is the
-  // shape of the gap that matters; the exact ค้าง number is the KPI card's job.
-  return json({ rows, totalOut, totalBack, gap: totalOut - totalBack });
+  return json({ rows, totalOut, totalBack, outstanding: balance });
 }

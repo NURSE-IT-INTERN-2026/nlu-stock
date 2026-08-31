@@ -823,7 +823,7 @@ async function main() {
 
   for (const m of mockDispenses) {
     if (!m.itemId) continue;
-    await prisma.dispenseRecord.create({
+    const rec = await prisma.dispenseRecord.create({
       data: {
         itemId: m.itemId,
         quantity: m.qty,
@@ -833,6 +833,20 @@ async function main() {
         loanType: "BORROW",
         // Closed so these chart-only records don't pollute the รับคืน open-loan list.
         resolvedQty: m.qty,
+        returnedAt: day(m.daysAgo),
+      },
+    });
+    // Every path in lib/returns that sets returnedAt also writes one of these, so a closed
+    // loan without one is data the app cannot produce. The dashboard reads the two sides
+    // from different tables — /tab-summary counts open rows, /flow-monthly walks the return
+    // ledger — and a seed that closes a loan silently made those two disagree by 351 ชิ้น.
+    await prisma.returnRecord.create({
+      data: {
+        itemId: m.itemId,
+        dispenseRecordId: rec.id,
+        quantity: m.qty,
+        condition: "AVAILABLE",
+        returnedBy: admin.id,
         returnedAt: day(m.daysAgo),
       },
     });
@@ -1005,14 +1019,23 @@ async function main() {
   // Already-returned tracked SubItem (partial-return scenario): SubItem back to AVAILABLE, record closed.
   async function loanTrackedReturned(subId: string, itemId: string, opts: LoanOpts) {
     await prisma.subItem.update({ where: { id: subId }, data: { status: "AVAILABLE" } });
-    await prisma.dispenseRecord.create({
+    const returnedAt = new Date(opts.at.getTime() + 2 * 86400000);
+    const rec = await prisma.dispenseRecord.create({
       data: {
         itemId, subItemId: subId, quantity: 1, resolvedQty: 1,
         staffId: admin.id, dispensedAt: opts.at,
         loanGroupId: opts.loanGroupId, dueAt: opts.due,
         recipient: opts.recipient, usageType: opts.usage,
         loanType: "BORROW",
-        returnedAt: new Date(opts.at.getTime() + 2 * 86400000),
+        returnedAt,
+      },
+    });
+    // See the mockDispenses loop: closing a loan without its ReturnRecord is unreachable
+    // through the app and puts the dashboard's two ค้าง numbers out of step.
+    await prisma.returnRecord.create({
+      data: {
+        itemId, subItemId: subId, dispenseRecordId: rec.id,
+        quantity: 1, condition: "AVAILABLE", returnedBy: admin.id, returnedAt,
       },
     });
     affectedTracked.add(itemId);
@@ -1034,13 +1057,22 @@ async function main() {
   // Partially-returned count loan: `resolved` units already back. Net available drop = qty - resolved.
   async function loanCountPartial(itemId: string, qty: number, resolved: number, opts: LoanOpts) {
     await prisma.item.update({ where: { id: itemId, availableQty: { gte: qty - resolved } }, data: { availableQty: { decrement: qty - resolved } } });
-    await prisma.dispenseRecord.create({
+    const rec = await prisma.dispenseRecord.create({
       data: {
         itemId, quantity: qty, resolvedQty: resolved,
         staffId: admin.id, dispensedAt: opts.at,
         loanGroupId: opts.loanGroupId, dueAt: opts.due,
         recipient: opts.recipient, usageType: opts.usage,
         loanType: "BORROW",
+      },
+    });
+    // The part that already came home needs its ReturnRecord too — this is the case the
+    // return ledger exists for, since the dispense row stays open and carries no date for it.
+    await prisma.returnRecord.create({
+      data: {
+        itemId, dispenseRecordId: rec.id, quantity: resolved,
+        condition: "AVAILABLE", returnedBy: admin.id,
+        returnedAt: new Date(opts.at.getTime() + 86400000),
       },
     });
     loanRecCount++;

@@ -12,15 +12,15 @@ export function StationByRoomChart() {
   const { data, isLoading, error, refetch } = useStationByRoom();
   const all = data?.rows ?? [];
   const rows = all.slice(0, TAKE);
-  const max = Math.max(...rows.map((r) => r.records), 1);
-  const records = all.reduce((n, r) => n + r.records, 0);
+  const max = Math.max(...rows.map((r) => r.units), 1);
+  const units = all.reduce((n, r) => n + r.units, 0);
 
   return (
     <Panel
       title="ตอนนี้ของอยู่ที่ไหน"
       hint={
-        records > 0
-          ? `กระจายอยู่ ${records.toLocaleString("th-TH")} ครั้ง ใน ${all.length.toLocaleString("th-TH")} จุด`
+        units > 0
+          ? `กระจายอยู่ ${units.toLocaleString("th-TH")} ชิ้น ใน ${all.length.toLocaleString("th-TH")} จุด`
           : "ที่ตั้งใช้งานอยู่ตอนนี้"
       }
     >
@@ -44,13 +44,13 @@ export function StationByRoomChart() {
                   {r.label}
                 </span>
                 <span className="shrink-0 text-sm font-bold tabular-nums">
-                  {r.records.toLocaleString("th-TH")}
+                  {r.units.toLocaleString("th-TH")}
                 </span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                 <div
                   className="bar-grow h-full rounded-full bg-chart-4"
-                  style={{ width: `${(r.records / max) * 100}%`, animationDelay: `${i * 80}ms` }}
+                  style={{ width: `${(r.units / max) * 100}%`, animationDelay: `${i * 80}ms` }}
                 />
               </div>
             </li>

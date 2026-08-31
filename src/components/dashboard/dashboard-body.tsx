@@ -93,17 +93,22 @@ function BorrowPanel() {
       <LoanKpis />
       <FlowMonthlyChart
         title="แนวโน้มการยืม-คืน"
-        hint="ยืมออกเทียบกับคืนเข้า ย้อนหลัง 1 ปี (ครั้ง)"
+        hint="ยืมออกเทียบกับคืนเข้า และยอดค้าง ณ สิ้นเดือน ย้อนหลัง 1 ปี (ชิ้น)"
+        gapLabel="ค้างสะสม"
         outLabel="ยืมออก"
         backLabel="คืนเข้า"
-        gapLabel="ค้างสะสม"
       />
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+      {/* Three narrow widgets in one row rather than a pair plus an orphan. Every one of them
+          is a short list of labelled bars — two ranked lists and a four-bucket histogram — and
+          whichever is left over at full width stretches its bars across 1136px with a lane of
+          dead space in the middle. Only แนวโน้ม (12 months) and รายการค้างคืน (five columns)
+          have content that uses the whole row. */}
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
         <TopDispenseWidget verb="ยืม" />
+        <TopCoursesChart verb="ยืม" />
         <LoanDurationChart />
       </div>
       <OutstandingLoansTable />
-      <TopCoursesChart />
     </div>
   );
 }
@@ -118,10 +123,10 @@ function InUsePanel() {
           beside it stretches to its height and shows a band of empty space. */}
       <FlowMonthlyChart
         title="แนวโน้มการนำไปใช้งาน-นำกลับ"
-        hint="นำออกใช้งานเทียบกับนำกลับคลัง ย้อนหลัง 1 ปี (ครั้ง)"
+        hint="นำออกใช้งานเทียบกับนำกลับคลัง และยอดค้าง ณ สิ้นเดือน ย้อนหลัง 1 ปี (ชิ้น)"
+        gapLabel="ค้างสะสม"
         outLabel="นำออก"
         backLabel="นำกลับ"
-        gapLabel="ค้างสะสม"
       />
       <SectionHeading title="สถานะและที่ตั้ง" subtitle="ชิ้นงานอยู่ในสถานะไหน และกระจายอยู่ห้องไหน" />
       {/* items-start, not stretch: the donut card is the one thing here that must not grow to

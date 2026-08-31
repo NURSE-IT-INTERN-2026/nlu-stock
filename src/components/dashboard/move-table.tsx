@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 import { Pagination } from "@/components/shared/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
@@ -27,6 +29,11 @@ export interface MoveRow {
  * Two layouts, because a four-column table does not survive a phone. Below sm the rows
  * stack (name over a date · who · kind line) instead of scrolling sideways; from sm up it
  * is a dense fixed table.
+ *
+ * `viewAll` swaps the pager for a link to the page that owns the full list. A widget fed a
+ * feed that is capped anyway (เบิกล่าสุด takes 10) pages fine, but one fed every open row
+ * turned into 52 pages of 5 inside a dashboard card — a reader is not going to click 52
+ * times, and the page built for that list is one click away.
  */
 export function MoveTable({
   title,
@@ -34,18 +41,21 @@ export function MoveTable({
   tone,
   whoLabel,
   emptyText = "ไม่มีรายการ",
+  viewAll,
 }: {
   title: string;
   rows: MoveRow[];
   tone: FlowTone;
   whoLabel: string;
   emptyText?: string;
+  /** Show the first `rows.length` of `total` and link out, instead of paging in place. */
+  viewAll?: { href: string; total: number };
 }) {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  const sliced = rows.slice((page - 1) * PAGE_SIZE.DASHBOARD, page * PAGE_SIZE.DASHBOARD);
+  const sliced = viewAll ? rows : rows.slice((page - 1) * PAGE_SIZE.DASHBOARD, page * PAGE_SIZE.DASHBOARD);
   const qtyCls = cn("font-bold tabular-nums", FLOW[tone].text);
 
   const handlePageChange = useCallback((p: number) => {
@@ -128,7 +138,11 @@ export function MoveTable({
                       </p>
                     </TableCell>
                     <TableCell className={cn("text-right", qtyCls)}>{r.qty}</TableCell>
-                    <TableCell className="truncate text-xs text-muted-foreground">{r.who}</TableCell>
+                    {/* title, because the column is 112px and a เหตุผล line is not: the same
+                        truncate-with-hover the ranked lists on this tab use. */}
+                    <TableCell className="truncate text-xs text-muted-foreground" title={r.who}>
+                      {r.who}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -136,7 +150,21 @@ export function MoveTable({
           </div>
 
           <div className="mt-auto">
-            <Pagination page={page} total={rows.length} pageSize={PAGE_SIZE.DASHBOARD} onChange={handlePageChange} />
+            {viewAll ? (
+              <Link
+                href={viewAll.href}
+                className="flex items-center justify-between gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+              >
+                <span>
+                  แสดง {rows.length.toLocaleString("th-TH")} จาก {viewAll.total.toLocaleString("th-TH")} รายการ
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 font-medium">
+                  ดูทั้งหมด <ArrowRight className="size-3.5" />
+                </span>
+              </Link>
+            ) : (
+              <Pagination page={page} total={rows.length} pageSize={PAGE_SIZE.DASHBOARD} onChange={handlePageChange} />
+            )}
           </div>
         </div>
       )}

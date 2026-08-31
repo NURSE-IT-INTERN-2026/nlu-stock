@@ -17,6 +17,12 @@ import { DashboardSkeleton } from "./dashboard-skeleton";
 // Scoped like every other widget on the tab. It used to fetch the whole warehouse, which put
 // a bigger set of rows directly under KPI cards that obeyed the ประเภท/หมวดย่อย filter — two
 // numbers for one thing on one screen is how a reader stops trusting the whole page.
+//
+// Top TAKE only, then a link out. /api/dispense/in-use returns every open record, so paging it
+// five at a time inside a dashboard card produced 52 pages — /receive?tab=in_use is the screen
+// built for that list, with search and รับคืน on it.
+const TAKE = 8;
+
 export function InUseTable() {
   const nonce = useDashboardRefreshNonce();
   const scope = useDashboardScope();
@@ -38,7 +44,8 @@ export function InUseTable() {
     );
   }
 
-  const rows: MoveRow[] = (data ?? []).map((r) => {
+  const all = data ?? [];
+  const rows: MoveRow[] = all.slice(0, TAKE).map((r) => {
     const loc = r.location ?? r.item.location;
     return {
       id: r.id,
@@ -62,6 +69,7 @@ export function InUseTable() {
       tone="issued"
       whoLabel="เหตุผล"
       emptyText="ยังไม่มีของที่นำไปใช้งาน"
+      viewAll={{ href: "/receive?tab=in_use", total: all.length }}
     />
   );
 }

@@ -51,8 +51,13 @@ export function TopDispenseChart({ data, verb }: { data: TopDispenseData[]; verb
                 </span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                {/* chart-4, not danger-500: the two are the same red in light mode, but only
+                    chart-4 has a dark-mode step — danger-500 is defined once and stayed at
+                    55% lightness on a dark card, so this bar and the identical one in
+                    ตอนนี้ของอยู่ที่ไหน drifted apart in dark. danger-500 is also the alarm
+                    token (dashboard-alert-bar, "หมด"), and a ranking is not an alarm. */}
                 <div
-                  className="bar-grow h-full rounded-full bg-danger-500"
+                  className="bar-grow h-full rounded-full bg-chart-4"
                   style={{ width: `${(d.records / max) * 100}%`, animationDelay: `${i * 80}ms` }}
                 />
               </div>
