@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { oauthConfig, signState, OAUTH_STATE_COOKIE } from "@/lib/cmu-oauth";
+import { oauthConfig, signState, callbackUri, OAUTH_STATE_COOKIE } from "@/lib/cmu-oauth";
 
 /** Kick off the OAuth dance: bounce the browser to the provider's consent screen. */
 export async function GET(request: NextRequest) {
@@ -14,7 +14,10 @@ export async function GET(request: NextRequest) {
 
   const url = new URL(c.authorizeUrl);
   url.searchParams.set("client_id", c.clientId);
-  url.searchParams.set("redirect_uri", c.redirectUri);
+  // Derived from the origin this request arrived on, not a fixed env value, so localhost and
+  // a tunnel both work. The callback repeats the same computation and must reach the same
+  // string — the provider compares them.
+  url.searchParams.set("redirect_uri", callbackUri(request.headers, request.nextUrl.origin));
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", c.scope);
   url.searchParams.set("state", token);

@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { getJwtSecret } from "./auth-config";
+import { BASE_PATH } from "./base-path";
 
 /** Nonce half of the CSRF pair. The other half rides in the signed `state` param. */
 export const OAUTH_STATE_COOKIE = "oauth_state";
@@ -14,8 +15,9 @@ export function oauthConfig() {
   return {
     clientId: required("CMU_CLIENT_ID"),
     clientSecret: required("CMU_CLIENT_SECRET"),
-    // Must match what is registered with the provider byte for byte, basePath included,
-    // or the provider rejects the exchange with redirect_uri_mismatch.
+    // The default callback URI, and the origin that seeds the callbackUri() allowlist. Must
+    // match what is registered with the provider byte for byte, basePath included, or the
+    // provider rejects the exchange with redirect_uri_mismatch.
     redirectUri: required("CMU_REDIRECT_URI"),
     authorizeUrl: required("CMU_OAUTH_URL"),
     tokenUrl: required("CMU_TOKEN_URL"),
@@ -23,6 +25,46 @@ export function oauthConfig() {
     userinfoUrl: process.env.CMU_USERINFO_URL || "",
     scope: process.env.CMU_SCOPE || "openid profile email",
   };
+}
+
+// ─── Callback URI ───
+// The provider only accepts a redirect_uri that is registered against the client id, and
+// the token exchange must repeat the exact same string. One env value was enough while the
+// app only ever ran on one host; a tunnel (ngrok) or a second machine needs a second URI
+// without editing env and re-logging-in every time you switch.
+
+const CALLBACK_PATH = BASE_PATH + "/api/auth/cmu/callback";
+
+/** Origins permitted to receive the callback. CMU_REDIRECT_URI's own origin is always in —
+ *  it is the registered one — and CMU_OAUTH_ORIGINS adds tunnels/LAN hosts for testing. */
+function allowedOrigins(): string[] {
+  const out = [new URL(required("CMU_REDIRECT_URI")).origin];
+  for (const raw of (process.env.CMU_OAUTH_ORIGINS ?? "").split(",")) {
+    const v = raw.trim().replace(/\/$/, "");
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+/**
+ * Which callback URI this request should use. Derived from the origin the browser actually
+ * reached us on, so localhost and a tunnel work at the same time — but ONLY if that origin
+ * is allowlisted: `host` is a client-supplied header, and an attacker who could steer
+ * redirect_uri would be pointing the authorization code at themselves. Unknown origin falls
+ * back to the configured URI, which fails visibly at the provider rather than silently.
+ *
+ * Behind a TLS-terminating proxy (ngrok, the faculty server) the socket is plain http and
+ * the real scheme/host only exist in headers — read those first or the derived URI says
+ * `http://` and no longer matches what was registered.
+ */
+export function callbackUri(headers: Headers, fallbackOrigin: string): string {
+  const first = (v: string | null) => v?.split(",")[0]?.trim() || "";
+  const proto = first(headers.get("x-forwarded-proto"));
+  const host = first(headers.get("x-forwarded-host")) || first(headers.get("host"));
+  const origin = proto && host ? `${proto}://${host}` : fallbackOrigin;
+  return allowedOrigins().includes(origin)
+    ? origin + CALLBACK_PATH
+    : required("CMU_REDIRECT_URI");
 }
 
 // ─── CSRF state ───
@@ -59,7 +101,9 @@ export interface TokenResponse {
   id_token?: string;
 }
 
-export async function exchangeCode(code: string): Promise<TokenResponse> {
+/** `redirectUri` must be byte-for-byte the one sent to /authorize — the provider compares
+ *  them and rejects the exchange otherwise. Callers get it from callbackUri(). */
+export async function exchangeCode(code: string, redirectUri: string): Promise<TokenResponse> {
   const c = oauthConfig();
   const res = await fetch(c.tokenUrl, {
     method: "POST",
@@ -67,7 +111,7 @@ export async function exchangeCode(code: string): Promise<TokenResponse> {
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: c.redirectUri,
+      redirect_uri: redirectUri,
       client_id: c.clientId,
       client_secret: c.clientSecret,
     }),
@@ -130,6 +174,13 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> {
 export interface OAuthProfile {
   email: string;
   name: string | null;
+  /** itaccounttype_EN from CMU basicinfo. null when the provider answered from an id_token,
+   *  which carries no such claim — roleForProfile then denies anyone not in an env list. */
+  accountType: string | null;
+  /** organization_code from CMU basicinfo. Same null caveat as accountType. */
+  orgCode: string | null;
+  /** organization_name_TH from CMU basicinfo. Same null caveat as accountType. */
+  orgName: string | null;
 }
 
 export async function fetchProfile(tokens: TokenResponse): Promise<OAuthProfile | null> {
@@ -151,6 +202,29 @@ export async function fetchProfile(tokens: TokenResponse): Promise<OAuthProfile 
   }
   if (!claims) return null;
 
+  // CMU_DEBUG=true ชั่วคราว: ยังไม่เคยเห็น organization_code ของบุคลากร (นศ. = รหัสคณะตรงๆ แต่
+  // บุคลากรลงลึกถึงภาควิชา) — ให้ นศ./อาจารย์/คนจบแล้ว login คนละครั้ง แล้วเอาค่าที่ได้ไปรัด
+  // BORROWER_ORG_PREFIXES ให้แคบลง จากนั้นปิด flag นี้.
+  // Keys only plus the three claims the gate reads — never the name, email or student_id,
+  // which would put a real person's identity into the server log for the sake of a lookup.
+  if (process.env.CMU_DEBUG === "true") {
+    console.log("[cmu] userinfo keys:", Object.keys(claims).join(", "));
+    console.log("[cmu] gate claims:", JSON.stringify({
+      organization_code: claims.organization_code,
+      organization_name_TH: claims.organization_name_TH,
+      itaccounttype_EN: claims.itaccounttype_EN,
+    }));
+  }
+
   const email = pickEmail(claims);
-  return email ? { email, name: pickName(claims) } : null;
+  if (!email) return null;
+  return {
+    email,
+    name: pickName(claims),
+    // CMU basicinfo v3 only. Kept as raw strings — lib/roles decides what they mean, this
+    // file just stops throwing them away.
+    accountType: str(claims, "itaccounttype_EN") || null,
+    orgCode: str(claims, "organization_code") || null,
+    orgName: str(claims, "organization_name_TH") || null,
+  };
 }

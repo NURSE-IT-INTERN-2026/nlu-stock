@@ -4,9 +4,11 @@
 // state must fail the signature, and a replayed one must fail the nonce compare.
 import assert from "node:assert";
 // Safe to set after import: the secret is read inside getJwtSecret() on every call.
-import { signState, readState, pickEmail, pickName } from "@/lib/cmu-oauth";
+import { signState, readState, pickEmail, pickName, callbackUri } from "@/lib/cmu-oauth";
 
 process.env.JWT_SECRET ||= "test-secret-for-oauth-state";
+process.env.CMU_REDIRECT_URI = "http://localhost:3000/nlu-stock/api/auth/cmu/callback";
+process.env.CMU_OAUTH_ORIGINS = "https://tunnel.example.dev, https://lan.example.net/";
 
 async function main() {
   // Round trip: the ?next= destination survives so a QR scan resumes where it left off.
@@ -67,7 +69,62 @@ async function main() {
   assert.equal(pickEmail({ name: "Somchai" }), null);
   assert.equal(pickEmail({}), null);
 
-  console.log("cmu-oauth state + claims: ok");
+  // ── callback URI ──
+  // redirect_uri is the one OAuth parameter an attacker would want to steer: it decides
+  // where the authorization code lands. The allowlist and the proxy headers in front of it
+  // are what keep a client-supplied Host header from choosing it.
+  const h = (init: Record<string, string> = {}) => new Headers(init);
+  const LOCAL = "http://localhost:3000";
+  const CB = "/nlu-stock/api/auth/cmu/callback";
+  const CONFIGURED = process.env.CMU_REDIRECT_URI!;
+
+  // No proxy headers: the request origin is used as-is.
+  assert.equal(callbackUri(h(), LOCAL), LOCAL + CB);
+  // CMU_REDIRECT_URI's origin is allowed without naming it in CMU_OAUTH_ORIGINS.
+  assert.equal(callbackUri(h({ host: "localhost:3000" }), "http://elsewhere"), LOCAL + CB);
+
+  // Behind a TLS-terminating proxy (ngrok) the socket is plain http and the real scheme
+  // lives in a header. Reading the socket would build an http:// URI that no longer matches
+  // what was registered with the provider.
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "https", "x-forwarded-host": "tunnel.example.dev" }), LOCAL),
+    "https://tunnel.example.dev" + CB,
+  );
+  // x-forwarded-host absent → `host`, which is what the proxy rewrote.
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "https", host: "tunnel.example.dev" }), LOCAL),
+    "https://tunnel.example.dev" + CB,
+  );
+  // Chained proxies append; the client-facing hop is the first entry.
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "https, http", "x-forwarded-host": "tunnel.example.dev, inner" }), LOCAL),
+    "https://tunnel.example.dev" + CB,
+  );
+  // A trailing slash in the env entry must not stop it matching.
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "https", host: "lan.example.net" }), LOCAL),
+    "https://lan.example.net" + CB,
+  );
+
+  // Fail closed. An unlisted origin never becomes the redirect_uri; it falls back to the
+  // configured one, which the provider accepts, so the code goes nowhere useful to anyone.
+  assert.equal(callbackUri(h({ host: "evil.example.com" }), LOCAL), CONFIGURED);
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "https", "x-forwarded-host": "evil.example.com" }), LOCAL),
+    CONFIGURED,
+  );
+  // Scheme is part of the origin — http:// against an https:// entry is a different origin.
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "http", host: "tunnel.example.dev" }), LOCAL),
+    CONFIGURED,
+  );
+  // A listed origin is not a substring match.
+  assert.equal(
+    callbackUri(h({ "x-forwarded-proto": "https", host: "tunnel.example.dev.evil.com" }), LOCAL),
+    CONFIGURED,
+  );
+
+  console.log("cmu-oauth state + claims + callback uri: ok");
 }
 
 main();
