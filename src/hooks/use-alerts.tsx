@@ -34,7 +34,10 @@ function countsEqual(a: AlertCounts, b: AlertCounts) {
   return a.lowStock === b.lowStock && a.nearExpiry === b.nearExpiry && a.overdueMaintenance === b.overdueMaintenance && a.overdueReturn === b.overdueReturn && a.damagedPending === b.damagedPending && a.dueCount === b.dueCount && a.openCases === b.openCases && a.total === b.total && a.totalItems === b.totalItems && a.onLoan === b.onLoan;
 }
 
-export function AlertProvider({ children }: { children: ReactNode }) {
+/** `enabled=false` skips the poll entirely. A BORROWER has no alerts UI and no access to
+ *  /api/alerts, so leaving it on meant two 403s per page load and another pair every five
+ *  minutes — caught and invisible, but still asking for something they may not have. */
+export function AlertProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
   const [state, setState] = useState<AlertState>(defaultState);
 
   const fetchAlerts = useCallback(async () => {
@@ -50,10 +53,11 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchAlerts();
     const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [fetchAlerts]);
+  }, [enabled, fetchAlerts]);
 
   const value = useMemo(() => state, [state]);
 

@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { BottomTab } from "@/components/layout/bottom-tab";
 import { Header } from "@/components/layout/header";
 import { useSession } from "@/components/layout/auth-guard";
+import { isSelfBorrower } from "@/lib/roles";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { AlertProvider } from "@/hooks/use-alerts";
@@ -67,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <AlertProvider>
+    <AlertProvider enabled={!isSelfBorrower(user.role)}>
       <CartProvider>
       <PageHeaderProvider>
         <div className="flex min-h-dvh lg:h-dvh lg:overflow-hidden" style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "4rem" : "16rem" }}>

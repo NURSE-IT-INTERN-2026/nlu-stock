@@ -142,7 +142,10 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
   const [subNotes, setSubNotes] = useState("");
   const [subLocRef, setSubLocRef] = useState<LocationRef>({ kind: "none" });
 
-  useEffect(() => { getUnits().then(setUnits); }, []);
+  // .catch is not optional: an unhandled rejection here is a full-page error overlay, and
+  // this fires on mount whether the dialog is open or not. Empty list degrades to a picker
+  // with nothing in it, which is what a save would have been blocked on anyway.
+  useEffect(() => { getUnits().then(setUnits).catch(() => setUnits([])); }, []);
 
   // Fetch full Settings-shape item whenever the dialog opens for a new item.
   useEffect(() => {

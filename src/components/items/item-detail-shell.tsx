@@ -486,7 +486,11 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
       </div>
 
       {/* ── Item-mode dialogs ── */}
-      {mode === "item" && item && (
+      {/* canAct-gated: every one of these is opened by a button only staff get, and they
+          fetch their lookups (units, categories) on mount — admin-only endpoints. Mounting
+          them for an EXECUTIVE or a BORROWER fired 403s nobody could act on, one of which
+          was an uncaught rejection. */}
+      {mode === "item" && item && canAct && (
         <>
           <StockAdjustmentDialog
             open={adjustOpen}
@@ -525,7 +529,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
           onDone={() => { fetchSub(); fetchItem(); }}
         />
       )}
-      {mode === "piece" && sub && (
+      {/* Same canAct gate as the item-mode block above. SelfBorrowDialog is deliberately
+          outside it — that one belongs to the borrower, not to staff. */}
+      {mode === "piece" && sub && canAct && (
         <>
           <MaintenanceFormDialog open={maintOpen} onOpenChange={setMaintOpen} itemId={sub.item.id} itemLabel={sub.item.name} subItemId={sub.id} subItemLabel={isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code} maintenanceCycleMonths={sub.item.maintenanceCycleMonths} onSuccess={fetchSub} />
           <ReportStatusDialog
