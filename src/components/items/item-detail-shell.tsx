@@ -11,12 +11,11 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon,
   Undo2, Package, Tag, FolderTree, Layers, MapPin, ClipboardList,
   QrCode, ShoppingCart, Flag, ArrowDownToLine, Pencil, SearchX, Trash2,
-  CalendarDays, User2, ShieldAlert, Home, Printer,
-} from "lucide-react";
+  CalendarDays, User2, ShieldAlert, Home, Printer, HandCoins} from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { useSession } from "@/components/layout/auth-guard";
-import { canManageStock } from "@/lib/roles";
+import { canManageStock, isSelfBorrower } from "@/lib/roles";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { cn } from "@/lib/utils";
 import { lotDisplay } from "@/lib/lot-code";
@@ -33,6 +32,8 @@ import { ItemThumb } from "@/components/shared/item-thumb";
 import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
 import type { OpenDamage } from "@/components/items/item-detail-overview";
 import { ItemDetailOverview } from "@/components/items/item-detail-overview";
+import { SelfBorrowDialog } from "@/components/dispense/self-borrow-dialog";
+import { isSelfBorrowable } from "@/lib/self-borrow";
 import { ItemDetailMedia } from "@/components/items/item-detail-media";
 import { ItemDetailHistory } from "@/components/items/item-detail-history";
 import { OpenRepairBanner } from "@/components/items/open-repair-banner";
@@ -49,7 +50,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 // ── Types ──
 
-interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null }
+interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
 interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null }
@@ -61,6 +62,7 @@ interface ItemData {
   issueUnit: { id: string; name: string }; minThreshold: number;
   location: LocationType | null; imageUrl: string | null; description: string | null;
   images: string[]; availableQty: number; totalQty: number;
+  selfBorrowable: boolean; selfBorrowLimit: number | null;
   subItems: SubItemRecord[]; lots: LotType[];
   model: string | null; purchaseDate: string | null; purchasePrice: number | null;
   vendorCompany: string | null; vendorContact: string | null; vendorPhone: string | null;
@@ -82,7 +84,7 @@ interface ParentItem {
   id: string; code: string; name: string; nameEn: string | null; trackIndividually: boolean;
   imageUrl: string | null; maintenanceCycleMonths: number;
   lastMaintenanceDate: string | null; nextMaintenanceDate: string | null;
-  category: { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean } | null };
+  category: { id: string; name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null };
   location: LocationType | null; issueUnit: { id: string; name: string };
 }
 interface DispenseRecord { id: string; quantity: number; dispensedAt: string; returnedAt: string | null; usageType: string | null; courseCode?: string | null; usageNote: string | null; notes: string | null; recipient?: string | null; loanType?: string | null; staff: { name: string } }
@@ -158,6 +160,10 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const copy = searchParams.get("copy");
   const { user } = useSession();
   const canAct = canManageStock(user?.role ?? "");
+  // ยืมเอง on a tracked piece. The item page has its own copy of this in ItemDetailOverview;
+  // piece mode renders PieceOverview instead and never reaches it, which is why a หนังสือ or
+  // a ครุภัณฑ์ showed no button at all while a วัสดุคงทน did.
+  const [pieceBorrowOpen, setPieceBorrowOpen] = useState(false);
 
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
@@ -445,6 +451,22 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   sub={sub}
                   isMulti={isMulti}
                   canAct={canAct}
+                  // Only this exact copy, and only while it is on the shelf.
+                  canSelfBorrow={
+                    isSelfBorrower(user?.role ?? "") &&
+                    sub.status === "AVAILABLE" &&
+                    !!item &&
+                    isSelfBorrowable({
+                      selfBorrowable: item.selfBorrowable,
+                      selfBorrowLimit: item.selfBorrowLimit,
+                      availableQty: item.availableQty,
+                      trackIndividually: item.trackIndividually,
+                      dispenseType: item.category.profile?.dispenseType ?? "ITEM",
+                      profileSelfBorrowable: item.category.profile?.selfBorrowable ?? false,
+                      profileSelfBorrowLimit: item.category.profile?.selfBorrowLimit ?? 1,
+                    })
+                  }
+                  onSelfBorrow={() => setPieceBorrowOpen(true)}
                   qrDataUrl={qrDataUrl}
                   onStation={() => setStationOpen(true)}
                   onReportDamage={() => setStatusAction("DAMAGED")}
@@ -497,6 +519,21 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
       )}
 
       {/* ── Piece-mode dialogs ── */}
+      {mode === "piece" && sub && item && (
+        <SelfBorrowDialog
+          open={pieceBorrowOpen}
+          onOpenChange={setPieceBorrowOpen}
+          itemId={item.id}
+          itemCode={isMulti ? formatSubCode(item.code, sub.subCode) : item.code}
+          itemName={sub.name ?? item.name}
+          issueUnit={item.issueUnit.name}
+          max={1}
+          isTracked
+          isConsume={false}
+          subItemId={sub.id}
+          onDone={() => { fetchSub(); fetchItem(); }}
+        />
+      )}
       {mode === "piece" && sub && (
         <>
           <MaintenanceFormDialog open={maintOpen} onOpenChange={setMaintOpen} itemId={sub.item.id} itemLabel={sub.item.name} subItemId={sub.id} subItemLabel={isMulti ? formatSubCode(sub.item.code, sub.subCode) : sub.item.code} maintenanceCycleMonths={sub.item.maintenanceCycleMonths} onSuccess={fetchSub} />
@@ -894,8 +931,9 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
 }
 
 // ── Piece overview tab (detail rows + manage tiles + QR) ──
-function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
-  sub: SubItemData; isMulti: boolean; canAct: boolean; qrDataUrl: string;
+function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, onSelfBorrow, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
+  sub: SubItemData; isMulti: boolean; canAct: boolean; canSelfBorrow: boolean; qrDataUrl: string;
+  onSelfBorrow: () => void;
   onStation: () => void; onReportDamage: () => void; onStatus: (s: "AVAILABLE" | "LOST" | "DISPOSED") => void; onEdit: () => void; onReceive: () => void;
 }) {
   const [printOpen, setPrintOpen] = useState(false);
@@ -975,7 +1013,20 @@ function PieceOverview({ sub, isMulti, canAct, qrDataUrl, onStation, onReportDam
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <SectionHeader title="QR code" />
+            {canSelfBorrow ? (
+              <>
+                <SectionHeader title="ยืมพัสดุ" />
+                {/* No numbers here — the dialog states them and is where they change. The whole
+                    page is already about this one copy, and its code sits in the dialog header. */}
+                <div className="p-4 sm:p-5">
+                  <Button className="w-full" onClick={onSelfBorrow}>
+                    <HandCoins className="size-4 mr-1" />ยืมพัสดุนี้
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <SectionHeader title="QR code" />
+            )}
             {qrBlock}
           </div>
         )}

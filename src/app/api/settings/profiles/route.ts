@@ -16,7 +16,26 @@ export async function GET(request: NextRequest) {
     include: { _count: { select: { subCategories: true } } },
   });
 
-  return json(profiles);
+  // Items hang off the profile through CategoryType, so Prisma cannot count them in the
+  // include above. The edit form needs the number to grey out the fields that freeze once a
+  // profile holds stock — without it the lock only shows up as a 409 after Save.
+  const counts = await prisma.item.groupBy({
+    by: ["categoryId"],
+    _count: { _all: true },
+  });
+  const categories = await prisma.categoryType.findMany({ select: { id: true, profileId: true } });
+  const byProfile = new Map<string, number>();
+  for (const c of counts) {
+    const profileId = categories.find((x) => x.id === c.categoryId)?.profileId;
+    if (profileId) byProfile.set(profileId, (byProfile.get(profileId) ?? 0) + c._count._all);
+  }
+
+  return json(
+    profiles.map((p) => ({
+      ...p,
+      _count: { ...p._count, items: byProfile.get(p.id) ?? 0 },
+    })),
+  );
 }
 
 export async function POST(request: NextRequest) {

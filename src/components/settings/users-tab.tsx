@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/sheet";
 import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { ENV_ROLES } from "@/lib/roles";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +57,7 @@ export function UsersTab() {
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [roleFilter, setRoleFilter] = useState<string>("ALL");
 
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -69,14 +72,14 @@ export function UsersTab() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT });
+      const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT, role: roleFilter });
       setUsers(data.users as UserRecord[]);
       setTotal(data.total);
     } catch {
       toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
-  }, [page]);
+  }, [page, roleFilter]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -219,6 +222,17 @@ export function UsersTab() {
       <div className="flex justify-end">
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มผู้ใช้งาน</Button>
       </div>
+
+      {/* บทบาทมาจาก env ไม่ใช่คอลัมน์ — route แปลง role กลับเป็นรายชื่ออีเมลแล้วค่อยกรอง */}
+      <Tabs value={roleFilter} onValueChange={(v) => { setRoleFilter(v as string); setPage(1); }}>
+        {/* w-full + flex-1 ของ trigger: 4 ช่องแบ่งรางเท่าๆ กัน min-w-0 กันป้ายไทยดันรางล้นจอแคบ */}
+        <TabsList className="w-full min-w-0">
+          <TabsTrigger value="ALL" className="min-w-0">ทั้งหมด</TabsTrigger>
+          {ENV_ROLES.map((r) => (
+            <TabsTrigger key={r} value={r} className="min-w-0">{ROLE_LABELS[r]}</TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
         <Table grid zebra className="table-fixed">

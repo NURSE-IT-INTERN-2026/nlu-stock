@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth-config";
-import { roleForEmail } from "@/lib/roles";
+import { roleForProfile } from "@/lib/roles";
 import { z } from "zod/v4";
 
 const loginSchema = z.object({
   email: z.string().min(1),
+  /** Stand in for the CMU claims that grant BORROWER, so the ยืมเอง flow is testable without
+   *  a real นศ./บุคลากร account — nobody on this project has one. Omitted = env allowlists
+   *  only, exactly as before. */
+  orgCode: z.string().nullish(),
+  orgName: z.string().nullish(),
+  accountType: z.string().nullish(),
 });
 
 export async function POST(request: NextRequest) {
@@ -29,7 +35,15 @@ export async function POST(request: NextRequest) {
   // The env allowlists are the gate — not the users table. A row that isn't in any
   // list can't sign in, and a listed email that has no row yet gets one created
   // (every movement record needs a user to point at).
-  const role = roleForEmail(email);
+  //
+  // Dev-only claims so the BORROWER shortcuts have something to match: the provider is what
+  // supplies these in production, and this route already 404s there.
+  const role = roleForProfile({
+    email,
+    accountType: parsed.data.accountType ?? "StudentAccount",
+    orgCode: parsed.data.orgCode ?? null,
+    orgName: parsed.data.orgName ?? null,
+  });
   if (!role) {
     return NextResponse.json({ error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, { status: 403 });
   }
