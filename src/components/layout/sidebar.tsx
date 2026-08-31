@@ -14,11 +14,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Menu } from "lucide-react";
+  Menu, QrCode } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, LayoutGroup } from "motion/react";
 import type { SessionUser } from "@/types";
-import { canManageStock } from "@/lib/roles";
+import { canManageStock, isSelfBorrower } from "@/lib/roles";
 
 // stockOnly / superOnly mirror the route rules in src/middleware.ts — the server is
 // what actually enforces them; these just keep dead links out of the menu.
@@ -47,11 +47,16 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
     return pathname.startsWith(href);
   }
 
-  const filteredNav = navItems.filter(
-    (item) =>
-      (!item.superOnly || user.role === "SUPERADMIN") &&
-      (!item.stockOnly || canManageStock(user.role))
-  );
+  // A borrower has exactly one destination — the item they scanned, reached by scanning it.
+  // /items is the staff catalogue and is blocked for them, so the menu offers the scanner
+  // instead; everything else here would only be a dead link.
+  const filteredNav = isSelfBorrower(user.role)
+    ? [{ href: "/scan", label: "สแกน QR", icon: QrCode }]
+    : navItems.filter(
+        (item) =>
+          (!item.superOnly || user.role === "SUPERADMIN") &&
+          (!item.stockOnly || canManageStock(user.role))
+      );
 
   return (
     <aside

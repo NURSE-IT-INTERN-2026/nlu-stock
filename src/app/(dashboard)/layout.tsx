@@ -18,6 +18,7 @@ const FULL_BLEED = new Set(["/receive", "/items", "/settings", "/alerts"]);
 const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
   "/items": "รายการพัสดุทั้งหมด",
+  "/scan": "สแกน QR",
   "/alerts": "การแจ้งเตือน",
   "/dispense": "เบิก-ยืมพัสดุ",
   "/receive": "รับพัสดุเข้า",
