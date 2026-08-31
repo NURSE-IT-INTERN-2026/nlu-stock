@@ -27,7 +27,7 @@ import {
   USAGE_STATUS_ORDER, STATUS_PILLS, recipientLabel,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
-import { getItem, getSubItem, getSubItems, returnItem, updateSubItemFields } from "@/lib/api";
+import { getItem, getSubItem, returnItem, updateSubItemFields } from "@/lib/api";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
 import type { OpenDamage } from "@/components/items/item-detail-overview";
@@ -53,7 +53,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
-interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null }
+interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null; location: LocationType | null; dispenseRecords: DispenseRecord[] }
 interface LotType { id: string; lotNumber: string; expiryDate: string | null; receivedQty: number; remainingQty: number }
 
 interface ItemData {
@@ -88,13 +88,9 @@ interface ParentItem {
   location: LocationType | null; issueUnit: { id: string; name: string };
 }
 interface DispenseRecord { id: string; quantity: number; dispensedAt: string; returnedAt: string | null; usageType: string | null; courseCode?: string | null; usageNote: string | null; notes: string | null; recipient?: string | null; loanType?: string | null; staff: { name: string } }
-// Sibling row as served by GET /api/settings/items/:id/sub-items — location + the one
-// open dispense record (returnedAt: null, take 1), which is what the table needs.
-interface SiblingRow {
-  id: string; subCode: string; status: ItemStatus;
-  location: LocationType | null;
-  dispenseRecords: DispenseRecord[];
-}
+// The sub-code table's row. Same shape the item response serves, so it reads straight off
+// item.subItems — no second request, and no admin-only endpoint in a read every role makes.
+type SiblingRow = SubItemRecord;
 interface StatusLog { id: string; previousStatus: ItemStatus; newStatus: ItemStatus; reason: string | null; changedAt: string; imageUrls: string[]; repairVenue: "INTERNAL" | "EXTERNAL" | null; changer: { name: string } }
 interface MaintenanceRecord { id: string; type: string; result: string; performedAt: string; issue: string | null; description: string | null; cost: number | null; performer: { name: string }; attachmentUrls: string[] }
 interface SubItemData {
@@ -168,7 +164,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [siblings, setSiblings] = useState<SiblingRow[]>([]);
   const [tab, setTab] = useState<string>("overview");
   // "item" = non-tracked aggregate; "piece" = tracked (a copy); "empty" = tracked with 0 subs.
   const [mode, setMode] = useState<"item" | "piece" | "empty">("item");
@@ -260,13 +255,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     if (mode === "piece" && sub) QRCode.toDataURL(qrUrl(sub.item.code, isMulti ? sub.subCode : null), { width: 128, margin: 1 }).then(setQrDataUrl).catch(() => {});
   }, [mode, isMulti, sub]);
 
-  // Piece siblings
-  const parentId = sub?.item.id;
-  const fetchSiblings = useCallback(async () => {
-    if (!parentId) return;
-    try { setSiblings((await getSubItems(parentId)) as SiblingRow[]); } catch {}
-  }, [parentId]);
-  useEffect(() => { if (mode === "piece") fetchSiblings(); }, [mode, fetchSiblings]);
+  // Piece siblings — already on the item fetched above, so refreshing the item refreshes the
+  // table with it. Empty in item/empty mode, where no sub-code table renders.
+  const siblings: SiblingRow[] = mode === "piece" ? item?.subItems ?? [] : [];
 
   const onReturn = async (subItemId?: string) => {
     if (!sub) return;
@@ -275,7 +266,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     try {
       await returnItem(sub.item.id, { subItemId: id });
       toast.success("คืนพัสดุย่อยแล้ว");
-      await Promise.all([fetchSub(), fetchSiblings()]);
+      await Promise.all([fetchSub(), fetchItem()]);
     } catch { toast.error("คืนไม่สำเร็จ"); }
     finally { setReturning(null); }
   };
@@ -542,7 +533,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
             onOpenChange={(o) => { if (!o) { setStatusAction(null); setStatusTarget(null); } }}
             itemId={sub.item.id} itemCode={sub.item.code} status={statusAction ?? "DAMAGED"} trackIndividually
             subItems={[statusTarget ?? { id: sub.id, subCode: sub.subCode, status: sub.status }]}
-            onSuccess={async () => { await Promise.all([fetchSub(), fetchSiblings()]); }}
+            onSuccess={async () => { await Promise.all([fetchSub(), fetchItem()]); }}
           />
           <EditItemDialog open={editOpen} itemId={sub.item.id} subItem={{ id: sub.id, serialNumber: sub.serialNumber, condition: sub.condition, notes: sub.notes, locationId: sub.location?.id ?? null }} onOpenChange={setEditOpen} onSaved={fetchSub} />
           <StationInRoomDialog open={stationOpen} onOpenChange={setStationOpen} itemId={sub.item.id} itemCode={sub.item.code} itemName={sub.item.name} subItemId={sub.id} onSuccess={fetchSub} />
