@@ -100,5 +100,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|uploads|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)).*)"],
+  // "/" is listed separately and is NOT redundant: with a basePath the pattern below is
+  // matched as /nlu-stock/((?!…).*), which needs a slash and something after it, so a request
+  // to the bare /nlu-stock skipped middleware entirely — the dashboard shell answered 200 to
+  // signed-out visitors and to borrowers alike.
+  matcher: ["/", "/((?!_next/static|_next/image|favicon.ico|uploads|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)).*)"],
 };
