@@ -3,10 +3,11 @@ import { BASE_PATH } from "@/lib/base-path";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth-config";
-import { roleForEmail } from "@/lib/roles";
-import { OAUTH_STATE_COOKIE, exchangeCode, fetchProfile, readState, type OAuthProfile } from "@/lib/cmu-oauth";
+import { roleForProfile } from "@/lib/roles";
+import { OAUTH_STATE_COOKIE, callbackUri, exchangeCode, fetchProfile, readState, type OAuthProfile } from "@/lib/cmu-oauth";
 
-/** Where the provider sends the browser back. Must equal CMU_REDIRECT_URI exactly. */
+/** Where the provider sends the browser back. Must equal the redirect_uri the /authorize
+ *  leg sent — see callbackUri() for how that is derived and allowlisted. */
 export async function GET(request: NextRequest) {
   // Route handlers get a nextUrl whose basePath has already been stripped and is NOT put
   // back by clone() — unlike middleware, where it is. Spell the prefix out or every bounce
@@ -37,16 +38,19 @@ export async function GET(request: NextRequest) {
 
   let profile: OAuthProfile | null;
   try {
-    profile = await fetchProfile(await exchangeCode(code));
+    // Same computation as the /authorize leg — the provider rejects an exchange whose
+    // redirect_uri differs from the one the code was issued against.
+    const tokens = await exchangeCode(code, callbackUri(request.headers, request.nextUrl.origin));
+    profile = await fetchProfile(tokens);
   } catch {
     return fail("เชื่อมต่อระบบยืนยันตัวตนไม่สำเร็จ");
   }
   if (!profile) return fail("ไม่พบอีเมลในบัญชีที่ใช้เข้าสู่ระบบ");
   const { email } = profile;
 
-  // Unchanged from the old login route: the env allowlists are the gate, not the users
-  // table. OAuth only proves the person owns the address — it grants nothing by itself.
-  const role = roleForEmail(email);
+  // OAuth only proves the person owns the address — it grants nothing by itself. Staff come
+  // from the env allowlists; นศ./บุคลากร come from the faculty claims. Neither = turned away.
+  const role = roleForProfile(profile);
   if (!role) return fail("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ");
 
   const existing = await prisma.user.findUnique({ where: { email } });
