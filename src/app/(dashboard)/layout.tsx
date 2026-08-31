@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { redirect, usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { BottomTab } from "@/components/layout/bottom-tab";
 import { Header } from "@/components/layout/header";
@@ -36,7 +36,6 @@ function getTitle(pathname: string) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useSession();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const router = useRouter();
   const pathname = usePathname();
 
   // Auto-collapse on tablet (md–xl), expand on desktop (xl+)
@@ -63,8 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) {
-    router.push("/login");
-    return null;
+    redirect("/login");
   }
 
   return (
