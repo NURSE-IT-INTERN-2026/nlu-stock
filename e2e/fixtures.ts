@@ -160,6 +160,9 @@ function prefixPage(page: Page): Page {
 export const test = base.extend<{
   /** unique item code per test — avoids collisions on the shared seeded DB. */
   uniqueCode: string;
+  /** หน้าเดียวกัน แต่ล็อกอินเป็น นศ./บุคลากร (BORROWER) — คนละ context กับ page ปกติที่เป็น
+   *  SUPERADMIN ทั้ง suite. ใช้กับ ยืมเอง ผ่าน QR ซึ่งเป็นงานเดียวที่ staff ทำแทนไม่ได้. */
+  borrowerPage: Page;
   /** shared mutable state for BDD steps — pass item code / subCode / qty between Given/When/Then */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a per-scenario bag by design
   bdd: Record<string, any>;
@@ -172,6 +175,12 @@ export const test = base.extend<{
   },
   request: async ({ request }, use) => {
     await use(prefixRequest(request));
+  },
+  borrowerPage: async ({ browser }, use) => {
+    const ctx = await browser.newContext({ storageState: "e2e/.auth/borrower.json" });
+    const page = prefixPage(await ctx.newPage());
+    await use(page);
+    await ctx.close();
   },
   uniqueCode: async ({}, use, testInfo) => {
     // Derived from the test's own title, not the clock: same test → same code on every run.

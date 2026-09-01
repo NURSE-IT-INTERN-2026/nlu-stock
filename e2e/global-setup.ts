@@ -10,6 +10,7 @@ const DB_URL = process.env.DATABASE_URL!;
 const JWT_SECRET = process.env.JWT_SECRET!;
 const AUTH_DIR = "e2e/.auth";
 const AUTH_FILE = `${AUTH_DIR}/admin.json`;
+const BORROWER_FILE = `${AUTH_DIR}/borrower.json`;
 
 async function ensureDatabase() {
   const u = new URL(DB_URL);
@@ -40,38 +41,23 @@ async function resetSchema() {
 }
 
 // users has no role column any more — roles come from the env allowlists (src/lib/roles.ts),
-// so the suite states the role it wants instead of reading it back. SUPERADMIN because the
-// specs walk /settings, which nothing below SUPERADMIN may reach.
-async function adminUserId() {
+// so the suite states the role it wants instead of reading it back.
+async function userByEmail(email: string) {
   const c = new Client({ connectionString: DB_URL });
   await c.connect();
-  const { rows } = await c.query(
-    `SELECT id, email, name FROM users WHERE email = 'superadmin@nlu.ac.th'`
-  );
+  const { rows } = await c.query(`SELECT id, email, name FROM users WHERE email = $1`, [email]);
   await c.end();
   return rows[0];
 }
 
-export default async function globalSetup() {
-  await ensureDatabase();
-  await resetSchema();
-
-  const consent = { ...process.env, PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION: "yes" };
-  // Sync schema.prisma → test DB directly. The 0_init migration is stale (no
-  // category_profiles / DispenseType-era tables); dev uses `db push` too.
-  // db push handles the pgvector embedding column since the extension is enabled.
-  execSync("npx prisma db push --accept-data-loss", { stdio: "inherit", env: consent });
-  execSync("npx prisma db seed", { stdio: "inherit", env: consent });
-
-  const admin = await adminUserId();
-  if (!admin) throw new Error("Seed did not create superadmin@nlu.ac.th");
-
-  const token = await new SignJWT({
-    userId: admin.id,
-    email: admin.email,
-    name: admin.name,
-    role: "SUPERADMIN",
-  })
+/** One signed-in browser state on disk. Roles are not in the DB (src/lib/roles.ts) — the suite
+ *  states the role it wants, exactly as the CMU callback would after reading the claims. */
+async function writeAuthFile(
+  file: string,
+  user: { id: string; email: string; name: string },
+  role: string,
+) {
+  const token = await new SignJWT({ userId: user.id, email: user.email, name: user.name, role })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("24h")
     .setIssuedAt()
@@ -79,7 +65,7 @@ export default async function globalSetup() {
 
   mkdirSync(AUTH_DIR, { recursive: true });
   writeFileSync(
-    AUTH_FILE,
+    file,
     JSON.stringify({
       cookies: [
         {
@@ -96,4 +82,26 @@ export default async function globalSetup() {
       origins: [],
     })
   );
+}
+
+export default async function globalSetup() {
+  await ensureDatabase();
+  await resetSchema();
+
+  const consent = { ...process.env, PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION: "yes" };
+  // Sync schema.prisma → test DB directly. The 0_init migration is stale (no
+  // category_profiles / DispenseType-era tables); dev uses `db push` too.
+  // db push handles the pgvector embedding column since the extension is enabled.
+  execSync("npx prisma db push --accept-data-loss", { stdio: "inherit", env: consent });
+  execSync("npx prisma db seed", { stdio: "inherit", env: consent });
+
+  const admin = await userByEmail("superadmin@nlu.ac.th");
+  if (!admin) throw new Error("Seed did not create superadmin@nlu.ac.th");
+  await writeAuthFile(AUTH_FILE, admin, "SUPERADMIN");
+
+  // ยืมเอง ผ่าน QR: BORROWER มาจาก CMU claims ไม่ใช่ env allowlist — เทสจึงปั๊ม session ให้ตรง
+  // ตามที่ callback จะออกให้ นศ. ของคณะ แทนที่จะวิ่ง OAuth จริงในเทส
+  const borrower = await userByEmail("student@cmu.ac.th");
+  if (!borrower) throw new Error("Seed did not create student@cmu.ac.th");
+  await writeAuthFile(BORROWER_FILE, borrower, "BORROWER");
 }

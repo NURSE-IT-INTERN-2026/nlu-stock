@@ -1,6 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { test, expect } from "../fixtures";
-import { freshTracked } from "./helpers";
+import { expectHistory, freshTracked } from "./helpers";
 
 const { Given, When, Then } = createBdd(test);
 
@@ -32,3 +32,10 @@ Then("ฉันจะเห็นหลักฐาน {int} รูปในแ�
     page.getByRole("button").filter({ hasText: new RegExp(`หลักฐาน\\s*${n}`) }).first()
   ).toBeVisible({ timeout: 15_000 });
 });
+
+Then(
+  "ประวัติของ X บนสุดต้องเป็น {string} เปิดดูแล้วมีรายละเอียดและหลักฐาน {int} ไฟล์",
+  async ({ page, bdd }, label: string, files: number) => {
+    await expectHistory(page, bdd.item.code, [label], { contains: "E2E จอแตก", evidence: files });
+  }
+);
