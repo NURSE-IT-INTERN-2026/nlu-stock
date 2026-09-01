@@ -106,7 +106,12 @@ model User {
   email     String   @unique
   name      String
   // No role column — roles come from env allowlists (src/lib/roles.ts). This row
-  // exists only so every movement record has an owner to point at (8 FKs below).
+  // exists only so every movement record has an owner to point at (9 FKs below).
+  // The one exception, and it is display-only: BORROWER has no env list, it is decided
+  // from the provider's claims at sign-in. Without this flag /settings cannot tell a
+  // working นศ./บุคลากร account from a revoked one and labels both "ไม่มีสิทธิ์".
+  // Never a permission check — roleForProfile() still re-decides on every sign-in.
+  isBorrower Boolean  @default(false)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

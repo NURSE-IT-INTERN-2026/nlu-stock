@@ -3,7 +3,7 @@
 // which list an email lands in, and which writes an EXECUTIVE is allowed.
 import assert from "node:assert";
 // Safe to set after import: the lists are read on every call, not at module load.
-import { roleForEmail, canManageStock, emailsForRole, roleForProfile } from "@/lib/roles";
+import { roleForEmail, canManageStock, emailsForRole, roleForProfile, displayRole } from "@/lib/roles";
 
 process.env.SUPERADMIN_EMAILS = " Boss@NU.ac.th ,two@nu.ac.th";
 process.env.ADMIN_EMAILS = "store@nu.ac.th";
@@ -92,5 +92,15 @@ process.env.BORROWER_ORG_PREFIXES = "12";
 process.env.BORROWER_ORG_NAMES = "พยาบาล";
 
 assert.equal(canManageStock("BORROWER"), false, "borrowers must not touch stock");
+
+// displayRole — what /settings prints for a stored row. The flag only ever answers for rows
+// no env list claims; a listed address keeps its list role even if it once signed in as one.
+assert.equal(displayRole({ email: "nurse@cmu.ac.th", isBorrower: true }), "BORROWER");
+assert.equal(displayRole({ email: "store@nu.ac.th", isBorrower: true }), "ADMIN", "a promoted borrower reads as staff");
+assert.equal(
+  displayRole({ email: "expired@nu.ac.th", isBorrower: false }),
+  null,
+  "no list, no flag = cannot sign in — this is the one row that should read ไม่มีสิทธิ์",
+);
 
 console.log("# roles: all assertions passed");

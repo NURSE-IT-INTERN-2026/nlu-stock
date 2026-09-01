@@ -346,11 +346,12 @@ export function getUsers() {
  * /api/settings/users แบ่งหน้าฝั่ง server เสมอ (perPage default 20) — ผู้เรียกต้องส่ง page
  * และอ่าน total ไม่งั้นคนที่ 21 ขึ้นไปหายเงียบโดยไม่มีอะไรบอก
  */
-export function getSettingsUsers(params?: { page?: number; perPage?: number; role?: string }) {
+export function getSettingsUsers(params?: { page?: number; perPage?: number; role?: string; q?: string }) {
   const qs = new URLSearchParams({
     page: String(params?.page ?? 1),
     perPage: String(params?.perPage ?? 20),
     ...(params?.role && params.role !== "ALL" ? { role: params.role } : {}),
+    ...(params?.q?.trim() ? { q: params.q.trim() } : {}),
   }).toString();
   return request<{ users: UserOption[]; page: number; perPage: number; total: number }>(
     `/api/settings/users?${qs}`,

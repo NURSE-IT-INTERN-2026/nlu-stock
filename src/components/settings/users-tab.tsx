@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, UserCheck, UserX, Users, X } from "lucide-react";
+import { Plus, Pencil, Search, Trash2, UserCheck, UserX, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/sheet";
 import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
-import { ENV_ROLES } from "@/lib/roles";
+import { ROLES } from "@/lib/roles";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -42,22 +43,29 @@ interface UserRecord {
   id: string;
   email: string;
   name: string;
-  /** Derived from the env allowlists by the API, never stored. null = not listed
-   *  anywhere, so this account cannot sign in until an env list mentions it. */
+  /** Derived by the API, never a column. null = no env list mentions the account and it
+   *  is not a นศ./บุคลากร either, so it cannot sign in until a list does. */
   role: Role | null;
   isActive: boolean;
+  /** เคยทำรายการอะไรไว้บ้างหรือยัง — มีแล้วลบถาวรไม่ได้ (FK) เหลือแค่ปิดใช้งาน */
+  hasHistory: boolean;
 }
 
 export function UsersTab() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only the very first fetch swaps the whole tab for a skeleton. Every later one keeps the
+  // table mounted — unmounting it mid-search steals focus from the box being typed into.
+  const [firstLoad, setFirstLoad] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<UserRecord | null>(null);
   const [form, setForm] = useState({ email: "", name: "" });
-  const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
+  const [query, setQuery] = useState("");
+  const debounced = useDebounce(query, 300);
 
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -72,16 +80,20 @@ export function UsersTab() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT, role: roleFilter });
+      const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT, role: roleFilter, q: debounced });
       setUsers(data.users as UserRecord[]);
       setTotal(data.total);
     } catch {
       toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
-  }, [page, roleFilter]);
+    setFirstLoad(false);
+  }, [page, roleFilter, debounced]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  // หน้าที่ค้างอยู่ไม่มีความหมายกับผลค้นหาชุดใหม่ — page 7 ของคำเก่ามักว่างเปล่า
+  useEffect(() => { setPage(1); }, [debounced]);
 
   function openCreate() {
     setEditing(null);
@@ -121,23 +133,19 @@ export function UsersTab() {
     }
   }
 
-  async function handleDelete(user: UserRecord) {
-    setDeactivateTarget(user);
-  }
-
-  async function handleConfirmDeactivate() {
-    if (!deactivateTarget) return;
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await deleteSettingsUser(deactivateTarget.id);
-      toast.success("ปิดใช้งานผู้ใช้สำเร็จ");
+      await deleteSettingsUser(deleteTarget.id);
+      toast.success("ลบผู้ใช้สำเร็จ");
       fetchUsers();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "ปิดใช้งานไม่สำเร็จ");
+      toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
-    setDeactivateTarget(null);
+    setDeleteTarget(null);
   }
 
-  if (loading) return (
+  if (firstLoad) return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <Skeleton className="h-6 w-28" />
@@ -223,16 +231,28 @@ export function UsersTab() {
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มผู้ใช้งาน</Button>
       </div>
 
-      {/* บทบาทมาจาก env ไม่ใช่คอลัมน์ — route แปลง role กลับเป็นรายชื่ออีเมลแล้วค่อยกรอง */}
+      {/* บทบาทมาจาก env ไม่ใช่คอลัมน์ (ยกเว้น ผู้ยืม ที่มีคอลัมน์) — route กรองให้ฝั่ง DB */}
       <Tabs value={roleFilter} onValueChange={(v) => { setRoleFilter(v as string); setPage(1); }}>
-        {/* w-full + flex-1 ของ trigger: 4 ช่องแบ่งรางเท่าๆ กัน min-w-0 กันป้ายไทยดันรางล้นจอแคบ */}
+        {/* w-full + flex-1 ของ trigger: 5 ช่องแบ่งรางเท่าๆ กัน min-w-0 กันป้ายไทยดันรางล้นจอแคบ */}
         <TabsList className="w-full min-w-0">
           <TabsTrigger value="ALL" className="min-w-0">ทั้งหมด</TabsTrigger>
-          {ENV_ROLES.map((r) => (
+          {ROLES.map((r) => (
             <TabsTrigger key={r} value={r} className="min-w-0">{ROLE_LABELS[r]}</TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
+
+      {/* ค้นฝั่ง server: ตารางนี้โตตามจำนวน นศ. ที่เคยล็อกอิน ไม่ใช่จำนวนเจ้าหน้าที่ */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="ค้นหาชื่อหรืออีเมล"
+          className="pl-9"
+          aria-label="ค้นหาผู้ใช้งาน"
+        />
+      </div>
 
       <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
         <Table grid zebra className="table-fixed">
@@ -251,10 +271,16 @@ export function UsersTab() {
                 <div className="flex flex-col items-center gap-3 text-center">
                   <Users className="h-8 w-8 text-muted-foreground/40" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">ยังไม่มีผู้ใช้งาน</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">เพิ่มผู้ใช้งานเพื่อให้เข้าถึงระบบได้</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {debounced || roleFilter !== "ALL" ? "ไม่พบผู้ใช้งานตามที่ค้นหา" : "ยังไม่มีผู้ใช้งาน"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {debounced || roleFilter !== "ALL" ? "ลองเปลี่ยนคำค้นหรือบทบาท" : "เพิ่มผู้ใช้งานเพื่อให้เข้าถึงระบบได้"}
+                    </p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มผู้ใช้งาน</Button>
+                  {!debounced && roleFilter === "ALL" && (
+                    <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มผู้ใช้งาน</Button>
+                  )}
                 </div>
               </TableCell></TableRow>
             ) : users.map((user) => (
@@ -286,12 +312,16 @@ export function UsersTab() {
                         </TooltipTrigger>
                         <TooltipContent>{user.isActive ? "ปิดใช้งาน" : "เปิดใช้งาน"}</TooltipContent>
                       </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => handleDelete(user)} aria-label="ปิดใช้งาน" />}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </TooltipTrigger>
-                        <TooltipContent>ปิดใช้งาน</TooltipContent>
-                      </Tooltip>
+                      {/* ลบถาวรได้เฉพาะแถวที่ยังไม่มีประวัติ — ที่เหลือ FK กันไว้ และปุ่มปิดใช้งาน
+                          ข้างซ้ายคือการแบนตัวจริงอยู่แล้ว */}
+                      {!user.hasHistory && (
+                        <Tooltip>
+                          <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => setDeleteTarget(user)} aria-label="ลบ" />}>
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </TooltipTrigger>
+                          <TooltipContent>ลบถาวร</TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                   </TooltipProvider>
                 </TableCell>
@@ -330,17 +360,19 @@ export function UsersTab() {
         </Sheet>
       )}
 
-      <AlertDialog open={deactivateTarget !== null} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>ปิดใช้งานผู้ใช้</AlertDialogTitle>
+            <AlertDialogTitle>ลบผู้ใช้ถาวร</AlertDialogTitle>
             <AlertDialogDescription>
-              ต้องการปิดใช้งาน &ldquo;{deactivateTarget?.name}&rdquo; ใช่หรือไม่? ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้
+              ต้องการลบ &ldquo;{deleteTarget?.name}&rdquo; ออกจากระบบถาวรใช่หรือไม่? กู้คืนไม่ได้
+              — และถ้าเป็น นศ./บุคลากรของคณะ แถวจะถูกสร้างใหม่ทันทีที่เข้าสู่ระบบอีกครั้ง
+              ถ้าต้องการห้ามใช้งานให้ใช้ปิดใช้งานแทน
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleConfirmDeactivate}>ปิดใช้งาน</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>ลบถาวร</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

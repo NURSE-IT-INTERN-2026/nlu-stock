@@ -92,6 +92,16 @@ export function roleForProfile(claims: AccountClaims): Role | null {
   return null;
 }
 
+/**
+ * What /settings should print for a stored row. Same order of authority as sign-in, minus
+ * the live claims — an env list wins, then the isBorrower flag the last sign-in stamped.
+ * null = no list mentions the address and it never signed in as a นศ./บุคลากร, so it cannot
+ * sign in at all. Display only: never gate anything on this, use roleForProfile.
+ */
+export function displayRole(user: { email: string; isBorrower: boolean }): Role | null {
+  return roleForEmail(user.email) ?? (user.isBorrower ? "BORROWER" : null);
+}
+
 /** Everything except ตั้งค่า. Executives and borrowers are read-only apart from เบิก/ยืม. */
 export function canManageStock(role: string): boolean {
   return role === "SUPERADMIN" || role === "ADMIN";

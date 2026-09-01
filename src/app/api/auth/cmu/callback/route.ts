@@ -58,13 +58,21 @@ export async function GET(request: NextRequest) {
 
   // Fall back to the address prefix only when the provider gave no name at all.
   const placeholder = email.split("@")[0];
-  const user = existing
+  // Display-only, and re-stamped on every sign-in so it cannot drift: an env list can
+  // promote a borrower to staff, and /settings has no other way to tell a นศ./บุคลากร
+  // account apart from one that no list mentions any more. See User.isBorrower.
+  const isBorrower = role === "BORROWER";
+  const changes = {
     // Adopt the provider's name for a row still carrying the placeholder, but never
     // overwrite one an admin typed by hand in /settings.
-    ? profile.name && existing.name === placeholder
-      ? await prisma.user.update({ where: { id: existing.id }, data: { name: profile.name } })
+    ...(existing && profile.name && existing.name === placeholder ? { name: profile.name } : {}),
+    ...(existing && existing.isBorrower !== isBorrower ? { isBorrower } : {}),
+  };
+  const user = existing
+    ? Object.keys(changes).length
+      ? await prisma.user.update({ where: { id: existing.id }, data: changes })
       : existing
-    : await prisma.user.create({ data: { email, name: profile.name ?? placeholder } });
+    : await prisma.user.create({ data: { email, name: profile.name ?? placeholder, isBorrower } });
 
   const token = await signToken({
     userId: user.id,
