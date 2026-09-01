@@ -15,7 +15,14 @@ export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
   const params = new URLSearchParams();
   params.set("type", reportType);
   for (const [k, v] of Object.entries(filters)) {
-    if (v !== undefined && v !== "") params.set(k, v);
+    if (v === undefined || v === "") continue;
+    // location เป็น object (cascade อาคาร/ชั้น/ห้อง/จุด) — แบนเป็นคีย์ละชั้นแบบเดียวกับที่ tab
+    // ยิงหา API ไม่งั้นมันกลายเป็น "[object Object]" แล้วไฟล์ที่โหลดได้กว้างกว่าที่เห็นบนจอ
+    if (typeof v === "object") {
+      for (const [lk, lv] of Object.entries(v)) if (lv) params.set(lk, String(lv));
+      continue;
+    }
+    params.set(k, String(v));
   }
 
   const baseUrl = `/api/reports/export?${params.toString()}`;

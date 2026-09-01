@@ -76,6 +76,7 @@ doc/*.csv
 /playwright-report/
 /playwright/.cache/
 /e2e/.auth/
+/e2e/.gen/
 /uploads-test/
 .env.test
 .next-e2e/

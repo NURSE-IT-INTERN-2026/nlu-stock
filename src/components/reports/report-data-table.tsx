@@ -100,7 +100,9 @@ export function ReportDataTable<T extends Record<string, any>>({
 
   return (
     // py-0: Card's own pt-4 showed as a bare white band above the tinted header.
-    <Card className={cn("py-0", className)}>
+    // border: Card ships only a faint shadow, which disappears on the muted page background —
+    // every other table in the app (/items, /maintenance, /alerts) draws a real edge.
+    <Card className={cn("py-0 border", className)}>
       {/* One table at every width. The stacked label→value cards this replaced turned a
           six-column row into six lines, so a phone screen held one row and a half; a table
           that scrolls sideways shows the shape of the data even when it does not all fit.

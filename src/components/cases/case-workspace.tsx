@@ -85,7 +85,7 @@ const RANGE_OPTIONS = caseRangeOptions();
  * หล่นหายทั้งที่เป็นสองอย่างที่คนตามงานถามถึงที่สุด. ตารางคืนความกว้างนั้นให้ ส่วนรายละเอียดมาเมื่อ
  * ถูกเรียก แทนที่จะกินครึ่งจอค้างไว้ตลอดเวลาเผื่อว่าจะมีคนอ่าน.
  */
-export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId, compact, canEdit, onTotals }: {
+export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId, compact, canEdit, onTotals, actions }: {
   itemId?: string;
   subItemId?: string;
   lockType?: CaseType;
@@ -103,6 +103,8 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
    *  the list with them and export exactly what is on screen. The workspace itself draws
    *  neither: a list scoped to one พัสดุ has nothing to total and nothing to export. */
   onTotals?: (totals: CaseTotalsJson, query: string) => void;
+  /** ปุ่มของผู้เรียก (ส่งออก Excel/PDF) — ต่อท้ายแถวตัวกรอง ไม่ใช่แถวลอยเหนือการ์ด */
+  actions?: React.ReactNode;
 }) {
   const [type, setType] = useState<string>(lockType ?? "all");
   const [state, setState] = useState("all");
@@ -182,7 +184,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
         {!compact && (
           <div className="px-4 pt-4">
             <Filters
-              {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ: setQ }}
+              {...{ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ: setQ, actions }}
               className="rounded-none border-0 bg-transparent p-0"
             />
           </div>
@@ -241,7 +243,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
   );
 }
 
-function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ, className }: {
+function Filters({ type, setType, state, setState, range, setRange, dirty, clear, lockType, todo, q, onQ, actions, className }: {
   type: string; setType: (v: string) => void;
   state: string; setState: (v: string) => void;
   range: string; setRange: (v: string) => void;
@@ -250,6 +252,7 @@ function Filters({ type, setType, state, setState, range, setRange, dirty, clear
   todo?: boolean;
   /** โหมดตาราง: ช่องค้นหาย้ายมาอยู่กับตัวกรองตัวอื่น เพราะหัวการ์ดที่เคยถือมันไว้ไม่มีแล้ว */
   q?: string; onQ?: (v: string) => void;
+  actions?: React.ReactNode;
   /** ตัวกรองอยู่ในการ์ดใหญ่แล้ว — ผู้เรียกถอดกรอบของตัวมันเองออกผ่านตรงนี้ */
   className?: string;
 }) {
@@ -291,10 +294,15 @@ function Filters({ type, setType, state, setState, range, setRange, dirty, clear
           </div>
         </Field>
       )}
-      {dirty && (
-        <Button variant="outline" className="ml-auto gap-1.5" onClick={clear}>
-          <FilterX className="size-4" /> ล้างตัวกรอง
-        </Button>
+      {(dirty || actions) && (
+        <div className="ml-auto flex flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
+          {dirty && (
+            <Button variant="outline" className="gap-1.5" onClick={clear}>
+              <FilterX className="size-4" /> ล้างตัวกรอง
+            </Button>
+          )}
+          {actions}
+        </div>
       )}
     </div>
   );
@@ -690,7 +698,7 @@ function Timeline({ steps, tone, attach }: { steps: CaseDetailJson["steps"]; ton
               {s.detail && <p className="mt-0.5 text-sm text-muted-foreground">{s.detail}</p>}
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                 {s.by && <span>โดย {s.by}</span>}
-                {s.cost != null && <span className="tabular-nums">฿{s.cost.toLocaleString("th-TH")}</span>}
+                {s.cost != null && <span className="tabular-nums">ค่าใช้จ่าย {s.cost.toLocaleString("th-TH")}</span>}
               </div>
               {s.attachments.length > 0 && (
                 <div className="mt-2">

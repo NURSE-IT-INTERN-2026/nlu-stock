@@ -39,6 +39,10 @@ assert.equal(selfBorrowMax({ ...base, selfBorrowLimit: 2 }), 2, "item override b
 assert.equal(selfBorrowMax({ ...base, availableQty: 2 }), 2, "stock binds when it is scarcer than the limit");
 assert.equal(selfBorrowMax({ ...base, availableQty: 0 }), 0);
 assert.equal(selfBorrowMax({ ...base, trackIndividually: true }), 1, "tracked pieces go out one at a time");
+// availableQty on a tracked item = how many copies are AVAILABLE, so an empty shelf must read
+// 0 — a flat 1 kept the ยืม button lit when every copy was already out.
+assert.equal(selfBorrowMax({ ...base, trackIndividually: true, availableQty: 0 }), 0, "no free copy = nothing to borrow");
+assert.equal(selfBorrowMax({ ...base, trackIndividually: true, availableQty: 9, selfBorrowLimit: 5 }), 1, "the limit never lifts a tracked borrow above one piece");
 
 const from = new Date("2026-08-28T15:00:00.000Z");
 assert.equal(selfBorrowDueAt(1, from).toISOString(), "2026-08-29T15:00:00.000Z", "+24h, not end of next day");

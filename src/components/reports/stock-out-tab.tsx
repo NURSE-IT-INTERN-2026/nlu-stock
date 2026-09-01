@@ -153,7 +153,7 @@ interface KindSpec {
   exportType: (f: FilterValues) => string;
 }
 
-const baseFilters: FilterConfig = { dateRange: true, staff: true, usageTypes: true };
+const baseFilters: FilterConfig = { dateRange: true, staffSearch: "ค้นหาผู้ดำเนินการ", usageTypes: true };
 
 // การใช้งาน ก่อน เหตุผล ทุก segment: คนอ่านรายงาน monitor จาก "ของถูกเอาไปใช้ทำอะไร" ก่อนเสมอ
 // แล้วค่อยเจาะว่าอันไหน — ประเภทกว้างๆ 3 ค่าจึงมาก่อน ตามด้วยบรรทัดที่ระบุตัวจริง.
@@ -207,7 +207,7 @@ const KINDS: Record<DispenseKind, KindSpec> = {
     // (station-in-room-dialog ไม่เคยเขียน recipient) ค้นด้วย recipient จึงหาไม่เจอสักแถว
     filters: {
       dateRange: true,
-      staff: true,
+      staffSearch: "ค้นหาผู้ดำเนินการ",
       statusOptions: [{ value: "open", label: "ยังอยู่ข้างนอก" }],
     },
     emptyMessage: "ไม่มีการนำไปใช้งานในช่วงนี้",
@@ -268,7 +268,7 @@ export function StockOutTab() {
     };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    if (filters.staffId) params.staffId = filters.staffId;
+    if (filters.staff) params.staff = filters.staff;
     if (filters.recipient) params.recipient = filters.recipient;
     if (filters.usageType) params.usageType = filters.usageType;
     if (filters.status) params.loanStatus = filters.status;
@@ -291,10 +291,10 @@ export function StockOutTab() {
         leading={
           <Tabs value={kind} onValueChange={(v) => selectKind(v as string)}>
             {/* สีอยู่บนราง ไม่ใช่บนแต่ละช่อง เพราะตัวที่ทาสีคือแถบที่เลื่อน ไม่ใช่ปุ่ม */}
-            <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+            <TabsList variant="segment" className="w-full min-w-0 sm:w-fit" style={segmentStyle(spec.token)}>
               <TabsIndicator />
               {DISPENSE_KINDS.map((k) => (
-                <TabsTrigger key={k} value={k} className="min-w-0">
+                <TabsTrigger key={k} value={k}>
                   {DISPENSE_KIND_LABELS[k]}
                 </TabsTrigger>
               ))}

@@ -11,8 +11,10 @@
  * current one. Anything older belongs to a trip that already closed.
  */
 export type RepairTripLog = {
+  id?: string;
   previousStatus: string | null;
   newStatus?: string | null;
+  imageUrls?: string[];
   reason: string | null;
   repairVenue: "INTERNAL" | "EXTERNAL" | null;
   repairNote: string | null;
@@ -26,7 +28,27 @@ export type RepairTrip = {
   repairNote: string | null;
   /** When the piece entered its current status — not the last edit to the repair info. */
   startedAt: string | null;
+  /** The log row that opened the trip: the record whose imageUrls hold this job's หลักฐาน. */
+  openerId: string | null;
+  imageUrls: string[];
 };
+
+/**
+ * The symptom, dug out of a `reason` that was written as a timeline sentence.
+ *
+ * Rows older than the damageNote column keep the อาการ inside `reason`, wrapped in whatever
+ * phrasing the step that wrote it needed. A card labelled "ชำรุด:" wants the symptom alone —
+ * "ชำรุด: คืนพร้อมระบุ: ชำรุด (จอแตก)" says ชำรุด three times and จอแตก once.
+ */
+function symptomFromReason(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  // The server's stand-in when the reporter left the note blank — it only restates the badge.
+  if (/^(เปลี่ยนสถานะเป็น|Status changed to)/.test(reason)) return null;
+  // A ชำรุด/สูญหาย loan return: the note is the part in brackets, and there may be none.
+  const returned = reason.match(/^คืนพร้อมระบุ:[^(]*(?:\(([\s\S]*)\))?$/);
+  if (returned) return returned[1]?.trim() || null;
+  return reason;
+}
 
 export function deriveRepairTrip(logs: RepairTripLog[], status: string): RepairTrip {
   const latest = logs[0];
@@ -38,8 +60,12 @@ export function deriveRepairTrip(logs: RepairTripLog[], status: string): RepairT
     // Venue/note track the newest edit, and so does the symptom now that แก้ข้อมูลการส่งซ่อม can
     // correct it — newest non-null damageNote wins, falling back to the trip-opening row's
     // reason for trips recorded before the column existed.
-    damageNote: logs.find((l) => l.damageNote)?.damageNote ?? start?.reason ?? null,
+    damageNote: logs.find((l) => l.damageNote)?.damageNote ?? symptomFromReason(start?.reason),
     repairNote: latest?.repairNote ?? null,
     startedAt: start?.changedAt.toISOString() ?? null,
+    // Evidence belongs to the row that opened the job, the way a qty booking owns its own:
+    // one pile per job, appended to through /api/attachments, never copied to a second row.
+    openerId: start?.id ?? null,
+    imageUrls: start?.imageUrls ?? [],
   };
 }

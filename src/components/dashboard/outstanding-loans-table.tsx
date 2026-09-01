@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PackageCheck } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { courseNamePart } from "@/lib/constants";
 import { fmtDate, TH_DAY } from "@/lib/format";
 import { Panel, WidgetState } from "./primitives";
 import { useOutstandingLoans } from "@/hooks/use-dashboard-queries";
@@ -75,17 +76,34 @@ export function OutstandingLoansTable() {
                   }
                 }}
                 aria-label={`${r.code} ${r.name}`}
-                className="cursor-pointer focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                // Two columns run two lines and four run one — align-top (and one shared
+                // padding) so the whole row starts on the same line. See move-table.
+                className="cursor-pointer [&>td]:h-auto [&>td]:py-2 [&>td]:align-top focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
-                <TableCell className="h-auto py-2">
+                <TableCell>
                   <p className="font-medium">{r.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {r.code} · ยืม {fmtDate(new Date(r.dispensedAt), TH_DAY)}
                   </p>
                 </TableCell>
-                {/* A loan filed before เหตุผล was required has nothing to show here, and an
+                {/* Two lines for a course, mirroring the รายการ column beside it: the name a
+                    reader recognises on top, the code that identifies it underneath. One
+                    string "555725 พยาธิสรีรวิทยา…" made the row's two identifiers read as one
+                    sentence. กิจกรรม / อื่นๆ have no code and stay on one line.
+                    A loan filed before เหตุผล was required has nothing to show here, and an
                     em dash is more honest than repeating the item name. */}
-                <TableCell className="text-muted-foreground">{r.reason ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {r.reason === null ? (
+                    "—"
+                  ) : r.courseCode ? (
+                    <>
+                      <p className="text-foreground">{courseNamePart(r.reason, r.courseCode)}</p>
+                      <p className="text-xs tabular-nums">{r.courseCode}</p>
+                    </>
+                  ) : (
+                    r.reason
+                  )}
+                </TableCell>
                 <TableCell className="text-right font-semibold tabular-nums">{r.quantity.toLocaleString("th-TH")}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {r.dueAt ? fmtDate(new Date(r.dueAt), TH_DAY) : "ไม่กำหนด"}

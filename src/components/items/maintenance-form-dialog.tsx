@@ -467,7 +467,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
 
             <div className={cn("grid grid-cols-1 gap-3", !fromRepair && !sending && "sm:grid-cols-2", sending && "hidden")}>
               <div className="space-y-2">
-                <Label>{fromRepair ? "ค่าใช้จ่ายในการซ่อมแซมครั้งนี้ (฿)" : "ค่าใช้จ่ายในการบำรุงรักษา (฿)"}</Label>
+                <Label>{fromRepair ? "ค่าใช้จ่ายในการซ่อมแซมครั้งนี้" : "ค่าใช้จ่ายในการบำรุงรักษา"}</Label>
                 <Input
                   type="number"
                   min={0}

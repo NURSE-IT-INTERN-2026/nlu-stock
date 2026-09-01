@@ -1,5 +1,9 @@
-import { test as base, expect, type APIRequestContext } from "@playwright/test";
+// The BDD runtime needs its fixtures on the test instance, so the chain starts from
+// playwright-bdd's test (itself an extension of @playwright/test's base).
+import { test as base } from "playwright-bdd";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import { Pool } from "pg";
+import { withBase } from "../src/lib/base-path";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -88,6 +92,11 @@ export async function makeTracked(
   return { id: item.id, code: item.code, subId: sub.id, subCode: sub.subCode };
 }
 
+// Byte-stable names, not timestamps: the suite runs serially against a DB reset once per run,
+// so a counter is unique enough — and unlike Date.now() it makes two runs produce the same
+// rows, which is what the visual snapshots compare against.
+let lotSeq = 0;
+
 /** Receive stock into an item (creates/updates a lot for consumables). */
 export async function receive(
   request: APIRequestContext,
@@ -101,7 +110,7 @@ export async function receive(
         {
           itemId,
           quantity,
-          lotNumber: lotNumber ?? `E2E-LOT-${Date.now()}`,
+          lotNumber: lotNumber ?? `E2E-LOT-${String(++lotSeq).padStart(3, "0")}`,
           expiryDate: null,
         },
       ],
@@ -119,16 +128,59 @@ export async function apiPost(
   return request.post(path, { data: body });
 }
 
+/**
+ * Playwright resolves a relative URL with `new URL(url, baseURL)`, and a leading slash
+ * resolves against the ORIGIN — so "/api/items" against a baseURL of
+ * http://host/nlu-stock drops the basePath and lands on a 404. Every spec writes
+ * app-absolute paths, so prefix them here once instead of in ~70 call sites.
+ * withBase() is the app's own helper and is idempotent, so a path that already carries
+ * the prefix passes through.
+ */
+const REQUEST_METHODS = ["get", "post", "put", "patch", "delete", "head", "fetch"] as const;
+
+function prefixRequest(ctx: APIRequestContext): APIRequestContext {
+  for (const method of REQUEST_METHODS) {
+    const original = ctx[method].bind(ctx);
+    // @ts-expect-error same signature, only the url argument is rewritten
+    ctx[method] = (url: string, options?: unknown) => original(withBase(url), options);
+  }
+  return ctx;
+}
+
+function prefixPage(page: Page): Page {
+  const goto = page.goto.bind(page);
+  page.goto = (url: string, options?: Parameters<Page["goto"]>[1]) => goto(withBase(url), options);
+  prefixRequest(page.request);
+  return page;
+}
+
+/* eslint-disable react-hooks/rules-of-hooks --
+   `use` here is Playwright's fixture callback (hand the value to the test, then tear down),
+   not React's. The rule only matches on the name. */
 export const test = base.extend<{
   /** unique item code per test — avoids collisions on the shared seeded DB. */
   uniqueCode: string;
+  /** shared mutable state for BDD steps — pass item code / subCode / qty between Given/When/Then */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a per-scenario bag by design
+  bdd: Record<string, any>;
 }>({
-  uniqueCode: async ({}, use) => {
-    const code = `E2E-${Date.now().toString(36).toUpperCase()}-${Math.random()
-      .toString(36)
-      .slice(2, 6)
-      .toUpperCase()}`;
-    await use(code);
+  bdd: async ({}, use) => {
+    await use({});
+  },
+  page: async ({ page }, use) => {
+    await use(prefixPage(page));
+  },
+  request: async ({ request }, use) => {
+    await use(prefixRequest(request));
+  },
+  uniqueCode: async ({}, use, testInfo) => {
+    // Derived from the test's own title, not the clock: same test → same code on every run.
+    // Unique because no two tests share a title, and the DB is reset before each run.
+    let h = 0x811c9dc5;
+    for (const ch of testInfo.titlePath.join("/")) {
+      h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+    }
+    await use(`E2E-${h.toString(36).toUpperCase().padStart(7, "0")}`);
   },
 });
 

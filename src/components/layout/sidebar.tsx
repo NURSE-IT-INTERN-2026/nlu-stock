@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { motion, LayoutGroup } from "motion/react";
 import type { SessionUser } from "@/types";
 import { canManageStock, isSelfBorrower } from "@/lib/roles";
+import { withBase } from "@/lib/base-path";
 
 // stockOnly / superOnly mirror the route rules in src/middleware.ts — the server is
 // what actually enforces them; these just keep dead links out of the menu.
@@ -69,7 +70,7 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
       <div className={cn("flex items-center h-20", collapsed ? "justify-center" : "justify-between px-4")}>
         {!collapsed && (
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/nurse-th.png" alt="NLU Stock" width={32} height={32} className="h-8 w-8 rounded-lg" />
+            <Image src={withBase("/nurse-th.png")} alt="NLU Stock" width={32} height={32} className="h-8 w-8 rounded-lg" />
             <span className="font-bold text-lg tracking-tight">NLU Stock</span>
           </Link>
         )}

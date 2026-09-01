@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { defineBddConfig } from "playwright-bdd";
 import dotenv from "dotenv";
 import { BASE_PATH } from "./src/lib/base-path";
 
@@ -9,12 +10,23 @@ const PORT = 4517;
 // the webServer readiness probe have to go through the subpath or they land on a 404.
 const baseURL = `http://localhost:${PORT}${BASE_PATH}`;
 
+// bddgen reads this export; playwright runs the generated tests from the same dir.
+export const testDir = defineBddConfig({
+  features: ["./e2e/features/*.feature"],
+  steps: ["./e2e/fixtures.ts", "./e2e/steps/*.ts"],
+  outputDir: "./e2e/.gen",
+  // suite is being built group by group — scenarios without step definitions yet are
+  // skipped instead of blocking generation of the finished ones.
+  missingSteps: "skip-scenario",
+});
+
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./e2e/.gen",
   // Shared seeded DB (reset once per run) → no per-test isolation, run serially.
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  timeout: 60_000,
   reporter: "list",
   globalSetup: "./e2e/global-setup.ts",
   use: {
@@ -22,33 +34,14 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     actionTimeout: 15_000,
+    // always headed with a visible pause — the owner watches every run (HEADLESS=1 / SLOWMO= override)
+    headless: process.env.HEADLESS === "1",
+    launchOptions: { slowMo: Number(process.env.SLOWMO ?? 800) },
   },
   projects: [
     {
       name: "chromium",
-      testIgnore: /responsive\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/admin.json" },
-    },
-    // Responsive audit — runs only responsive.spec.ts across mobile→desktop widths.
-    {
-      name: "mobile-320",
-      testMatch: /responsive\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 320, height: 720 }, storageState: "e2e/.auth/admin.json" },
-    },
-    {
-      name: "mobile-375",
-      testMatch: /responsive\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 375, height: 812 }, storageState: "e2e/.auth/admin.json" },
-    },
-    {
-      name: "tablet-768",
-      testMatch: /responsive\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 }, storageState: "e2e/.auth/admin.json" },
-    },
-    {
-      name: "desktop-1024",
-      testMatch: /responsive\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1024, height: 768 }, storageState: "e2e/.auth/admin.json" },
     },
   ],
   webServer: {

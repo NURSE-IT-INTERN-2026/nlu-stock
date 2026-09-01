@@ -59,7 +59,15 @@ export function Pill({ token, children }: { token?: Token; children: ReactNode }
   );
 }
 
-/** Set on a `<TabsList variant="segment">` trigger to colour its active fill. */
+/** Set on a `<TabsList variant="segment">` to colour its track and active chip.
+ *  ป้ายบนชิปเป็นสีของ event ส่วนชิปเป็นสีการ์ด — ไม่ใช่ชิปทึบสีเข้ม: ราง segment นั่งอยู่บนแถว
+ *  เดียวกับ select ที่เหลือ ชิปทึบทั้งก้อนจึงดังกว่าตัวกรองอื่นทั้งแถวทั้งที่มีน้ำหนักเท่ากัน */
 export function segmentStyle(token: Token): CSSProperties {
-  return { "--chip": tokenVar[token] } as CSSProperties;
+  return {
+    "--chip": "var(--card)",
+    "--chip-fg": tokenVar[token],
+    // 20% ไม่ใช่ 12%: ปลายรางที่เหลือแค่ 4px รอบชิปสีการ์ด ถ้าจางกว่านี้จะอ่านเป็นขาวบนขาว
+    // แล้วชิปตัวริมสุดดูเหมือนหลุดออกนอกราง
+    "--track": tokenTint(token, 20),
+  } as CSSProperties;
 }

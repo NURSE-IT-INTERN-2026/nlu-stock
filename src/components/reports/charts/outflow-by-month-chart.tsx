@@ -21,7 +21,7 @@ export interface OutflowMonth {
  * มูลค่าจึงมีรูปร่างของ "เดือนไหนมีคนกรอกราคา" ไม่ใช่ "เดือนไหนของออกเยอะ" — และสองอย่างนั้น
  * หน้าตาเหมือนกันเป๊ะบนจอ. จำนวนชิ้นรู้ครบทุกแถวเสมอ.
  */
-const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const baht = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 function ChartTooltip({
   active, payload, unitWord,

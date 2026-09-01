@@ -39,11 +39,14 @@ async function resetSchema() {
   await db.end();
 }
 
+// users has no role column any more — roles come from the env allowlists (src/lib/roles.ts),
+// so the suite states the role it wants instead of reading it back. SUPERADMIN because the
+// specs walk /settings, which nothing below SUPERADMIN may reach.
 async function adminUserId() {
   const c = new Client({ connectionString: DB_URL });
   await c.connect();
   const { rows } = await c.query(
-    `SELECT id, email, name, role FROM users WHERE email = 'admin@nlu.ac.th'`
+    `SELECT id, email, name FROM users WHERE email = 'superadmin@nlu.ac.th'`
   );
   await c.end();
   return rows[0];
@@ -61,13 +64,13 @@ export default async function globalSetup() {
   execSync("npx prisma db seed", { stdio: "inherit", env: consent });
 
   const admin = await adminUserId();
-  if (!admin) throw new Error("Seed did not create admin@nlu.ac.th");
+  if (!admin) throw new Error("Seed did not create superadmin@nlu.ac.th");
 
   const token = await new SignJWT({
     userId: admin.id,
     email: admin.email,
     name: admin.name,
-    role: admin.role,
+    role: "SUPERADMIN",
   })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("24h")

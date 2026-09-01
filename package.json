@@ -8,8 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "tsx --env-file-if-exists=.env.local --test src/lib/*.test.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e": "bddgen && playwright test",
+    "test:e2e:ui": "bddgen && playwright test --ui",
+    "bdd:gen": "bddgen"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -51,6 +52,7 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
+    "playwright-bdd": "^9.2.0",
     "shadcn": "^4.8.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.6",

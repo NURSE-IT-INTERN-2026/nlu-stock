@@ -24,7 +24,7 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-1 text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
@@ -36,7 +36,13 @@ const tabsListVariants = cva(
         // did not once they sat alone in a row. `relative` is what the indicator positions against.
         // overflow-x-auto: สี่ช่องกับป้ายไทยยาวๆ ไม่พอในรางเดียวบนจอ 320px — เลื่อนแนวนอน
         // ดีกว่าบีบตัวอักษรจนตกขอบราง
-        segment: "relative overflow-x-auto bg-muted",
+        // justify-start ทับ justify-center ของ base: flex ที่ justify-center แล้วเนื้อในล้น จะดัน
+        // ส่วนเกินออกทั้งสองข้างเท่าๆ กัน ฝั่งซ้ายที่ล้นออกไปเลื่อนกลับมาไม่ได้ (scrollLeft ติดลบไม่ได้)
+        // — ช่องแรกจึงหายไปจากจอถาวรพร้อมชิปที่เลือกอยู่ ทั้งที่ scrollLeft ยังเป็น 0
+        // แถบ scrollbar ในรางสูง 32px กินที่จนอ่านเป็นเส้นขีดกลางปุ่ม ซ่อนไว้ — ช่องที่โผล่ครึ่งตัว
+        // ริมขอบคือ affordance ที่บอกว่าเลื่อนได้อยู่แล้ว
+        segment:
+          "relative justify-start overflow-x-auto rounded-full bg-(--track) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       },
     },
     defaultVariants: {
@@ -70,12 +76,12 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         "data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
         "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
         // segment: the fill is the indicator sliding underneath, so the tab itself stays
-        // transparent and only flips its label to --card, which reads on every event colour in
-        // both themes. The group-scoped selector is what outranks `data-active:bg-background`.
+        // transparent and only flips its label to --chip-fg (the event colour) against the
+        // --chip card fill. The group-scoped selector is what outranks `data-active:bg-background`.
         // shrink-0 คู่กับ flex-1 ของ base: กว้างพอก็ยืดแบ่งเท่าๆ กันเต็มราง แคบไปก็ดันให้รางเลื่อน
         // แทนที่จะหดจนป้ายล้น
         "group-data-[variant=segment]/tabs-list:shrink-0 group-data-[variant=segment]/tabs-list:px-3 group-data-[variant=segment]/tabs-list:after:hidden",
-        "group-data-[variant=segment]/tabs-list:data-active:border-transparent group-data-[variant=segment]/tabs-list:data-active:bg-transparent group-data-[variant=segment]/tabs-list:data-active:text-card dark:group-data-[variant=segment]/tabs-list:data-active:border-transparent dark:group-data-[variant=segment]/tabs-list:data-active:bg-transparent dark:group-data-[variant=segment]/tabs-list:data-active:text-card",
+        "group-data-[variant=segment]/tabs-list:data-active:border-transparent group-data-[variant=segment]/tabs-list:data-active:bg-transparent group-data-[variant=segment]/tabs-list:data-active:text-(--chip-fg) dark:group-data-[variant=segment]/tabs-list:data-active:border-transparent dark:group-data-[variant=segment]/tabs-list:data-active:bg-transparent dark:group-data-[variant=segment]/tabs-list:data-active:text-(--chip-fg)",
         className
       )}
       {...props}
@@ -96,8 +102,8 @@ function TabsIndicator({ className, ...props }: TabsPrimitive.Indicator.Props) {
     <TabsPrimitive.Indicator
       data-slot="tabs-indicator"
       className={cn(
-        "pointer-events-none absolute top-[3px] left-0 h-[calc(100%-6px)] w-(--active-tab-width)",
-        "translate-x-(--active-tab-left) rounded-md bg-(--chip)",
+        "pointer-events-none absolute top-1 left-0 h-[calc(100%-0.5rem)] w-(--active-tab-width)",
+        "translate-x-(--active-tab-left) rounded-full bg-(--chip) shadow-sm",
         "data-[activation-direction=left]:transition-[translate,width] data-[activation-direction=right]:transition-[translate,width] duration-200 ease-out",
         "motion-reduce:transition-none",
         className,

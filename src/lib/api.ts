@@ -338,10 +338,6 @@ export function quickCreateItem(data: QuickCreateItemPayload) {
 
 // ─── Users ───
 
-export function getUsers() {
-  return request<UserOption[]>("/api/users");
-}
-
 /**
  * /api/settings/users แบ่งหน้าฝั่ง server เสมอ (perPage default 20) — ผู้เรียกต้องส่ง page
  * และอ่าน total ไม่งั้นคนที่ 21 ขึ้นไปหายเงียบโดยไม่มีอะไรบอก
@@ -777,6 +773,10 @@ export interface SubItemByStatus {
   repairNote: string | null;
   // When the piece entered its current UNDER_REPAIR trip — not the last edit to the repair info.
   repairSentAt: string | null;
+  // The log row that opened this job, and the หลักฐาน already on it (แจ้งชำรุด photos, or the
+  // proof taken when the piece came back from a loan broken). null on rows with no log at all.
+  evidenceLogId: string | null;
+  evidenceUrls: string[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;
   item: {
     id: string;
@@ -1059,15 +1059,6 @@ export function getAlerts() {
   return request<{ lowStock: number; nearExpiry: number; overdueMaintenance: number; overdueReturn: number; damagedPending: number; dueCount: number; openCases: number; total: number; totalItems: number; onLoan: number }>(
     "/api/alerts",
   );
-}
-
-// ─── Import ───
-
-export function importRows(type: string, rows: Record<string, string>[]) {
-  return request<{ imported: number; errors?: unknown[] }>("/api/settings/import", {
-    method: "POST",
-    body: JSON.stringify({ type, rows }),
-  });
 }
 
 // ─── Dashboard ───

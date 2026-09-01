@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // playwright.config gives the E2E dev server its own distDir so it can run beside the
+    // dev server on 3000 — same generated output as .next, and lint drowns in it (411 files).
+    ".next-e2e/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

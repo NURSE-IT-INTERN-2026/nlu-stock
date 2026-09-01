@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
     const dateFrom = params.get("dateFrom") || undefined;
     const dateTo = params.get("dateTo") || undefined;
     const categoryId = params.get("categoryId") || undefined;
-    const staffId = params.get("staffId") || undefined;
+    // ปุ่มหมวดหมู่เป็น cascade: หยุดที่ชั้นประเภทก็กรองได้
+    const profileId = params.get("profileId") || undefined;
 
     const where: Record<string, unknown> = {};
     if (from) where.previousStatus = from;
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
       };
     }
     if (categoryId) where.item = { categoryId };
-    if (staffId) where.changedBy = staffId;
+    else if (profileId) where.item = { category: { profileId } };
 
     const [records, total, byItem] = await Promise.all([
       prisma.itemStatusLog.findMany({

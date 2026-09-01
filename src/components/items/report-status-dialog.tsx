@@ -47,8 +47,11 @@ interface Props {
 
 export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, status, trackIndividually, subItems, onSuccess }: Props) {
   const meta = STATUS_ACTION_META[status];
-  // Lost/disposed reports must carry a reason — bookkeeping needs the why.
-  const notesRequired = status === "LOST" || status === "DISPOSED";
+  // Every off-normal report must carry a reason: lost/disposed for bookkeeping, ชำรุด because
+  // the ค้างซ่อม worklist is a queue of jobs, and a job whose อาการ is blank cannot be triaged
+  // or handed to a shop by anyone but the person who filed it.
+  const notesRequired = status !== "AVAILABLE";
+  const isDamage = status === "DAMAGED";
   // Full sub-code shown to staff (e.g. NLU-KRU-001-C01); falls back to raw when no itemCode.
   const fmtCode = (code: string) => effectiveCode(itemCode ?? "", code, subItems.length);
   // ponytail: name optional — most sub-items have one, code stays as the ID.
@@ -78,7 +81,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
       return;
     }
     if (notesRequired && !notes.trim()) {
-      toast.error("กรุณากรอกหมายเหตุ");
+      toast.error(isDamage ? "กรุณาระบุอาการที่ชำรุด" : "กรุณากรอกหมายเหตุ");
       return;
     }
     setSaving(true);
@@ -87,6 +90,9 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
         newStatus: status,
         subItemId: trackIndividually ? subItemId : null,
         notes: notes || null,
+        // The symptom in its own column too — the worklist and แก้ข้อมูลส่งซ่อม read damageNote,
+        // and `reason` is free text that later steps append to.
+        ...(isDamage ? { damageNote: notes.trim() } : {}),
         imageUrls,
       });
       toast.success(`${meta.title}แล้ว`);
@@ -164,7 +170,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
             )}
 
             <div className="space-y-2">
-              <Label required={notesRequired}>หมายเหตุ</Label>
+              <Label required={notesRequired}>{isDamage ? "อาการที่ชำรุด" : "หมายเหตุ"}</Label>
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

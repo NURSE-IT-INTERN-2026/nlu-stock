@@ -138,6 +138,19 @@ export function recipientLabel(r: {
 }
 
 /**
+ * The course-name half of a "578101 การพยาบาลพื้นฐาน" label, for the callers that stack the
+ * code on its own line instead of printing the label as one string.
+ *
+ * Lives beside recipientLabel because it is the inverse of the join a few lines up — split
+ * anywhere else and the two drift the first time the separator changes. Returns the whole
+ * label untouched when it does not start with the code, which is the recipient-wins case:
+ * a typed name is not a course name with a code in front of it.
+ */
+export function courseNamePart(reason: string, courseCode: string): string {
+  return reason.startsWith(courseCode) ? reason.slice(courseCode.length).trim() || courseCode : reason;
+}
+
+/**
  * นำไปใช้งาน used to fold the destination room into notes as "ห้องที่ตั้ง: X", back when
  * locationId could come back null (see item-detail-shell roomFromNotes, which still reads it
  * to place those rows). The dialog stopped writing it once INUSE required a real Location.

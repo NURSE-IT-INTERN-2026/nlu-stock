@@ -4,7 +4,7 @@
 import assert from "node:assert";
 import { isDuplicateOfLoanRow, isLoanEdge, returnLocationUpdate } from "@/lib/returns";
 import { dispenseRequestSchema } from "@/lib/validators/dispense";
-import { recipientLabel } from "@/lib/constants";
+import { recipientLabel, courseNamePart } from "@/lib/constants";
 import { loanFields } from "@/lib/dispense-kind";
 import type { ItemStatus } from "@/generated/prisma/enums";
 
@@ -206,5 +206,14 @@ assert.equal(recipientLabel({ recipient: "   ", usageType: "ACTIVITY", usageNote
 assert.equal(recipientLabel({ usageType: null }), null);
 // นำไปใช้งาน files no usageType at all; the row is named by its ห้อง, not by this.
 assert.equal(recipientLabel({ usageType: null, notes: "ตั้งไว้ห้อง 402" }), "ตั้งไว้ห้อง 402");
+
+// ── รายการค้างคืน stacks the รหัสวิชา under the name, so it has to undo the join above ──
+assert.equal(courseNamePart("578101 การพยาบาลพื้นฐาน", "578101"), "การพยาบาลพื้นฐาน");
+// Registrar was down at dispense time: no name to put on the top line, so the code goes there
+// rather than leaving it blank with the code repeated underneath.
+assert.equal(courseNamePart("578101", "578101"), "578101");
+// recipient wins in recipientLabel, so the label is a typed name with no code in front — it is
+// the whole name line, not something to slice.
+assert.equal(courseNamePart("ครูสมชาย", "578101"), "ครูสมชาย");
 
 console.log("dispense-history: ok");

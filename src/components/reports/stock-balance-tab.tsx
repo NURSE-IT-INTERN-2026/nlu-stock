@@ -17,7 +17,7 @@ import { segmentStyle, tokenVar, type Token } from "./report-kit";
 import { getReport } from "@/lib/api";
 import { useAsync } from "@/hooks/use-async";
 
-const filterConfig: FilterConfig = { profiles: true, categories: true };
+const filterConfig: FilterConfig = { categories: true };
 
 interface Row {
   code: string;
@@ -37,7 +37,7 @@ interface Row {
   usedUnpricedQty: number;
 }
 
-const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const baht = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 // สิ้นเปลืองกับคงทนตอบคนละคำถาม — ของสิ้นเปลืองอ่านว่า "เหลือของกี่บาท" ส่วนครุภัณฑ์อ่านว่า
 // "ทรัพย์สินที่ถืออยู่กี่บาท" — ยอดรวมของสองอย่างนี้บวกกันแล้วไม่ได้แปลว่าอะไร จึงแยกฝั่งกันดู.
@@ -286,10 +286,10 @@ export function StockBalanceTab() {
         leading={
           <Tabs value={side} onValueChange={(v) => { setSide(v as Side); setOpenProfile(null); }}>
             {/* สีอยู่บนราง ไม่ใช่บนแต่ละช่อง เพราะตัวที่ทาสีคือแถบที่เลื่อน ไม่ใช่ปุ่ม */}
-            <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+            <TabsList variant="segment" className="w-full min-w-0 sm:w-fit" style={segmentStyle(spec.token)}>
               <TabsIndicator />
               {(Object.keys(SIDES) as Side[]).map((k) => (
-                <TabsTrigger key={k} value={k} className="min-w-0">
+                <TabsTrigger key={k} value={k}>
                   {SIDES[k].label}
                 </TabsTrigger>
               ))}
@@ -445,7 +445,7 @@ function BreakdownDialog<T extends Record<string, any>>({
             <DialogDescription className="text-xs">{subtitle}</DialogDescription>
           </DialogHeader>
           <div ref={bodyRef} tabIndex={-1} className={cn(DIALOG_BODY, "bg-secondary/40 px-5 py-5 outline-none")}>
-            <ReportDataTable columns={columns} data={data} pageSize={12} token={token} />
+            <ReportDataTable columns={columns} data={data} pageSize={12} token={token} className="rounded-xl" />
           </div>
         </div>
       </DialogContent>

@@ -25,7 +25,7 @@ const SERIES = [
 
 type SeriesKey = (typeof SERIES)[number]["key"];
 
-const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const baht = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 function ChartTooltip({
   active, payload, label,

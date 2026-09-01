@@ -70,7 +70,7 @@ export function ItemDetailMaintenance({ item, maintenanceRecords, canAct, showAs
   const assetFields = !showAssetInfo ? [] : [
     item.model && { label: "รุ่น", value: item.model },
     item.purchaseDate && { label: "วันที่ซื้อ", value: fmtDate(item.purchaseDate, TH_DATE) },
-    item.purchasePrice != null && { label: "ราคา", value: `฿${item.purchasePrice.toLocaleString()}` },
+    item.purchasePrice != null && { label: "ราคา", value: item.purchasePrice.toLocaleString() },
     item.vendorCompany && { label: "บริษัท", value: item.vendorCompany },
     item.vendorContact && { label: "ตัวแทน", value: item.vendorContact },
     item.vendorPhone && { label: "เบอร์โทร", value: item.vendorPhone },

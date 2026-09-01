@@ -88,7 +88,9 @@ export function DistributionTable({ rows, unit }: { rows: DistributionRow[]; uni
           {rows.map((r, i) => {
             const Icon = r.kind === "borrower" ? User2 : MapPin;
             return (
-              <TableRow key={`${r.kind}-${r.label}-${i}`}>
+              // The subject cell grows a second line on some rows only; align-top stops
+              // สถานะ/จำนวน from shifting down on exactly those rows.
+              <TableRow key={`${r.kind}-${r.label}-${i}`} className="[&>td]:align-top">
                 <TableCell className="px-3">
                   {/* The subject of the row — carries the weight the badge used to steal. */}
                   <span className="flex items-center gap-1.5 min-w-0 font-medium">

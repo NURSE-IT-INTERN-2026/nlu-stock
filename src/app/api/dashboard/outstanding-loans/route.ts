@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
       name: r.item.name,
       code: r.subItem ? formatSubCode(r.item.code, r.subItem.subCode) : r.item.code,
       reason: recipientLabel(r),
+      // The รหัสวิชา split out so the cell can stack it under the name, the way the รายการ
+      // column already stacks its code under the item name. Only COURSE gets one — กิจกรรม /
+      // อื่นๆ / legacy rows are a single free-text line with nothing to split off, and
+      // recipientLabel already glued the code onto the front for them to read as one label.
+      courseCode: r.usageType === "COURSE" ? r.courseCode : null,
       quantity: Math.max(0, r.quantity - r.resolvedQty),
       dispensedAt: r.dispensedAt.toISOString(),
       dueAt: r.dueAt?.toISOString() ?? null,

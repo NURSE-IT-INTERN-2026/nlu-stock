@@ -13,7 +13,7 @@ import { searchDispenseItems } from "@/lib/api";
 import type { ProfileOption } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
-import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
+import { CategoryPicker, LocationPicker, formatLocation, type LocationFilter } from "@/components/shared/filter-pickers";
 import type { ComponentRow } from "./types";
 
 interface SearchResult {
@@ -104,11 +104,13 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
           categories={categories}
           value={{ profileId, categoryId: categoryId || null }}
           onChange={(next) => { setProfileId(next.profileId); setCategoryId(next.categoryId ?? ""); }}
+          className={profileId ? undefined : "bg-card"}
         />
         <LocationPicker
           value={location}
           locations={locations}
           onChange={(loc) => setLocation(loc)}
+          className={formatLocation(location) ? undefined : "bg-card"}
         />
         {hasFilter && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-primary hover:text-primary hover:bg-primary/10">

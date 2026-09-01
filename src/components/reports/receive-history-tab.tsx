@@ -79,7 +79,7 @@ export function ReceiveHistoryTab() {
   // ไม่งั้นมันลอยอยู่นอกการ์ดคนเดียวทั้งหน้า
   const chips = (
     <Tabs value={sub} onValueChange={(v) => selectSub(v as SubTab)}>
-      <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+      <TabsList variant="segment" className="w-full min-w-0 sm:w-fit" style={segmentStyle(spec.token)}>
         <TabsIndicator />
         {SUB_TABS.map(({ value, label }) => (
           <TabsTrigger key={value} value={value}>
@@ -147,8 +147,8 @@ function ReportTable<T extends { id: string }>({
     };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    if (filters.staffId) params.staffId = filters.staffId;
     if (filters.categoryId) params.categoryId = filters.categoryId;
+    else if (filters.profileId) params.profileId = filters.profileId;
     if (extraParams) {
       for (const [k, v] of Object.entries(extraParams)) {
         if (v) params[k] = v;
@@ -203,7 +203,9 @@ function ReportTable<T extends { id: string }>({
   );
 }
 
-const COMMON_FILTERS: FilterConfig = { dateRange: true, staff: true, categories: true };
+// ไม่มีช่องกรองคน: ผู้รับเข้า/ผู้บันทึกของคลังมีไม่กี่คน กรองแล้วได้ผลเท่าเดิม และคำถามของ
+// รายงานฝั่งนี้คือของเข้ามาเท่าไร ราคาเท่าไร — ใครกดบันทึกอ่านจากคอลัมน์รายแถวได้อยู่แล้ว
+const COMMON_FILTERS: FilterConfig = { dateRange: true, categories: true };
 
 // ── นำเข้าคลัง: ReceiveRecord ──
 interface ReceiveRow {

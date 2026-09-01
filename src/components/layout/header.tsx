@@ -98,7 +98,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
       {sidebarCollapsed && (
         <>
           <Link href="/" className="flex items-center gap-2 shrink-0 mr-1">
-            <Image src="/nurse-th.png" alt="NLU Stock" width={40} height={40} className="size-10 rounded-lg" />
+            <Image src={withBase("/nurse-th.png")} alt="NLU Stock" width={40} height={40} className="size-10 rounded-lg" />
             <span className="font-bold text-lg tracking-tight hidden sm:inline">NLU Stock</span>
           </Link>
           <span className="text-muted-foreground/40 select-none" aria-hidden="true">|</span>

@@ -147,7 +147,10 @@ function MaintenanceShell() {
     const params: Record<string, string> = { perPage: "200" };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
-    if (filters.locationId) params.locationId = filters.locationId;
+    if (filters.location?.building) params.building = filters.location.building;
+    if (filters.location?.floor) params.floor = filters.location.floor;
+    if (filters.location?.room) params.room = filters.location.room;
+    if (filters.location?.detail) params.detail = filters.location.detail;
     try {
       const [sum, sched] = await Promise.all([
         getMaintenanceSummary(),

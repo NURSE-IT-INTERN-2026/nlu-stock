@@ -256,8 +256,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       }
       const itemId = params.get("itemId");
       if (itemId) where.itemId = itemId;
-      const staffId = params.get("staffId");
-      if (staffId) where.staffId = staffId;
+      const staff = params.get("staff")?.trim();
+      if (staff) where.staff = { name: { contains: staff, mode: "insensitive" } };
       const usageType = params.get("usageType");
       if (usageType) where.usageType = usageType as UsageType;
       // Mirrors the เหตุผล search box on the tab. Missing here, an Excel exported under a
@@ -297,7 +297,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             ...head,
             การใช้งาน: usageLabel,
             เหตุผล: recipientLabel(r) ?? "",
-            ผู้เบิก: r.staff.name,
+            ดำเนินโดย: r.staff.name,
           };
         }
         if (kind === "inuse") {
@@ -305,7 +305,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
             ...head,
             สถานที่: r.location ? locationLabel(r.location) : "ไม่ระบุที่ตั้ง",
             เหตุผล: recipientLabel(r) ?? "",
-            ผู้เบิก: r.staff.name,
+            ดำเนินโดย: r.staff.name,
             สถานะ: r.returnedAt ? "กลับเข้าคลังแล้ว" : "อยู่ที่ห้อง",
           };
         }
@@ -319,7 +319,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           ...head,
           การใช้งาน: usageLabel,
           เหตุผล: recipientLabel(r) ?? "",
-          ผู้เบิก: r.staff.name,
+          ดำเนินโดย: r.staff.name,
           ครบกำหนด: r.dueAt ? fmtDate(r.dueAt, "yyyy-MM-dd") : "",
           สถานะ: cond,
         };
@@ -342,8 +342,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
           ...(dateTo && { lte: new Date(dateTo + "T23:59:59") }),
         };
       }
-      const staffId = params.get("staffId");
-      if (staffId) where.staffId = staffId;
+      const staff = params.get("staff")?.trim();
+      if (staff) where.staff = { name: { contains: staff, mode: "insensitive" } };
       // Same เหตุผล search as the tab — see the note on the dispense-history case.
       const recipient = params.get("recipient")?.trim();
       if (recipient) where.AND = [recipientOr(recipient)];
@@ -385,7 +385,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         return {
           วันที่: fmtDate(head.dispensedAt, "yyyy-MM-dd HH:mm"),
           เหตุผล: recipientLabel(head) ?? "",
-          ผู้เบิก: head.staff.name,
+          ดำเนินโดย: head.staff.name,
           รายการ: recs.length,
           ค้างคืน: outstanding,
           ครบกำหนด: due,
@@ -405,9 +405,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         };
       }
       const categoryId = params.get("categoryId");
+      const profileId = params.get("profileId");
       if (categoryId) where.item = { categoryId };
-      const staffId = params.get("staffId");
-      if (staffId) where.receivedBy = staffId;
+      else if (profileId) where.item = { category: { profileId } };
 
       const records = await prisma.receiveRecord.findMany({
         where,
@@ -451,9 +451,9 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         };
       }
       const categoryId = params.get("categoryId");
+      const profileId = params.get("profileId");
       if (categoryId) where.item = { categoryId };
-      const staffId = params.get("staffId");
-      if (staffId) where.changedBy = staffId;
+      else if (profileId) where.item = { category: { profileId } };
 
       const records = await prisma.itemStatusLog.findMany({
         where,
@@ -499,6 +499,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       // AND, ไม่ใช่ where.item = — kindWhere ถือคีย์ item ของตัวเองอยู่ การเขียนทับจะลบเงื่อนไข
       // dispenseType ของ kind ทิ้งเงียบๆ
       if (categoryId) filters.push({ item: { categoryId } });
+      else if (params.get("profileId")) filters.push({ item: { category: { profileId: params.get("profileId")! } } });
       const where = { AND: filters };
 
       // ไฟล์ต้องเล่าเรื่องเดียวกับหน้าจอ ซึ่งตอนนี้แกนเป็นเดือน — ไฟล์ที่เป็นยอดรวมทั้งช่วงอย่างเดียว
@@ -547,7 +548,11 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
 
     case "annual-cost": {
       const year = Number(params.get("year") || new Date().getFullYear());
-      const categoryId = params.get("categoryId");
+      const categoryId = params.get("categoryId") || undefined;
+      const profileId = params.get("profileId") || undefined;
+      const catWhere: Prisma.ItemWhereInput = categoryId
+        ? { categoryId }
+        : profileId ? { category: { profileId } } : {};
       const startOfYear = new Date(year, 0, 1);
       const endOfYear = new Date(year, 11, 31, 23, 59, 59);
       // หน้าจอแยกสองก้อนงบ (สิ้นเปลือง / อื่นๆ) ไฟล์ต้องเป็นก้อนเดียวกับที่คนกดปุ่มเห็นอยู่ —
@@ -570,7 +575,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         where: {
           receivedAt: { gte: startOfYear, lte: endOfYear },
           unitCost: { not: null },
-          item: { AND: [{ isActive: true, ...(categoryId ? { categoryId } : {}) }, sideItem] },
+          item: { AND: [{ isActive: true, ...catWhere }, sideItem] },
         },
         select: {
           quantity: true, unitCost: true, receivedAt: true,
@@ -589,7 +594,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         where: {
           performedAt: { gte: startOfYear, lte: endOfYear },
           cost: { not: null },
-          item: { AND: [categoryId ? { categoryId } : {}, sideItem] },
+          item: { AND: [catWhere, sideItem] },
         },
         include: { item: { select: { code: true, name: true, category: { select: { name: true } } } }, performer: { select: { name: true } } },
         take: 10000,
@@ -625,7 +630,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       // ของที่หายออกจากคลังปีนี้ — อยู่ในไฟล์เดียวกันเพราะการ์ดบนหน้าจอมันอยู่แถวเดียวกัน แต่
       // คอลัมน์ ประเภท แยกไว้ชัด: เงินที่จ่ายกับของที่เสียไปบวกกันไม่ได้ (lib/cost lossEvents)
       const lossRows = (await lossEvents(prisma, { gte: startOfYear, lte: endOfYear },
-        { AND: [categoryId ? { categoryId } : {}, sideItem] }))
+        { AND: [catWhere, sideItem] }))
         .map((e) => ({
           ประเภท: e.kind === "LOST" ? "สูญหาย" : "ตัดจำหน่าย",
           รหัสพัสดุ: e.itemCode,
@@ -644,7 +649,10 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
     }
 
     case "maintenance-schedule": {
-      const locationId = params.get("locationId");
+      const building = params.get("building");
+      const floor = params.get("floor");
+      const room = params.get("room");
+      const detail = params.get("detail");
       const dateFrom = params.get("dateFrom");
       const dateTo = params.get("dateTo");
 
@@ -655,7 +663,12 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         if (dateTo) dateFilter.lte = new Date(dateTo + "T23:59:59");
         where.nextMaintenanceDate = dateFilter;
       }
-      if (locationId) where.locationId = locationId;
+      if (building || floor || room || detail) {
+        where.location = {
+          ...(building && { building }), ...(floor && { floor }),
+          ...(room && { room }), ...(detail && { detail }),
+        };
+      }
 
       const items = await prisma.item.findMany({
         where,

@@ -9,10 +9,9 @@ import { LocationsTab } from "@/components/settings/locations-tab";
 import { UnitsTab } from "@/components/settings/units-tab";
 import { ItemsMasterTab } from "@/components/settings/items-master-tab";
 import { UsersTab } from "@/components/settings/users-tab";
-import { ImportTab } from "@/components/settings/import-tab";
 import { ProfilesTab } from "@/components/settings/profiles-tab";
 import { TemplatesTab } from "@/components/settings/templates-tab";
-import { Package, Tag, MapPin, Users, Upload, Layers, ClipboardList, Ruler } from "lucide-react";
+import { Package, Tag, MapPin, Users, Layers, ClipboardList, Ruler } from "lucide-react";
 
 const TABS = [
   { value: "items", label: "รายการพัสดุ", icon: Package, component: ItemsMasterTab },
@@ -22,7 +21,6 @@ const TABS = [
   { value: "units", label: "หน่วยนับ", icon: Ruler, component: UnitsTab },
   { value: "templates", label: "เทมเพลตเบิก", icon: ClipboardList, component: TemplatesTab },
   { value: "users", label: "ผู้ใช้งาน", icon: Users, component: UsersTab },
-  { value: "import", label: "นำเข้าข้อมูล", icon: Upload, component: ImportTab },
 ] as const;
 
 export default function SettingsPage() {

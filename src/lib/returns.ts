@@ -196,7 +196,9 @@ export async function resolveSubItemReturn(
   const reason =
     status === "AVAILABLE"
       ? note ? `คืนเข้าสู่ระบบ (${note})` : "คืนเข้าสู่ระบบ"
-      : `คืนพร้อมระบุ: ${REASON_LABEL[status]}${note ? ` (${note})` : ""}`;
+      // ชำรุด parks the note in damageNote below, so repeating it here would print it twice
+      // wherever a reader shows both (the case timeline joins them). สูญหาย has no such column.
+      : `คืนพร้อมระบุ: ${REASON_LABEL[status]}${note && status !== "DAMAGED" ? ` (${note})` : ""}`;
 
   const dispense = await tx.dispenseRecord.findFirst({
     where: {
@@ -240,6 +242,14 @@ export async function resolveSubItemReturn(
       newStatus,
       reason,
       changedBy: userId,
+      // The symptom in its own column, not only wrapped in `reason`: the ค้างซ่อม worklist and
+      // แก้ข้อมูลส่งซ่อม read damageNote, and a piece that arrived broken from a loan is the
+      // same job as one reported broken on the shelf.
+      ...(status === "DAMAGED" && note ? { damageNote: note } : {}),
+      // The return photo is หลักฐาน for the job this row opens, not just for the loan it closes:
+      // ส่งซ่อม reads it off this row. It stays on the DispenseRecord too — that copy answers
+      // "what condition did this loan come back in", a different question with a different reader.
+      ...(status !== "AVAILABLE" && proofUrls?.length ? { imageUrls: proofUrls } : {}),
       ...(status === "AVAILABLE" ? {} : { fromReturnId: ret.id }),
     },
   });

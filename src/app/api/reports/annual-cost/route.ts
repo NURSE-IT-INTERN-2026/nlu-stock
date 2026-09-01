@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
   const params = getSearchParams(request);
   const year = Number(params.get("year") || new Date().getFullYear());
   const categoryId = params.get("categoryId") || undefined;
+  // ปุ่มหมวดหมู่เป็น cascade: หยุดที่ชั้นประเภทก็กรองได้ — หมวดย่อยชนะประเภทเมื่อเลือกทั้งคู่
+  const profileId = params.get("profileId") || undefined;
+  const catWhere: Prisma.ItemWhereInput | undefined =
+    categoryId ? { categoryId } : profileId ? { category: { profileId } } : undefined;
 
   const startOfYear = new Date(year, 0, 1);
   const endOfYear = new Date(year, 11, 31, 23, 59, 59);
@@ -54,13 +58,13 @@ export async function GET(request: NextRequest) {
 
   const receiveWhere: Prisma.ReceiveRecordWhereInput = {
     receivedAt: inYear,
-    item: { isActive: true, ...(categoryId ? { categoryId } : {}) },
+    item: { isActive: true, ...(catWhere ?? {}) },
   };
 
   const maintWhere: Prisma.MaintenanceRecordWhereInput = {
     performedAt: inYear,
     cost: { not: null },
-    ...(categoryId ? { item: { categoryId } } : {}),
+    ...(catWhere ? { item: catWhere } : {}),
   };
 
   // ปีที่ยังไม่มีใครกรอกราคาเลยกับปีที่ไม่ได้ซื้ออะไรเลยให้ยอด 0 เท่ากัน — ตัวนับนี้คือสิ่งเดียว
@@ -76,7 +80,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-  const itemWhere = categoryId ? { categoryId } : undefined;
+  const itemWhere = catWhere;
 
   // ต้นทุนของที่ถูกใช้ไปแยกรายวิชา — เฉพาะ "เบิกใช้" ตามนิยามเดียวกับ tab สถิติการใช้งาน
   // (kindWhere ตัวเดียวกัน) ไม่ใช่ predicate ที่เขียนใหม่ตรงนี้ ไม่งั้นสองหน้าจะนับคนละชุด.

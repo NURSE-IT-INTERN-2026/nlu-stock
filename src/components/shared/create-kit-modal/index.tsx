@@ -266,7 +266,7 @@ export function CreateKitModal({ open, onClose, onCreated }: CreateKitModalProps
           {step === "summary" ? (
             <>
               <Check className="h-4 w-4" />
-              {isSubmitting ? "กำลังบันทึก..." : "บันทึกสูตรชุด"}
+              {isSubmitting ? "กำลังบันทึก..." : "บันทึกชุดอุปกรณ์"}
             </>
           ) : (
             <>

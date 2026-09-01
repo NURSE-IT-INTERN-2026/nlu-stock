@@ -17,7 +17,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const includeRepairLog = status === ItemStatus.UNDER_REPAIR;
+  // Both open repair stages read their trip out of the log: UNDER_REPAIR for venue/note/sent-at,
+  // DAMAGED for the one thing the ค้างซ่อม worklist has to show — why the piece was reported
+  // broken. sub_items has no column for it; only the แจ้งชำรุด log row does.
+  const includeRepairLog = status === ItemStatus.UNDER_REPAIR || status === ItemStatus.DAMAGED;
 
   const subItems = await prisma.subItem.findMany({
     where: { status },
@@ -44,10 +47,10 @@ export async function GET(req: NextRequest) {
       // ponytail: 10 rows = 9 edits in one trip; deeper falls back to the oldest fetched row.
       ...(includeRepairLog && {
         statusLogs: {
-          where: { newStatus: ItemStatus.UNDER_REPAIR },
+          where: { newStatus: status },
           orderBy: { changedAt: "desc" },
           take: 10,
-          select: { repairVenue: true, reason: true, repairNote: true, damageNote: true, changedAt: true, previousStatus: true },
+          select: { id: true, repairVenue: true, reason: true, repairNote: true, damageNote: true, changedAt: true, previousStatus: true, imageUrls: true },
         },
       }),
     },
@@ -60,13 +63,15 @@ export async function GET(req: NextRequest) {
   const subItemsOut = subItems.map((s) => {
     const logs =
       (s as { statusLogs?: Parameters<typeof deriveRepairTrip>[0] }).statusLogs ?? [];
-    const trip = deriveRepairTrip(logs, ItemStatus.UNDER_REPAIR);
+    const trip = deriveRepairTrip(logs, status);
     return {
       ...s,
       repairVenue: trip.repairVenue,
       damageNote: trip.damageNote,
       repairNote: trip.repairNote,
       repairSentAt: trip.startedAt,
+      evidenceLogId: trip.openerId,
+      evidenceUrls: trip.imageUrls,
     };
   });
 

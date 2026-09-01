@@ -41,7 +41,9 @@ export async function GET(request: NextRequest) {
     const dateFrom = params.get("dateFrom") || undefined;
     const dateTo = params.get("dateTo") || undefined;
     const itemId = params.get("itemId") || undefined;
-    const staffId = params.get("staffId") || undefined;
+    // ชื่อผู้ดำเนินการ ไม่ใช่ id: ดรอปดาวน์รายชื่อถูกถอดออกเพราะตาราง users โตตามจำนวน นศ.
+    // ที่เคยยืมเอง — ช่องค้นหาส่งชื่อมาแทน
+    const staff = params.get("staff")?.trim() || undefined;
     const usageType = params.get("usageType") || undefined;
     const loanStatus = params.get("loanStatus") || undefined; // "open" | "overdue"
     // เหตุผล is not a stored field — it is the usage block (lib/constants
@@ -59,7 +61,7 @@ export async function GET(request: NextRequest) {
       };
     }
     if (itemId) where.itemId = itemId;
-    if (staffId) where.staffId = staffId;
+    if (staff) where.staff = { name: { contains: staff, mode: "insensitive" } };
     if (usageType) where.usageType = usageType as UsageType;
     // AND, not OR: kindWhere already owns `where.OR` (the NULL-safe loanType pair), and
     // assigning a second OR here would drop the kind filter and widen the page to every kind.
@@ -77,7 +79,7 @@ export async function GET(request: NextRequest) {
     if (dateFrom) conds.push(Prisma.sql`"dispensedAt" >= ${new Date(dateFrom)}`);
     if (dateTo) conds.push(Prisma.sql`"dispensedAt" <= ${new Date(dateTo + "T23:59:59")}`);
     if (itemId) conds.push(Prisma.sql`"itemId" = ${itemId}`);
-    if (staffId) conds.push(Prisma.sql`"staffId" = ${staffId}`);
+    if (staff) conds.push(Prisma.sql`"staffId" IN (SELECT id FROM users WHERE name ILIKE ${`%${staff}%`})`);
     if (usageType) conds.push(Prisma.sql`"usageType"::text = ${usageType}`);
     if (recipient) {
       const like = `%${recipient}%`;

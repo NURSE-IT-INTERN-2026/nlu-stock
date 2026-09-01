@@ -126,12 +126,17 @@ export function MoveTable({
                     onClick={() => go(r.itemId)}
                     onKeyDown={(e) => onKeyDown(e, r.itemId)}
                     aria-label={`${r.code} ${r.name}, ${r.qty} ชิ้น`}
-                    className="cursor-pointer focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    // align-top on every cell, not just the two-line one: with the default
+                    // align-middle the date/qty/who cells float against the middle of a row
+                    // whose height รายการ decides, so each row has three different vertical
+                    // reference points. Padding lives here too, so the single-line cells sit
+                    // on the same line as the title instead of 2px below it.
+                    className="cursor-pointer [&>td]:h-auto [&>td]:py-1.5 [&>td]:align-top focus-visible:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <TableCell className="text-[11px] tabular-nums text-muted-foreground">
                       {r.date}
                     </TableCell>
-                    <TableCell className="h-auto py-1.5">
+                    <TableCell>
                       <p className="truncate font-medium">{r.name}</p>
                       <p className="truncate text-[11px] text-muted-foreground">
                         {[r.code, r.kind].filter(Boolean).join(" · ")}

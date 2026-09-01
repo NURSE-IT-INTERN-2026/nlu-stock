@@ -171,93 +171,178 @@ export function ItemsMasterTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <ItemsFilterBar
-        profiles={profiles}
-        categories={categories}
-        locations={locations}
-        alerts={{ lowStock: 0, nearExpiry: 0, overdueMaintenance: 0 }}
-        value={filter}
-        onChange={handleFilterChange}
-        resultCount={total}
-        onScanQR={() => {}}
-        hideScan
-        hideAlertPicker
-        allStatuses
-        trailingAction={
-          <div className="flex gap-2 w-full">
-            {selectedIds.size > 0 && (
-              <Button type="button" variant="outline" onClick={() => setPrintOpen(true)} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 flex-1 justify-center">
-                <QrCode className="size-5" />
-                <span className="font-medium">พิมพ์ QR ({selectedIds.size})</span>
-              </Button>
-            )}
-            <Button type="button" onClick={openCreate} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 flex-1 justify-center">
-              <Plus className="size-5" />
-              <span className="font-medium">เพิ่มรายการ</span>
-            </Button>
-          </div>
-        }
-      />
       {/* Table — hero zone, most visual weight */}
       <div className="rounded-2xl border bg-card shadow-sm flex flex-col md:overflow-clip">
-        <div className="hidden md:block">
-        <Table grid className="table-fixed">
-          <TableHeader sticky>
-            <TableRow>
-              <TableHead className="w-[48px] pl-4">
-                <Checkbox
-                  checked={items.length > 0 && items.every((i) => selectedIds.has(i.id))}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      setSelectedIds(new Set(items.map((i) => i.id)));
-                    } else {
-                      setSelectedIds(new Set());
-                    }
-                  }}
-                  aria-label="เลือกทั้งหมด"
-                />
-              </TableHead>
-              <TableHead className="w-28 px-2">รหัส</TableHead>
-              <TableHead className="px-2">ชื่อพัสดุ</TableHead>
-              <TableHead className="w-40 px-2 hidden xl:table-cell">หมวดหมู่</TableHead>
-              <TableHead className="w-24 px-2 hidden xl:table-cell">หน่วย</TableHead>
-              <TableHead className="w-44 px-2">สถานที่</TableHead>
-              <TableHead className="w-32 px-2">สถานะ</TableHead>
-              <TableHead className="w-[100px] px-2">จัดการ</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <ItemsFilterBar
+          className="rounded-none border-x-0 border-t-0"
+          profiles={profiles}
+          categories={categories}
+          locations={locations}
+          alerts={{ lowStock: 0, nearExpiry: 0, overdueMaintenance: 0 }}
+          value={filter}
+          onChange={handleFilterChange}
+          resultCount={total}
+          onScanQR={() => {}}
+          hideScan
+          hideAlertPicker
+          allStatuses
+          trailingAction={
+            <div className="flex gap-2 w-full">
+              {selectedIds.size > 0 && (
+                <Button type="button" variant="outline" onClick={() => setPrintOpen(true)} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 flex-1 justify-center">
+                  <QrCode className="size-5" />
+                  <span className="font-medium">พิมพ์ QR ({selectedIds.size})</span>
+                </Button>
+              )}
+              <Button type="button" onClick={openCreate} className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl gap-2 flex-1 justify-center">
+                <Plus className="size-5" />
+                <span className="font-medium">เพิ่มรายการ</span>
+              </Button>
+            </div>
+          }
+        />
+
+        <div className="p-2.5 sm:p-4">
+          <div className="rounded-xl border bg-card flex flex-col md:overflow-clip">
+          <div className="hidden md:block">
+          <Table grid className="table-fixed">
+            <TableHeader sticky>
+              <TableRow>
+                <TableHead className="w-[48px] pl-4">
+                  <Checkbox
+                    checked={items.length > 0 && items.every((i) => selectedIds.has(i.id))}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedIds(new Set(items.map((i) => i.id)));
+                      } else {
+                        setSelectedIds(new Set());
+                      }
+                    }}
+                    aria-label="เลือกทั้งหมด"
+                  />
+                </TableHead>
+                <TableHead className="w-28 px-2">รหัส</TableHead>
+                <TableHead className="px-2">ชื่อพัสดุ</TableHead>
+                <TableHead className="w-40 px-2 hidden xl:table-cell">หมวดหมู่</TableHead>
+                <TableHead className="w-24 px-2 hidden xl:table-cell">หน่วย</TableHead>
+                <TableHead className="w-44 px-2">สถานที่</TableHead>
+                <TableHead className="w-32 px-2">สถานะ</TableHead>
+                <TableHead className="w-[100px] px-2">จัดการ</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 8 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : items.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="py-12">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <Package className="h-8 w-8 text-muted-foreground/40" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">ไม่พบรายการพัสดุ</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</p>
+                    </div>
+                  </div>
+                </TableCell></TableRow>
+              ) : items.map((item) => (
+                <React.Fragment key={item.id}>
+                  <TableRow
+                    className={`group ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                    onClick={(e) => {
+                      if (!(e.target as HTMLElement).closest("input[type='checkbox'], button, a")) {
+                        if (item.trackIndividually && item._count.subItems > 1) {
+                          setExpandedRow(expandedRow === item.id ? null : item.id);
+                        }
+                      }
+                    }}
+                  >
+                    <TableCell className="pl-4">
+                      <Checkbox
+                        checked={selectedIds.has(item.id)}
+                        onCheckedChange={(checked) => {
+                          const next = new Set(selectedIds);
+                          checked ? next.add(item.id) : next.delete(item.id);
+                          setSelectedIds(next);
+                        }}
+                        aria-label={`เลือก ${item.code}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs px-2">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="block truncate">{item.code}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate min-w-0"><span className="font-medium">{item.name}</span>{item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}</span>
+                        {item.trackIndividually && item._count.subItems > 1 && <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-2.5" />{item._count.subItems}</Badge>}
+                        {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="shrink-0 h-4 px-1 text-[10px] bg-amber-50 text-amber-700 border-amber-200">ไม่มี SubItem</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-2 hidden xl:table-cell"><Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
+                    <TableCell className="text-xs px-2 hidden xl:table-cell"><span className="block truncate">{item.issueUnit.name}</span></TableCell>
+                    <TableCell className="text-xs px-2"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
+                    <TableCell className="px-2">
+                      <span className={`inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium ${statusDisplay(item).cls}`}>
+                        {statusDisplay(item).label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="px-2">
+                      <TooltipProvider>
+                        <div className="flex gap-1">
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label="แก้ไข" />}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </TooltipTrigger>
+                            <TooltipContent>แก้ไข</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => handleDelete(item)} aria-label="ลบ" />}>
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </TooltipTrigger>
+                            <TooltipContent>ลบ</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
+                    </TableCell>
+                  </TableRow>
+                  {expandedRow === item.id && item.trackIndividually && item._count.subItems > 1 && (
+                    <TableRow key={`${item.id}-expand`}>
+                      <TableCell colSpan={8} className="bg-muted/30 p-4">
+                        <SubCodesManager itemId={item.id} itemCode={item.code} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              ))}
+            </TableBody>
+          </Table>
+          </div>
+
+          {/* Mobile: stacked cards (no horizontal scroll) */}
+          <div className="divide-y divide-border md:hidden">
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
-                    <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
-                  ))}
-                </TableRow>
+                <div key={i} className="px-4 py-3"><Skeleton className="h-12 w-full" /></div>
               ))
             ) : items.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="py-12">
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <Package className="h-8 w-8 text-muted-foreground/40" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">ไม่พบรายการพัสดุ</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</p>
-                  </div>
+              <div className="flex flex-col items-center gap-3 py-12 text-center">
+                <Package className="h-8 w-8 text-muted-foreground/40" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">ไม่พบรายการพัสดุ</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</p>
                 </div>
-              </TableCell></TableRow>
-            ) : items.map((item) => (
-              <React.Fragment key={item.id}>
-                <TableRow
-                  className={`group ${!item.isActive ? "opacity-50" : ""} ${item.trackIndividually && item._count.subItems > 1 ? "cursor-pointer hover:bg-muted/40" : ""}`}
-                  onClick={(e) => {
-                    if (!(e.target as HTMLElement).closest("input[type='checkbox'], button, a")) {
-                      if (item.trackIndividually && item._count.subItems > 1) {
-                        setExpandedRow(expandedRow === item.id ? null : item.id);
-                      }
-                    }
-                  }}
-                >
-                  <TableCell className="pl-4">
+              </div>
+            ) : items.map((item) => {
+              const canExpand = item.trackIndividually && item._count.subItems > 1;
+              return (
+                <div key={item.id} className={!item.isActive ? "opacity-50" : ""}>
+                  <div className="flex items-start gap-2.5 px-4 py-2.5">
                     <Checkbox
                       checked={selectedIds.has(item.id)}
                       onCheckedChange={(checked) => {
@@ -266,148 +351,69 @@ export function ItemsMasterTab() {
                         setSelectedIds(next);
                       }}
                       aria-label={`เลือก ${item.code}`}
+                      className="mt-1"
                     />
-                  </TableCell>
-                  <TableCell className="font-mono text-xs px-2">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className="block truncate">{item.code}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="truncate min-w-0"><span className="font-medium">{item.name}</span>{item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}</span>
-                      {item.trackIndividually && item._count.subItems > 1 && <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-2.5" />{item._count.subItems}</Badge>}
-                      {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="shrink-0 h-4 px-1 text-[10px] bg-amber-50 text-amber-700 border-amber-200">ไม่มี SubItem</Badge>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-2 hidden xl:table-cell"><Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{item.category.profile?.name ?? item.category.name}</Badge></TableCell>
-                  <TableCell className="text-xs px-2 hidden xl:table-cell"><span className="block truncate">{item.issueUnit.name}</span></TableCell>
-                  <TableCell className="text-xs px-2"><span className="block truncate">{item.location ? locationLabel(item.location) : "-"}</span></TableCell>
-                  <TableCell className="px-2">
-                    <span className={`inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium ${statusDisplay(item).cls}`}>
-                      {statusDisplay(item).label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="px-2">
-                    <TooltipProvider>
-                      <div className="flex gap-1">
-                        <Tooltip>
-                          <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label="แก้ไข" />}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </TooltipTrigger>
-                          <TooltipContent>แก้ไข</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => handleDelete(item)} aria-label="ลบ" />}>
-                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                          </TooltipTrigger>
-                          <TooltipContent>ลบ</TooltipContent>
-                        </Tooltip>
+                    <button
+                      type="button"
+                      onClick={() => canExpand && setExpandedRow(expandedRow === item.id ? null : item.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
                       </div>
-                    </TooltipProvider>
-                  </TableCell>
-                </TableRow>
-                {expandedRow === item.id && item.trackIndividually && item._count.subItems > 1 && (
-                  <TableRow key={`${item.id}-expand`}>
-                    <TableCell colSpan={8} className="bg-muted/30 p-4">
+                      <div className="mt-0.5 font-medium leading-tight flex flex-wrap items-center gap-1.5">
+                        <span className="truncate">{item.name}</span>
+                        {item.nameEn && <span className="text-muted-foreground"> ({item.nameEn})</span>}
+                        {canExpand && <Badge variant="outline" className="gap-0.5 px-1.5 py-0 text-[11px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-3" />{item._count.subItems}</Badge>}
+                        {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-orange-200">ไม่มี SubItem</Badge>}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                        <span>{item.category.profile?.name ?? item.category.name}</span>
+                        <span>· {item.issueUnit.name}</span>
+                        {item.location && <span>· {locationLabel(item.location)}</span>}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${statusDisplay(item).cls}`}>
+                          {statusDisplay(item).label}
+                        </span>
+                      </div>
+                    </button>
+                    <div className="flex shrink-0 flex-col gap-1">
+                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openEdit(item)} aria-label="แก้ไข">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleDelete(item)} aria-label="ลบ">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                  {expandedRow === item.id && canExpand && (
+                    <div className="bg-muted/30 px-4 py-3">
                       <SubCodesManager itemId={item.id} itemCode={item.code} />
-                    </TableCell>
-                  </TableRow>
-                )}
-              </React.Fragment>
-            ))}
-          </TableBody>
-        </Table>
-        </div>
-
-        {/* Mobile: stacked cards (no horizontal scroll) */}
-        <div className="divide-y divide-border md:hidden">
-          {loading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="px-4 py-3"><Skeleton className="h-12 w-full" /></div>
-            ))
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
-              <Package className="h-8 w-8 text-muted-foreground/40" />
-              <div>
-                <p className="text-sm font-medium text-foreground">ไม่พบรายการพัสดุ</p>
-                <p className="text-xs text-muted-foreground mt-0.5">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</p>
-              </div>
-            </div>
-          ) : items.map((item) => {
-            const canExpand = item.trackIndividually && item._count.subItems > 1;
-            return (
-              <div key={item.id} className={!item.isActive ? "opacity-50" : ""}>
-                <div className="flex items-start gap-2.5 px-4 py-2.5">
-                  <Checkbox
-                    checked={selectedIds.has(item.id)}
-                    onCheckedChange={(checked) => {
-                      const next = new Set(selectedIds);
-                      checked ? next.add(item.id) : next.delete(item.id);
-                      setSelectedIds(next);
-                    }}
-                    aria-label={`เลือก ${item.code}`}
-                    className="mt-1"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => canExpand && setExpandedRow(expandedRow === item.id ? null : item.id)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
                     </div>
-                    <div className="mt-0.5 font-medium leading-tight flex flex-wrap items-center gap-1.5">
-                      <span className="truncate">{item.name}</span>
-                      {item.nameEn && <span className="text-muted-foreground"> ({item.nameEn})</span>}
-                      {canExpand && <Badge variant="outline" className="gap-0.5 px-1.5 py-0 text-[11px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-3" />{item._count.subItems}</Badge>}
-                      {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-orange-200">ไม่มี SubItem</Badge>}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                      <span>{item.category.profile?.name ?? item.category.name}</span>
-                      <span>· {item.issueUnit.name}</span>
-                      {item.location && <span>· {locationLabel(item.location)}</span>}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${statusDisplay(item).cls}`}>
-                        {statusDisplay(item).label}
-                      </span>
-                    </div>
-                  </button>
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openEdit(item)} aria-label="แก้ไข">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleDelete(item)} aria-label="ลบ">
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+                  )}
                 </div>
-                {expandedRow === item.id && canExpand && (
-                  <div className="bg-muted/30 px-4 py-3">
-                    <SubCodesManager itemId={item.id} itemCode={item.code} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Pagination — desktop numbered, mobile load-more */}
-        {isMobile ? (
-          items.length > 0 && (
-            <Pagination
-              mode="loadMore"
-              shown={items.length}
-              total={total}
-              hasMore={hasNext}
-              isLoading={isLoadingMore}
-              onLoadMore={loadMore}
-            />
-          )
-        ) : (
-          <Pagination page={page} total={total} pageSize={perPage} onChange={goToPage} />
-        )}
+          {/* Pagination — desktop numbered, mobile load-more */}
+          {isMobile ? (
+            items.length > 0 && (
+              <Pagination
+                mode="loadMore"
+                shown={items.length}
+                total={total}
+                hasMore={hasNext}
+                isLoading={isLoadingMore}
+                onLoadMore={loadMore}
+              />
+            )
+          ) : (
+            <Pagination page={page} total={total} pageSize={perPage} onChange={goToPage} />
+          )}
+          </div>
+        </div>
       </div>
 
       <EditItemDialog

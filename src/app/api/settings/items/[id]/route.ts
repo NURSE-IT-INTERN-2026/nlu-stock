@@ -5,6 +5,7 @@ import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
 import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { embedItem } from "@/lib/gemini";
 import { STATUS_LABELS } from "@/lib/constants";
 import type { DispenseType } from "@/generated/prisma/enums";
 import { ItemStatus, AdjustmentReason } from "@/generated/prisma/enums";
@@ -122,6 +123,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             : Promise.resolve();
         }),
       );
+    }
+
+    // Semantic search embeds name + nameEn + code + category — a rename leaves the old
+    // vector behind, so the item stops matching its own new name. Only those four fields
+    // matter; qty/price/location edits must not burn embedding quota.
+    if (["name", "nameEn", "code", "categoryId"].some((f) => f in data)) {
+      embedItem(id).catch((e) => console.error("Embedding failed for", id, e));
     }
 
     return json(item);

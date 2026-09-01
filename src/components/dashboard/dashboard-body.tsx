@@ -182,10 +182,12 @@ export function DashboardBody() {
             main's own top edge instead. */}
         <div className="sticky top-16 z-30 -mx-4 flex flex-col gap-2.5 border-b bg-background/85 px-4 py-2.5 backdrop-blur-md sm:top-20 sm:-mx-6 sm:px-6 lg:top-0 lg:flex-row lg:items-center lg:gap-4">
           {/* w-full, not w-fit: the three tabs split the bar evenly so each is a wide target
-              and the strip reads as the page's own segmented control. */}
-          <TabsList className="w-full min-w-0">
+              and the strip reads as the page's own segmented control.
+              shrink-0 คู่กับ flex-1 ของ base: จอกว้างแบ่งเท่าๆ กัน จอแคบดันรางให้เลื่อน แทนที่จะบีบ
+              จนป้ายล้น — "สถิติการนำไปใช้งาน" ต้องการ 120px แต่ได้ช่อง 112px ที่จอ 375 */}
+          <TabsList className="w-full min-w-0 overflow-x-auto">
             {TABS.map((t) => (
-              <TabsTrigger key={t.kind} value={t.kind} className="min-w-0 px-3.5">
+              <TabsTrigger key={t.kind} value={t.kind} className="shrink-0 px-3.5">
                 {t.label}
               </TabsTrigger>
             ))}

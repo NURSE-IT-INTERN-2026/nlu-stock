@@ -73,7 +73,9 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
   // did not, which had it backwards — a short count is the one that ends up in the
   // loss figures, and สูญหาย/ตัดจำหน่าย is often a best guess at the moment of counting.
   // The note is where "ยังไม่ทราบสาเหตุ" can be said out loud.
-  const notesRequired = isCount ? (over || short) : !fixedReason;
+  // แจ้งชำรุด is the other one that must say why: the units land on the ค้างซ่อม worklist, where
+  // an อาการ-less job cannot be triaged or handed to a shop by anyone but whoever filed it.
+  const notesRequired = isCount ? (over || short) : !fixedReason || fixedReason === "DAMAGED_PENDING_REPAIR";
 
   const modeHint = fixedReason ? null : ADJUST_MODE_OPTIONS.find((m) => m.value === mode)?.hint;
 
@@ -257,12 +259,14 @@ export function StockAdjustmentDialog({ open, onOpenChange, itemId, availableQty
           )}
 
           <div className="space-y-2">
-            <Label required={notesRequired}>หมายเหตุ</Label>
+            <Label required={notesRequired}>{isDamage ? "อาการที่ชำรุด" : "หมายเหตุ"}</Label>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={
-                isCount && over
+                isDamage
+                  ? "เช่น จอแตก ปุ่มหลุด สายชาร์จขาด…"
+                  : isCount && over
                   ? "นับได้เกินยอดระบบ — ระบุที่มาของของส่วนเกิน"
                   : isCount && short
                     ? "นับได้น้อยกว่ายอดระบบ — ระบุสาเหตุ หรือ “ยังไม่ทราบสาเหตุ รอตรวจสอบ”"

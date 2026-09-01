@@ -19,7 +19,11 @@ export async function GET(request: NextRequest) {
 
   const dateFrom = params.get("dateFrom") || undefined;
   const dateTo = params.get("dateTo") || undefined;
-  const locationId = params.get("locationId") || undefined;
+  // cascade อาคาร/ชั้น/ห้อง/จุด — ชุดเดียวกับ /api/items เพราะปุ่มที่ส่งมาคือปุ่มตัวเดียวกัน
+  const building = params.get("building") || undefined;
+  const floor = params.get("floor") || undefined;
+  const room = params.get("room") || undefined;
+  const detail = params.get("detail") || undefined;
 
   // Date filter applies to whichever nextMaintenanceDate is the source of truth
   // (sub-item for tracked, item for flat).
@@ -27,7 +31,9 @@ export async function GET(request: NextRequest) {
   if (dateFrom) dateFilter.gte = new Date(dateFrom);
   if (dateTo) dateFilter.lte = new Date(dateTo + "T23:59:59");
 
-  const locFilter = locationId ? { locationId } : {};
+  const locFilter = building || floor || room || detail
+    ? { location: { ...(building && { building }), ...(floor && { floor }), ...(room && { room }), ...(detail && { detail }) } }
+    : {};
 
   // ponytail: in-memory merge of the two sources, move to a SQL UNION if it ever grows.
   // Tracked → one row per live copy (source of truth = SubItem dates).

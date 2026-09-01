@@ -399,10 +399,13 @@ function QtyRepairRow({ row, stage, showStage, onResolved }: { row: PendingRepai
               {isRepair ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
                   {showStage && <StageBadge stage={stage} />}
+                  {/* อาการที่แจ้งไว้ stays on the card after ส่งซ่อม: the repair note says where it
+                      went, not what is wrong with it, and the ค้างซ่อม worklist mixes both stages. */}
+                  {row.notes && <span>ชำรุด: <span className="text-foreground">{row.notes}</span></span>}
                   <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + VENUE_BADGE[row.repairVenue ?? "NONE"][1]}>
                     {VENUE_BADGE[row.repairVenue ?? "NONE"][0]}
                   </span>
-                  {(row.repairNote ?? row.notes) && <span className="text-foreground">{row.repairNote ?? row.notes}</span>}
+                  {row.repairNote && <span className="text-foreground">{row.repairNote}</span>}
                   {row.repairSentAt && (
                     <>
                       <span className="text-border">│</span>
@@ -604,7 +607,10 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
     save({
       newStatus: targetStatus,
       notes: isDamaged ? note.trim() : undefined,
-      imageUrls: isDamaged ? photoUrls : undefined,
+      // Only when the files have nowhere else to live (see the dialog): otherwise AttachmentList
+      // already wrote them onto the แจ้งชำรุด row, and repeating them here stores the same
+      // photo twice under two dates.
+      imageUrls: isDamaged && !row.evidenceLogId ? photoUrls : undefined,
       repairVenue: isDamaged && venue ? venue : undefined,
       repairNote: isDamaged ? repairNote.trim() : undefined,
       // The ส่งซ่อม note IS the symptom this trip is about — stamp it on the row so later
@@ -638,16 +644,17 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-sm leading-snug">{row.item.name}</p>
               <p className="text-xs text-muted-foreground font-mono">{effectiveCode(row.item.code, row.subCode, row.item._count.subItems)}</p>
-              {/* Repair tab trades location/ชำรุด for the repair trip itself — venue, detail,
-                  and how long it's been out. Older logs have no venue/repairNote, so the
-                  ชำรุด reason stands in as the detail. */}
+              {/* Repair tab trades location for the repair trip itself — venue, detail, and how
+                  long it's been out. อาการที่ชำรุด stays: it is the reason the trip exists, and
+                  the repair note only says where the piece went. */}
               {isRepair ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
                   {showStage && <StageBadge stage={stage} />}
+                  {row.damageNote && <span>ชำรุด: <span className="text-foreground">{row.damageNote}</span></span>}
                   <span className={"inline-flex items-center rounded-full px-1.5 py-0 font-medium " + VENUE_BADGE[row.repairVenue ?? "NONE"][1]}>
                     {VENUE_BADGE[row.repairVenue ?? "NONE"][0]}
                   </span>
-                  {(row.repairNote ?? row.damageNote) && <span className="text-foreground">{row.repairNote ?? row.damageNote}</span>}
+                  {row.repairNote && <span className="text-foreground">{row.repairNote}</span>}
                   {row.repairSentAt && (
                     <>
                       <span className="text-border">│</span>
@@ -696,7 +703,17 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
               size="sm"
               className="h-9 w-full sm:w-auto"
               disabled={saving}
-              onClick={() => (isRepair ? setMaintOpen(true) : setConfirmOpen(true))}
+              // อาการที่แจ้งไว้ตอน แจ้งชำรุด is already on record — ส่งซ่อม is the next step of the
+              // same job, not a fresh report, so it opens with that text to correct rather than
+              // an empty box that quietly overwrites it. Same as the qty row's openWith().
+              onClick={() => {
+                if (isRepair) return setMaintOpen(true);
+                if (isDamaged) {
+                  setNote(row.damageNote ?? "");
+                  setPhotoUrls(row.evidenceUrls);
+                }
+                setConfirmOpen(true);
+              }}
             >
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : isRepair ? <Wrench className="size-3.5" /> : isDamaged ? <Send className="size-3.5" /> : <RotateCcw className="size-3.5" />}
               {actionLabel}
@@ -753,8 +770,23 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
                   <VenuePicker value={venue} onChange={setVenue} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">รูปหลักฐานก่อนส่ง (ถ้ามี)</Label>
-                  <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" />
+                  <Label className="text-xs text-muted-foreground">หลักฐานแนบ</Label>
+                  {/* รูปที่แนบตอนแจ้งชำรุด (หรือตอนรับคืนของที่พัง) is already หลักฐาน of THIS job,
+                      so ส่งซ่อม opens with it instead of an empty picker that made the earlier
+                      photo look lost. Same rule as the qty row: files append to the record that
+                      opened the job, the moment they land — no second copy on the ส่งซ่อม row. */}
+                  {row.evidenceLogId ? (
+                    <AttachmentList
+                      urls={photoUrls}
+                      target={{ recordType: "ItemStatusLog", recordId: row.evidenceLogId }}
+                      canEdit
+                      onChange={setPhotoUrls}
+                    />
+                  ) : (
+                    // No log row to hang them on (data old enough to predate the log) — the
+                    // ส่งซ่อม row this confirm writes becomes the record instead.
+                    <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" />
+                  )}
                 </div>
               </div>
             )}

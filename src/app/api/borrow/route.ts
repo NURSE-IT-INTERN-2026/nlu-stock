@@ -86,7 +86,13 @@ export async function POST(req: NextRequest) {
       if (!isSelfBorrowable(rule)) throw new Error(`${item.name} ไม่เปิดให้เบิก-ยืมเอง กรุณาติดต่อเจ้าหน้าที่`);
       const consumeOnly = isConsumeOnly(rule);
       if (!item.isActive) throw new Error(`${item.name} ถูกปิดใช้งาน`);
-      if (isManualHold(item.status)) throw new Error(`${item.name}: สถานะ ${STATUS_LABELS[item.status]} — ยืมไม่ได้`);
+      // Same carve-out as api/dispense: a tracked item's aggregate status is the highest-priority
+      // status among its pieces, so ONE ชำรุด copy out of ten reads as DAMAGED on the parent and
+      // this check would refuse the nine that are fine. Tracked pieces are covered instead by the
+      // AVAILABLE filter on subItems above, which judges the actual piece going out.
+      if (!item.trackIndividually && isManualHold(item.status)) {
+        throw new Error(`${item.name}: สถานะ ${STATUS_LABELS[item.status]} — ยืมไม่ได้`);
+      }
 
       const max = selfBorrowMax(rule);
       if (max <= 0) throw new Error(`${item.name} ไม่มีของพร้อมให้ยืมตอนนี้`);
@@ -94,13 +100,22 @@ export async function POST(req: NextRequest) {
         throw new Error(`${item.name} ยืมเองได้ครั้งละไม่เกิน ${max} ${item.issueUnit.name}`);
       }
 
-      // Tracked: resolve to one physical piece. The scanned copy if it is still free,
-      // otherwise any free one — a borrower holding the shelf cannot pick a code that is
-      // already out, and making them re-scan would be theatre.
+      // Tracked: resolve to one physical piece. A named copy is the copy in the borrower's hand
+      // — if it is no longer free, say so instead of quietly filing the loan against a different
+      // piece that is still sitting on the shelf. Only an unnamed borrow (the item page, which
+      // shows no copy) lets the server choose.
       const sub = item.trackIndividually
-        ? (data.subItemId && item.subItems.find((s) => s.id === data.subItemId)) || item.subItems[0]
+        ? data.subItemId
+          ? item.subItems.find((s) => s.id === data.subItemId)
+          : item.subItems[0]
         : null;
-      if (item.trackIndividually && !sub) throw new Error(`${item.name} ถูกยืมออกไปหมดแล้ว`);
+      if (item.trackIndividually && !sub) {
+        throw new Error(
+          data.subItemId
+            ? `${item.name} ชิ้นที่สแกนไม่ว่างแล้ว — สแกนชิ้นอื่น`
+            : `${item.name} ถูกยืมออกไปหมดแล้ว`,
+        );
+      }
 
       // สิ้นเปลืองที่มีล็อต: ตัดล็อตที่หมดอายุก่อน (FEFO) เหมือน buildCartItem — the include
       // below sorts them. ของที่ไม่มีล็อต (ส่วนใหญ่) ใช้ availableQty เป็นตัวนับตัวเดียว.
@@ -135,7 +150,14 @@ export async function POST(req: NextRequest) {
       });
 
       if (sub) {
-        await tx.subItem.update({ where: { id: sub.id }, data: { status: ItemStatus.ON_LOAN } });
+        // Optimistic lock, same as the qty branch below: the status read above is already stale.
+        // QR on a shelf is exactly the concurrent case — two borrowers scanning one copy at the
+        // same moment both saw it AVAILABLE, and an unconditional update let both loans through.
+        const claimed = await tx.subItem.updateMany({
+          where: { id: sub.id, status: ItemStatus.AVAILABLE },
+          data: { status: ItemStatus.ON_LOAN },
+        });
+        if (claimed.count === 0) throw new Error(`${item.name} มีคนตัดหน้ายืมไปแล้ว`);
         // Mirrors api/dispense: this log row is what lets an item's ประวัติ fold the status
         // change into the ยืม row beside it instead of printing the same event twice.
         await tx.itemStatusLog.create({

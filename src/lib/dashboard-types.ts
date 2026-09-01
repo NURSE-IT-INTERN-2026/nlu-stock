@@ -112,6 +112,7 @@ export const OutstandingLoansSchema = z.object({
     name: z.string(),
     code: z.string(),
     reason: z.string().nullable(),
+    courseCode: z.string().nullable(),
     quantity: z.number(),
     dispensedAt: z.string(),
     dueAt: z.string().nullable(),

@@ -101,7 +101,7 @@ const SIDES = {
 };
 type Side = keyof typeof SIDES;
 
-const baht = (n: number) => `฿${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const baht = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 const repairColumns: Column<RepairRow>[] = [
   { key: "performedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.performedAt), TH_DATE) },
@@ -209,6 +209,7 @@ export function AnnualCostTab() {
     const params: Record<string, string> = {};
     if (filters.year) params.year = filters.year;
     if (filters.categoryId) params.categoryId = filters.categoryId;
+    else if (filters.profileId) params.profileId = filters.profileId;
     return (await getReport("annual-cost", params)) as Result;
   }, [filters]);
 
@@ -225,10 +226,10 @@ export function AnnualCostTab() {
         leading={
           <Tabs value={side} onValueChange={(v) => setSide(v as Side)}>
             {/* สีอยู่บนราง ไม่ใช่บนแต่ละช่อง เพราะตัวที่ทาสีคือแถบที่เลื่อน ไม่ใช่ปุ่ม */}
-            <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
+            <TabsList variant="segment" className="w-full min-w-0 sm:w-fit" style={segmentStyle(spec.token)}>
               <TabsIndicator />
               {(Object.keys(SIDES) as Side[]).map((k) => (
-                <TabsTrigger key={k} value={k} className="min-w-0">
+                <TabsTrigger key={k} value={k}>
                   {SIDES[k].label}
                 </TabsTrigger>
               ))}
@@ -259,6 +260,7 @@ export function AnnualCostTab() {
           </CardHeader>
           <CardContent>
             <ReportDataTable
+              className="rounded-xl"
               columns={subjectColumns}
               data={bySubject}
               loading={loading}
@@ -279,6 +281,7 @@ export function AnnualCostTab() {
           </CardHeader>
           <CardContent>
             <ReportDataTable
+              className="rounded-xl"
               columns={repairColumns}
               data={payload?.repairs ?? []}
               loading={loading}

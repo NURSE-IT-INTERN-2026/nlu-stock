@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
   const dateFrom = params.get("dateFrom") || undefined;
   const dateTo = params.get("dateTo") || undefined;
   const categoryId = params.get("categoryId") || undefined;
+  // ปุ่มหมวดหมู่เป็น cascade: หยุดที่ชั้นประเภทก็กรองได้ ไม่ใช่ตัวกรองที่กดแล้วไม่เกิดอะไร
+  const profileId = params.get("profileId") || undefined;
 
   const filters: Record<string, unknown>[] = [kindWhere(kind)];
   // นำไปใช้งานเป็นภาพนิ่งของตอนนี้ ไม่ใช่บัญชีเหตุการณ์ — ตัวกรองช่วงวันที่จึงไม่มีความหมายกับมัน
@@ -39,6 +41,7 @@ export async function GET(request: NextRequest) {
   // AND, ไม่ใช่ spread: kindWhere ถือคีย์ `item` ของตัวเองอยู่แล้ว การเขียน where.item ทับจะลบ
   // เงื่อนไข dispenseType ของ kind ทิ้งเงียบๆ แล้วทุก segment จะกลับไปนับชุดเดียวกันหมด
   if (categoryId) filters.push({ item: { categoryId } });
+  else if (profileId) filters.push({ item: { category: { profileId } } });
 
   const where = { AND: filters };
 

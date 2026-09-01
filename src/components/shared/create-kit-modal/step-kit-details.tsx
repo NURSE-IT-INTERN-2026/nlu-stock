@@ -70,10 +70,9 @@ export function StepKitDetails({ form, onUpdate }: StepKitDetailsProps) {
 
       {/* รหัส (auto, KIT เสมอ) */}
       <div className="space-y-2">
-        <Label htmlFor="kit-code">รหัสชุด</Label>
+        <Label htmlFor="kit-code">รหัสชุดที่จะได้</Label>
         {form.code ? (
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
-            <span className="text-xs text-muted-foreground">รหัสที่จะได้ (สร้างอัตโนมัติ):</span>
             <p className="text-sm font-mono font-semibold text-foreground">{form.code}</p>
           </div>
         ) : (
@@ -90,7 +89,7 @@ export function StepKitDetails({ form, onUpdate }: StepKitDetailsProps) {
         </div>
       ) : (
         <div className="space-y-2">
-          <Label htmlFor="kit-unit-select" className="text-xs" required>หน่วยนับ (ของชุด)</Label>
+          <Label htmlFor="kit-unit-select" className="text-xs" required>หน่วยนับ</Label>
           <Select
             value={form.issueUnitId}
             onValueChange={(v) => {
@@ -99,7 +98,7 @@ export function StepKitDetails({ form, onUpdate }: StepKitDetailsProps) {
               onUpdate({ issueUnitId: v, issueUnitName: name });
             }}
           >
-            <SelectTrigger id="kit-unit-select" className="bg-card">
+            <SelectTrigger id="kit-unit-select" className="bg-card w-full">
               <span className={form.issueUnitId ? "text-foreground" : "text-muted-foreground"}>
                 {form.issueUnitId
                   ? ((units.find((u) => u.id === form.issueUnitId)?.name ?? form.issueUnitName) || "เลือก")

@@ -70,7 +70,10 @@ export function selfBorrowLimitFor(override: number | null | undefined, profileL
 
 /** How many units one person may take at once. Tracked items go out a piece at a time. */
 export function selfBorrowMax(item: SelfBorrowItem): number {
-  if (item.trackIndividually) return 1;
+  // Tracked: a piece at a time, and 0 when no piece is free — availableQty IS the count of
+  // AVAILABLE sub-items (recomputeItemCounts). Returning a flat 1 made the item page offer
+  // ยืม on a shelf where every copy was already out, and only said so after the dialog.
+  if (item.trackIndividually) return Math.min(1, Math.max(0, item.availableQty));
   const limit = selfBorrowLimitFor(item.selfBorrowLimit, item.profileSelfBorrowLimit);
   return Math.max(0, Math.min(limit, item.availableQty));
 }

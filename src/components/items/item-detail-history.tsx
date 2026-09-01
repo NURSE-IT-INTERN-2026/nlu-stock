@@ -453,7 +453,7 @@ function tripMeta(trip: RepairTrip, unit: string, full = false): string {
     trip.done
       ? `${opened} ${fmtDate(trip.openedAt, TH_DATE)}`
       : `${opened} ${fmtDate(trip.openedAt, TH_DATE)} · ผ่านมา ${dayCount(trip.openedAt)} วัน`,
-    trip.cost != null ? `฿${trip.cost.toLocaleString("th-TH")}` : null,
+    trip.cost != null ? `ค่าใช้จ่าย ${trip.cost.toLocaleString("th-TH")}` : null,
     trip.attachments > 0 ? `หลักฐาน ${trip.attachments}` : null,
   ].filter(Boolean).join(" · ");
 }

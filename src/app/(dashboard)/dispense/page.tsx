@@ -22,7 +22,7 @@ import type { ItemStatus } from "@/generated/prisma/enums";
 import { useCart, buildCartItem, toDispenseableItem } from "@/components/dispense/cart-context";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/shared/pagination";
-import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/items/items-filter-bar";
+import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/shared/filter-pickers";
 import type { ProfileOption } from "@/lib/api";
 
 
@@ -169,7 +169,8 @@ function DispenseContent() {
 
 return (
     <div className="flex flex-col h-full">
-      <div className="rounded-2xl border border-border/60 bg-card p-3 sm:p-4 space-y-3 mb-4 shrink-0">
+      <Card className="flex-1 min-h-0 p-0 gap-0 flex flex-col overflow-clip">
+      <div className="border-b border-border/60 p-3 sm:p-4 space-y-3 shrink-0">
         {/* Row 1: search + scan */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-0">
@@ -232,7 +233,7 @@ return (
         </div>
       </div>
 
-      <Card className="flex-1 min-h-0 px-3 pt-3 pb-3 gap-3 flex flex-col relative">
+      <div className="relative flex-1 min-h-0 flex flex-col gap-3 p-3">
         <div ref={gridRef} className="flex-1 overflow-y-auto pb-1">
         {items.length === 0 && !loading ? (
           <p className="text-sm text-muted-foreground text-center py-8">
@@ -386,6 +387,7 @@ return (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
           </div>
         )}
+      </div>
       </Card>
 
       <QrScanner

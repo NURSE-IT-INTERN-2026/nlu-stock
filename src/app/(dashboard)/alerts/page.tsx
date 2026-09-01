@@ -322,20 +322,25 @@ function AlertsContent() {
         <TodoTab canEdit={canManageStock(user?.role ?? "")} />
       ) : (
       <>
-      <ItemsFilterBar
-        profiles={profiles}
-        categories={categories}
-        locations={locations}
-        alerts={alerts}
-        value={filter}
-        onChange={handleFilterChange}
-        resultCount={total}
-        onScanQR={() => {}}
-        hideAlertPicker
-        hideScan
-      />
-
       <div className="rounded-2xl border overflow-hidden bg-card">
+        <ItemsFilterBar
+          className="rounded-none border-x-0 border-t-0"
+          profiles={profiles}
+          categories={categories}
+          locations={locations}
+          alerts={alerts}
+          value={filter}
+          onChange={handleFilterChange}
+          resultCount={total}
+          onScanQR={() => {}}
+          hideAlertPicker
+          hideScan
+        />
+
+        {/* Inner card on desktop only — mobile already renders standalone alert cards,
+            so a third border there would just nest a card inside a card inside a card. */}
+        <div className="md:p-4">
+          <div className="md:rounded-xl md:border md:overflow-hidden md:flex md:flex-col">
         {/* Desktop: table */}
         <div className="hidden md:block overflow-auto max-h-[58dvh] lg:max-h-[calc(100vh-340px)]">
           <Table grid zebra className="table-fixed">
@@ -366,7 +371,10 @@ function AlertsContent() {
               ) : items.map((item) => (
                 <TableRow
                   key={item.id}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  // ประเภท wraps its badges and รายละเอียด stacks one line per alert, so row
+                  // height is variable — align-top keeps รหัส/ชื่อ/สถานที่ on the first line
+                  // of it instead of drifting down as a row gains alerts.
+                  className="cursor-pointer hover:bg-muted/50 transition-colors [&>td]:align-top"
                   onClick={() => router.push(`/items/${item.id}`)}
                 >
                   <TableCell className="font-mono text-xs px-2"><span className="block truncate">{item.code}</span></TableCell>
@@ -469,6 +477,8 @@ function AlertsContent() {
         ) : (
           <Pagination page={page} total={total} pageSize={perPage} onChange={setPage} />
         )}
+          </div>
+        </div>
       </div>
       </>
       )}
@@ -486,11 +496,13 @@ function TodoTab({ canEdit }: { canEdit: boolean }) {
   const [query, setQuery] = useState("");
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <ExportButtons reportType="cases" filters={exportFilters(query)} />
-      </div>
       {totals && lostStat(totals).length > 0 && <ReportSummary stats={lostStat(totals)} />}
-      <CaseWorkspace todo canEdit={canEdit} onTotals={(t, q) => { setTotals(t); setQuery(q); }} />
+      <CaseWorkspace
+        todo
+        canEdit={canEdit}
+        onTotals={(t, q) => { setTotals(t); setQuery(q); }}
+        actions={<ExportButtons reportType="cases" filters={exportFilters(query)} />}
+      />
     </div>
   );
 }
@@ -521,7 +533,7 @@ function exportFilters(query: string): Record<string, string | undefined> {
  */
 function lostStat(t: CaseTotalsJson): SummaryStat[] {
   if (t.lostCases === 0) return [];
-  const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
+  const baht = (n: number) => n.toLocaleString("th-TH");
   const known = t.lostPriced / t.lostCases >= 0.5;
   // ป้าย (ประมาณการ) หายเองเมื่อทุกเคสที่ตีราคาได้ใช้ราคาจากใบรับเข้าของชิ้นนั้นเอง
   const estimated = t.lostExact < t.lostPriced;
