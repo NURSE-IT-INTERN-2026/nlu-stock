@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { parse } from "csv-parse/sync";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { ItemStatus, ItemCondition, UsageType } from "../src/generated/prisma/enums";
 
 const CSV_DIR = join(process.cwd(), "CSV");
 
@@ -44,7 +45,7 @@ const PROFILE_SPEC: ProfileSpec[] = [
 const PROFILE_ALIASES: Record<string, string> = { ELE: "KRU", BOOK: "BAT", TOY: "BAT" };
 
 // Map Thai condition → ItemCondition enum
-function mapCondition(th: string): string {
+function mapCondition(th: string): ItemCondition {
   const t = (th || "").trim();
   if (t === "ใหม่" || t === "ปกติ") return "NEW";
   if (t === "ปานกลาง") return "FAIR";
@@ -60,7 +61,7 @@ function mapCondition(th: string): string {
 // create is invisible there. Seed one opening entry per non-AVAILABLE starting status.
 async function logInitialStatus(
   db: (typeof import("../src/lib/prisma"))["prisma"],
-  sub: { id: string; itemId: string; status: string },
+  sub: { id: string; itemId: string; status: ItemStatus },
   adminId: string,
 ) {
   if (sub.status === "AVAILABLE") return;
@@ -68,8 +69,8 @@ async function logInitialStatus(
     data: {
       itemId: sub.itemId,
       subItemId: sub.id,
-      previousStatus: "AVAILABLE" as any,
-      newStatus: sub.status as any,
+      previousStatus: ItemStatus.AVAILABLE,
+      newStatus: sub.status,
       reason: "สถานะเริ่มต้นจากข้อมูลนำเข้า",
       changedBy: adminId,
     },
@@ -77,7 +78,7 @@ async function logInitialStatus(
 }
 
 // Map Thai condition → ItemStatus enum
-function mapStatus(th: string): string {
+function mapStatus(th: string): ItemStatus {
   const t = (th || "").trim();
   if (t === "ชำรุด" || t === "ใช้งานไม่ได้") return "DAMAGED";
   if (t === "ส่งซ่อม") return "UNDER_REPAIR";
@@ -341,8 +342,8 @@ async function main() {
           itemId: item.id,
           subCode: `C${String(si + 1).padStart(2, "0")}`,
           name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
-          status: mapStatus(sub.condition) as any,
-          condition: mapCondition(sub.condition) as any,
+          status: mapStatus(sub.condition),
+          condition: mapCondition(sub.condition),
           serialNumber: sub.serialNo && sub.serialNo !== "N/A" && sub.serialNo !== "รอเลขจากพัสดุ" ? sub.serialNo : null,
           notes: sub.notes || null,
         },
@@ -440,8 +441,8 @@ async function main() {
           itemId: item.id,
           subCode: `C${String(si + 1).padStart(2, "0")}`,
           name: group.subItems.length > 1 ? `${stripTrailingNum(group.nameTh)} (${si + 1})` : group.nameTh,
-          status: mapStatus(sub.condition) as any,
-          condition: mapCondition(sub.condition) as any,
+          status: mapStatus(sub.condition),
+          condition: mapCondition(sub.condition),
           serialNumber: sub.serialNo && sub.serialNo !== "N/A" ? sub.serialNo : null,
           notes: sub.notes || null,
         },
@@ -751,7 +752,7 @@ async function main() {
         data: {
           itemId: item.id, lotId: lot.id,
           quantity: qty,
-          usageType: ["COURSE", "ACTIVITY", "OTHER"][j % 3] as any,
+          usageType: ([UsageType.COURSE, UsageType.ACTIVITY, UsageType.OTHER] as const)[j % 3],
           staffId: admin.id, dispensedAt: day(j * 3 + 1),
           loanType: "BORROW",
         },
@@ -1121,7 +1122,7 @@ async function main() {
     await loanTracked(loanF.subIds[0], loanF.itemId, o);
   }
 
-  for (const iid of affectedTracked) await recomputeItemCounts(prisma as any, iid);
+  for (const iid of affectedTracked) await recomputeItemCounts(prisma, iid);
   console.log(`  ${loanRecCount} open loan records across ${loanEventCount} borrow events`);
 
   // ============================================================

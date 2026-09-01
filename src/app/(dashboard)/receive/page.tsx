@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -206,7 +206,10 @@ function ReceiveContent() {
     setQuickOpen(false);
   };
 
-  const doSearch = useCallback(async (q: string) => {
+  // ไม่ห่อ useCallback: doSearch ถูกเรียกจาก event handler ที่เดียว ไม่เคยอยู่ใน dep array
+  // ของใคร — memo ด้วยมือจึงไม่ได้อะไร แถม React Compiler รักษามันไว้ไม่ได้ เลยข้ามการ
+  // compile ทั้ง component ทิ้ง (ปล่อยให้ compiler memo เองคุ้มกว่า)
+  const doSearch = async (q: string) => {
     if (!q) { setSearchResults([]); setHasSearched(false); return; }
     setSearchLoading(true);
     setHasSearched(true);
@@ -218,7 +221,7 @@ function ReceiveContent() {
     } finally {
       setSearchLoading(false);
     }
-  }, []);
+  };
 
   const handleSearchChange = (val: string) => {
     setSearchQ(val);

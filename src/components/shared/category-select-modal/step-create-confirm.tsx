@@ -28,6 +28,10 @@ export function StepCreateConfirm({
       .then((ps) => setProfile(ps.find((p) => p.id === profileId) ?? null))
       .catch(() => setProfile(null));
   }, [profileId]);
+  // profileIcon() ไม่ได้สร้าง component ใหม่ — มันหยิบตัวเดิมออกจาก PROFILE_ICON_REGISTRY ที่
+  // ประกาศไว้ระดับ module (src/lib/profile-icons.ts) identity จึงคงที่ทุก render ไม่มี remount
+  // และ state ไม่หาย. อีก 6 ที่ในโปรเจกต์เขียนแบบเดียวกันแต่ไม่โดนจับ เพราะอยู่ใน .map()
+  // ซึ่ง rule มองไม่ทะลุเข้าไป — จุดที่ปิดกฎอยู่ที่ JSX ข้างล่าง ตรงที่ rule รายงาน
   const Icon = profileIcon(profile?.icon);
 
   return (
@@ -51,6 +55,7 @@ export function StepCreateConfirm({
         </div>
         <div className="mt-3 flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            {/* eslint-disable-next-line react-hooks/static-components -- ดูหมายเหตุ profileIcon ด้านบน */}
             <Icon className="h-5 w-5" />
           </div>
           <dl className="flex-1 space-y-2 text-sm">

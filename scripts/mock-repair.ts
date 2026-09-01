@@ -45,7 +45,7 @@ async function main() {
   }
 
   // recompute parent item counts (availableQty/totalQty/status ลดลงตามที่หายไป)
-  for (const itemId of affected) await recomputeItemCounts(p as any, itemId);
+  for (const itemId of affected) await recomputeItemCounts(p, itemId);
 
   console.log(`\n✅ mocked ${subs.length} sub-items → UNDER_REPAIR across ${affected.size} items`);
   console.log("ดูได้ที่ /receive?tab=repair (tab รับซ่อม)");
