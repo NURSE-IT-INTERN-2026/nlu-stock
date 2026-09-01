@@ -1,5 +1,15 @@
 # NLU code scheme — flat code, หมวดย่อย in CategoryType, uniform COPY
 
+> **Superseded in part (2026-09-01): the `-{SNN}` set segment is gone.**
+> `Item.setSize` and `CategoryProfile.setTracking` were dropped. Nothing ever read `setSize`
+> back — no stock, dispense, or report path branched on it, and no code parsed the `S` segment
+> out — while every item that used it already spelled the count out in its name
+> ("ชุดของเล่นไม้รูปสัตว์ (1 ชุด มี 8 ชิ้น)"), which says more than a bare number. New codes are
+> `NLU-{PREFIX}-{NNN}`. Legacy codes keep their `-{SNN}`: they are opaque strings, some already
+> printed on QR labels. `suggest-code` reads segment index 2, so legacy codes still parse.
+> The rest of this ADR (flat code, หมวดย่อย in `CategoryType`, uniform `-CNN` copy) stands.
+
+
 The old scheme embedded หมวด/หมวดย่อย positionally inside the item code string, in three
 different shapes (`NLU-CON-001`, `NLU-ELE-001-001`, `NLU-BOOK-013-001-S10-C01`). To suggest the
 next code, `suggest-code` had to scan every item and `split("-")` to find the max number, and หมวด

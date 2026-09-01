@@ -69,7 +69,6 @@ interface ItemRecord {
   warrantyMonths: number;
   maintenanceCycleMonths: number;
   storageRequirements: string | null;
-  setSize: number;
 }
 
 export function ItemsMasterTab() {

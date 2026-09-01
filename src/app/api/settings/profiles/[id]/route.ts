@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 // Behavior fields can only change while the profile has no items (see validators/profile.ts).
 // selfBorrowable/selfBorrowLimit are deliberately NOT here: they decide who may take stock
 // out, not how the stock is modelled, so they stay editable for a profile full of items.
-const BEHAVIOR_FIELDS = ["code", "dispenseType", "assetTracking", "setTracking"] as const;
+const BEHAVIOR_FIELDS = ["code", "dispenseType", "assetTracking"] as const;
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSuperAdmin(request);

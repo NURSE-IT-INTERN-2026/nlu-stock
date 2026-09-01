@@ -16,7 +16,6 @@ export const profileCreateSchema = z.object({
   // ยืมเอง — ปิดทั้งประเภท. Narrowed further per item; see lib/self-borrow.ts.
   selfBorrowable: z.boolean().default(true),
   selfBorrowLimit: z.number().int().min(1).default(1),
-  setTracking: z.boolean().default(false),
   icon: z.string().min(1).default("Package"),
   color: z.string().min(1),
   sortOrder: z.number().int().min(0).default(0),
@@ -37,5 +36,4 @@ export const profileUpdateSchema = z.object({
   assetTracking: z.boolean().optional(),
   selfBorrowable: z.boolean().optional(),
   selfBorrowLimit: z.number().int().min(1).optional(),
-  setTracking: z.boolean().optional(),
 });

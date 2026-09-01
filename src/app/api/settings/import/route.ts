@@ -96,7 +96,6 @@ async function importItems(rows: ImportRow[]): Promise<ImportResult> {
         // and a KIT row is a recipe whose sets only exist once someone assembles them.
         totalQty: trackIndividually ? 0 : qty,
         availableQty: trackIndividually ? 0 : qty,
-        setSize: parseOptionalInt(row.setSize) ?? 1,
         // Asset fields (KRU/ELE) — nullable, ignored for other profiles
         model: row.model || null,
         purchaseDate: parseOptionalDate(row.purchaseDate),
@@ -353,8 +352,8 @@ const TEMPLATES: Record<string, { headers: string[]; example: string[] }> = {
     example: ["NLU-KRU-002-001", "iPad", "iPad Air", "อุปกรณ์อิเล็กทรอนิกส์", "เครื่อง", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", "iPad Air 11", "13500", "2024-01-15", "Apple Thailand", "คุณ ก.", "02-123-4567", "12", ""],
   },
   "items-bat": {
-    headers: ["code", "name", "nameEn", "category", "unit", "building", "floor", "room", "detail", "setSize", "description"],
-    example: ["NLU-BAT-013-001-S10-C01", "คู่มือพัฒนาการ", "", "หนังสือ", "เล่ม", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", "10", ""],
+    headers: ["code", "name", "nameEn", "category", "unit", "building", "floor", "room", "detail", "description"],
+    example: ["NLU-BAT-013-001-C01", "คู่มือพัฒนาการ", "", "หนังสือ", "เล่ม", "อาคาร 2", "ชั้น 4", "402", "ตู้ 1", "1 ชุด มี 10 เล่ม"],
   },
   "items-dur": {
     headers: ["code", "name", "nameEn", "category", "unit", "qty", "building", "floor", "room", "detail", "description"],

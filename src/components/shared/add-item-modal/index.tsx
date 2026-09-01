@@ -162,11 +162,7 @@ export function AddItemModal({
 
   const handleCodeMetaChange = useCallback((meta: CodeMeta) => {
     setState((s) => {
-      if (
-        s.codeMeta?.copyCount === meta.copyCount &&
-        s.codeMeta?.isSet === meta.isSet &&
-        s.codeMeta?.setSize === meta.setSize
-      ) return s;
+      if (s.codeMeta?.copyCount === meta.copyCount) return s;
       return { ...s, codeMeta: meta };
     });
   }, []);
@@ -193,7 +189,7 @@ export function AddItemModal({
         categoryId: cat.id,
         categoryName: cat.name,
         categoryType: profile?.code ?? "",
-        profile: profile ? { code: profile.code, dispenseType: profile.dispenseType, assetTracking: profile.assetTracking, setTracking: profile.setTracking } : null,
+        profile: profile ? { code: profile.code, dispenseType: profile.dispenseType, assetTracking: profile.assetTracking } : null,
         // Reset code — let the builder component generate it for ITEM types
         code: isItemTracked ? "" : s.form.code,
       },
@@ -264,7 +260,6 @@ export function AddItemModal({
           categoryId: state.form.categoryId,
           issueUnitId: state.form.issueUnitId,
           copyCount: state.codeMeta?.copyCount ?? 1,
-          setSize: state.codeMeta?.isSet ? state.codeMeta.setSize : 1,
           initialQty: isFlat ? state.initialQty : 0,
           description: state.form.description || undefined,
         });

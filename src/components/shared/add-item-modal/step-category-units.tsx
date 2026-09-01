@@ -124,19 +124,11 @@ export function StepCategoryUnits({
         ) : profile?.dispenseType === "ITEM" ? (
           <CodeBuilder
             prefix={categoryType}
-            canSet={profile.setTracking}
             value={code}
             onChange={onCodeChange}
             copyCount={initialCodeMeta?.copyCount ?? 1}
-            onCopyCountChange={(count) =>
-              onCodeMetaChange?.({
-                copyCount: count,
-                isSet: initialCodeMeta?.isSet ?? false,
-                setSize: initialCodeMeta?.setSize ?? 2,
-              })
-            }
+            onCopyCountChange={(count) => onCodeMetaChange?.({ copyCount: count })}
             onMetaChange={onCodeMetaChange}
-            initialMeta={initialCodeMeta}
           />
         ) : (
           <div className="space-y-2">

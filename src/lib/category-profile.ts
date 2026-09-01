@@ -10,7 +10,6 @@
 export interface ProfileLike {
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
-  setTracking: boolean;
 }
 
 function req(p: ProfileLike | null | undefined): ProfileLike {
@@ -60,9 +59,6 @@ export function sanitizeItemByProfile(
   }
   if (profile.dispenseType === "CONSUMABLE") {
     for (const f of MAINTENANCE_FIELDS) delete data[f];
-  }
-  if (!profile.setTracking) {
-    data.setSize = 1;
   }
   if (profile.dispenseType !== "CONSUMABLE") {
     delete data.storageRequirements;

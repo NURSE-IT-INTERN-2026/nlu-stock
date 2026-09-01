@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     prisma.item.findMany({
       where,
       include: {
-        category: { select: { name: true, profile: { select: { name: true, dispenseType: true, assetTracking: true, setTracking: true, color: true } } } },
+        category: { select: { name: true, profile: { select: { name: true, dispenseType: true, assetTracking: true, color: true } } } },
         issueUnit: { select: { id: true, name: true } },
         lots: {
           where: { remainingQty: { gt: 0 } },

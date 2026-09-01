@@ -32,7 +32,6 @@ export interface FormProfile {
   code: string;
   dispenseType: DispenseType;
   assetTracking: boolean;
-  setTracking: boolean;
 }
 
 export interface ItemFormState {

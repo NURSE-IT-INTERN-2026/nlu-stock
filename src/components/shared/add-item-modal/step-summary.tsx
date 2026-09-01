@@ -47,7 +47,6 @@ export function StepSummary({
         {/* Section: หน่วย */}
         <Section label="หน่วย">
           <Row label="หน่วยนับ" value={issueUnitName || "—"} />
-          {codeMeta?.isSet && codeMeta.setSize > 1 && <Row label="จำนวนต่อชุด" value={`${codeMeta.setSize}`} />}
           {codeMeta && codeMeta.copyCount > 1 && (
             <Row label="จำนวนชิ้น" value={`${codeMeta.copyCount} ${issueUnitName || "รายการ"}`} />
           )}

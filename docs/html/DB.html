@@ -96,7 +96,7 @@
   <h2>① เช็ค Ref Code ที่ "ประเภท" — ได้ใช้มั้ย?</h2>
   <div class="callout v">
     <p style="margin:0 0 8px"><b>สรุป:</b> รหัสสินค้า (<code>code</code>) ใช้ <b>หมวด enum</b> (7 ค่า) เป็น prefix — <b>ไม่ได้</b>ใช้ "ประเภท" (CategoryType / ตาราง <code>categories</code>)</p>
-    <p style="margin:0;font-size:13px;color:var(--mut)">ฟอร์แมต = <code>NLU-{ENUM}-{NNN}</code> (+ optional <code>-SNN</code> สำหรับ set BOOK/TOY)<br>
+    <p style="margin:0;font-size:13px;color:var(--mut)">ฟอร์แมต = <code>NLU-{ENUM}-{NNN}</code> (<code>-SNN</code> เลิกใช้ 2026-09-01 รหัสเก่ายังมีติดอยู่)<br>
     ENUM ∈ <code>KRU | ELE | BOOK | TOY | DUR | CON | KIT</code> &nbsp;·&nbsp; logic อยู่ที่ <code>src/app/api/items/suggest-code/route.ts</code></p>
   </div>
   <p style="color:var(--mut);font-size:13px">ดังนั้น: หากอยากให้ ref code อิง "ประเภท" (เช่น <code>หุ่นทางสูติศาสตร์</code>) ต้องเพิ่มฟิลด์ <code>code</code>/<code>prefix</code> ในตาราง <code>categories</code> ก่อน — ตอนนี้ตาราง categories <b>ไม่มีฟิลด์รหัส</b> (มีแค่ id/name/category/description/sortOrder)</p>
@@ -399,7 +399,6 @@ erDiagram
         <tr><td class="mono">description</td><td>String</td><td class="null-ok">✓</td><td class="null-no">—</td><td></td></tr>
         <tr><td class="mono">dispenseType</td><td>DispenseType</td><td class="null-no">—</td><td class="null-no">—</td><td></td></tr>
         <tr><td class="mono">assetTracking</td><td>Boolean</td><td class="null-no">—</td><td class="mono">false</td><td></td></tr>
-        <tr><td class="mono">setTracking</td><td>Boolean</td><td class="null-no">—</td><td class="mono">false</td><td></td></tr>
         <tr><td class="mono">icon</td><td>String</td><td class="null-no">—</td><td class="mono">"Package"</td><td></td></tr>
         <tr><td class="mono">color</td><td>String</td><td class="null-no">—</td><td class="mono">"bg-blue-100…"</td><td></td></tr>
         <tr><td class="mono">sortOrder</td><td>Int</td><td class="null-no">—</td><td class="mono">0</td><td></td></tr>
@@ -462,7 +461,6 @@ erDiagram
         <tr><td class="mono">totalQty</td><td>Int</td><td class="null-no">—</td><td class="mono">0</td><td></td></tr>
         <tr><td class="mono">availableQty</td><td>Int</td><td class="null-no">—</td><td class="mono">0</td><td></td></tr>
         <tr><td class="mono">storageRequirements</td><td>String</td><td class="null-ok">✓</td><td class="null-no">—</td><td></td></tr>
-        <tr><td class="mono">setSize</td><td>Int</td><td class="null-no">—</td><td class="mono">1</td><td></td></tr>
         <tr><td class="mono">borrowable</td><td>Boolean</td><td class="null-no">—</td><td class="mono">false</td><td></td></tr>
         <tr><td class="mono">model</td><td>String</td><td class="null-ok">✓</td><td class="null-no">—</td><td></td></tr>
         <tr><td class="mono">purchaseDate</td><td>DateTime</td><td class="null-ok">✓</td><td class="null-no">—</td><td></td></tr>

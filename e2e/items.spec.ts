@@ -21,7 +21,6 @@ test("quick-create wizard: item + counters persisted", async ({ request, uniqueC
       categoryId,
       issueUnitId: unitId,
       copyCount: 1,
-      setSize: 1,
       initialQty: 12,
     },
   });

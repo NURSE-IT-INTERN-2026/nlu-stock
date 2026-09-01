@@ -79,7 +79,6 @@ export async function makeTracked(
       categoryId: cat.id,
       issueUnitId: unit.id,
       copyCount,
-      setSize: 1,
       initialQty: 0,
     },
   });

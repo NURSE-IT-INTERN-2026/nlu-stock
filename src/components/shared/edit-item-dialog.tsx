@@ -8,7 +8,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
-import { NumericInput } from "@/components/shared/numeric-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,7 +49,6 @@ interface SettingsItem {
   maintenanceCycleMonths: number;
   countCycleMonths: number | null;
   storageRequirements: string | null;
-  setSize: number;
   selfBorrowable: boolean;
   selfBorrowLimit: number | null;
   _count: { subItems: number; dispenseRecords: number; receiveRecords: number };
@@ -66,7 +64,6 @@ interface FormState {
   warrantyMonths: number; maintenanceCycleMonths: number;
   countCycleMonths: string; // "" = follow the profile default (3 mo consumable, 12 mo rest)
   storageRequirements: string;
-  setSize: number;
   selfBorrowable: boolean;
   /** "" = ตามประเภท — kept as a string so an emptied box stays empty instead of snapping to 1. */
   selfBorrowLimit: string;
@@ -82,7 +79,6 @@ const emptyForm: FormState = {
   warrantyMonths: 0, maintenanceCycleMonths: 12,
   countCycleMonths: "",
   storageRequirements: "",
-  setSize: 1,
   selfBorrowable: true,
   selfBorrowLimit: "",
 };
@@ -110,7 +106,6 @@ function prefillFrom(item: SettingsItem): FormState {
     maintenanceCycleMonths: item.maintenanceCycleMonths,
     countCycleMonths: item.countCycleMonths != null ? String(item.countCycleMonths) : "",
     storageRequirements: item.storageRequirements || "",
-    setSize: item.setSize ?? 1,
     selfBorrowable: item.selfBorrowable ?? true,
     selfBorrowLimit: item.selfBorrowLimit == null ? "" : String(item.selfBorrowLimit),
   };
@@ -168,7 +163,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
   // Profile drives field gating (comes from categories lookup, not the item).
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
   const profile = selectedCategory?.profile ?? null;
-  const isSetTracked = profile?.setTracking ?? false;
   const isFixedAsset = profile?.assetTracking ?? false;
   const isConsumable = profile?.dispenseType === "CONSUMABLE";
   const trackForced = profile ? profile.dispenseType === "ITEM" : undefined;
@@ -331,17 +325,6 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
 
               <Section title="เกณฑ์การจัดการ">
                 <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
-                  {isSetTracked && (
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-medium text-muted-foreground">จำนวนในชุด (set) — มากกว่า 1 = เป็นชุด</Label>
-                      <NumericInput
-                        value={form.setSize}
-                        onCommit={(n) => setForm({ ...form, setSize: n })}
-                        min={1}
-                        className="h-10 text-foreground bg-muted/50 border border-input shadow-none font-mono"
-                      />
-                    </div>
-                  )}
                   {/* Hidden only when the whole ประเภท is closed — an item switch that cannot
                       change the answer is worse than no switch (lib/self-borrow.ts). */}
                   {(profile?.selfBorrowable ?? true) && (

@@ -16,7 +16,7 @@ File upload,,Image upload to /uploads + serve; wired to item media.,,Small,Low,D
 AI semantic search (Gemini + pgvector),,Duplicate detection in add-item wizard; text-search fallback if no API key.,,Medium,Medium,Done,✨ AI,
 CSV import (items/categories/locations/sub-items),,Bulk import via /api/settings/import. Sub-items now reconcile parent qty (fixed).,,Medium,Medium,In progress,🛠️ Utility,
 CategoryProfile + DispenseType model,,5 profiles (CON/DUR/KRU/BAT); forcedTrackIndividually server-enforced.,,Small,High,Done,⚙️ Core,
-Enforce assetTracking/setTracking server-side (D4),,Flags still decorative — strip/clamp disallowed fields on create/update/import; surface in wizard.,,Medium,Medium,Not started,🔧 Hardening,
+Enforce assetTracking server-side (D4),,Flag still decorative — strip disallowed fields on create/update/import; surface in wizard. setTracking dropped 2026-09-01.,,Medium,Medium,Not started,🔧 Hardening,
 Single-source qty derivation (ADR-0002),,Item.totalQty/availableQty as maintained counters — derive from Lots/SubItems. Risky — deferred.,,Large,Low,Not started,🔧 Hardening,
 Kit / BOM,,Cut entirely (D1). Re-introduce in Phase 2 with borrow sets.,,Medium,Low,Not started,❌ Cut,
 Borrow / return workflow + sets,,Phase 2. Student/teacher roles + borrow sets.,,Large,Medium,Not started,⏭️ Phase 2,

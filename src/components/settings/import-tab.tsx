@@ -26,8 +26,8 @@ const COLUMN_REF: Record<ImportType, { required: string[]; optional: string[]; s
   },
   "items-bat": {
     required: ["code", "name", "category"],
-    optional: ["nameEn", "unit", "building", "floor", "room", "detail", "setSize", "description"],
-    sample: { code: "NLU-BAT-013-001-S10-C01", name: "คู่มือพัฒนาการ", category: "หนังสือ", unit: "เล่ม", setSize: "10" },
+    optional: ["nameEn", "unit", "building", "floor", "room", "detail", "description"],
+    sample: { code: "NLU-BAT-013-001-C01", name: "คู่มือพัฒนาการ", category: "หนังสือ", unit: "เล่ม" },
   },
   "items-dur": {
     required: ["code", "name", "category"],

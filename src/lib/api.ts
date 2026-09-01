@@ -107,7 +107,6 @@ export interface ProfileOption {
   description?: string | null;
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
-  setTracking: boolean;
   /** ยืมเอง — ปิดทั้งประเภท และตั้งเพดานที่ item ส่วนใหญ่ใช้. See lib/self-borrow.ts. */
   selfBorrowable: boolean;
   selfBorrowLimit: number;
@@ -212,7 +211,6 @@ export function createProfile(data: {
   code: string;
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking?: boolean;
-  setTracking?: boolean;
   selfBorrowable?: boolean;
   selfBorrowLimit?: number;
   icon?: string;
@@ -318,7 +316,6 @@ export interface QuickCreateItemPayload {
   categoryId: string;
   issueUnitId: string;
   copyCount?: number;
-  setSize?: number;
   initialQty?: number;
   description?: string;
 }

@@ -17,7 +17,7 @@ _Phase 1_ = dispense-focused stock management. _Phase 2_ = borrow/return (deferr
 | D1 | **Cut Kit / BOM entirely from Phase 1.** | No UI defines kit components → the only composite code path (`dispense` deduct) can never find components. Kit is a Phase 2 "borrow set" feature per `talk.txt`. Dead until then. |
 | D2 | **Auth = dev/demo email-only.** No Entra/MSAL, no passwords. | Prod SSO was never built; `bcryptjs` removed (was never wired). Email-only is a known limitation, not a bug — flagged for a later auth milestone. |
 | D3 | **Keep AI semantic search** (pgvector + Gemini). | Used in add-item-modal to detect duplicates. Documented here as in-scope. |
-| D4 | **Enforce `assetTracking` / `setTracking` server-side.** | Today they're decorative in the API (selected but never branched on). Make the flags constrain what gets stored so UI and server agree. |
+| D4 | **Enforce `assetTracking` server-side.** | Today decorative in the API (selected but never branched on). Make the flag constrain what gets stored so UI and server agree. `setTracking` was in this row too; it was dropped 2026-09-01 rather than enforced — `setSize` fed no logic and the count already lives in the item name. |
 | D5 | **`CategoryProfile` + `DispenseType` enum is the category model.** Not the legacy `Category` enum. | Already live; 5 profiles seeded (CON/KIT→plain/DUR/KRU/BAT). |
 | D6 | **`UsageType` enum replaces the `Subject` table.** | COURSE/ACTIVITY/OTHER matches the requirement's "ระบุวิชา/กิจกรรม". Subject table was over-engineering. |
 
@@ -29,13 +29,13 @@ Source of truth: `prisma/schema.prisma`. Summary:
 
 **Profiles (the only fixed enum is `DispenseType`):**
 
-| Profile (seed code) | Name | `dispenseType` | `assetTracking` | `setTracking` | `trackIndividually` |
-|---|---|---|---|---|---|
-| `CON` | วัสดุสิ้นเปลือง | CONSUMABLE | – | – | false |
-| `DUR` | วัสดุคงทน | COUNT | – | – | false |
-| `KRU` | ครุภัณฑ์ | ITEM | ✓ | – | true |
-| `BAT` | หนังสือและของเล่น | ITEM | – | ✓ | true |
-| ~~`KIT`~~ | อุปกรณ์ประกอบวิชา | (Phase 2) | – | – | – |
+| Profile (seed code) | Name | `dispenseType` | `assetTracking` | `trackIndividually` |
+|---|---|---|---|---|
+| `CON` | วัสดุสิ้นเปลือง | CONSUMABLE | – | false |
+| `DUR` | วัสดุคงทน | COUNT | – | false |
+| `KRU` | ครุภัณฑ์ | ITEM | ✓ | true |
+| `BAT` | หนังสือและของเล่น | ITEM | – | true |
+| ~~`KIT`~~ | อุปกรณ์ประกอบวิชา | (Phase 2) | – | – |
 
 **`trackIndividually` rule** (`forcedTrackIndividually`): `dispenseType === "ITEM" → true`, else `false`. Server always overrides client input. No per-item override.
 
@@ -46,7 +46,7 @@ Source of truth: `prisma/schema.prisma`. Summary:
 
 **Stock counters** (ADR-0002): `Lot.receivedQty` immutable, `Lot.remainingQty` decremented on dispense. `Item.totalQty` / `availableQty` are maintained counters (single-source derivation deferred — too risky in dev).
 
-**Code scheme** (ADR-0001): `NLU-{PREFIX}-{NNN}[-SNN]`. Copy segment `-CNN` lives on `SubItem.subCode`, uniform across tracked categories.
+**Code scheme** (ADR-0001): `NLU-{PREFIX}-{NNN}` (the `-SNN` set segment was dropped 2026-09-01; legacy codes keep theirs). Copy segment `-CNN` lives on `SubItem.subCode`, uniform across tracked categories.
 
 ---
 
@@ -100,7 +100,7 @@ Prioritized. Each is independently grabbable.
 
 **A2 — Enforce flags server-side (D4).** Today decorative. Add to item create/update/quick-create/import:
 - `assetTracking === false` → strip fixed-asset fields (`model`, `purchaseDate`, `purchasePrice`, `vendor*`, `warrantyMonths`, `maintenanceCycleMonths`) before write.
-- `setTracking === false` → clamp `setSize = 1`.
+- ~~`setTracking === false` → clamp `setSize = 1`~~ — set tracking was dropped 2026-09-01; `setSize`/`setTracking` no longer exist.
 - And surface `assetTracking`-gated fields in the add-item wizard (currently only the legacy edit dialog reads it — `items-master-tab.tsx:872`).
 - Exact reject-vs-strip semantics: confirm before coding (see Q in §7).
 
@@ -142,7 +142,7 @@ Entra ID SSO, NodeMailer email alerts, borrow/return + sets, Kit/BOM (re-introdu
 
 ## 6. Locked architecture decisions (ADRs)
 
-- `docs/adr/0001` — flat code `NLU-PREFIX-NNN[-SNN]`, copy on `SubItem.subCode`.
+- `docs/adr/0001` — flat code `NLU-PREFIX-NNN`, copy on `SubItem.subCode`. (`-SNN` dropped 2026-09-01.)
 - `docs/adr/0002` — `Lot` split into immutable `receivedQty` + `remainingQty`; corrections via `StockAdjustment`.
 
 Both current and authoritative.

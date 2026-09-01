@@ -79,7 +79,6 @@ export async function POST(request: NextRequest) {
           name,
           categoryId: kitCategory.id,
           issueUnitId,
-          setSize: 1,
           // A set is a piece with its own status — the recipe holds no stock of its own.
           trackIndividually: true,
           totalQty: 0,

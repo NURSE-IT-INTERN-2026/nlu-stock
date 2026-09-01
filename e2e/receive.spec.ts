@@ -31,7 +31,7 @@ async function freshConsumable(request: Req, code: string, initialQty: number) {
   )).rows[0];
   const unit = (await pool.query(`SELECT id FROM units LIMIT 1`)).rows[0];
   const created = await request.post("/api/items/quick-create", {
-    data: { code, name: `E2E ${code}`, categoryId: cat.id, issueUnitId: unit.id, copyCount: 1, setSize: 1, initialQty },
+    data: { code, name: `E2E ${code}`, categoryId: cat.id, issueUnitId: unit.id, copyCount: 1, initialQty },
   });
   expect(created.ok(), await created.text()).toBeTruthy();
   const item = await created.json();

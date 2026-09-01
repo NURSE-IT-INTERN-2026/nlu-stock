@@ -176,8 +176,7 @@ model CategoryProfile {
   code          String       @unique
   description   String?
   dispenseType  DispenseType
-  assetTracking Boolean      @default(false) // โชว์ fields จัดซื้อ/บำรุงรักษา (KRU/ELE)
-  setTracking   Boolean      @default(false) // โชว์ setSize (BOOK/TOY)
+  assetTracking Boolean      @default(false) // โชว์ fields จัดซื้อ/ผู้ขาย/ประกัน (KRU/ELE)
   // ยืมเอง — ปิดทั้งประเภทได้ในคลิกเดียว. Lives here and not only on Item so a decision about
   // a whole ประเภท (KIT ต้องผ่านเจ้าหน้าที่ เพราะระบบไม่ตัดของสิ้นเปลืองในชุดให้) survives the
   // next item somebody adds to it. Item.selfBorrowable narrows further; neither can widen.
@@ -256,7 +255,6 @@ model Item {
   storageRequirements String?
 
   // Book/Toy set size — volumes per set; 1 = single.
-  setSize Int @default(1)
 
   // These replace the old borrowLimit/borrowable, which were dropped for being write-only —
   // nothing ever read them, while the UI promised "0 = ห้ามยืม". They are NOT a gate on

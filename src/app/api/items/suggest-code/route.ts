@@ -5,11 +5,14 @@ import { requireAuth } from "@/lib/api-utils";
 /**
  * GET /api/items/suggest-code?prefix=XXX
  *
- * Uniform scheme (ADR-0001): every item code is `NLU-{PREFIX}-{NNN}`
- * (+ optional `-{SNN}` set on BOOK/TOY, applied client-side; copy `-{CNN}`
- * lives on the SubItem). This endpoint only suggests the next running NNN
- * for a prefix — no group/title parsing, no string scanning beyond the NNN
- * segment.
+ * Uniform scheme (ADR-0001): every item code is `NLU-{PREFIX}-{NNN}`; the
+ * copy `-{CNN}` lives on the SubItem. This endpoint only suggests the next
+ * running NNN for a prefix — no group/title parsing, no string scanning
+ * beyond the NNN segment.
+ *
+ * Legacy BOOK/TOY codes carry a 4th `-{SNN}` segment from the dropped set
+ * feature. Splitting on "-" and reading index 2 ignores it, so they still
+ * yield the right running number.
  *
  * Response:
  *   { suggestedCode: "NLU-BOOK-043", nextNumber: "043" }

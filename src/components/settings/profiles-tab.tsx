@@ -56,7 +56,6 @@ interface FormState {
   code: string;
   dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
   assetTracking: boolean;
-  setTracking: boolean;
   selfBorrowable: boolean;
   selfBorrowLimit: number;
   icon: string;
@@ -66,7 +65,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: "", code: "", dispenseType: "CONSUMABLE",
-  assetTracking: false, setTracking: false, selfBorrowable: true, selfBorrowLimit: 1,
+  assetTracking: false, selfBorrowable: true, selfBorrowLimit: 1,
   icon: "Package", color: PROFILE_COLOR_OPTIONS[0].value, description: "",
 };
 
@@ -111,13 +110,13 @@ export function ProfilesTab() {
     setEditing(p);
     setForm({
       name: p.name, code: p.code, dispenseType: p.dispenseType,
-      assetTracking: p.assetTracking, setTracking: p.setTracking, selfBorrowable: p.selfBorrowable ?? true, selfBorrowLimit: p.selfBorrowLimit ?? 1,
+      assetTracking: p.assetTracking, selfBorrowable: p.selfBorrowable ?? true, selfBorrowLimit: p.selfBorrowLimit ?? 1,
       icon: p.icon, color: p.color, description: p.description ?? "",
     });
     setDialogOpen(true);
   }
 
-  // A profile with items in it: code/ประเภทการเบิกจ่าย/ติดตาม* are frozen (the API enforces
+  // A profile with items in it: code/ประเภทการเบิกจ่าย/ติดตามทรัพย์สิน are frozen (the API enforces
   // it too). ให้เบิก-ยืมเอง is NOT in that set — it changes who may take stock out, not how
   // the stock is modelled, so it stays editable and its fields sit outside the frozen block.
   const locked = (editing?._count?.items ?? 0) > 0;
@@ -139,7 +138,6 @@ export function ProfilesTab() {
             code: form.code,
             dispenseType: form.dispenseType,
             assetTracking: form.assetTracking,
-            setTracking: form.setTracking,
           }),
           selfBorrowable: form.selfBorrowable,
           selfBorrowLimit: Number(form.selfBorrowLimit) || 1,
@@ -148,7 +146,7 @@ export function ProfilesTab() {
       } else {
         await createProfile({
           name: form.name, code: form.code, dispenseType: form.dispenseType,
-          assetTracking: form.assetTracking, setTracking: form.setTracking, selfBorrowable: form.selfBorrowable, selfBorrowLimit: Number(form.selfBorrowLimit) || 1,
+          assetTracking: form.assetTracking, selfBorrowable: form.selfBorrowable, selfBorrowLimit: Number(form.selfBorrowLimit) || 1,
           icon: form.icon, color: form.color, description: form.description || undefined,
         });
         toast.success("สร้างประเภทสำเร็จ");
@@ -242,26 +240,18 @@ export function ProfilesTab() {
           <p className="text-xs text-muted-foreground mt-1">{DISPENSE_HELP[form.dispenseType]}</p>
         </div>
         <div className="space-y-2 rounded-lg border bg-card p-3">
-          <div>
-            <p className="text-sm font-medium">ตั้งค่าเพิ่มเติม</p>
-            <p className="text-xs text-muted-foreground">เลือกได้อิสระ ไม่ผูกกับประเภทการเบิกจ่ายด้านบน</p>
-          </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
-              <Label htmlFor="p-asset" className="text-sm">ติดตามทรัพย์สิน (จัดซื้อ/บำรุงรักษา)</Label>
-              <p className="text-xs text-muted-foreground">เปิดถ้าต้องขึ้นทะเบียนครุภัณฑ์ กรอกข้อมูลผู้ขาย ราคา รับประกัน และรอบซ่อมบำรุง</p>
+              <Label htmlFor="p-asset" className="text-sm">ติดตามทรัพย์สิน (จัดซื้อ)</Label>
+              {/* Not "และรอบซ่อมบำรุง": the maintenance cycle is open to every non-CONSUMABLE
+                  profile regardless of this switch (see lib/category-profile MAINTENANCE_FIELDS),
+                  so naming it here talked people into turning this on for the wrong reason. */}
+              <p className="text-xs text-muted-foreground">เปิดถ้าต้องขึ้นทะเบียนครุภัณฑ์ กรอกข้อมูลผู้ขาย ราคา และรับประกัน — เลือกได้อิสระ ไม่ผูกกับประเภทการเบิกจ่ายด้านบน</p>
             </div>
             <Switch id="p-asset" disabled={locked} checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
           </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5 pr-2">
-              <Label htmlFor="p-set" className="text-sm">ติดตามเป็นชุด</Label>
-              <p className="text-xs text-muted-foreground">ใช้เมื่อ 1 หน่วยที่รับเข้าประกอบด้วยหลายชิ้นย่อย เช่น หนังสือ 1 ชุด มี 6 เล่ม</p>
-            </div>
-            <Switch id="p-set" disabled={locked} checked={form.setTracking} onCheckedChange={(v) => setForm({ ...form, setTracking: v })} />
-          </div>
-          {/* Sits with the two switches it applies to, not at the bottom of the box — under
-              the ยืมเอง fields it read as a warning about them, which is the opposite of true. */}
+          {/* Sits with the switch it applies to, not at the bottom of the box — under the
+              ยืมเอง fields it read as a warning about them, which is the opposite of true. */}
           {locked && <p className="text-xs text-amber-600">⚠ ล็อกไว้เพราะประเภทนี้มีพัสดุอยู่แล้ว</p>}
         </div>
 
@@ -366,7 +356,6 @@ export function ProfilesTab() {
                   <TableCell className="px-2">
                     <div className="flex flex-wrap gap-1">
                       {p.assetTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ทรัพย์สิน</Badge>}
-                      {p.setTracking && <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">ชุด</Badge>}
                       {!p.selfBorrowable && <Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">ไม่ให้ยืมเอง</Badge>}
                     </div>
                   </TableCell>

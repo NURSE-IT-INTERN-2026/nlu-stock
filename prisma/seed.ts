@@ -29,15 +29,15 @@ function readCsv(filename: string) {
 // ── Profile spec (synced with scripts/migrate-profiles.ts) ──
 type ProfileSpec = {
   code: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM";
-  assetTracking: boolean; setTracking: boolean;
+  assetTracking: boolean;
   icon: string; color: string;
 };
 const PROFILE_SPEC: ProfileSpec[] = [
-  { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, setTracking: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "ITEM", assetTracking: false, setTracking: false, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
-  { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, setTracking: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, setTracking: false, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
-  { code: "BAT", name: "หนังสือและของเล่น", dispenseType: "ITEM", assetTracking: false, setTracking: true, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  { code: "CON", name: "วัสดุสิ้นเปลือง", dispenseType: "CONSUMABLE", assetTracking: false, icon: "Package", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  { code: "KIT", name: "อุปกรณ์ประกอบวิชา", dispenseType: "ITEM", assetTracking: false, icon: "Beaker", color: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { code: "DUR", name: "วัสดุคงทน", dispenseType: "COUNT", assetTracking: false, icon: "Hammer", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  { code: "KRU", name: "ครุภัณฑ์", dispenseType: "ITEM", assetTracking: true, icon: "Building2", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
+  { code: "BAT", name: "หนังสือและของเล่น", dispenseType: "ITEM", assetTracking: false, icon: "BookOpen", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
 ];
 
 // Legacy enum codes that CSV imports still reference → map to current profile codes.
@@ -105,21 +105,16 @@ function parsePrice(raw: string): number | null {
 }
 
 // Uniform code generator (ADR-0001): NLU-{PREFIX}-{NNN}[-S{NN}].
-// Per-prefix running counter; setSize>1 appends the set segment.
+// Per-prefix running counter.
 const prefixCounters: Record<string, number> = {};
-function nextCode(prefix: string, setSize = 1): string {
+function nextCode(prefix: string): string {
   const p = PROFILE_ALIASES[prefix] ?? prefix;
   prefixCounters[p] = (prefixCounters[p] ?? 0) + 1;
   const nnn = String(prefixCounters[p]).padStart(3, "0");
-  return setSize > 1 ? `NLU-${p}-${nnn}-S${String(setSize).padStart(2, "0")}` : `NLU-${p}-${nnn}`;
+  return `NLU-${p}-${nnn}`;
 }
 
 // Extract set size from an old-format code (NLU-BOOK-013-001-S06 → 6), else 1.
-function extractSetSize(oldCode: string): number {
-  const m = oldCode.match(/-S(\d{2})$/);
-  return m ? parseInt(m[1], 10) : 1;
-}
-
 // Extract NLU code prefix for grouping
 // "NLU-KRU-001-001" → "NLU-KRU-001"
 // "NLU-BOOK-001-001-S02-C01" → "NLU-BOOK-001-001-S02" (keep set, strip copy)
@@ -481,15 +476,12 @@ async function main() {
   for (const [, group] of bookGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
-    const setSize = extractSetSize(group.codes[0]);
-
     const item = await prisma.item.create({
       data: {
-        code: nextCode("BOOK", setSize),
+        code: nextCode("BOOK"),
         name: stripTrailingNum(group.bookName),
         categoryId: catBook.id,
         trackIndividually: true,
-        setSize,
         issueUnitId: unitId("เล่ม"),
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,
@@ -542,15 +534,12 @@ async function main() {
   for (const [, group] of toyGroups) {
     const locId = group.room ? await getOrCreateLocation("อาคาร 2", "ชั้น 4", group.room) : defaultLocId;
     const qty = group.codes.length;
-    const setSize = extractSetSize(group.codes[0]);
-
     const item = await prisma.item.create({
       data: {
-        code: nextCode("TOY", setSize),
+        code: nextCode("TOY"),
         name: stripTrailingNum(group.toyName),
         categoryId: catToy.id,
         trackIndividually: true,
-        setSize,
         issueUnitId: unitId("ชิ้น"),
         minThreshold: 0, locationId: locId,
         totalQty: qty, availableQty: qty,

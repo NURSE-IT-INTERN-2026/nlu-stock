@@ -13,7 +13,6 @@ const quickCreateSchema = z.object({
   categoryId: z.string().min(1, "Category is required"),
   issueUnitId: z.string().min(1, "Issue unit is required"),
   copyCount: z.number().int().min(1).default(1),
-  setSize: z.number().int().min(1).default(1),
   initialQty: z.number().int().min(0).default(0),
   description: z.string().max(1000).optional(),
 });
@@ -33,8 +32,6 @@ export async function POST(request: NextRequest) {
   if (!cat) return error("Category not found");
 
   const trackIndividually = isItemTracked(cat.profile);
-  // setSize only applies to set-tracked profiles (BOOK/TOY); clamp otherwise (D4).
-  const setSize = cat.profile?.setTracking ? data.setSize : 1;
 
   // Maintenance schedule seed. quick-create uses the default cycle (12 mo); no cycle
   // field in its payload. CONSUMABLE never gets a cycle. Tracked → seed each copy;
@@ -62,7 +59,6 @@ export async function POST(request: NextRequest) {
       issueUnitId: data.issueUnitId,
       description: data.description,
       trackIndividually,
-      setSize,
       ...(subItems.length > 0
         ? { subItems: { createMany: { data: subItems } } }
         : {}),
