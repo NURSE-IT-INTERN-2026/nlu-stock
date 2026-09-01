@@ -3,7 +3,7 @@
 // which list an email lands in, and which writes an EXECUTIVE is allowed.
 import assert from "node:assert";
 // Safe to set after import: the lists are read on every call, not at module load.
-import { roleForEmail, canManageStock, emailsForRole, roleForProfile, displayRole } from "@/lib/roles";
+import { roleForEmail, canManageStock, emailsForRole, roleForProfile, displayRole, roleForSignIn } from "@/lib/roles";
 
 process.env.SUPERADMIN_EMAILS = " Boss@NU.ac.th ,two@nu.ac.th";
 process.env.ADMIN_EMAILS = "store@nu.ac.th";
@@ -93,14 +93,40 @@ process.env.BORROWER_ORG_NAMES = "พยาบาล";
 
 assert.equal(canManageStock("BORROWER"), false, "borrowers must not touch stock");
 
-// displayRole — what /settings prints for a stored row. The flag only ever answers for rows
-// no env list claims; a listed address keeps its list role even if it once signed in as one.
-assert.equal(displayRole({ email: "nurse@cmu.ac.th", isBorrower: true }), "BORROWER");
-assert.equal(displayRole({ email: "store@nu.ac.th", isBorrower: true }), "ADMIN", "a promoted borrower reads as staff");
+// displayRole — what /settings prints for a stored row: env list, then the granted role,
+// then the flag the last sign-in stamped.
+assert.equal(displayRole({ email: "nurse@cmu.ac.th", role: null, isBorrower: true }), "BORROWER");
+assert.equal(displayRole({ email: "store@nu.ac.th", role: null, isBorrower: true }), "ADMIN", "a promoted borrower reads as staff");
+assert.equal(displayRole({ email: "new@nu.ac.th", role: "EXECUTIVE", isBorrower: false }), "EXECUTIVE", "granted from /settings");
 assert.equal(
-  displayRole({ email: "expired@nu.ac.th", isBorrower: false }),
+  displayRole({ email: "store@nu.ac.th", role: "EXECUTIVE", isBorrower: false }),
+  "ADMIN",
+  "env wins over the column — it is the lever that still works when the table is wrong",
+);
+assert.equal(
+  displayRole({ email: "hand-edited@nu.ac.th", role: "GOD", isBorrower: false }),
   null,
-  "no list, no flag = cannot sign in — this is the one row that should read ไม่มีสิทธิ์",
+  "a role name outside ROLES grants nothing",
+);
+assert.equal(
+  displayRole({ email: "expired@nu.ac.th", role: null, isBorrower: false }),
+  null,
+  "no list, no grant, no flag = cannot sign in — the one row that should read เข้าระบบไม่ได้",
+);
+
+// roleForSignIn — the stored row decides first, the provider's claims are the fallback that
+// hands a นศ./บุคลากร their BORROWER.
+const nurseClaims = { email: "nurse@cmu.ac.th", accountType: "StudentAccount", orgCode: "12", orgName: null };
+assert.equal(roleForSignIn(nurseClaims, null), "BORROWER", "first sign-in, no row yet");
+assert.equal(
+  roleForSignIn(nurseClaims, { email: "nurse@cmu.ac.th", role: "EXECUTIVE", isBorrower: true }),
+  "EXECUTIVE",
+  "a grant from /settings outranks what the claims would have given",
+);
+assert.equal(
+  roleForSignIn({ ...nurseClaims, orgCode: "07" }, { email: "nurse@cmu.ac.th", role: null, isBorrower: true }),
+  null,
+  "a stale flag must not grant anything on its own — the claims are re-read every sign-in",
 );
 
 console.log("# roles: all assertions passed");

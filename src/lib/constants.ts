@@ -21,8 +21,20 @@ export const ROLE_LABELS: Record<Role, string> = {
   SUPERADMIN: "ผู้ดูแลระบบ",
   ADMIN: "ผู้ดูแล",
   EXECUTIVE: "ผู้บริหาร",
-  // นศ./บุคลากรคณะที่ผ่าน CMU OAuth แต่ไม่อยู่ใน env list ไหน — ยืมเองได้อย่างเดียว
-  BORROWER: "ผู้ยืม",
+  // นศ./บุคลากรคณะที่ผ่าน CMU OAuth แต่ไม่อยู่ใน env list ไหน — ยืมเองได้อย่างเดียว.
+  // ป้ายบอกว่า "เป็นใคร" ไม่ใช่ "ทำอะไร" เหมือนอีกสามค่า — เจ้าหน้าที่ก็ยืม คำว่าผู้ยืม
+  // จึงไม่ได้แยกใครออกจากใคร
+  BORROWER: "นักศึกษา/บุคลากร",
+};
+
+// สีของ "บทบาท" คือสิ่งที่ต้องกวาดตาเจอในตารางผู้ใช้ — เรียงจากสิทธิ์มากไปน้อย และ ผู้ยืม
+// เงียบที่สุดเพราะเป็นเกือบทุกแถวเมื่อทั้งคณะเริ่มล็อกอิน. -700 อ่านไม่ผ่าน AA บนพื้นมืด
+// จึงต้องจับคู่ dark:-200 ทุกตัว
+export const ROLE_BADGE: Record<Role, string> = {
+  SUPERADMIN: "bg-primary/10 text-primary",
+  ADMIN: "bg-info-500/10 text-info-700 dark:text-info-200",
+  EXECUTIVE: "bg-warning/15 text-warning-700 dark:text-warning-200",
+  BORROWER: "bg-muted text-muted-foreground",
 };
 
 // ─── Maintenance ───

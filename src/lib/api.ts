@@ -389,6 +389,18 @@ export function createSettingsUser(data: Record<string, unknown>) {
   });
 }
 
+/** สิ่งที่รู้เกี่ยวกับอีเมลนี้ก่อนยืนยันเพิ่ม — ชื่อมาจากตาราง users เท่านั้น ไม่มี directory
+ *  API ให้ค้น (ดู api/settings/users/lookup) */
+export function lookupSettingsUser(email: string) {
+  return request<{
+    email: string;
+    name: string | null;
+    known: boolean;
+    currentRole: string | null;
+    isActive: boolean;
+  }>(`/api/settings/users/lookup?email=${encodeURIComponent(email)}`);
+}
+
 export function deleteSettingsUser(id: string) {
   return request<void>(`/api/settings/users/${id}`, { method: "DELETE" });
 }

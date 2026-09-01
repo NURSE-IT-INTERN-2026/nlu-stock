@@ -12,10 +12,17 @@ function roleWhere(role: string | null): Prisma.UserWhereInput {
   if (!role || role === "ALL") return {};
   // BORROWER is the one role with no env list; it has a column instead. Exclude the listed
   // addresses so a borrower later promoted to staff shows under their new role only.
-  if (role === "BORROWER") return { isBorrower: true, ...notListed() };
+  if (role === "BORROWER") return { isBorrower: true, role: null, ...notListed() };
   const emails = (ENV_ROLES as readonly string[]).includes(role) ? emailsForRole(role as EnvRole) : [];
   // equals + insensitive per address: emails are stored as typed, the env lists are lowercased.
-  return { OR: emails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })) };
+  // อีกทางคือแถวที่ถูกมอบบทบาทนี้จาก /settings — แต่ env ชนะคอลัมน์ ถ้าอีเมลอยู่ใน list อื่น
+  // แถวนั้นเป็นของ role นั้น ไม่ใช่ของ role ที่คอลัมน์เขียนไว้
+  return {
+    OR: [
+      ...emails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })),
+      { role, ...notListed() },
+    ],
+  };
 }
 
 /** Rows no env list mentions. */
@@ -78,10 +85,15 @@ export async function POST(request: NextRequest) {
   if (parseError) return parseError;
   if (!data) return error("No data");
 
-  const existing = await prisma.user.findUnique({ where: { email: data.email } });
-  if (existing) return error("Email already exists");
+  const email = data.email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email } });
 
-  const user = await prisma.user.create({ data });
+  // เคยล็อกอินแล้ว = มีแถวอยู่ ไม่ใช่ error — สิ่งที่ superadmin ขอคือ "ให้บทบาทคนนี้"
+  // ไม่ใช่ "สร้างแถว" (แถวเกิดเองตอนล็อกอินครั้งแรกอยู่แล้ว)
+  const user = existing
+    ? await prisma.user.update({ where: { id: existing.id }, data: { role: data.role, isActive: true } })
+    // ชื่อจริงมาจาก provider ตอนล็อกอินครั้งแรก — callback เขียนทับ placeholder ตัวนี้ให้เอง
+    : await prisma.user.create({ data: { email, name: email.split("@")[0], role: data.role } });
 
-  return json(user, 201);
+  return json(user, existing ? 200 : 201);
 }

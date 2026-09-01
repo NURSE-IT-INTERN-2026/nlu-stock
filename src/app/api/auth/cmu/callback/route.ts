@@ -3,7 +3,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth-config";
-import { roleForProfile } from "@/lib/roles";
+import { roleForSignIn } from "@/lib/roles";
 import { OAUTH_STATE_COOKIE, callbackUri, exchangeCode, fetchProfile, readState, type OAuthProfile } from "@/lib/cmu-oauth";
 
 /** Where the provider sends the browser back. Must equal the redirect_uri the /authorize
@@ -48,13 +48,14 @@ export async function GET(request: NextRequest) {
   if (!profile) return fail("ไม่พบอีเมลในบัญชีที่ใช้เข้าสู่ระบบ");
   const { email } = profile;
 
-  // OAuth only proves the person owns the address — it grants nothing by itself. Staff come
-  // from the env allowlists; นศ./บุคลากร come from the faculty claims. Neither = turned away.
-  const role = roleForProfile(profile);
-  if (!role) return fail("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ");
-
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing && !existing.isActive) return fail("บัญชีนี้ถูกปิดใช้งาน");
+
+  // OAuth only proves the person owns the address — it grants nothing by itself. Staff come
+  // from the env allowlists or a grant made in /settings; นศ./บุคลากร come from the faculty
+  // claims, re-read on every sign-in. Neither = turned away.
+  const role = roleForSignIn(profile, existing);
+  if (!role) return fail("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ");
 
   // Fall back to the address prefix only when the provider gave no name at all.
   const placeholder = email.split("@")[0];

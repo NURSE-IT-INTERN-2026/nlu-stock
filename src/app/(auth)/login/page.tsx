@@ -27,8 +27,8 @@ const quickLogins = [
   // real account would. Two of them because นศ. and บุคลากร reach BORROWER by different
   // signals: the student by faculty code, the staffer by department name (their code is
   // unknown — no one here has an account to look it up with).
-  { label: "ผู้ยืม (นศ.)", email: "student@cmu.ac.th", role: "BORROWER", claims: { orgCode: "12", accountType: "StudentAccount" } },
-  { label: "ผู้ยืม (บุคลากร)", email: "staff@cmu.ac.th", role: "BORROWER", claims: { orgCode: "4501", orgName: "ภาควิชาการพยาบาลศัลยศาสตร์", accountType: "MISEmployee" } },
+  { label: "นักศึกษา", email: "student@cmu.ac.th", role: "BORROWER", claims: { orgCode: "12", accountType: "StudentAccount" } },
+  { label: "บุคลากร", email: "staff@cmu.ac.th", role: "BORROWER", claims: { orgCode: "4501", orgName: "ภาควิชาการพยาบาลศัลยศาสตร์", accountType: "MISEmployee" } },
 ];
 
 export default function LoginPage() {

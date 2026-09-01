@@ -112,6 +112,10 @@ model User {
   // working นศ./บุคลากร account from a revoked one and labels both "ไม่มีสิทธิ์".
   // Never a permission check — roleForProfile() still re-decides on every sign-in.
   isBorrower Boolean  @default(false)
+  // บทบาทที่ superadmin ตั้งจาก /settings. null = ไม่ได้ตั้ง ให้ไปว่าตาม env/claims เหมือนเดิม.
+  // env ยังชนะคอลัมน์นี้เสมอ — เป็นทางเดียวที่แก้ได้โดยไม่ต้องผ่านหน้าจอ เวลาลบสิทธิ์ตัวเอง
+  // ออกจาก DB. SUPERADMIN ตั้งที่นี่ไม่ได้ (validator กัน) มาจาก env ทางเดียว
+  role      String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

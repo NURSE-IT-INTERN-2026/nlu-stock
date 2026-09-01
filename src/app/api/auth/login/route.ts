@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth-config";
-import { roleForProfile } from "@/lib/roles";
+import { roleForSignIn } from "@/lib/roles";
 import { z } from "zod/v4";
 
 const loginSchema = z.object({
@@ -38,24 +38,33 @@ export async function POST(request: NextRequest) {
   //
   // Dev-only claims so the BORROWER shortcuts have something to match: the provider is what
   // supplies these in production, and this route already 404s there.
-  const role = roleForProfile({
-    email,
-    accountType: parsed.data.accountType ?? "StudentAccount",
-    orgCode: parsed.data.orgCode ?? null,
-    orgName: parsed.data.orgName ?? null,
-  });
-  if (!role) {
-    return NextResponse.json({ error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, { status: 403 });
-  }
-
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing && !existing.isActive) {
     return NextResponse.json({ error: "บัญชีนี้ถูกปิดใช้งาน" }, { status: 403 });
   }
 
-  const user =
-    existing ??
-    (await prisma.user.create({ data: { email, name: email.split("@")[0] } }));
+  const role = roleForSignIn(
+    {
+      email,
+      accountType: parsed.data.accountType ?? "StudentAccount",
+      orgCode: parsed.data.orgCode ?? null,
+      orgName: parsed.data.orgName ?? null,
+    },
+    existing,
+  );
+  if (!role) {
+    return NextResponse.json({ error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, { status: 403 });
+  }
+
+  // Stamp isBorrower the same way api/auth/cmu/callback does — the shortcuts on the login
+  // page are how the ยืมเอง flow gets exercised, and a row created here that skips the flag
+  // reads as "เข้าระบบไม่ได้" in /settings right after signing in fine.
+  const isBorrower = role === "BORROWER";
+  const user = existing
+    ? existing.isBorrower === isBorrower
+      ? existing
+      : await prisma.user.update({ where: { id: existing.id }, data: { isBorrower } })
+    : await prisma.user.create({ data: { email, name: email.split("@")[0], isBorrower } });
 
   const token = await signToken({
     userId: user.id,

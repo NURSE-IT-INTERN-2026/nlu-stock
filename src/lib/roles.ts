@@ -92,14 +92,54 @@ export function roleForProfile(claims: AccountClaims): Role | null {
   return null;
 }
 
+/** The stored half of a row's identity: what /settings set, and what the last sign-in saw. */
+export interface UserRow {
+  email: string;
+  /** ตั้งจาก /settings. null = ไม่ได้ตั้ง */
+  role: string | null;
+  isBorrower: boolean;
+}
+
 /**
- * What /settings should print for a stored row. Same order of authority as sign-in, minus
- * the live claims — an env list wins, then the isBorrower flag the last sign-in stamped.
- * null = no list mentions the address and it never signed in as a นศ./บุคลากร, so it cannot
- * sign in at all. Display only: never gate anything on this, use roleForProfile.
+ * What the stored row actually grants, and the single place that defines the order:
+ *
+ *   env list  →  the role column
+ *
+ * env comes first on purpose. It is the only lever that works without the app — wiping
+ * every SUPERADMIN out of the users table would otherwise lock the ตั้งค่า tab, and its
+ * own list, behind a door nobody can open.
+ *
+ * isBorrower is deliberately absent. It records what the *last* sign-in decided, and
+ * whether someone is still นศ./บุคลากร of the faculty is a question only the provider's
+ * current claims can answer — a graduate's stale flag must not keep letting them in.
  */
-export function displayRole(user: { email: string; isBorrower: boolean }): Role | null {
-  return roleForEmail(user.email) ?? (user.isBorrower ? "BORROWER" : null);
+function grantedRole(user: UserRow): Role | null {
+  const listed = roleForEmail(user.email);
+  if (listed) return listed;
+  // Guard the cast: a hand-edited row (or a role retired from ROLES) must not become a
+  // role name nothing understands.
+  if (user.role && (ROLES as readonly string[]).includes(user.role)) return user.role as Role;
+  return null;
+}
+
+/**
+ * What /settings should print for a stored row — the grant, or else the flag the last
+ * sign-in stamped, which is the only trace a นศ./บุคลากร leaves behind. null = nothing
+ * grants this address anything and no sign-in ever did, so it cannot sign in at all.
+ * Display only: never gate on this, use roleForSignIn.
+ */
+export function displayRole(user: UserRow): Role | null {
+  return grantedRole(user) ?? (user.isBorrower ? "BORROWER" : null);
+}
+
+/**
+ * Who is signing in. A grant decides first — a superadmin who handed out ผู้ดูแล from
+ * /settings means it whatever the provider says — otherwise the claims decide, which is
+ * where BORROWER comes from and why leaving the faculty takes it away. A row that does not
+ * exist yet has no grant, so pass null and this is exactly roleForProfile.
+ */
+export function roleForSignIn(claims: AccountClaims, user: UserRow | null): Role | null {
+  return (user && grantedRole(user)) || roleForProfile(claims);
 }
 
 /** Everything except ตั้งค่า. Executives and borrowers are read-only apart from เบิก/ยืม. */

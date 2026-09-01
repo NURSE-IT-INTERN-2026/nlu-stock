@@ -19,8 +19,9 @@ import {
 import {
   Sheet, SheetContent, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
-import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser } from "@/lib/api";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { getSettingsUsers, createSettingsUser, updateSettingsUser, deleteSettingsUser, lookupSettingsUser } from "@/lib/api";
+import { GRANTABLE_ROLES } from "@/lib/validators/user";
+import { ROLE_LABELS, ROLE_BADGE, labelFor, type Role } from "@/lib/constants";
 import { ROLES } from "@/lib/roles";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +39,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+
+type GrantableRole = (typeof GRANTABLE_ROLES)[number];
+type Preview = Awaited<ReturnType<typeof lookupSettingsUser>>;
 
 interface UserRecord {
   id: string;
@@ -59,7 +63,13 @@ export function UsersTab() {
   const [firstLoad, setFirstLoad] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<UserRecord | null>(null);
-  const [form, setForm] = useState({ email: "", name: "" });
+  const [form, setForm] = useState<{ email: string; name: string; role: GrantableRole }>({
+    email: "", name: "", role: "ADMIN",
+  });
+  // เพิ่มผู้ใช้ = 2 จังหวะ: กรอกอีเมล+บทบาท แล้วดูสรุปก่อนยืนยัน (แก้ไขไม่ต้อง มีข้อมูลอยู่แล้ว)
+  const [step, setStep] = useState<"form" | "confirm">("form");
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [checking, setChecking] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -97,14 +107,30 @@ export function UsersTab() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ email: "", name: "" });
+    setForm({ email: "", name: "", role: "ADMIN" });
+    setStep("form");
+    setPreview(null);
     setDialogOpen(true);
   }
 
   function openEdit(user: UserRecord) {
     setEditing(user);
-    setForm({ email: user.email, name: user.name });
+    setForm({ email: user.email, name: user.name, role: "ADMIN" });
+    setStep("form");
     setDialogOpen(true);
+  }
+
+  /** ถามระบบว่ารู้จักอีเมลนี้ว่าอะไรบ้าง แล้วค่อยให้ยืนยัน — ไม่มีใครควรกดเพิ่มโดยไม่เห็นว่า
+   *  กำลังเพิ่มใครและเปลี่ยนบทบาทจากอะไรเป็นอะไร */
+  async function handleNext() {
+    setChecking(true);
+    try {
+      setPreview(await lookupSettingsUser(form.email));
+      setStep("confirm");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ตรวจสอบอีเมลไม่สำเร็จ");
+    }
+    setChecking(false);
   }
 
   async function handleSave() {
@@ -113,8 +139,8 @@ export function UsersTab() {
         await updateSettingsUser(editing.id, { name: form.name });
         toast.success("อัปเดตผู้ใช้สำเร็จ");
       } else {
-        await createSettingsUser(form);
-        toast.success("สร้างผู้ใช้สำเร็จ");
+        await createSettingsUser({ email: form.email, role: form.role });
+        toast.success(preview?.known ? "ให้บทบาทสำเร็จ" : "เพิ่มผู้ใช้งานสำเร็จ");
       }
       setDialogOpen(false);
       fetchUsers();
@@ -145,32 +171,37 @@ export function UsersTab() {
     setDeleteTarget(null);
   }
 
+  // โครงเดียวกับการ์ดจริง (แถบเครื่องมือ + ตาราง) ไม่งั้นตอนโหลดเสร็จหน้าจะกระโดด
   if (firstLoad) return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <Skeleton className="h-6 w-28" />
-        <Skeleton className="h-8 w-16" />
-      </div>
-      <div className="rounded-2xl border overflow-hidden bg-card">
-        <div className="divide-y divide-border">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-4 px-4 py-3">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-5 w-16 rounded-full" />
-              <Skeleton className="h-5 w-14 rounded-full" />
-              <Skeleton className="h-7 w-24" />
-            </div>
-          ))}
+    <div className="rounded-2xl border bg-card md:overflow-clip">
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-4">
+        <Skeleton className="h-9 w-full rounded-lg" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-9 flex-1 rounded-lg" />
+          <Skeleton className="h-9 w-32 rounded-lg" />
         </div>
+      </div>
+      <div className="divide-y divide-border">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-7 w-24" />
+          </div>
+        ))}
       </div>
     </div>
   );
 
   // ── Modal shell elements (shared by Dialog + Sheet) ──────────
-  const title = editing ? "แก้ไขผู้ใช้งาน" : "เพิ่มผู้ใช้งาน";
-  const subtitle = editing ? "แก้ไขข้อมูลผู้ใช้งาน" : "เพิ่มผู้ใช้งานเข้าระบบ";
-  const canSave = !form.email || !form.name;
+  const confirming = !editing && step === "confirm";
+  const title = editing ? "แก้ไขผู้ใช้งาน" : confirming ? "ยืนยันการเพิ่มผู้ใช้งาน" : "เพิ่มผู้ใช้งาน";
+  const subtitle = editing
+    ? "แก้ไขข้อมูลผู้ใช้งาน"
+    : confirming
+      ? "ตรวจข้อมูลก่อนยืนยัน"
+      : "กรอกอีเมลและบทบาทที่จะให้";
 
   const modalHeader = (
     <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
@@ -193,81 +224,164 @@ export function UsersTab() {
     </div>
   );
 
+  const summaryRow = (label: string, value: React.ReactNode) => (
+    <div className="flex items-baseline justify-between gap-4 py-2">
+      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-right text-sm font-medium text-foreground">{value}</span>
+    </div>
+  );
+
   const modalBody = (
     <div className={cn(DIALOG_BODY, "bg-secondary/40 px-6 py-6")}>
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="user-email">อีเมล</Label>
-          <Input
-            id="user-email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            disabled={!!editing}
-            type="email"
-            className="bg-card"
-          />
+      {editing ? (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="user-email">อีเมล</Label>
+            <Input id="user-email" value={form.email} disabled type="email" className="bg-card" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-name">ชื่อ-นามสกุล</Label>
+            <Input id="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="user-name">ชื่อ-นามสกุล</Label>
-          <Input id="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-card" />
+      ) : confirming ? (
+        <div className="space-y-4">
+          <div className="divide-y divide-border rounded-xl border border-border bg-card px-4 py-1">
+            {summaryRow(
+              "ชื่อ",
+              preview?.name ?? (
+                <span className="font-normal text-muted-foreground">
+                  — ยังไม่เคยเข้าสู่ระบบ ชื่อจริงจะมาเองครั้งแรกที่เข้า
+                </span>
+              ),
+            )}
+            {summaryRow("อีเมล", <span className="font-mono text-xs break-all">{preview?.email ?? form.email}</span>)}
+            {summaryRow(
+              "บทบาท",
+              preview?.currentRole && preview.currentRole !== form.role ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-muted-foreground line-through">{labelFor(ROLE_LABELS, preview.currentRole as Role)}</span>
+                  <span aria-hidden>→</span>
+                  <span>{ROLE_LABELS[form.role]}</span>
+                </span>
+              ) : (
+                ROLE_LABELS[form.role]
+              ),
+            )}
+          </div>
+          {preview && !preview.isActive && (
+            <p className="text-xs text-warning-700 dark:text-warning-200">
+              บัญชีนี้ถูกปิดใช้งานอยู่ — ยืนยันแล้วจะถูกเปิดใช้งานกลับ
+            </p>
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          บทบาทกำหนดจากรายชื่ออีเมลในค่าตั้งระบบ (env) ไม่ได้แก้จากหน้านี้
-        </p>
-      </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="user-email">อีเมล</Label>
+            <Input
+              id="user-email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              type="email"
+              placeholder="somchai.s@cmu.ac.th"
+              className="bg-card"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>บทบาท</Label>
+            {/* สองตัวเลือก ใช้ปุ่มไปเลย — dropdown สำหรับ 2 ค่าคือการซ่อนของที่แสดงหมดได้ */}
+            <div className="grid grid-cols-2 gap-2">
+              {GRANTABLE_ROLES.map((r) => (
+                <Button
+                  key={r}
+                  type="button"
+                  variant={form.role === r ? "default" : "outline"}
+                  className={form.role === r ? "" : "bg-card"}
+                  aria-pressed={form.role === r}
+                  onClick={() => setForm({ ...form, role: r })}
+                >
+                  {ROLE_LABELS[r]}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
   const modalFooter = (
     <div className="flex items-center justify-between border-t border-border bg-card px-6 py-4">
-      <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
-      <Button onClick={handleSave} disabled={canSave}>{editing ? "บันทึก" : "สร้าง"}</Button>
+      {confirming ? (
+        <>
+          <Button variant="ghost" onClick={() => setStep("form")}>ย้อนกลับ</Button>
+          <Button onClick={handleSave}>{preview?.known ? "ยืนยันให้บทบาท" : "ยืนยันเพิ่มผู้ใช้งาน"}</Button>
+        </>
+      ) : (
+        <>
+          <Button variant="ghost" onClick={() => setDialogOpen(false)}>ยกเลิก</Button>
+          {editing ? (
+            <Button onClick={handleSave} disabled={!form.name.trim()}>บันทึก</Button>
+          ) : (
+            <Button onClick={handleNext} disabled={!form.email.trim() || checking}>
+              {checking ? "กำลังตรวจสอบ…" : "ถัดไป"}
+            </Button>
+          )}
+        </>
+      )}
     </div>
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />เพิ่มผู้ใช้งาน</Button>
+    <>
+    {/* ตัวกรอง ช่องค้น ปุ่มเพิ่ม และตาราง เป็นเครื่องมือของตารางเดียวกัน — อยู่ในการ์ดใบเดียว
+        ไม่ใช่ลอยอยู่บน page wash คนละชั้นกัน */}
+    <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-4">
+        {/* บทบาทมาจาก env ไม่ใช่คอลัมน์ (ยกเว้น ผู้ยืม ที่มีคอลัมน์) — route กรองให้ฝั่ง DB */}
+        <Tabs value={roleFilter} onValueChange={(v) => { setRoleFilter(v as string); setPage(1); }}>
+          {/* shrink-0 คู่กับ flex-1 ของ base: จอกว้างแบ่งราง 5 ช่องเท่าๆ กัน จอแคบดันรางให้เลื่อน
+              แทนที่จะบีบจนป้ายขาด — "ผู้ดูแลระบบ" ไม่พอในช่อง 61px ตั้งแต่ยังมีแค่ 4 ช่อง */}
+          <TabsList className="w-full min-w-0 overflow-x-auto">
+            <TabsTrigger value="ALL" className="shrink-0 px-3">ทั้งหมด</TabsTrigger>
+            {ROLES.map((r) => (
+              <TabsTrigger key={r} value={r} className="shrink-0 px-3">{ROLE_LABELS[r]}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center gap-2">
+          {/* ค้นฝั่ง server: ตารางนี้โตตามจำนวน นศ. ที่เคยล็อกอิน ไม่ใช่จำนวนเจ้าหน้าที่ */}
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ค้นหาชื่อหรืออีเมล"
+              className="pl-9"
+              aria-label="ค้นหาผู้ใช้งาน"
+            />
+          </div>
+          <Button className="shrink-0" onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">เพิ่มผู้ใช้งาน</span>
+          </Button>
+        </div>
       </div>
 
-      {/* บทบาทมาจาก env ไม่ใช่คอลัมน์ (ยกเว้น ผู้ยืม ที่มีคอลัมน์) — route กรองให้ฝั่ง DB */}
-      <Tabs value={roleFilter} onValueChange={(v) => { setRoleFilter(v as string); setPage(1); }}>
-        {/* w-full + flex-1 ของ trigger: 5 ช่องแบ่งรางเท่าๆ กัน min-w-0 กันป้ายไทยดันรางล้นจอแคบ */}
-        <TabsList className="w-full min-w-0">
-          <TabsTrigger value="ALL" className="min-w-0">ทั้งหมด</TabsTrigger>
-          {ROLES.map((r) => (
-            <TabsTrigger key={r} value={r} className="min-w-0">{ROLE_LABELS[r]}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {/* ค้นฝั่ง server: ตารางนี้โตตามจำนวน นศ. ที่เคยล็อกอิน ไม่ใช่จำนวนเจ้าหน้าที่ */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ค้นหาชื่อหรืออีเมล"
-          className="pl-9"
-          aria-label="ค้นหาผู้ใช้งาน"
-        />
-      </div>
-
-      <div className="rounded-2xl border bg-card shadow-sm md:overflow-clip">
-        <Table grid zebra className="table-fixed">
+      <Table grid zebra className="table-fixed">
           <TableHeader sticky>
             <TableRow>
               <TableHead className="px-2">ชื่อ</TableHead>
               <TableHead className="w-56 px-2">อีเมล</TableHead>
               <TableHead className="w-28 px-2">บทบาท</TableHead>
-              <TableHead className="w-24 px-2">สถานะ</TableHead>
               <TableHead className="w-[120px] px-2">การดำเนินการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="py-12">
+              <TableRow><TableCell colSpan={4} className="py-12">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <Users className="h-8 w-8 text-muted-foreground/40" />
                   <div>
@@ -285,17 +399,25 @@ export function UsersTab() {
               </TableCell></TableRow>
             ) : users.map((user) => (
               <TableRow key={user.id} className={`${!user.isActive ? "opacity-50" : ""}`}>
-                <TableCell className="px-2"><span className="block truncate font-medium">{user.name}</span></TableCell>
+                <TableCell className="px-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{user.name}</span>
+                    {/* "ใช้งาน" คือสถานะของเกือบทุกแถว — ป้ายที่ติดทุกแถวไม่ได้บอกอะไร
+                        และป้ายเขียวยังอ่านเป็นไฟ online/offline. เหลือไว้เฉพาะข้อยกเว้น */}
+                    {!user.isActive && (
+                      <span className="shrink-0 inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-0 leading-5 text-[11px] font-medium text-muted-foreground">
+                        ปิดใช้งาน
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{user.email}</span></TableCell>
+                {/* null ไม่ใช่บทบาทที่ต่ำกว่าผู้ยืม — คนที่เข้าระบบได้อย่างน้อยเป็นผู้ยืมเสมอ
+                    แถวนั้นคือแถวที่ล็อกอินไม่ได้แล้ว (ถูกถอดจาก env / เพิ่มมือไว้เฉยๆ) */}
                 <TableCell className="px-2">
                   {user.role
-                    ? <Badge variant="outline" className="px-1.5 py-0 leading-5 text-[11px]">{ROLE_LABELS[user.role]}</Badge>
-                    : <span className="text-[11px] text-muted-foreground">ไม่มีสิทธิ์</span>}
-                </TableCell>
-                <TableCell className="px-2">
-                  {user.isActive
-                    ? <span className="inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium bg-success/15 text-success-700 border-success/30">ใช้งาน</span>
-                    : <span className="inline-flex items-center rounded-full border px-1.5 py-0 leading-5 text-[11px] font-medium bg-muted text-muted-foreground border-border">ปิดใช้งาน</span>}
+                    ? <Badge variant="outline" className={cn("border-transparent px-1.5 py-0 leading-5 text-[11px]", ROLE_BADGE[user.role])}>{ROLE_LABELS[user.role]}</Badge>
+                    : <span className="text-[11px] text-muted-foreground">เข้าระบบไม่ได้</span>}
                 </TableCell>
                 <TableCell className="px-2">
                   <TooltipProvider>
@@ -376,6 +498,6 @@ export function UsersTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

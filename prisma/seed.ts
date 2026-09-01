@@ -162,6 +162,12 @@ async function main() {
   const admin = await prisma.user.create({ data: { email: "superadmin@nlu.ac.th", name: "Super Admin" } });
   await prisma.user.create({ data: { email: "admin@nlu.ac.th", name: "Admin User" } });
   await prisma.user.create({ data: { email: "executive@nlu.ac.th", name: "Executive User" } });
+  // นศ. ตัวอย่างของปุ่มลัด "ผู้ยืม (นศ.)" บนหน้า login. isBorrower คือสิ่งที่การล็อกอินประทับไว้
+  // ตอน claims บอกว่าเป็นคนในคณะ — เขียนตรงเข้า DB โดยไม่ใส่ = แถวที่ล็อกอินได้จริงแต่ /settings
+  // อ่านว่า "เข้าระบบไม่ได้"
+  await prisma.user.create({
+    data: { email: "student@cmu.ac.th", name: "student", isBorrower: true },
+  });
 
   // ============================================================
   // Units — collect unique units from CSVs + ชีต8
