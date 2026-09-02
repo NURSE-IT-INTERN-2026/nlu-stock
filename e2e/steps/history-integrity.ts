@@ -16,8 +16,11 @@ type Row = Record<string, unknown> & { steps?: Row[] };
  * กับพัสดุทุกตัว และต้องครอบ flow ที่เพิ่งเพิ่มเข้ามาให้เองโดยไม่ต้องมาแก้เทส
  */
 When("ฉันเปิดประวัติของพัสดุทุกตัวที่เทสสร้างไว้", async ({ request, bdd }) => {
+  // ตะแกรงเดิมจับด้วยรหัสอย่างเดียว จึงมองไม่เห็นของที่สร้างผ่าน wizard — ตรงนั้นระบบเป็นคน
+  // ออกรหัสให้ (NLU-KRU-167) เทสตั้งได้แค่ชื่อ
   const { rows } = await pool.query(
-    `SELECT id, code FROM items WHERE code LIKE 'E2E-%' ORDER BY code`
+    `SELECT id, code, "totalQty" FROM items
+      WHERE code LIKE 'E2E-%' OR name LIKE 'E2E %' ORDER BY code`
   );
   expect(rows.length, "suite ต้องสร้างพัสดุไว้ก่อนถึงจะมีอะไรให้ตรวจ").toBeGreaterThan(0);
 
@@ -37,6 +40,7 @@ When("ฉันเปิดประวัติของพัสดุทุ�
       code: item.code,
       events: (body.events ?? []) as Row[],
       dbRows: Number(moved.rows[0].n),
+      totalQty: Number(item.totalQty),
     });
   }
 });
@@ -46,6 +50,15 @@ Then("ของที่ยอดหรือสถานะขยับ ต้�
     .filter((h: { events: Row[]; dbRows: number }) => h.dbRows > 0 && h.events.length === 0)
     .map((h: { code: string; dbRows: number }) => `${h.code} (${h.dbRows} รายการใน DB)`);
   expect(silent, "ของขยับแล้วแต่ประวัติว่างเปล่า").toEqual([]);
+});
+
+// ยอดตั้งต้นก็เป็นการขยับ: ของ 10 ชิ้นโผล่เข้าคลังต้องตอบได้ว่ามาจากไหน ไม่ใช่แค่ของที่
+// ขยับ *หลัง* สร้างแล้วเท่านั้น — ledger ว่างทำให้ข้อบนไม่ทันเห็นเคสนี้
+Then("ของที่มียอดอยู่ในคลัง ต้องบอกได้ว่ายอดตั้งต้นมาจากไหน", async ({ bdd }) => {
+  const unexplained = bdd.histories
+    .filter((h: { events: Row[]; totalQty: number }) => h.totalQty > 0 && h.events.length === 0)
+    .map((h: { code: string; totalQty: number }) => `${h.code} (${h.totalQty} ชิ้น)`);
+  expect(unexplained, "มีของอยู่ในคลังแต่ประวัติว่างเปล่า").toEqual([]);
 });
 
 Then(

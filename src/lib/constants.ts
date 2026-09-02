@@ -179,6 +179,7 @@ export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   ASSEMBLY: "ประกอบเป็นชุด",
   REPAIR_RETURN: "รับคืนจากซ่อม",
   DAMAGE_CANCELLED: "ยกเลิกคำขอชำรุด",
+  OPENING_BALANCE: "ยอดตั้งต้นตอนขึ้นทะเบียน",
   OTHER: "อื่นๆ",
 };
 

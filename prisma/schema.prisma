@@ -45,6 +45,9 @@ enum AdjustmentReason {
   // that puts repaired stock back — the one row where the reason is the whole point.
   REPAIR_RETURN
   DAMAGE_CANCELLED
+  // ยอดตั้งต้นตอนขึ้นทะเบียนพัสดุใหม่ (api/items/quick-create). ไม่ใช่ใบรับเข้า — ของชุดนี้
+  // อยู่บนชั้นมาก่อนแล้ว การขึ้นทะเบียนแค่ทำให้ระบบรู้จักมัน แต่ยังต้องมีแถวบอกที่มาของยอด
+  OPENING_BALANCE
   OTHER
 }
 
