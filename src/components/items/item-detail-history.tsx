@@ -6,7 +6,7 @@ import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight,
+  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight, Tag,
   ListFilter, CircleDot, CalendarDays, FilterX, Search, ArrowLeft, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -99,6 +99,8 @@ const TYPE_META: Record<TimelineEventType, { icon: typeof Package; chip: string;
   STATUS_CHANGE: { icon: RefreshCw, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
   MAINTENANCE: { icon: Wrench, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
   LOCATION_CHANGE: { icon: MapPin, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
+  // แก้ราคาไม่ได้ทำให้ของขยับ — เงียบเหมือนย้ายที่ตั้งกับเปลี่ยนสถานะ
+  PRICE_CHANGE: { icon: Tag, chip: "bg-muted text-muted-foreground", rail: "bg-muted-foreground" },
 };
 
 /**
@@ -122,6 +124,7 @@ const TYPE_GROUPS: { value: string; label: string; types: TimelineEventType[] }[
   { value: "ADJUSTMENT", label: "ปรับสต๊อก", types: ["ADJUSTMENT"] },
   { value: "STATUS_CHANGE", label: "เปลี่ยนสถานะ", types: ["STATUS_CHANGE"] },
   { value: "LOCATION_CHANGE", label: "ย้ายที่ตั้ง", types: ["LOCATION_CHANGE"] },
+  { value: "PRICE_CHANGE", label: "แก้ราคา", types: ["PRICE_CHANGE"] },
 ];
 
 /** ตัวเลือกหนึ่งค่า → ชนิดเหตุการณ์ที่มันครอบ, ส่งไปเป็น list ให้ `?type=` ที่รับ comma อยู่แล้ว. */

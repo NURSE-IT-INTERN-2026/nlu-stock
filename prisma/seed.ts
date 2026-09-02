@@ -135,6 +135,8 @@ async function main() {
 
   // Clean all tables (order matters for FK)
   const stripTrailingNum = (s: string) => s.replace(/\s*\(\d+\)\s*$/, "");
+  // ประวัติการแนบ/ลบหลักฐาน อ้าง User และไม่มีใครลบให้ — ตกหล่นไป reseed จะตายที่ user.deleteMany()
+  await prisma.attachmentLog.deleteMany();
   await prisma.itemStatusLog.deleteMany();
   await prisma.locationChangeLog.deleteMany();
   await prisma.maintenanceRecord.deleteMany();
@@ -858,6 +860,18 @@ async function main() {
         expiryDate: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000),
         receivedDate: day(120),
       },
+    });
+    // ล็อตของสิ้นเปลืองคือแหล่งความจริงของยอด — สร้างล็อตแล้วไม่ขยับยอดของ item ด้วย
+    // ฐานจะออกมาผิดตั้งแต่วินาทีแรก (availableQty 0 ทั้งที่ในล็อตมีของ 5) ซึ่งเป็น drift
+    // ที่ recomputeItemCounts จะไม่มีวันแก้ให้ เพราะไม่มีใครเรียกมันกับของชิ้นนี้อีก
+    const lotSum = await prisma.lot.aggregate({
+      where: { itemId: demoConsumables[0].id },
+      _sum: { remainingQty: true },
+    });
+    const available = lotSum._sum.remainingQty ?? 0;
+    await prisma.item.update({
+      where: { id: demoConsumables[0].id },
+      data: { availableQty: available, totalQty: { set: Math.max(demoConsumables[0].totalQty, available) } },
     });
   }
 

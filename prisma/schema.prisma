@@ -132,6 +132,7 @@ model User {
   dispenseTemplates  DispenseTemplate[]
   returnRecords      ReturnRecord[]
   attachmentChanges  AttachmentLog[]
+  priceChanges       ReceivePriceLog[]
 
   @@map("users")
 }
@@ -313,6 +314,7 @@ model Item {
   maintenanceRecords MaintenanceRecord[]
   statusLogs         ItemStatusLog[]
   locationChanges    LocationChangeLog[]
+  priceChanges       ReceivePriceLog[]
   templateLines      DispenseTemplateLine[]
   returnRecords      ReturnRecord[]
 
@@ -389,6 +391,7 @@ model Lot {
   dispenseRecords DispenseRecord[]
   receiveRecords  ReceiveRecord[]
   adjustments     StockAdjustment[]
+  priceChanges    ReceivePriceLog[]
 
   @@unique([itemId, lotNumber])
   @@index([itemId, expiryDate])
@@ -483,6 +486,7 @@ model ReceiveRecord {
   notes      String?
   // ชิ้นที่ใบนี้พาเข้าคลัง (ครุภัณฑ์ที่ track รายชิ้นเท่านั้น) — ใช้ตีราคาต่อชิ้นตอนตัดจำหน่าย
   subItems   SubItem[]
+  priceChanges ReceivePriceLog[]
 
   @@index([itemId, receivedAt])
   @@map("receive_records")
@@ -647,6 +651,30 @@ model ItemStatusLog {
 // --- Location Change Log (audit trail for ย้ายที่ตั้ง) ---
 // fromLabel/toLabel denormalized: an audit log is point-in-time, so the
 // location name as it was at move time is what we want to show.
+// --- Price edit log (แก้ราคาต่อหน่วยของใบรับเข้าย้อนหลัง) ---
+// ใบรับเข้าถือราคาปัจจุบันได้ค่าเดียว แต่ราคานั้นเป็นตัวตั้งของ Item.purchasePrice, Lot.unitCost
+// และมูลค่าคงคลังทั้งรายงาน — แก้ทีเดียวตัวเลขขยับทั้งกระดาน โดยไม่เหลือร่องรอยว่าเคยเป็นเท่าไหร่
+// หรือใครแก้. แถวนี้คือร่องรอยนั้น: ใบไหน ล็อตไหน จากเท่าไหร่ไปเท่าไหร่ ใคร เมื่อไหร่.
+model ReceivePriceLog {
+  id        String        @id @default(cuid())
+  receiveId String
+  receive   ReceiveRecord @relation(fields: [receiveId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  // ล็อตของใบนั้น (ของสิ้นเปลือง) — null บนของที่ไม่ได้แยกล็อต
+  lotId     String?
+  lot       Lot?          @relation(fields: [lotId], references: [id])
+  lotNumber String?
+  fromCost  Float?
+  toCost    Float?
+  changedBy String
+  changer   User          @relation(fields: [changedBy], references: [id])
+  changedAt DateTime      @default(now())
+
+  @@index([itemId, changedAt])
+  @@map("receive_price_logs")
+}
+
 model LocationChangeLog {
   id        String   @id @default(cuid())
   itemId    String

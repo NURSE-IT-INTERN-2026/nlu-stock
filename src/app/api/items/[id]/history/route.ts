@@ -417,6 +417,35 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
     );
   }
 
+  // แก้ราคาต่อหน่วยของใบรับเข้าย้อนหลัง — ระดับรายการเหมือนใบรับเข้าเอง ทุกชิ้นถือร่วมกัน
+  if (fetchReceive) {
+    queries.push(
+      prisma.receivePriceLog.findMany({
+        where: { itemId: id },
+        include: { changer: { select: { name: true } } },
+        orderBy: { changedAt: "desc" },
+      }).then((records) => {
+        for (const r of records) {
+          const money = (v: number | null) => (v == null ? "—" : v.toLocaleString("th-TH"));
+          events.push({
+            id: r.id,
+            type: "PRICE_CHANGE",
+            date: r.changedAt,
+            delta: null,
+            qty: null,
+            note: "แก้ราคาต่อหน่วย",
+            // ล็อตอยู่ในบรรทัดเดียวกับตัวเลข เพราะใบรับเข้าหลายใบของรายการเดียวกันต่างล็อตกัน
+            // และ "80 → 99" เฉย ๆ ตอบไม่ได้ว่าของกองไหน
+            subtitle: `${r.lotNumber ? `Lot ${r.lotNumber} · ` : ""}${money(r.fromCost)} → ${money(r.toCost)} บาท`,
+            notes: "",
+            user: r.changer.name,
+            details: { lotNumber: r.lotNumber, fromCost: r.fromCost, toCost: r.toCost },
+          });
+        }
+      })
+    );
+  }
+
   if (fetchLocation) {
     queries.push(
       prisma.locationChangeLog.findMany({

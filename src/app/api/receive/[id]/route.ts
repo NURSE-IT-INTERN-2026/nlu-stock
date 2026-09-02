@@ -34,7 +34,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const record = await tx.receiveRecord.findUnique({
         where: { id },
         select: {
-          id: true, itemId: true, lotId: true, receivedAt: true,
+          id: true, itemId: true, lotId: true, receivedAt: true, unitCost: true,
+          lot: { select: { lotNumber: true } },
           item: { select: { category: { select: { profile: { select: { dispenseType: true } } } } } },
         },
       });
@@ -45,6 +46,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         data: { unitCost: parsed.data.unitCost },
         select: { id: true, unitCost: true },
       });
+
+      // ใบเก็บได้แค่ราคาปัจจุบัน — ร่องรอยว่าเคยเป็นเท่าไหร่ ล็อตไหน ใครแก้ อยู่ในแถวนี้แถวเดียว
+      // เขียนเฉพาะตอนตัวเลขขยับจริง: กดบันทึกทับค่าเดิมไม่ใช่การแก้ราคา
+      if (record.unitCost !== row.unitCost) {
+        await tx.receivePriceLog.create({
+          data: {
+            receiveId: record.id,
+            itemId: record.itemId,
+            lotId: record.lotId,
+            lotNumber: record.lot?.lotNumber ?? null,
+            fromCost: record.unitCost,
+            toCost: row.unitCost,
+            changedBy: auth.user.userId,
+          },
+        });
+      }
 
       // เหมือน POST เป๊ะ: ราคาอยู่ที่ใบรับเข้า ส่วน Item.purchasePrice / Lot.unitCost เป็นค่าที่
       // derive จากใบรับเข้าทั้งหมดของมัน — แก้ใบไหนก็ตาม ตัวเลขในรายงานตามทันทีโดยไม่ต้อง backfill.

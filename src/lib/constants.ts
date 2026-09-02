@@ -60,7 +60,7 @@ export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
 export type TimelineEventType =
   | "DISPENSE" | "INUSE" | "BORROW" | "RETURN" | "RECEIVE" | "ADJUSTMENT"
   | "DAMAGE_REPORT" | "REPAIR_SENT" | "REPAIR_RETURN"
-  | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE";
+  | "STATUS_CHANGE" | "MAINTENANCE" | "LOCATION_CHANGE" | "PRICE_CHANGE";
 
 export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   DISPENSE: "เบิก",
@@ -77,6 +77,7 @@ export const EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   STATUS_CHANGE: "เปลี่ยนสถานะ",
   MAINTENANCE: "บำรุงรักษา",
   LOCATION_CHANGE: "ย้ายที่ตั้ง",
+  PRICE_CHANGE: "แก้ราคา",
 };
 
 export const RETURN_CONDITION_LABELS: Record<string, string> = {
