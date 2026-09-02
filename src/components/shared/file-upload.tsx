@@ -160,6 +160,9 @@ interface FileUploadListProps {
   accept?: string;
   label?: string;
   max?: number;
+  /** แจ้ง parent ว่ายังอัปโหลดไม่เสร็จ — ปุ่มบันทึกของ dialog ต้องปิดระหว่างนี้ ไม่งั้นกดทันแล้ว
+   *  บันทึกไปด้วยรายการไฟล์ว่าง: onChange เพิ่ง push URL หลัง putFile คืนค่า. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
 /**
@@ -176,10 +179,16 @@ export function FileUploadList({
   accept = EVIDENCE_ACCEPT,
   label = "แนบไฟล์",
   max = MAX_EVIDENCE_FILES,
+  onUploadingChange,
 }: FileUploadListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploadingState] = useState(false);
   const room = max - value.length;
+
+  const setUploading = (busy: boolean) => {
+    setUploadingState(busy);
+    onUploadingChange?.(busy);
+  };
 
   async function addFiles(fileList: FileList | null) {
     const picked = Array.from(fileList ?? []);

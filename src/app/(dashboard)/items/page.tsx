@@ -139,7 +139,10 @@ function ItemsContent() {
     items, total, page, perPage, loading, isLoadingMore, hasNext,
     loadMore, setPage, refetch,
   } = useInventoryList<ItemRecord>({ isMobile, filter });
-  const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setPage(1); setSelected(new Set()); }, [setPage]);
+  // ไม่เรียก setPage(1) ที่นี่: useInventoryList รีเซ็ตหน้าให้เองอยู่แล้วเมื่อ filter เปลี่ยน และ
+  // setPage คือ goToPage ที่ถือ filter เก่าจาก closure — เรียกตรงนี้คือยิงคำขอ "ยังไม่กรอง"
+  // แข่งกับคำขอที่กรองแล้ว ซึ่งถ้ามันมาช้ากว่าจะได้ตารางที่ไม่ถูกกรองทั้งที่ช่องค้นหามีคำอยู่
+  const handleFilterChange = useCallback((next: FilterState) => { setFilter(next); setSelected(new Set()); }, []);
   const statusFiltering = filter.status.length > 0;
 
   const [expandedId, setExpandedId] = useState<string | null>(null);

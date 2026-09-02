@@ -93,6 +93,9 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   // null = follow the auto-calculated date; a string = staff typed their own.
   const [nextOverride, setNextOverride] = useState<string | null>(null);
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
+  // ปุ่มบันทึกต้องปิดระหว่างอัปโหลด — FileUploadList push URL เข้า onChange หลัง putFile เสร็จ
+  // กดทันก่อนหน้านั้นจะบันทึกไปด้วยรายการไฟล์ว่าง แล้วหลักฐานหายเงียบๆ ทั้งที่เลือกไฟล์แล้ว
+  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // ── Reset on open/close ──
@@ -501,14 +504,14 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
 
             <div className="space-y-2">
               <Label>เอกสารแนบ</Label>
-              <FileUploadList value={attachmentUrls} onChange={setAttachmentUrls} label="แนบเอกสาร" />
+              <FileUploadList value={attachmentUrls} onChange={setAttachmentUrls} label="แนบเอกสาร" onUploadingChange={setUploading} />
             </div>
           </div>
 
           {/* ── Footer ── */}
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-4 sm:px-6 py-4">
             <Button variant="ghost" onClick={resetAndClose}>ยกเลิก</Button>
-            <Button disabled={submitting || !selectedItemId} onClick={handleSubmit} className="gap-1.5">
+            <Button disabled={submitting || uploading || !selectedItemId} onClick={handleSubmit} className="gap-1.5">
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
               {editSend ? "บันทึกการแก้ไข" : sending ? "ส่งบำรุงรักษา" : receiving ? "บันทึกรับคืน" : "บันทึก"}
             </Button>

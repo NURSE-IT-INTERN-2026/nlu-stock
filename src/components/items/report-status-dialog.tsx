@@ -60,6 +60,9 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
   const [subItemId, setSubItemId] = useState("");
   const [notes, setNotes] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  // ปุ่มบันทึกต้องปิดระหว่างอัปโหลด — FileUploadList push URL เข้า onChange หลัง putFile เสร็จ
+  // กดทันก่อนหน้านั้นจะบันทึกไปด้วยรายการไฟล์ว่าง แล้วหลักฐานหายเงียบๆ ทั้งที่เลือกไฟล์แล้ว
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // When there is exactly one sub-item (e.g. opened from a specific piece's detail
@@ -182,7 +185,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
 
             <div className="space-y-2">
               <Label>หลักฐานแนบ</Label>
-              <FileUploadList value={imageUrls} onChange={setImageUrls} label="แนบรูป/เอกสาร" />
+              <FileUploadList value={imageUrls} onChange={setImageUrls} label="แนบรูป/เอกสาร" onUploadingChange={setUploading} />
             </div>
           </div>
 
@@ -192,7 +195,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
             <Button
               variant={status === "AVAILABLE" ? "default" : "destructive"}
               onClick={handleSave}
-              disabled={saving || (trackIndividually && !subItemId) || (notesRequired && !notes.trim())}
+              disabled={saving || uploading || (trackIndividually && !subItemId) || (notesRequired && !notes.trim())}
               className="gap-1.5"
             >
               {saving ? "กำลังบันทึก..." : meta.submit}

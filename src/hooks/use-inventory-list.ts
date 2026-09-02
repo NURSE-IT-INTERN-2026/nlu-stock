@@ -53,13 +53,22 @@ export function useInventoryList<T>({
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
+  /**
+   * ลำดับคำขอล่าสุด — ใช้ร่วมกันทั้ง effect และ goToPage.
+   *
+   * ธง `cancelled` ใน effect กันได้แค่ effect ชนตัวเอง: goToPage เป็นคนละเส้นทาง ถือ `filter`
+   * จาก closure ของมันเอง และเคยเขียนทับผลที่กรองแล้วด้วยผลที่ยังไม่กรอง เพียงเพราะมันมาช้ากว่า
+   * (เปลี่ยนตัวกรองหนึ่งครั้งยิงสองคำขอ). ตัวนับตัวเดียวทำให้ "คำขอล่าสุดชนะ" เสมอ ไม่ว่าใครยิง.
+   */
+  const reqSeq = useRef(0);
+
   // Primary fetch (replace): mode / filter / manual refetch → reset + first page.
   useEffect(() => {
-    let cancelled = false;
+    const seq = ++reqSeq.current;
     setLoading(true);
     (async () => {
       const data = await getItems(buildParams(filter, null));
-      if (cancelled) return;
+      if (seq !== reqSeq.current) return;
       setItems((data.items || []) as T[]);
       if (data.total != null) setTotal(data.total);
       if (mode === "pages") {
@@ -70,15 +79,13 @@ export function useInventoryList<T>({
       }
       setLoading(false);
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [mode, filter, reloadKey]);
 
   const goToPage = useCallback(
     async (target: number) => {
       if (mode !== "pages") return;
       const P = Math.max(1, Math.min(totalPages, target));
+      const seq = ++reqSeq.current;
       setLoading(true);
       // ponytail: cursor can't jump — walk forward from the highest known page, caching each
       // cursor. prev / next / already-visited = 1 fetch; a far forward jump = N sequential fetches
@@ -88,15 +95,17 @@ export function useInventoryList<T>({
       while (cursors.length < P) {
         const enter = cursors[cursors.length - 1]!;
         const step = await getItems(buildParams(filter, enter));
+        if (seq !== reqSeq.current) return; // ตัวกรองเปลี่ยนระหว่างเดิน cursor — เส้นทางนี้ตกรุ่นแล้ว
         if (!step.nextCursor) {
           eof = true; // ran out before reaching P — land on the last page
           break;
         }
         cursors.push(step.nextCursor);
       }
-      setPageCursors(cursors);
       const finalPage = eof ? cursors.length : P;
       const data = await getItems(buildParams(filter, cursors[finalPage - 1] ?? null));
+      if (seq !== reqSeq.current) return;
+      setPageCursors(cursors);
       setItems((data.items || []) as T[]);
       setPage(finalPage);
       if (data.total != null) setTotal(data.total);

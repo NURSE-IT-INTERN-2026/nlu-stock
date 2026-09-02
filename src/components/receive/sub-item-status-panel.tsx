@@ -572,6 +572,9 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
   // written before anyone has looked at the piece properly.
   const [damage, setDamage] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  // ปุ่มบันทึกต้องปิดระหว่างอัปโหลด — FileUploadList push URL เข้า onChange หลัง putFile เสร็จ
+  // กดทันก่อนหน้านั้นจะบันทึกไปด้วยรายการไฟล์ว่าง แล้วหลักฐานหายเงียบๆ ทั้งที่เลือกไฟล์แล้ว
+  const [uploading, setUploading] = useState(false);
   const [venue, setVenue] = useState<"INTERNAL" | "EXTERNAL" | "">("");
   const isRepair = stage === "UNDER_REPAIR";
   const isDamaged = stage === "DAMAGED";
@@ -785,14 +788,14 @@ function StatusRow({ row, stage, showStage, onResolved }: { row: SubItemByStatus
                   ) : (
                     // No log row to hang them on (data old enough to predate the log) — the
                     // ส่งซ่อม row this confirm writes becomes the record instead.
-                    <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" />
+                    <FileUploadList value={photoUrls} onChange={setPhotoUrls} label="แนบรูป/เอกสาร" onUploadingChange={setUploading} />
                   )}
                 </div>
               </div>
             )}
             <AlertDialogFooter>
               <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-              <AlertDialogAction disabled={isDamaged && (!note.trim() || !repairNote.trim() || !venue)} onClick={() => { setConfirmOpen(false); receive(); }}>ยืนยัน</AlertDialogAction>
+              <AlertDialogAction disabled={uploading || (isDamaged && (!note.trim() || !repairNote.trim() || !venue))} onClick={() => { setConfirmOpen(false); receive(); }}>ยืนยัน</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

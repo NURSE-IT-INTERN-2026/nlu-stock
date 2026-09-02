@@ -49,6 +49,9 @@ SLOWMO=2000 npm run test:e2e           # ช้าลง ~2 วิ/action ดู
 **อัตโนมัติทุก run:** seed DB ใหม่ (ต้องมี docker `realnlu-stock-db-1` รันอยู่) + ติด `next dev` ที่ port 4517 เอง
 **แก้ .feature / steps แล้ว** ไม่ต้องรัน `bddgen` เอง — `npm run test:e2e` generate ให้ก่อนเสมอ (`e2e/.gen/` อยู่ใน .gitignore)
 **Port ติดค้าง:** `lsof -ti :4517 | xargs kill`
+**ห้ามรันสอง session พร้อมกัน** — ทุก runner ใช้ `nlu_stock_test` ตัวเดียวและ globalSetup `DROP SCHEMA`
+ทุกครั้ง อีก session reseed ทับกลางคัน = user row ที่ token ชี้อยู่หายไป แล้ว requireAuth คืน 401
+(`src/lib/api-utils.ts`) ทุก request ที่เหลือ เห็นเป็น fail กระจายมั่วๆ ที่ rerun แล้วหาย
 **สอง session:** global-setup ปั๊ม `e2e/.auth/admin.json` (SUPERADMIN, ใช้เป็น default) และ
 `borrower.json` (BORROWER) — เรียกผ่าน fixture `borrowerPage` เมื่อต้องเทสในบทบาท นศ.
 **ค้นหาแบบ AI** ต้องมี `GOOGLE_GENERATIVE_AI_API_KEY` ใน `.env.test` ไม่มี (หรือ quota เต็ม) สเปคนั้น skip ตัวเอง ไม่ fail
