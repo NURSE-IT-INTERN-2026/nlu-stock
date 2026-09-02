@@ -1,6 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { test, expect, pool } from "../fixtures";
-import { createConsumable } from "./helpers";
+import { createConsumable, freshTracked } from "./helpers";
 
 const { Given, When, Then } = createBdd(test);
 
@@ -88,6 +88,33 @@ When(
 
     const dialog = page.getByRole("dialog");
     await dialog.getByPlaceholder("เช่น เครื่องดื่มหัวปลีแบบผง").fill(bdd.renamed);
+    await dialog.getByRole("button", { name: /^บันทึกการแก้ไข/ }).click();
+    await expect(page.getByText("แก้ไขรายการสำเร็จ")).toBeVisible({ timeout: 15_000 });
+  }
+);
+
+Given("มีครุภัณฑ์ X อยู่ในทะเบียน", async ({ request, bdd, uniqueCode }) => {
+  // ครุภัณฑ์เป็น profile เดียวที่ assetTracking = true — ฟิลด์จัดซื้อของประเภทอื่นถูก
+  // sanitizeItemByProfile ตัดทิ้งก่อนถึง DB จึงไม่มีอะไรให้บันทึก
+  bdd.item = await freshTracked(request, uniqueCode);
+});
+
+When(
+  "ฉันเปิดหน้าตั้งค่า แท็บรายการพัสดุ กดแก้ไขที่แถวของ X แล้วตั้งราคาจัดซื้อเป็น {int}",
+  async ({ page, bdd }, price: number) => {
+    await page.goto("/settings?tab=items");
+    await page.getByPlaceholder(/ค้นหา/).first().fill(bdd.item.code);
+    const row = page
+      .getByText(bdd.item.code, { exact: false })
+      .locator('xpath=ancestor::*[.//button[@aria-label="แก้ไข"]][1]')
+      .first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole("button", { name: "แก้ไข", exact: true }).first().click();
+
+    const dialog = page.getByRole("dialog");
+    const priceField = dialog.locator('input[type="number"][step="0.01"]').first();
+    await expect(priceField).toBeVisible({ timeout: 10_000 });
+    await priceField.fill(String(price));
     await dialog.getByRole("button", { name: /^บันทึกการแก้ไข/ }).click();
     await expect(page.getByText("แก้ไขรายการสำเร็จ")).toBeVisible({ timeout: 15_000 });
   }
