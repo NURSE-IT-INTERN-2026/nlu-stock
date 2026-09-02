@@ -3,15 +3,8 @@ import { test, expect, pool } from "../fixtures";
 
 const { Given, When, Then } = createBdd(test);
 
-/** ห้องเดียวกันทั้งสามรายการ — wizard เคยไม่ถามที่จัดเก็บเลย ของใหม่จึงค้างเป็น null */
+/** ห้องเดียวกันทุกไฟล์ — wizard เคยไม่ถามที่จัดเก็บเลย ของใหม่จึงค้างเป็น null */
 const LOCATION = { building: "อาคาร 2", floor: "ชั้น 4", room: "402" };
-
-interface Created {
-  name: string;
-  qty: number;
-  /** ยืม-คืน ตาม Code — ได้ชิ้นย่อย C01.. แทนยอดรวม */
-  tracked: boolean;
-}
 
 /** โค้ดที่ระบบออกให้ตอนสร้าง (wizard ตั้งเอง เทสไม่ได้เป็นคนกรอก) */
 async function codeOf(name: string) {
@@ -20,8 +13,14 @@ async function codeOf(name: string) {
   return rows[0].code as string;
 }
 
-Given("ฉันเปิดหน้ารับเข้า-คืนพัสดุ", async ({ page, bdd }) => {
-  bdd.created = [] as Created[];
+/** เปิดหน้ารายละเอียดของรายการที่ scenario นี้เพิ่งสร้าง */
+async function openNewItem(page: import("@playwright/test").Page, name: string) {
+  const code = await codeOf(name);
+  await page.goto(`/items/${code}`);
+  return code;
+}
+
+Given("ฉันเปิดหน้ารับเข้า-คืนพัสดุ", async ({ page }) => {
   await page.goto("/receive");
 });
 
@@ -75,50 +74,64 @@ When(
     await expect(dialog.getByText(`${LOCATION.building} / ${LOCATION.floor} / ${LOCATION.room}`)).toBeVisible();
     await dialog.getByRole("button", { name: /^สร้างพัสดุ/ }).click();
 
-    // toast อ้างชื่อรายการ — ยันทีละใบได้แม้ toast ใบก่อนยังไม่หาย
     await expect(page.getByText(`สร้างพัสดุ "${name}" สำเร็จ`)).toBeVisible({ timeout: 15_000 });
     await expect(dialog).toBeHidden();
 
-    (bdd.created as Created[]).push({ name, qty, tracked });
+    bdd.newItem = { name, qty };
   }
 );
 
-Then("ฉันจะเห็นทั้งสามรายการอยู่บนหน้ารายละเอียดของตัวเอง", async ({ page, bdd }) => {
-  const created = bdd.created as Created[];
-  expect(created).toHaveLength(3);
-  for (const item of created) {
-    const code = await codeOf(item.name);
-    await page.goto(`/items/${code}`);
-    await expect(page.getByRole("heading", { name: item.name, level: 1 })).toBeVisible({ timeout: 15_000 });
-    // หัวเรื่องพิมพ์รหัสรวมกับจำนวนในก้อนเดียว ("NLU-KRU-167 · 3 ชิ้น") จับแบบมีอยู่ในข้อความ
-    await expect(page.getByText(code).first()).toBeVisible();
-  }
+Then("ฉันจะเห็นรายการใหม่บนหน้ารายละเอียดของมัน", async ({ page, bdd }) => {
+  const code = await openNewItem(page, bdd.newItem.name);
+  await expect(page.getByRole("heading", { name: bdd.newItem.name, level: 1 })).toBeVisible({ timeout: 15_000 });
+  // หัวเรื่องพิมพ์รหัสรวมกับจำนวนในก้อนเดียว ("NLU-KRU-167 · 3 ชิ้น") จับแบบมีอยู่ในข้อความ
+  await expect(page.getByText(code).first()).toBeVisible();
 });
 
-Then("รายการแบบตาม Code ต้องมีเลขชิ้นย่อย C01 C02 C03", async ({ page, bdd }) => {
-  const item = (bdd.created as Created[]).find((c) => c.tracked)!;
-  await page.goto(`/items/${await codeOf(item.name)}`);
+Then("รายการใหม่ต้องมีเลขชิ้นย่อย C01 C02 C03", async ({ page, bdd }) => {
+  await openNewItem(page, bdd.newItem.name);
   for (const sub of ["C01", "C02", "C03"]) {
     await expect(page.getByRole("button", { name: new RegExp(`-${sub}$`) }).first()).toBeVisible({ timeout: 15_000 });
   }
 });
 
-Then("อีกสองรายการต้องมียอดคงเหลือเท่าจำนวนที่ตั้งไว้", async ({ page, bdd }) => {
-  for (const item of (bdd.created as Created[]).filter((c) => !c.tracked)) {
-    await page.goto(`/items/${await codeOf(item.name)}`);
-    // การ์ดสต็อกพิมพ์ "คงเหลือ / รวม หน่วย" — ยันฝั่งรวม ซึ่งเป็นจำนวนที่กรอกไว้ตอนสร้าง
-    await expect(page.getByText(new RegExp(`^/\\s*${item.qty}\\s`)).first()).toBeVisible({ timeout: 15_000 });
-  }
+Then("รายการใหม่ต้องมียอดคงเหลือเท่าจำนวนที่ตั้งไว้", async ({ page, bdd }) => {
+  await openNewItem(page, bdd.newItem.name);
+  // การ์ดสต็อกพิมพ์ "คงเหลือ / รวม หน่วย" — ยันฝั่งรวม ซึ่งเป็นจำนวนที่กรอกไว้ตอนสร้าง
+  await expect(
+    page.getByText(new RegExp(String.raw`^/\s*${bdd.newItem.qty}\s`)).first()
+  ).toBeVisible({ timeout: 15_000 });
 });
 
-Then("ทั้งสามรายการต้องผูกกับที่จัดเก็บที่เลือกไว้ ไม่ใช่ค้างเป็นไม่ระบุ", async ({ bdd }) => {
-  for (const item of bdd.created as Created[]) {
-    const { rows } = await pool.query(
-      `SELECT l.building, l.floor, l.room
-         FROM items i JOIN locations l ON l.id = i."locationId"
-        WHERE i.name = $1`,
-      [item.name]
-    );
-    expect(rows[0], `${item.name} ไม่ผูกที่จัดเก็บ`).toMatchObject(LOCATION);
-  }
+Then("รายการใหม่ต้องผูกกับที่จัดเก็บที่เลือกไว้ ไม่ใช่ค้างเป็นไม่ระบุ", async ({ bdd }) => {
+  const { rows } = await pool.query(
+    `SELECT l.building, l.floor, l.room
+       FROM items i JOIN locations l ON l.id = i."locationId"
+      WHERE i.name = $1`,
+    [bdd.newItem.name]
+  );
+  expect(rows[0], `${bdd.newItem.name} ไม่ผูกที่จัดเก็บ`).toMatchObject(LOCATION);
+});
+
+Then("ประวัติระดับรายการของรายการใหม่ต้องมีแถวยอดตั้งต้น", async ({ request, bdd }) => {
+  // หน้ารายละเอียดของของที่ติดตามรายชิ้นเปิดมาที่ชิ้น C01 เสมอ และแท็บประวัติของมันถูกกรอง
+  // ตามชิ้น — ยอดตั้งต้นเป็นแถวระดับรายการ (ไม่ผูกชิ้นไหน) จึงไม่โผล่บนจอนั้น
+  // ยันผ่าน API ตัวเดียวกับที่หน้าประวัติเรียก แต่ไม่กรองชิ้น
+  const { rows } = await pool.query(`SELECT id FROM items WHERE name = $1`, [bdd.newItem.name]);
+  const res = await request.get(`/api/items/${rows[0].id}/history?perPage=50`);
+  expect(res.ok(), `ประวัติเปิดไม่ได้ (HTTP ${res.status()})`).toBeTruthy();
+  const body = await res.json();
+  const opening = (body.events ?? []).filter(
+    (e: { note?: string }) => e.note === "ยอดตั้งต้นตอนขึ้นทะเบียน"
+  );
+  expect(opening.length, "ไม่มีแถวยอดตั้งต้นในประวัติ").toBe(1);
+});
+
+Then("ประวัติของรายการใหม่ต้องมีแถวยอดตั้งต้น", async ({ page, bdd }) => {
+  // ของที่เพิ่งขึ้นทะเบียนมีของอยู่ในคลังทันที ประวัติจึงต้องตอบได้ว่ายอดนั้นมาจากไหน
+  // ไม่ใช่ "ยังไม่มีประวัติของพัสดุนี้" ทั้งที่ยอดขึ้นไปแล้ว
+  await openNewItem(page, bdd.newItem.name);
+  await page.getByRole("button", { name: "ประวัติ", exact: true }).click();
+  const rows = page.locator("ol > li > div > button");
+  await expect(rows.first()).toContainText("ยอดตั้งต้นตอนขึ้นทะเบียน", { timeout: 15_000 });
 });
