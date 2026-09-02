@@ -666,10 +666,14 @@ export function createReceive(data: Record<string, unknown>) {
 }
 
 /** แก้ราคาต่อหน่วยของใบรับเข้าย้อนหลัง — null = ลบราคา (ไม่ทราบ), ต่างจาก 0 (ได้มาฟรี). */
-export function updateReceiveUnitCost(id: string, unitCost: number | null) {
-  return request<{ id: string; unitCost: number | null }>(`/api/receive/${id}`, {
+/** แก้ใบรับเข้าย้อนหลัง — ส่งเฉพาะช่องที่แตะ (ละไว้ = ไม่แก้ช่องนั้น) */
+export function updateReceiveRecord(
+  id: string,
+  data: { unitCost?: number | null; lotNumber?: string; batchRef?: string | null },
+) {
+  return request<{ id: string; unitCost: number | null; lotNumber: string | null; batchRef: string | null }>(`/api/receive/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ unitCost }),
+    body: JSON.stringify(data),
   });
 }
 

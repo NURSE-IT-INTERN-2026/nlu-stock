@@ -1,21 +1,29 @@
 "use client";
 
-import { useMemo, useState, useCallback, type ReactNode } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   ReportFilters, defaultDateFilters, periodLabel,
   type FilterValues, type FilterConfig,
 } from "./report-filters";
 import { ReportDataTable, type Column } from "./report-data-table";
+import { autoLotNumber } from "@/lib/lot-code";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { Tabs, TabsList, TabsTrigger, TabsIndicator } from "@/components/ui/tabs";
 import { segmentStyle, type Token } from "./report-kit";
 import { Badge } from "@/components/ui/badge";
-import { getReport, updateReceiveUnitCost } from "@/lib/api";
+import { Pencil } from "lucide-react";
+import { getReport, updateReceiveRecord } from "@/lib/api";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  DIALOG_SHELL_FIT, DIALOG_BODY,
+} from "@/components/ui/dialog";
 import { useSession } from "@/components/layout/auth-guard";
 import { canManageStock } from "@/lib/roles";
 import { STATUS_LABELS, STATUS_PILLS, type ItemStatus } from "@/lib/constants";
@@ -121,6 +129,8 @@ interface ReportTableProps<T extends { id: string }> {
   token: Token;
   /** แถวบนสุดของการ์ดตัวกรอง — sub-tab chip ของหน้านี้ */
   leading?: ReactNode;
+  /** กดแถวแล้วเปิดอะไรสักอย่าง. รับ refetch มาด้วยเพราะตารางนี้ไม่ refetch เองหลังแก้ */
+  onRowClick?: (row: T, refetch: () => void) => void;
 }
 
 function ReportTable<T extends { id: string }>({
@@ -134,6 +144,7 @@ function ReportTable<T extends { id: string }>({
   emptyMessage,
   token,
   leading,
+  onRowClick,
 }: ReportTableProps<T>) {
   const isMobile = useIsMobile();
   const [filters, setFilters] = useState<FilterValues>(defaultDateFilters);
@@ -162,7 +173,7 @@ function ReportTable<T extends { id: string }>({
   }, [filters, perPage, path, extraParams]);
 
   const {
-    items: data, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
+    items: data, total, page, loading, isLoadingMore, hasNext, loadMore, setPage, refetch,
   } = usePagedList<T>({ fetchPage, pageSize: perPage, isMobile });
 
   return (
@@ -179,6 +190,7 @@ function ReportTable<T extends { id: string }>({
         columns={columns}
         data={data}
         loading={loading}
+        onRowClick={onRowClick ? (row) => onRowClick(row, refetch) : undefined}
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
         emptyMessage={emptyMessage}
         token={token}
@@ -215,70 +227,159 @@ interface ReceiveRow {
   category: string;
   quantity: number;
   unitCost: number | null;
-  lotNumber: string;
+  /** null = ใบนี้ไม่ได้แยกล็อต — ชื่องวดของมันไปอยู่ที่ batchRef แทน */
+  lotNumber: string | null;
+  /** ชื่องวดของใบที่ไม่มีล็อต — null = ยังไม่ได้ตั้ง ใช้รหัสจากวันที่รับเข้าไปก่อน */
+  batchRef: string | null;
   expiryDate: string | null;
   receiverName: string;
   receivedAt: string;
 }
 
 /**
- * ช่องราคาที่แก้ได้ในบรรทัด — ตารางนี้คือที่เดียวที่เห็นใบรับเข้าทีละใบ และราคาส่วนใหญ่ใน
- * ประวัติยังว่าง (เพิ่งเริ่มถามราคาของคงทนเมื่อ 2026-08-19) ทั้งที่ค่าใช้จ่ายรายปีบวกจากช่องนี้.
+ * แก้ราคาย้อนหลังผ่าน dialog ที่เปิดจากการกดแถว.
  *
- * เป็น input ตลอดเวลา ไม่ใช่กดแล้วค่อยแก้: งานจริงคือไล่กรอกทีละสิบๆ แถว การต้องกดก่อนพิมพ์
- * ทุกแถวคือการกดเปล่าอีกเท่าตัว. บันทึกตอน blur เฉพาะเมื่อค่าเปลี่ยน — ไล่ Tab ผ่านแถวที่กรอก
- * แล้วจึงไม่ยิง request.
+ * เดิมเป็น input ในบรรทัด ซึ่งบนมือถือคือ "พิมพ์แล้วต้องกด Enter/แตะที่อื่น" ถึงจะบันทึก และบน
+ * หน้ารายงานที่คนเข้ามาอ่านเฉยๆ ช่องพิมพ์กลางตารางก็แก้โดนโดยไม่ตั้งใจได้ง่าย. กดแถว → เด้ง
+ * dialog → กดบันทึก ทำให้ทุกการแก้ราคาเป็นเจตนา และมีปุ่มบันทึกจริงให้กดบนจอเล็ก.
  */
-function UnitCostCell({ row, editable }: { row: ReceiveRow; editable: boolean }) {
-  // saved = ค่าที่บันทึกไว้จริงล่าสุด ไม่ใช่ค่าใน row ตอน render — เก็บแยกไว้เพราะรายการที่ fetch
-  // มาไม่ได้ refetch หลังบันทึก การเทียบกับ row.unitCost จะยิง PATCH ซ้ำทุกครั้งที่ blur.
-  const [saved, setSaved] = useState(row.unitCost);
-  const [value, setValue] = useState(row.unitCost != null ? String(row.unitCost) : "");
+function UnitCostDialog({
+  row, onClose, onSaved,
+}: { row: ReceiveRow | null; onClose: () => void; onSaved: () => void }) {
+  const [value, setValue] = useState("");
+  const [lot, setLot] = useState("");
   const [saving, setSaving] = useState(false);
 
-  if (!editable) {
-    return <span>{row.unitCost != null ? row.unitCost.toLocaleString() : "—"}</span>;
-  }
-
-  const revert = () => setValue(saved != null ? String(saved) : "");
+  // เปิดแถวไหนก็เริ่มจากค่าของแถวนั้น ไม่ใช่ค่าที่ค้างจากแถวก่อนหน้า
+  useEffect(() => {
+    if (row) {
+      setValue(row.unitCost != null ? String(row.unitCost) : "");
+      setLot(row.lotNumber ?? row.batchRef ?? "");
+    }
+  }, [row]);
 
   const save = async () => {
+    if (!row) return;
     const trimmed = value.trim();
     // ว่าง = ไม่ทราบราคา (null) ซึ่งต่างจาก 0 ที่แปลว่าได้มาฟรี — รายงานนับคนละแบบ
-    const next = trimmed === "" ? null : Number(trimmed);
-    if (next != null && (!Number.isFinite(next) || next < 0)) {
+    const nextCost = trimmed === "" ? null : Number(trimmed);
+    if (nextCost != null && (!Number.isFinite(nextCost) || nextCost < 0)) {
       toast.error("ราคาต้องเป็นตัวเลขไม่ติดลบ");
-      revert();
       return;
     }
-    if (next === saved) return;
+    const nextLot = lot.trim();
+    // ล็อตที่มีอยู่ต้องมีเลขเสมอ — ลบเลขทิ้งคือการลบล็อต ซึ่งเป็นการย้ายของ ไม่ใช่แก้ป้าย
+    // ใบที่ไม่มีล็อตว่างได้: ว่าง = ยังไม่ตั้งชื่องวด กลับไปใช้รหัสจากวันที่รับเข้า
+    if (row.lotNumber != null && nextLot === "") {
+      toast.error("เลขล็อตว่างไม่ได้");
+      return;
+    }
+
+    // ส่งเฉพาะช่องที่ขยับจริง — ไม่งั้นได้รายการ "แก้ราคาต่อหน่วย"/"แก้เลขล็อต" ในประวัติ
+    // ทั้งที่กดบันทึกทับค่าเดิม
+    const patch: { unitCost?: number | null; lotNumber?: string; batchRef?: string | null } = {};
+    if (nextCost !== (row.unitCost ?? null)) patch.unitCost = nextCost;
+    // ช่องเดียวบนจอ สองที่เก็บในฐานข้อมูล — ใบที่มีล็อตแก้ชื่อล็อต ใบที่ไม่มีแก้ชื่องวดของตัวเอง
+    if (row.lotNumber != null) {
+      if (nextLot !== row.lotNumber) patch.lotNumber = nextLot;
+    } else if ((nextLot || null) !== row.batchRef) {
+      patch.batchRef = nextLot || null;
+    }
+    if (Object.keys(patch).length === 0) {
+      onClose();
+      return;
+    }
+
     setSaving(true);
     try {
-      await updateReceiveUnitCost(row.id, next);
-      setSaved(next);
-      toast.success("บันทึกราคาแล้ว");
+      await updateReceiveRecord(row.id, patch);
+      toast.success("บันทึกแล้ว");
+      onSaved();
+      onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "บันทึกราคาไม่สำเร็จ");
-      revert();
+      toast.error(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Input
-      type="number"
-      min="0"
-      step="0.01"
-      inputMode="decimal"
-      placeholder="—"
-      disabled={saving}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      className="h-8 w-24 text-sm text-right"
-    />
+    <Dialog open={row != null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-md")}>
+        <DialogHeader className="shrink-0">
+          <DialogTitle>แก้ใบรับเข้า</DialogTitle>
+          <DialogDescription>
+            {row ? `${row.itemCode} · ${row.itemName}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className={cn(DIALOG_BODY, "space-y-4 px-1")}>
+          {/* บอกว่ากำลังแก้ใบไหน — รหัสพัสดุเดียวกันมีได้หลายใบรับเข้า จำนวน/วันที่คือตัวแยก.
+              สองช่องนี้แก้ไม่ได้: ของที่เคลื่อนจริงเท่าไหร่ วันไหน เป็นเรื่องของการปรับสต็อก */}
+          {row && (
+            <dl className="grid grid-cols-2 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
+              <dt className="text-muted-foreground">จำนวน</dt>
+              <dd className="text-right">{row.quantity.toLocaleString()}</dd>
+              <dt className="text-muted-foreground">วันที่รับเข้า</dt>
+              <dd className="text-right">{fmtDate(new Date(row.receivedAt), TH_DATE)}</dd>
+            </dl>
+          )}
+          {/* เลขล็อตแก้ได้เฉพาะใบที่มีล็อตอยู่แล้ว — สร้างล็อตให้ใบที่ไม่มีคือการย้ายของเข้าล็อต
+              ซึ่งบนของสิ้นเปลืองที่ไม่มีล็อตจะพลิก availableQty ไปนับจาก SUM(lots) ทันที */}
+          {row && (
+            <div className="space-y-1.5">
+              <Label htmlFor="lot-number">{row.lotNumber != null ? "เลขล็อต" : "ชื่องวดรับเข้า"}</Label>
+              <Input
+                id="lot-number"
+                disabled={saving}
+                placeholder={row.lotNumber != null ? undefined : autoLotNumber(new Date(row.receivedAt))}
+                value={lot}
+                onChange={(e) => setLot(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+              />
+              {/* ช่องเดียวกัน แต่ผลของการแก้ต่างกันตามว่าใบนี้แยกล็อตไหม — บอกตรงที่มันเกิด */}
+              <p className="text-xs text-muted-foreground">
+                {row.lotNumber != null
+                  ? "เปลี่ยนป้ายของล็อตนี้ทั้งล็อต — ใบรับเข้าอื่นที่ใช้ล็อตเดียวกันเปลี่ยนตาม"
+                  : "เปลี่ยนเฉพาะใบนี้ · เว้นว่าง = ใช้รหัสจากวันที่รับเข้า"}
+              </p>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="unit-cost">ราคาต่อหน่วย (บาท)</Label>
+            <Input
+              id="unit-cost"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              autoFocus
+              placeholder="เว้นว่าง = ไม่ทราบราคา"
+              disabled={saving}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </div>
+        </div>
+        <DialogFooter className="shrink-0">
+          <Button variant="outline" onClick={onClose} disabled={saving}>ยกเลิก</Button>
+          <Button onClick={save} disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึก"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// เซลล์ราคาเป็นตัวเดียวที่บอกว่าแถวนี้กดได้ — กรอบ dashed + ดินสอ อ่านออกว่า "ช่องที่ยังกรอกได้"
+// โดยไม่ต้อง hover (มือถือไม่มี hover) และไม่ต้องยัดปุ่มเพิ่มอีกคอลัมน์.
+function UnitCostCell({ row, editable }: { row: ReceiveRow; editable: boolean }) {
+  const text = row.unitCost != null ? row.unitCost.toLocaleString() : "—";
+  if (!editable) return <span className="tabular-nums">{text}</span>;
+  return (
+    <span className="flex w-full items-center justify-between gap-2 rounded-md border border-dashed border-muted-foreground/40 px-2 py-1">
+      <Pencil className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+      <span className={cn("tabular-nums", row.unitCost == null && "text-muted-foreground")}>{text}</span>
+    </span>
   );
 }
 
@@ -288,7 +389,13 @@ function receiveColumns(editable: boolean): Column<ReceiveRow>[] {
     { key: "itemCode", header: "รหัสพัสดุ" },
     { key: "itemName", header: "รายการพัสดุ" },
     { key: "category", header: "หมวดหมู่" },
-    { key: "lotNumber", header: "ล็อต" },
+    // ใบที่ไม่มีล็อต (ครุภัณฑ์ ADR-0002) ยังต้องบอกได้ว่า "งวดไหน" — วันที่รับเข้าของใบนั้น
+    // คือคำตอบ และเป็นรหัสตัวเดียวกับที่ระบบตั้งให้ล็อตอัตโนมัติอยู่แล้ว.
+    // พิมพ์เป็นรหัส ไม่แปลเป็น "รับเข้า 2 ก.ย. 2569" — คอลัมน์วันที่อยู่ซ้ายมืออยู่แล้ว
+    {
+      key: "lotNumber", header: "ล็อต / งวด",
+      render: (r) => r.lotNumber ?? r.batchRef ?? autoLotNumber(new Date(r.receivedAt)),
+    },
     { key: "quantity", header: "จำนวน" },
     {
       key: "unitCost", header: "ราคา/หน่วย", className: "text-right",
@@ -302,13 +409,26 @@ function receiveColumns(editable: boolean): Column<ReceiveRow>[] {
 function ReceiveLogTable({ token, leading }: { token: Token; leading?: ReactNode }) {
   const { user } = useSession();
   const editable = canManageStock(user?.role ?? "");
+  const [editing, setEditing] = useState<ReceiveRow | null>(null);
+  // refetch มาพร้อมแถวที่กด ไม่ได้อยู่ใน scope นี้ — เก็บไว้เรียกตอนบันทึกเสร็จเพื่อให้ทั้งตาราง
+  // และการ์ด "ยังไม่ได้กรอกราคา" ตรงกับของจริง
+  const refetchRef = useRef<() => void>(() => {});
   const columns = useMemo(() => receiveColumns(editable), [editable]);
   return (
+    <>
     <ReportTable<ReceiveRow>
       token={token}
       leading={leading}
       path="receive-history"
       columns={columns}
+      onRowClick={
+        editable
+          ? (row, refetch) => {
+              refetchRef.current = refetch;
+              setEditing(row);
+            }
+          : undefined
+      }
       filterConfig={COMMON_FILTERS}
       exportType="receive-history"
       emptyMessage="ไม่มีการนำเข้าคลังในช่วงนี้"
@@ -320,12 +440,18 @@ function ReceiveLogTable({ token, leading }: { token: Token; leading?: ReactNode
           // ว่าไม่ใช่ 0 ที่แปลว่า "ไม่ได้ซื้อ" และบอกด้วยว่าเหลือให้ไล่กรอกอีกกี่ใบ
           label: "ยังไม่ได้กรอกราคา",
           value: s.unpriced.toLocaleString(),
-          hint: editable ? "แก้ได้ที่ช่องราคาในตาราง" : "ค่าใช้จ่ายรายปีไม่นับใบที่ไม่มีราคา",
+          hint: editable ? "กดที่แถวเพื่อแก้ราคา" : "ค่าใช้จ่ายรายปีไม่นับใบที่ไม่มีราคา",
           tone: s.unpriced > 0 ? "warning" : "default",
           token: "stockin",
         },
       ]}
     />
+    <UnitCostDialog
+      row={editing}
+      onClose={() => setEditing(null)}
+      onSaved={() => refetchRef.current()}
+    />
+    </>
   );
 }
 

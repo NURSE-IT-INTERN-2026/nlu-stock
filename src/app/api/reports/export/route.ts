@@ -15,6 +15,7 @@ import { groupUsageByMonth, groupInUseSnapshot } from "@/lib/usage-by-subject";
 import { caseRangeBounds, listCases } from "@/lib/cases";
 import { itemHistory } from "@/app/api/items/[id]/history/route";
 import { CASE_PREFIX, CASE_STATE_LABELS, CASE_TYPE_LABELS, type CaseState, type CaseType } from "@/lib/case-types";
+import { autoLotNumber } from "@/lib/lot-code";
 
 /** เหตุผล search — the four columns recipientLabel can render from. Always nested under
  *  AND: both callers' `where` already owns `OR` for the NULL-safe loanType pair. */
@@ -425,7 +426,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         รหัสพัสดุ: r.item.code,
         รายการพัสดุ: r.item.name,
         หมวดหมู่: r.item.category?.name ?? "—",
-        ล็อต: r.lot?.lotNumber ?? "—",
+        // ใบที่ไม่มีล็อตอ้างงวดด้วยวันที่รับเข้าของมันเอง — รหัสเดียวกับที่ระบบตั้งให้ล็อตอัตโนมัติ
+        ล็อต: r.lot?.lotNumber ?? r.batchRef ?? autoLotNumber(r.receivedAt),
         จำนวน: r.quantity,
         // ว่าง = ยังไม่ได้กรอกราคา ไม่ใช่ 0 บาท — ค่าใช้จ่ายรายปีก็ไม่นับใบพวกนี้เหมือนกัน
         "ราคา/หน่วย": r.unitCost ?? "",

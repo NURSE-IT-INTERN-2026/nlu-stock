@@ -56,7 +56,10 @@ export async function GET(request: NextRequest) {
       // null = ยังไม่ได้กรอกราคา; ตารางแก้ค่านี้ได้ในบรรทัด (PATCH api/receive/[id]) เพราะ
       // ราคาส่วนใหญ่ในประวัติยังว่างอยู่ และนี่คือที่เดียวที่มองเห็นใบรับเข้าทีละใบ
       unitCost: r.unitCost,
-      lotNumber: r.lot?.lotNumber ?? "—",
+      // null = ใบนี้ไม่ได้แยกล็อต (ของคงทน หรือของสิ้นเปลืองที่ไม่ได้ใส่วันหมดอายุ) — ต่างจาก
+      // ล็อตที่มีอยู่จริง เพราะ dialog แก้เลขล็อตได้เฉพาะใบที่มีล็อต. ตารางเรนเดอร์ "—" เอง
+      lotNumber: r.lot?.lotNumber ?? null,
+      batchRef: r.batchRef,
       expiryDate: r.lot?.expiryDate?.toISOString() ?? null,
       receiverName: r.receiver.name,
       receivedAt: r.receivedAt.toISOString(),

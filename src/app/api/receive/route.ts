@@ -158,6 +158,9 @@ export async function POST(req: NextRequest) {
             unitCost: ri.unitCost ?? null,
             receivedBy: auth.user.userId,
             notes: notes ?? undefined,
+            // ของที่ไม่มีล็อตเก็บชื่องวดไว้กับใบตัวเอง — ที่ผู้ใช้พิมพ์คือช่องเดียวกันบนจอ
+            // ต่างกันแค่ปลายทางในฐานข้อมูล
+            batchRef: lotId ? null : ri.lotNumber?.trim() || null,
           },
         });
         ids.push(record.id);

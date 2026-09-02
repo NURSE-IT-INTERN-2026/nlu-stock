@@ -169,6 +169,7 @@ function ReceiveContent() {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState<ReceiveRow[]>([]);
   const [notes, setNotes] = useState("");
+  const [lotNumber, setLotNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [mobileTab, setMobileTab] = useState<"search" | "cart">("search");
 
@@ -306,8 +307,9 @@ function ReceiveContent() {
         items: rows.map((r) => ({
           itemId: r.item.id,
           quantity: r.quantity,
-          // Lot number is no longer collected — batches are keyed by import date (auto RCV code).
-          lotNumber: null,
+          // เลขล็อตของงวดนี้ — ช่องเดียวครอบทุกบรรทัดของใบ. เว้นว่าง = ให้ระบบตั้งเลขจากวันที่
+          // รับเข้า (RCV-YYYYMMDD) เอง
+          lotNumber: lotNumber.trim() || null,
           expiryDate: r.expiryDate || null,
           unitCost: r.unitCost ? Number(r.unitCost) : null,
           subCodes: r.item.trackIndividually ? genCodes(r.subStart, r.quantity, r.subWidth) : null,
@@ -318,6 +320,7 @@ function ReceiveContent() {
       toast.success(`รับเข้าสำเร็จ ${data.count} รายการ`);
       setRows([]);
       setNotes("");
+      setLotNumber("");
       setMobileTab("search");
     } catch (e) {
       toast.error(e instanceof Error && e.message ? e.message : "เกิดข้อผิดพลาด กรุณาลองใหม่");
@@ -438,11 +441,26 @@ function ReceiveContent() {
   // ── Cart panel ────────────────────────────────────────────────
   const CartPanel = (
     <div className="flex flex-col h-full">
-      {/* Header summary */}
-      <div className="pb-3 mb-1 shrink-0 border-b">
-        <p className="text-xs text-muted-foreground">
+      {/* Header summary — ยอดรวมขึ้นไปอยู่บรรทัดหัวการ์ดบนจอใหญ่ (ที่นั่นว่างอยู่แล้ว) เหลือแค่
+          ช่องงวดตรงนี้. จอเล็กไม่มีหัวการ์ด ยอดรวมจึงยังอยู่ที่เดิม */}
+      <div className={cn("pb-3 mb-1 shrink-0 border-b", rows.length === 0 && "md:hidden")}>
+        <p className="text-xs text-muted-foreground md:hidden">
           {rows.length} รายการ · รวม {totalUnits} หน่วย
         </p>
+        {/* ชื่องวดใบเดียวครอบทุกบรรทัด — เป็นของทั้งใบเหมือนหมายเหตุ ไม่ได้ถามรายรายการ จึงอยู่
+            เหนือรายการ ไม่ใช่ท้ายกอง. ของสิ้นเปลืองเก็บเป็นเลขล็อต ของที่ไม่มีล็อตเก็บเป็น
+            ชื่องวดของใบตัวเอง */}
+        {rows.length > 0 && (
+          <div className="space-y-1 pt-2 md:pt-0">
+            <Label className="text-xs text-muted-foreground">เลขล็อต / ชื่องวด</Label>
+            <Input
+              placeholder="เว้นว่าง = ให้ระบบตั้งเลขจากวันที่รับเข้า"
+              value={lotNumber}
+              onChange={(e) => setLotNumber(e.target.value)}
+              className="text-gray-900 h-8 text-sm"
+            />
+          </div>
+        )}
       </div>
 
       {/* Items or empty state */}
@@ -580,8 +598,11 @@ function ReceiveContent() {
         </Card>
 
         <Card className="flex flex-col overflow-hidden">
-          <div className="px-6 pt-4 pb-0 shrink-0">
+          <div className="px-6 pt-4 pb-0 shrink-0 flex items-baseline justify-between gap-2">
             <p className="font-semibold text-base">รายการรับเข้า</p>
+            <p className="text-xs text-muted-foreground">
+              {rows.length} รายการ · รวม {totalUnits} หน่วย
+            </p>
           </div>
           <CardContent className="flex-1 min-h-0 overflow-hidden py-0 flex flex-col">
             {CartPanel}

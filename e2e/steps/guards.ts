@@ -173,15 +173,15 @@ When("ฉันเปิดแท็บ {string} ของหน้าราย�
 });
 
 Then(
-  "กล่องแก้ใบรับเข้าต้องแก้ได้แค่ราคา เลขล็อต และเลขที่ใบส่งของ จำนวนกับวันที่เป็นข้อความอ่านอย่างเดียว",
+  "กล่องแก้ใบรับเข้าต้องแก้ได้แค่ราคากับเลขล็อต จำนวนกับวันที่เป็นข้อความอ่านอย่างเดียว",
   async ({ page, bdd }) => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel("ราคาต่อหน่วย (บาท)")).toBeVisible({ timeout: 10_000 });
-    // แก้ได้เฉพาะป้ายกำกับ: ราคา (ผิดบนกระดาษได้) + เลขล็อต/เลขที่ใบส่งของ (ชื่อเรียกงวด).
+    // แก้ได้เฉพาะป้ายกำกับ: ราคา (ผิดบนกระดาษได้) + เลขล็อต (ชื่อเรียกงวด).
     // จำนวนกับวันที่คือของที่เคลื่อนจริง — แก้ตรงนี้แล้วสต๊อกกับใบรับเข้าเล่าคนละเรื่อง
-    // (ดู api/receive/[id] PATCH: schema รับแค่ unitCost / lotNumber / deliveryRef)
+    // (ดู api/receive/[id] PATCH: schema รับแค่ unitCost / lotNumber)
     await expect(dialog.getByRole("spinbutton")).toHaveCount(1);
-    await expect(dialog.getByRole("textbox")).toHaveCount(2);
+    await expect(dialog.getByRole("textbox")).toHaveCount(1);
     await expect(dialog.getByLabel("เลขล็อต")).toHaveValue(bdd.lotNumber);
     // จำนวนกับวันที่อยู่ในกล่องเพื่อบอกว่ากำลังแก้ใบไหน — เห็นได้ แก้ไม่ได้
     await expect(dialog).toContainText(String(bdd.qty));

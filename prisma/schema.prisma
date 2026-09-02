@@ -486,6 +486,10 @@ model ReceiveRecord {
   receiver   User     @relation(fields: [receivedBy], references: [id])
   receivedAt DateTime @default(now())
   notes      String?
+  // ป้ายงวดของใบที่ไม่ได้แยกล็อต — ครุภัณฑ์/วัสดุคงทนไม่มี Lot (ADR-0002) แต่ก็มาเป็นงวด
+  // เหมือนกัน. ว่าง = ยังไม่ได้ตั้งชื่องวด หน้าจอจะแสดงรหัสจากวันที่รับเข้า (RCV-YYYYMMDD) แทน.
+  // ใบที่มีล็อตไม่ใช้ช่องนี้ — ชื่องวดของมันคือ Lot.lotNumber ซึ่งใช้ร่วมกันหลายใบ
+  batchRef   String?
   // ชิ้นที่ใบนี้พาเข้าคลัง (ครุภัณฑ์ที่ track รายชิ้นเท่านั้น) — ใช้ตีราคาต่อชิ้นตอนตัดจำหน่าย
   subItems   SubItem[]
   priceChanges ReceivePriceLog[]
