@@ -111,7 +111,15 @@ async function phaseLogin() {
   check("login as admin", res.ok, JSON.stringify(res.json));
   if (!res.ok) throw new Error("login failed — cannot continue");
   locations = await q(`SELECT id, building, floor, room FROM locations ORDER BY random() LIMIT 12`);
-  courses = await q(`SELECT code, name FROM courses ORDER BY random() LIMIT 25`);
+  const pickCourses = () => q(`SELECT code, name FROM courses ORDER BY random() LIMIT 25`);
+  courses = await pickCourses();
+  // แคตตาล็อกรายวิชามาจากทะเบียน ไม่ใช่ seed — ฐานที่เพิ่ง reseed จึงว่าง แล้วทุกเฟสที่เบิกแบบ
+  // รายวิชาจะล้มที่ pick(courses).code. นี่คือสิ่งเดียวกับที่หน้าเบิกทำตอนเปิดครั้งแรก.
+  if (courses.length === 0) {
+    await GET("/api/courses");
+    courses = await pickCourses();
+  }
+  check("มีรายวิชาให้เบิก", courses.length > 0, `courses=${courses.length}`);
 }
 
 /** นำเข้า — one receive path per profile. */
@@ -401,7 +409,9 @@ async function phaseReturns() {
     const res = await POST(`/api/dispense/in-use/${rec.recordId}/return`, {
       destLocationId: rec.destLocationId,
       quantity: rec.qty,
-      note: "เก็บกลับเข้าคลัง",
+      // เหตุผลเดียวกับหมายเหตุการคืนด้านบน: log เขียนว่า "คืนเข้าคลัง (<note>)" อยู่แล้ว
+      // "เก็บกลับเข้าคลัง" จึงเป็นการพูดคำเดิมซ้ำ — เขียนอย่างที่เจ้าหน้าที่เขียนจริง
+      note: "เก็บที่ชั้นเดิม",
     });
     check(`คืนเข้าคลัง ${before.code}`, res.ok, JSON.stringify(res.json));
     if (!res.ok) continue;
@@ -632,7 +642,9 @@ async function phaseHistory() {
     const events = res.json.events ?? [];
     const undated = events.filter((e: any) => !e.date).length;
     eq(`ประวัติ ${it.code} ทุกแถวมีวันที่`, undated, 0);
-    const nameless = events.filter((e: any) => !e.user).length;
+    // เคสเป็นหน่วยรวมหลายขั้นตอน คนทำอยู่ที่ขั้นตอนข้างใน ไม่ใช่ที่ตัวเคส — เช็ก `user`
+    // กับมันคือการถามหาฟิลด์ที่ไม่มีในชนิดนั้น
+    const nameless = events.filter((e: any) => !e.steps && !e.user).length;
     eq(`ประวัติ ${it.code} ทุกแถวมีผู้ทำรายการ`, nameless, 0);
   }
 
@@ -650,7 +662,9 @@ async function phaseHistory() {
     const res = await GET(path);
     check(`report ${name}`, res.ok, `status=${res.status} ${JSON.stringify(res.json).slice(0, 160)}`);
     if (!res.ok) continue;
-    const rows = res.json.rows ?? res.json.records ?? res.json.items ?? res.json.purchases ?? [];
+    // annual-cost คืนยอดรวมรายวิชาใน bySubject ไม่ใช่ตารางแถว — ไม่นับมันด้วยแล้วรายงาน
+    // ที่มีข้อมูลครบจะฟ้องว่าว่าง
+    const rows = res.json.rows ?? res.json.records ?? res.json.items ?? res.json.purchases ?? res.json.bySubject ?? [];
     check(`report ${name} มีข้อมูล`, (res.json.total ?? rows.length ?? 0) > 0, JSON.stringify(res.json).slice(0, 160));
   }
 
