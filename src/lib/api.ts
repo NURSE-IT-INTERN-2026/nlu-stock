@@ -474,6 +474,9 @@ export function searchItemsAI(params: { q: string; limit?: number }) {
       similarity: number;
     }>;
     total: number;
+    /** true = ผลชุดนี้มาจากการเทียบชื่อตรงๆ ไม่ใช่ similarity (ไม่มี API key, AI ล่ม/quota เต็ม,
+     *  หรือ AI หาของใกล้เคียงไม่เจอเลย) — หน้าจอต้องบอกผู้ใช้ ไม่ใช่ปล่อยให้เข้าใจว่า AI ทำงานอยู่ */
+    fallback?: boolean;
   }>(`/api/items/search-ai?${qs}`);
 }
 

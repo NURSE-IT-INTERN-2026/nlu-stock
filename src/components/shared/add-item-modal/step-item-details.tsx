@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Sparkles, Package } from "lucide-react";
+import { Check, Sparkles, Package, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ export function StepItemDetails({
   onSelectExisting,
 }: StepItemDetailsProps) {
   const [similar, setSimilar] = useState<SimilarItem[]>([]);
+  const [similarFallback, setSimilarFallback] = useState(false);
   const [similarLoading, setSimilarLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const debouncedName = useDebounce(name, 500);
@@ -47,7 +48,7 @@ export function StepItemDetails({
   }, [onSelectExisting, router]);
 
   const doSearch = useCallback(async (q: string) => {
-    if (!q.trim() || q.trim().length < 2) { setSimilar([]); return; }
+    if (!q.trim() || q.trim().length < 2) { setSimilar([]); setSimilarFallback(false); return; }
     setSimilarLoading(true);
     try {
       const data = await searchItemsAI({ q: q.trim(), limit: 5 });
@@ -58,8 +59,10 @@ export function StepItemDetails({
         category: { name: r.categoryName, profile: { dispenseType: r.categoryType as "CONSUMABLE" | "COUNT" | "ITEM" } },
       }));
       setSimilar(items);
+      setSimilarFallback(!!data.fallback);
     } catch {
       setSimilar([]);
+      setSimilarFallback(false);
     }
     setSimilarLoading(false);
   }, []);
@@ -91,9 +94,11 @@ export function StepItemDetails({
             </div>
           ) : similar.length > 0 ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
+              {/* ผลจาก AI กับผลจากการเทียบชื่อ หน้าตาเหมือนกันเป๊ะ — ถ้าไม่บอก คนจะอ่านว่า
+                  "AI หาให้แล้ว ไม่เจอของซ้ำ" ทั้งที่จริงคือ AI ไม่ได้ทำงานเลย */}
               <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-                <Sparkles className="h-3 w-3" />
-                พบพัสดุที่ชื่อคล้ายกัน
+                {similarFallback ? <Search className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                {similarFallback ? "พบพัสดุที่ชื่อตรงกัน — ค้นแบบเทียบชื่อ ไม่ใช่ AI" : "พบพัสดุที่ชื่อคล้ายกัน"}
               </div>
               <p className="text-[11px] text-amber-800 dark:text-amber-300">
                 {isReceiveMode

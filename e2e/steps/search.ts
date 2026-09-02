@@ -107,6 +107,9 @@ When(
 
 Then("ฉันจะเห็นรายการที่เกี่ยวข้องขึ้นมาในผลค้นหา", async ({ page, bdd }) => {
   const dialog = page.getByRole("dialog");
+  // หัวข้อนี้ขึ้นเฉพาะตอนผลมาจาก similarity จริง — ถ้าตกไป textSearch หัวข้อจะเปลี่ยนเป็น
+  // "ค้นแบบเทียบชื่อ ไม่ใช่ AI" (step-item-details.tsx) เห็นอันนี้จึงแปลว่า pgvector ทำงาน
   await expect(dialog.getByText("พบพัสดุที่ชื่อคล้ายกัน")).toBeVisible({ timeout: 15_000 });
+  await expect(dialog.getByText(/ค้นแบบเทียบชื่อ/)).toHaveCount(0);
   await expect(dialog.getByText(bdd.code)).toBeVisible();
 });
