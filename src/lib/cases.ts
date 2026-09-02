@@ -12,11 +12,11 @@
 // เคสยืมมีสองสถานะซ้อนกันโดยตั้งใจ: สถานะรวมของทั้งเคส (ใช้ในหน้ารายการเคส) กับสถานะรายบรรทัด
 // (ใช้ตอนการ์ดไปโผล่ในประวัติของพัสดุชิ้นเดียว — ชามรูปไตที่คืนแล้วต้องอ่านว่าจบ ถึงเคสรวมจะยังค้างชิ้นอื่น).
 import { prisma } from "@/lib/prisma";
-import { AdjustmentReason, ItemStatus, LoanType, MaintenanceType, RepairVenue } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus, LoanType, MaintenanceType, RepairVenue, ReturnCondition } from "@/generated/prisma/enums";
 import type { AttachRecordType } from "@/lib/attachments";
 import { CASE_PREFIX, CASE_TYPE_LABELS, type CaseType, type CaseState } from "@/lib/case-types";
 import { codesFor, sourceKey } from "@/lib/case-codes";
-import { USAGE_TYPE_LABELS } from "@/lib/constants";
+import { USAGE_TYPE_LABELS, RETURN_CONDITION_LABELS } from "@/lib/constants";
 import { writeOffValue } from "@/lib/cost";
 
 export { CASE_PREFIX, CASE_TYPE_LABELS } from "@/lib/case-types";
@@ -561,6 +561,15 @@ const loanArgs = {
 
 type LoanRow = Awaited<ReturnType<typeof prisma.dispenseRecord.findMany<typeof loanArgs>>>[number];
 
+/** สภาพที่ไม่ปกติของการคืน สำหรับต่อท้ายป้ายสถานะ — คืนปกติทั้งใบได้ค่าว่าง.
+ *  ใบเดียวคืนหลายรอบได้ และแต่ละรอบระบุสภาพแยกกัน จึงรวมทุกสภาพที่ไม่ใช่ ปกติ ไม่ใช่เอารอบสุดท้าย. */
+function returnedBadly(l: LoanRow): string {
+  const bad = [...new Set(
+    l.returns.map((r) => r.condition).filter((c) => c !== ReturnCondition.AVAILABLE),
+  )];
+  return bad.length ? ` · ${bad.map((c) => RETURN_CONDITION_LABELS[c] ?? c).join(" · ")}` : "";
+}
+
 const loanType = (l: LoanRow): CaseType =>
   l.loanType === LoanType.INUSE ? "INUSE" : l.loanType === LoanType.CONSUME ? "DISPENSE" : "BORROW";
 
@@ -591,7 +600,10 @@ function loanSummary(l: LoanRow): CaseSummary {
     statusLabel: consume
       ? "เบิกออกแล้ว"
       : outstanding === 0
-      ? (inRoom ? "คืนเข้าพัสดุแล้ว" : "คืนครบแล้ว")
+      // ของที่กลับมาไม่ครบสภาพ ปิดใบแล้วก็จริง แต่ป้าย "คืนครบแล้ว" เฉย ๆ อ่านเหมือนจบสวย
+      // ทั้งที่ชิ้นนั้นเป็น ชำรุด/สูญหาย อยู่ตอนนี้ — สภาพตอนคืนจึงต่อท้ายป้าย ไม่ใช่ซ่อนไว้
+      // ในขั้นตอนข้างในเคส ซึ่งต้องกดเข้าไปอีกชั้นถึงเห็น
+      ? (inRoom ? "คืนเข้าพัสดุแล้ว" : "คืนครบแล้ว") + returnedBadly(l)
       // เกินกำหนดใช้กับ ยืม เท่านั้น. ตั้งใช้ในห้องไม่มีกำหนดให้เกิน จึงวัดด้วยอายุแทน —
       // ไม่งั้นของที่ตั้งค้างมาปีนึงกับของที่เพิ่งตั้งเมื่อวานอ่านเหมือนกันเป๊ะ.
       : inRoom ? (age >= AGEING_DAYS ? `ตั้งใช้มา ${age} วัน` : "ตั้งใช้ในห้อง")

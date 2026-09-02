@@ -1,6 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { test, expect } from "../fixtures";
-import { freshTracked, borrowSubItem, createCountItem, stationInUse } from "./helpers";
+import { expectHistory, freshTracked, borrowSubItem, createCountItem, stationInUse } from "./helpers";
 
 const { Given, When, Then } = createBdd(test);
 
@@ -92,3 +92,15 @@ Then("ฉันจะไม่เห็น X ในแท็บ {string} อี�
   await expect(page.getByRole("button", { name: tab }).first()).toBeVisible();
   await expect(page.getByText(bdd.item.code, { exact: true })).toHaveCount(0);
 });
+
+Then(
+  'ประวัติของ X ต้องบอกว่าใบยืมนั้นคืนมาชำรุด ไม่ใช่แค่ "คืนครบแล้ว"',
+  async ({ page, bdd }) => {
+    // ป้ายบนการ์ดต้องพูดถึงสภาพ ไม่ใช่ให้ไปเจอเอาตอนกดเปิดขั้นตอนข้างใน (lib/cases returnedBadly)
+    await expectHistory(page, bdd.item.code, [/การยืม[\s\S]*คืนครบแล้ว · ชำรุด/], {
+      copy: bdd.item.subCode,
+      steps: ["ยืม", "รับคืน (ชำรุด)"],
+      contains: "E2E จอแตก",
+    });
+  }
+);
