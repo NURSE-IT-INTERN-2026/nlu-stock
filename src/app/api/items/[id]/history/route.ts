@@ -255,10 +255,13 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
             delta: r.quantity,
             qty: r.quantity,
             note: "รับเข้าคลัง",
-            subtitle: "",
+            // ราคาต่อหน่วยเป็นข้อมูลของใบรับเข้าที่แก้ย้อนหลังได้ (api/receive/[id] PATCH) และ
+            // ประวัติเป็นที่เดียวที่คนเปิดดูของชิ้นนั้นย้อนหลัง — ไม่พิมพ์ไว้ก็ไม่มีทางเห็นว่าราคา
+            // ที่ใช้อยู่ตอนนี้คือเท่าไหร่
+            subtitle: r.unitCost != null ? `ราคาต่อหน่วย ${r.unitCost.toLocaleString("th-TH")} บาท` : "",
             notes: r.notes ?? "",
             user: r.receiver.name,
-            details: { quantity: r.quantity },
+            details: { quantity: r.quantity, unitCost: r.unitCost },
           });
         }
       })

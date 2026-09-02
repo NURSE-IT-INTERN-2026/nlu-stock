@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { ItemStatus } from "@/generated/prisma/enums";
+import { STATUS_LABELS } from "@/lib/constants";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -161,7 +162,11 @@ export async function closeOpenLoan(
     dispenseRecordId: open.id,
     quantity: Math.max(open.quantity - open.resolvedQty, 1),
     condition: condition ?? "AVAILABLE",
-    notes: `ปิดรายการยืมอัตโนมัติ (${newStatus})`,
+    // ไม่พิมพ์สถานะซ้ำเมื่อมันคือ condition ของแถวนี้อยู่แล้ว — ป้ายของแถวอ่านว่า "รับคืน (ชำรุด)"
+    // การต่อท้ายอีกทีทำให้บรรทัดเดียวพูดคำว่าชำรุดสองครั้ง. เหลือไว้เฉพาะสถานะที่ไม่มี
+    // ReturnCondition ของตัวเอง (ส่งซ่อม/ตัดจำหน่าย) ซึ่งแถวจะบันทึกเป็น "ปกติ" — ตรงนั้นสถานะ
+    // จริงคือข้อมูลที่ไม่มีที่อื่นบอก. และเป็นชื่อไทย ไม่ใช่ค่าดิบอย่าง DAMAGED.
+    notes: condition ? "ปิดรายการยืมอัตโนมัติ" : `ปิดรายการยืมอัตโนมัติ (${STATUS_LABELS[newStatus]})`,
     userId,
   });
 }
