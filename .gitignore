@@ -83,3 +83,6 @@ doc/*.csv
 
 # DB dumps and the id lists kept for reverting a backfill — local recovery, not history
 /backups/
+
+# เอกสารประกอบ/สไลด์ที่ลากมาวางใน docs/ — ไม่ใช่เอกสารของ repo
+*.pdf
