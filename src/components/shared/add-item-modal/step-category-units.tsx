@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +13,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { getUnits } from "@/lib/api";
-import type { UnitOption } from "@/lib/api";
+import { getUnits, getCategories, getProfiles } from "@/lib/api";
+import type { UnitOption, CategoryOption, ProfileOption } from "@/lib/api";
+import { CategoryPicker } from "@/components/shared/filter-pickers";
+import type { DispenseType } from "@/generated/prisma/enums";
 import { CodeBuilder } from "./code-builder";
 import type { CodeMeta } from "./code-builder";
 import { NumericInput } from "@/components/shared/numeric-input";
@@ -23,17 +24,18 @@ import { LocationCascadePicker, type LocationRef } from "@/components/shared/loc
 import type { FormProfile } from "./types";
 
 interface StepCategoryUnitsProps {
-  /** ห้องที่ลงทะเบียนไว้ — ไม่บังคับ ปล่อยว่างได้ */
+  /** ห้องที่ลงทะเบียนไว้ — บังคับครบ อาคาร/ชั้น/ห้อง ปุ่มถัดไปถึงจะกดได้ */
   onLocationChange: (ref: LocationRef) => void;
   code: string;
   onCodeChange: (code: string) => void;
   categoryId: string;
-  categoryName: string;
+  /** เลือกหมวดหมู่ได้อย่างเดียว — สร้างหมวดหมู่ใหม่ทำที่หน้าตั้งค่า */
+  onCategoryChange: (cat: CategoryOption) => void;
+  /** ประเภทที่แบบการใช้งานในขั้น 1 อนุญาต — คอลัมน์ ประเภท โชว์เท่านี้ */
+  allowedDispenseType?: DispenseType;
   issueUnitId: string;
   issueUnitName?: string;
   onIssueUnitChange: (id: string, name: string) => void;
-  /** Opens inline category selection step */
-  onOpenCategorySelect: () => void;
   /** Category type code (profile.code) — used as code prefix */
   categoryType?: string;
   /** Profile flags driving builder/field visibility */
@@ -54,11 +56,11 @@ export function StepCategoryUnits({
   code,
   onCodeChange,
   categoryId,
-  categoryName,
+  onCategoryChange,
+  allowedDispenseType,
   issueUnitId,
   issueUnitName: issueUnitNameProp = "",
   onIssueUnitChange,
-  onOpenCategorySelect,
   categoryType,
   profile,
   onCodeMetaChange,
@@ -71,6 +73,8 @@ export function StepCategoryUnits({
 }: StepCategoryUnitsProps) {
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [qtyInvalid, setQtyInvalid] = useState(false);
 
   const fetchUnits = useCallback(async () => {
@@ -87,6 +91,21 @@ export function StepCategoryUnits({
 
   useEffect(() => { fetchUnits(); }, [fetchUnits]);
 
+  useEffect(() => {
+    Promise.all([getCategories(), getProfiles()])
+      .then(([cats, profs]) => { setCategories(cats); setProfiles(profs); })
+      .catch(() => toast.error("โหลดหมวดหมู่ไม่สำเร็จ"));
+  }, []);
+
+  // ประเภทที่ขัดกับแบบการใช้งานที่เลือกไว้แล้วไม่ควรโผล่ให้เลือกซ้ำ
+  const scopedProfiles = allowedDispenseType
+    ? profiles.filter((p) => p.dispenseType === allowedDispenseType)
+    : profiles;
+  const scopedCategories = allowedDispenseType
+    ? categories.filter((c) => c.profile?.dispenseType === allowedDispenseType)
+    : categories;
+  const selected = categories.find((c) => c.id === categoryId) ?? null;
+
   // When units finish loading, sync names for any IDs already set (e.g. after back-navigation)
   useEffect(() => {
     if (!units.length) return;
@@ -99,25 +118,21 @@ export function StepCategoryUnits({
 
   return (
     <div className="space-y-5">
-      {/* Category — primary, drives code generation */}
+      {/* Category — primary, drives code generation. cascade ประเภท → หมวดหมู่ย่อย ตัวเดียว
+          กับแถบตัวกรองหน้าพัสดุ/รายงาน */}
       <div className="space-y-2">
-        <Label htmlFor="cat-btn" required>หมวดหมู่</Label>
-        <button
-          id="cat-btn"
-          type="button"
-          onClick={onOpenCategorySelect}
-          className={cn(
-            "flex h-10 w-full items-center gap-2 rounded-lg border px-3 text-left text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-            categoryId
-              ? "border-primary/30 bg-primary/[0.02] text-foreground"
-              : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground",
-          )}
-        >
-          <FolderOpen className={cn("h-4 w-4 shrink-0", categoryId ? "text-primary" : "text-muted-foreground")} />
-          <span className="flex-1 min-w-0 truncate">
-            {categoryId ? categoryName : "เลือกหมวดหมู่..."}
-          </span>
-        </button>
+        <Label required>หมวดหมู่</Label>
+        <CategoryPicker
+          profiles={scopedProfiles}
+          categories={scopedCategories}
+          value={{ profileId: selected?.profile?.id ?? "", categoryId: categoryId || null }}
+          onChange={({ categoryId: picked }) => {
+            const cat = categories.find((c) => c.id === picked);
+            if (cat) onCategoryChange(cat);
+          }}
+          requireCategory
+          className="h-10 w-full justify-start rounded-lg"
+        />
       </div>
 
       {/* Code — auto-generates from category */}
@@ -187,7 +202,8 @@ export function StepCategoryUnits({
               onIssueUnitChange(v, name);
             }}
           >
-            <SelectTrigger id="issue-unit-select" className="bg-card">
+            {/* SelectTrigger เป็น w-fit ตั้งต้น — ในฟอร์มนี้ทุกช่องเต็มความกว้าง */}
+            <SelectTrigger id="issue-unit-select" className="w-full bg-card">
               <span className={issueUnitId ? "text-foreground" : "text-muted-foreground"}>
                 {issueUnitId
                   ? ((units.find((u) => u.id === issueUnitId)?.name ?? issueUnitNameProp) || "เลือก")
@@ -203,10 +219,10 @@ export function StepCategoryUnits({
         </div>
       )}
 
-      {/* ที่จัดเก็บ — ไม่บังคับ. ของที่ยังไม่รู้ที่เก็บตอนสร้างก็สร้างได้ ไปตั้งทีหลังที่ ย้ายที่ตั้ง
-          และตัวที่ตอบว่า "ของอยู่ไหนจริงๆ" คือ DistributionTable ในหน้ารายละเอียด ไม่ใช่ฟิลด์นี้ */}
+      {/* ที่จัดเก็บ — บังคับ. ของเข้าคลังแล้วต้องมีที่วางเสมอ ("ไม่ระบุ" ไม่มีใครกลับมาแก้)
+          ตัวที่ตอบว่า "ของอยู่ไหนจริงๆ" ยังเป็น DistributionTable ในหน้ารายละเอียด ฟิลด์นี้คือที่ตั้งต้น */}
       <div className="space-y-2">
-        <Label className="text-xs">ที่จัดเก็บ</Label>
+        <Label className="text-xs" required>ที่จัดเก็บ</Label>
         <LocationCascadePicker initialLocationId={null} onChange={onLocationChange} />
       </div>
 

@@ -19,49 +19,29 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { quickCreateItem, createCategory } from "@/lib/api";
+import { quickCreateItem } from "@/lib/api";
 import type { CategoryOption } from "@/lib/api";
-import type { AddItemModalProps, CategoryWizardState, ItemFormState, WizardStep } from "./types";
+import type { AddItemModalProps, ItemFormState, WizardStep } from "./types";
 import { USAGE_OPTIONS } from "./types";
 import { StepItemDetails } from "./step-item-details";
 import { StepCategoryUnits } from "./step-category-units";
 import { type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
 import type { CodeMeta } from "./code-builder";
 import { StepSummary } from "./step-summary";
-import { StepSelect } from "../category-select-modal/step-select";
-import { StepCreateName } from "../category-select-modal/step-create-name";
-import { StepCreateConfirm } from "../category-select-modal/step-create-confirm";
-import { StepConfirmExisting } from "../category-select-modal/step-confirm-existing";
 import { withBase } from "@/lib/base-path";
 
 const STEP_TITLES: Record<WizardStep, string> = {
   details: "ข้อมูลพัสดุ",
   "category-units": "หมวดหมู่และหน่วย",
   summary: "ตรวจสอบและยืนยัน",
-  "cat-select": "เลือกหมวดหมู่",
-  "cat-confirm-existing": "ยืนยันหมวดหมู่",
-  "cat-create-name": "สร้างหมวดหมู่ใหม่",
-  "cat-create-confirm": "ตรวจสอบและยืนยัน",
 };
 
-// Sidebar stepper metadata (3 main steps; cat-* sub-steps map to index 1)
+// Sidebar stepper metadata
 const MAIN_STEPS = [
   { idx: 0, title: "ข้อมูลพัสดุ", desc: "ชื่อและประเภทการใช้งาน", icon: FileText },
   { idx: 1, title: "หมวดหมู่และหน่วย", desc: "หมวดหมู่ รหัส และหน่วยนับ", icon: Layers },
   { idx: 2, title: "ตรวจสอบและยืนยัน", desc: "สรุปข้อมูลก่อนสร้าง", icon: ClipboardCheck },
 ] as const;
-
-const INITIAL_CAT_WIZARD: CategoryWizardState = {
-  selectedExisting: null,
-  newCategoryName: "",
-  newCategoryProfileId: "",
-  newCategoryDescription: "",
-  isSubmitting: false,
-};
-
-function isCatStep(step: WizardStep): boolean {
-  return step.startsWith("cat-");
-}
 
 export function AddItemModal({
   open,
@@ -84,7 +64,6 @@ export function AddItemModal({
     step: WizardStep;
     form: ItemFormState;
     isSubmitting: boolean;
-    catWizard: CategoryWizardState;
     codeMeta: CodeMeta | null;
     initialQty: number;
     qtyValid: boolean;
@@ -106,7 +85,6 @@ export function AddItemModal({
       description: "",
     },
     isSubmitting: false,
-    catWizard: { ...INITIAL_CAT_WIZARD },
     codeMeta: null,
     initialQty: 1,
     qtyValid: true,
@@ -133,7 +111,6 @@ export function AddItemModal({
       initialQty: 1,
       qtyValid: true,
       locationRef: null,
-      catWizard: { ...INITIAL_CAT_WIZARD },
     });
   }, [defaultCode]);
 
@@ -174,23 +151,18 @@ export function AddItemModal({
     });
   }, []);
 
-  const setCatWizard = useCallback((updater: (prev: CategoryWizardState) => CategoryWizardState) => {
-    setState((s) => ({ ...s, catWizard: updater(s.catWizard) }));
-  }, []);
-
   // ── Helpers ─────────────────────────────────────────────────
 
   const allowedDispenseType = state.form.usageType
     ? USAGE_OPTIONS.find((o) => o.id === state.form.usageType)?.dispenseType
     : undefined;
 
-  /** Apply a selected/created category, fetch suggested code, return to category-units step */
+  /** Apply the picked category and fetch the code the system suggests for its prefix */
   const applyCategory = useCallback(async (cat: CategoryOption) => {
     const profile = cat.profile;
     const isItemTracked = profile?.dispenseType === "ITEM";
     setState((s) => ({
       ...s,
-      step: "category-units",
       form: {
         ...s.form,
         categoryId: cat.id,
@@ -200,7 +172,6 @@ export function AddItemModal({
         // Reset code — let the builder component generate it for ITEM types
         code: isItemTracked ? "" : s.form.code,
       },
-      catWizard: { ...INITIAL_CAT_WIZARD },
       codeMeta: isItemTracked ? null : s.codeMeta,
     }));
 
@@ -228,25 +199,15 @@ export function AddItemModal({
       state.form.code.trim() !== "" &&
       state.form.categoryId !== "" &&
       state.form.issueUnitId !== "" &&
+      state.locationRef?.kind === "ok" &&
       state.qtyValid) ||
-    state.step === "summary" ||
-    (state.step === "cat-create-name" && state.catWizard.newCategoryName.trim() !== "" && state.catWizard.newCategoryProfileId !== "") ||
-    state.step === "cat-create-confirm" ||
-    state.step === "cat-confirm-existing";
+    state.step === "summary";
 
   const handleBack = useCallback(() => {
     if (state.step === "category-units") {
       setState((s) => ({ ...s, step: "details" }));
     } else if (state.step === "summary") {
       setState((s) => ({ ...s, step: "category-units" }));
-    } else if (state.step === "cat-select") {
-      setState((s) => ({ ...s, step: "category-units" }));
-    } else if (state.step === "cat-create-name") {
-      setState((s) => ({ ...s, step: "cat-select" }));
-    } else if (state.step === "cat-confirm-existing") {
-      setState((s) => ({ ...s, step: "cat-create-name", catWizard: { ...s.catWizard, selectedExisting: null } }));
-    } else if (state.step === "cat-create-confirm") {
-      setState((s) => ({ ...s, step: "cat-create-name" }));
     } else {
       handleClose();
     }
@@ -261,11 +222,9 @@ export function AddItemModal({
       setState((s) => ({ ...s, isSubmitting: true }));
       try {
         const isFlat = state.form.profile?.dispenseType !== "ITEM";
-        // ที่จัดเก็บไม่บังคับ: กรอกไม่ครบ/ไม่กรอก = null แล้วไปตั้งทีหลังที่ ย้ายที่ตั้ง ได้
-        // ล้มตรงนี้ก็ไม่ควรทำให้สร้างพัสดุไม่ได้ — ห้องที่ผูกไว้แก้ง่ายกว่าพัสดุที่ไม่ได้สร้าง
-        const locationId = state.locationRef
-          ? await resolveLocationId(state.locationRef).catch(() => null)
-          : null;
+        // ที่จัดเก็บบังคับแล้ว (canNext gate) — resolve ล้มก็ต้องล้มทั้งใบ ไม่ใช่สร้างพัสดุ
+        // ที่ค้างเป็น "ไม่ระบุ" ซึ่งเป็นสภาพที่การบังคับกรอกมีไว้กันพอดี
+        const locationId = state.locationRef ? await resolveLocationId(state.locationRef) : null;
         const created = await quickCreateItem({
           code: state.form.code,
           name: state.form.name,
@@ -283,35 +242,13 @@ export function AddItemModal({
         toast.error(e instanceof Error ? e.message : "สร้างพัสดุไม่สำเร็จ");
         setState((s) => ({ ...s, isSubmitting: false }));
       }
-    } else if (state.step === "cat-create-name") {
-      setState((s) => ({ ...s, step: "cat-create-confirm" }));
-    } else if (state.step === "cat-create-confirm") {
-      // Create new category then apply
-      setCatWizard((prev) => ({ ...prev, isSubmitting: true }));
-      try {
-        const cat = await createCategory({
-          name: state.catWizard.newCategoryName,
-          profileId: state.catWizard.newCategoryProfileId,
-          description: state.catWizard.newCategoryDescription || undefined,
-        });
-        applyCategory(cat);
-        toast.success(`สร้างหมวดหมู่ "${cat.name}" สำเร็จ`);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "สร้างหมวดหมู่ไม่สำเร็จ");
-        setCatWizard((prev) => ({ ...prev, isSubmitting: false }));
-      }
-    } else if (state.step === "cat-confirm-existing") {
-      // User picked a similar existing category — apply it
-      if (state.catWizard.selectedExisting) {
-        applyCategory(state.catWizard.selectedExisting);
-      }
     }
-  }, [state, onCreated, handleClose, applyCategory, setCatWizard]);
+  }, [state, onCreated, handleClose]);
 
   // ── Rendering helpers ───────────────────────────────────────
 
   // Main step index (cat-* steps map to step 2)
-  const stepIdx = isCatStep(state.step) ? 1 : state.step === "details" ? 0 : state.step === "category-units" ? 1 : 2;
+  const stepIdx = state.step === "details" ? 0 : state.step === "category-units" ? 1 : 2;
   const stepTitle = STEP_TITLES[state.step];
   const title = "เพิ่มพัสดุใหม่";
 
@@ -325,7 +262,7 @@ export function AddItemModal({
           <div>
             <p className="text-base font-semibold text-foreground">{title}</p>
             <p className="text-xs text-muted-foreground">
-              {isCatStep(state.step) ? stepTitle : `ขั้นตอนที่ ${stepIdx + 1} จาก 3`}
+              {`ขั้นตอนที่ ${stepIdx + 1} จาก 3`}
             </p>
           </div>
         </div>
@@ -409,12 +346,7 @@ export function AddItemModal({
                   >
                     {step.title}
                   </p>
-                  {/* Show current sub-step label for category branch */}
-                  {isCurrent && isCatStep(state.step) ? (
-                    <p className="mt-0.5 text-xs text-primary">{stepTitle}</p>
-                  ) : (
-                    <p className="mt-0.5 text-xs text-muted-foreground">{step.desc}</p>
-                  )}
+                  <p className="mt-0.5 text-xs text-muted-foreground">{step.desc}</p>
                 </div>
               </div>
             );
@@ -441,11 +373,11 @@ export function AddItemModal({
             code={state.form.code}
             onCodeChange={(c) => setState((s) => ({ ...s, form: { ...s.form, code: c } }))}
             categoryId={state.form.categoryId}
-            categoryName={state.form.categoryName}
+            onCategoryChange={applyCategory}
+            allowedDispenseType={allowedDispenseType}
             issueUnitId={state.form.issueUnitId}
             issueUnitName={state.form.issueUnitName}
             onIssueUnitChange={(id, name) => setState((s) => ({ ...s, form: { ...s.form, issueUnitId: id, issueUnitName: name } }))}
-            onOpenCategorySelect={() => setState((s) => ({ ...s, step: "cat-select" }))}
             categoryType={state.form.categoryType}
             profile={state.form.profile}
             onCodeMetaChange={handleCodeMetaChange}
@@ -477,40 +409,6 @@ export function AddItemModal({
           />
         )}
 
-        {/* ── Category sub-steps (inline) ── */}
-        {state.step === "cat-select" && (
-          <StepSelect
-            selectedId={state.form.categoryId || null}
-            onSelectExisting={(cat) => {
-              applyCategory(cat);
-            }}
-            onSelectCreateNew={() => setState((s) => ({ ...s, step: "cat-create-name" }))}
-            allowedDispenseType={allowedDispenseType}
-          />
-        )}
-        {state.step === "cat-create-name" && (
-          <StepCreateName
-            name={state.catWizard.newCategoryName}
-            onNameChange={(n) => setCatWizard((prev) => ({ ...prev, newCategoryName: n }))}
-            profileId={state.catWizard.newCategoryProfileId}
-            onProfileChange={(id) => setCatWizard((prev) => ({ ...prev, newCategoryProfileId: id }))}
-            onSelectSimilar={(cat) => {
-              setCatWizard((prev) => ({ ...prev, selectedExisting: cat }));
-              setState((s) => ({ ...s, step: "cat-confirm-existing" }));
-            }}
-          />
-        )}
-        {state.step === "cat-create-confirm" && (
-          <StepCreateConfirm
-            name={state.catWizard.newCategoryName}
-            profileId={state.catWizard.newCategoryProfileId}
-            description={state.catWizard.newCategoryDescription}
-            onDescriptionChange={(d) => setCatWizard((prev) => ({ ...prev, newCategoryDescription: d }))}
-          />
-        )}
-        {state.step === "cat-confirm-existing" && state.catWizard.selectedExisting && (
-          <StepConfirmExisting category={state.catWizard.selectedExisting} />
-        )}
       </div>
     );
   }
@@ -529,7 +427,7 @@ export function AddItemModal({
           )}
         </Button>
         <Button
-          disabled={!canNext || state.isSubmitting || state.catWizard.isSubmitting}
+          disabled={!canNext || state.isSubmitting}
           onClick={handleNext}
           className="gap-1.5"
         >
@@ -537,16 +435,6 @@ export function AddItemModal({
             <>
               <Check className="h-4 w-4" />
               {state.isSubmitting ? "กำลังสร้าง..." : "สร้างพัสดุ"}
-            </>
-          ) : state.step === "cat-create-confirm" ? (
-            <>
-              <Check className="h-4 w-4" />
-              {state.catWizard.isSubmitting ? "กำลังสร้าง..." : "สร้างหมวดหมู่"}
-            </>
-          ) : state.step === "cat-confirm-existing" ? (
-            <>
-              <Check className="h-4 w-4" />
-              เลือกหมวดหมู่นี้
             </>
           ) : (
             <>

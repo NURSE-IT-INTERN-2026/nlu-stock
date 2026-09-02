@@ -2,14 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Package, Repeat, ListChecks } from "lucide-react";
 import type { DispenseType } from "@/generated/prisma/enums";
 
-export type WizardStep =
-  | "details"
-  | "category-units"
-  | "summary"
-  | "cat-select"
-  | "cat-confirm-existing"
-  | "cat-create-name"
-  | "cat-create-confirm";
+export type WizardStep = "details" | "category-units" | "summary";
 
 export type UsageType = "consumable" | "borrow-count" | "borrow-item";
 
@@ -66,10 +59,3 @@ export interface AddItemModalProps {
   onSelectExisting?: (item: SimilarItem) => void;
 }
 
-export interface CategoryWizardState {
-  selectedExisting: import("@/lib/api").CategoryOption | null;
-  newCategoryName: string;
-  newCategoryProfileId: string;
-  newCategoryDescription: string;
-  isSubmitting: boolean;
-}

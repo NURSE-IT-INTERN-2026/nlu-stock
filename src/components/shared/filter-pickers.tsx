@@ -56,13 +56,16 @@ export function FilterButton({ active, icon: Icon, children, count, ...rest }: {
 
 // ─── Category cascade (profile → subcategory) ───
 // 2-level cascade mirroring LocationPicker. No schema change: CategoryType.profileId already holds main→sub.
-export function CategoryPicker({ profiles, categories, value, onChange, className }: {
+export function CategoryPicker({ profiles, categories, value, onChange, className, requireCategory }: {
   profiles: ProfileOption[];
   categories: CategoryOption[];
   value: { profileId: string; categoryId: string | null };
   onChange: (next: { profileId: string; categoryId: string | null }) => void;
   /** แถวตัวกรองของรายงานเป็นปุ่ม h-8 rounded-full — ปุ่มตั้งต้นเป็น h-9 rounded-lg ของหน้าพัสดุ */
   className?: string;
+  /** ฟอร์มต้องได้หมวดหมู่ย่อยเสมอ ไม่ใช่ตัวกรองที่หยุดแค่ประเภทได้ — ตัดทางลัด
+   *  "เลือกประเภทอย่างเดียว" กับปุ่มล้างค่าออก เหลือทางเดียวคือคลิกหมวดหมู่ย่อย */
+  requireCategory?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [draftProfile, setDraftProfile] = React.useState<string>(value.profileId);
@@ -107,7 +110,7 @@ export function CategoryPicker({ profiles, categories, value, onChange, classNam
               return (
                 <button key={p.id} onClick={() => {
                   // no subcategories → dead-end, apply profile-only filter immediately
-                  if (!categories.some((c) => c.profile?.id === p.id)) { apply(p.id, null); return; }
+                  if (!requireCategory && !categories.some((c) => c.profile?.id === p.id)) { apply(p.id, null); return; }
                   setDraftProfile(p.id); setDraftCategory(null);
                 }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors", draftProfile === p.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85")}>
                   <PIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -127,11 +130,16 @@ export function CategoryPicker({ profiles, categories, value, onChange, classNam
         </div>
 
         {/* footer */}
+        {/* ฟอร์มเลือกเสร็จตอนคลิกหมวดหมู่ย่อย ปุ่มยืนยันจะไม่มีอะไรให้ยืนยันเพิ่ม */}
         <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-border bg-muted/30 shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => apply("", null)} className="h-8 text-muted-foreground">ล้างหมวดหมู่</Button>
+          {requireCategory ? <span /> : (
+            <Button variant="ghost" size="sm" onClick={() => apply("", null)} className="h-8 text-muted-foreground">ล้างหมวดหมู่</Button>
+          )}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setOpen(false)} className="h-8">ยกเลิก</Button>
-            <Button size="sm" onClick={() => apply(draftProfile, draftCategory)} className="h-8">ใช้ตัวกรองนี้</Button>
+            {!requireCategory && (
+              <Button size="sm" onClick={() => apply(draftProfile, draftCategory)} className="h-8">ใช้ตัวกรองนี้</Button>
+            )}
           </div>
         </div>
       </PopoverContent>
@@ -241,7 +249,9 @@ function Crumb({ label, active, onClick }: { label: string; active: boolean; onC
 
 function CascadeColumn({ title, children, empty }: { title: string; children: React.ReactNode; empty?: boolean }) {
   return (
-    <div className="flex flex-col min-h-0 overflow-hidden">
+    // ชื่อคอลัมน์เป็น aria-label ด้วย: ประเภทกับหมวดหมู่ย่อยมีชื่อซ้ำกันได้ (ครุภัณฑ์/ครุภัณฑ์)
+    // แยกกันไม่ออกถ้าไม่บอกว่าปุ่มอยู่คอลัมน์ไหน
+    <div className="flex flex-col min-h-0 overflow-hidden" role="group" aria-label={title}>
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold border-b border-border bg-background shrink-0">{title}</div>
       {empty ? (
         <div className="flex-1 min-h-0 flex items-center justify-center px-3 text-center text-xs text-muted-foreground/70">เลือกระดับก่อนหน้า</div>
