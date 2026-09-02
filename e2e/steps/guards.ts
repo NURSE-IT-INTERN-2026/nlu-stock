@@ -156,25 +156,35 @@ Given("มีใบรับเข้าของ X จำนวน {int} หน
   bdd.item = await createConsumable(request, uniqueCode, 0);
   bdd.qty = qty;
   const res = await request.post("/api/receive", {
-    data: { items: [{ itemId: bdd.item.id, quantity: qty, lotNumber: `E2E-${uniqueCode}`, expiryDate: null }] },
+    // เก็บเลขล็อตที่ตั้งไว้จริงไว้เทียบตอนเปิดกล่อง — uniqueCode ขึ้นต้นด้วย E2E- อยู่แล้ว
+    // ประกอบใหม่ทีหลังจะได้ E2E-E2E-… ซึ่งไม่ตรงกับที่ API บันทึก
+    data: { items: [{ itemId: bdd.item.id, quantity: qty, lotNumber: (bdd.lotNumber = `E2E-${uniqueCode}`), expiryDate: null }] },
   });
   if (!res.ok()) throw new Error(`receive setup failed: ${res.status()}`);
 });
 
-When("ฉันเปิดแท็บ {string} ของหน้ารายงาน", async ({ page }, tab: string) => {
+When("ฉันเปิดแท็บ {string} ของหน้ารายงาน แล้วกดแถวของ X", async ({ page, bdd }, tab: string) => {
   await page.goto("/reports?tab=receive-history");
   await expect(page.getByRole("button", { name: tab, exact: true })).toBeVisible({ timeout: 15_000 });
+  // แถวของตารางรายงานกดเปิดรายละเอียดได้ จึงประกาศตัวเป็น role="button"
+  // (src/components/reports/report-data-table.tsx) — getByRole("row") ไม่เจอ
+  const row = page.getByRole("button", { name: new RegExp(bdd.item.code) }).filter({ visible: true }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
 });
 
 Then(
-  "แถวนั้นต้องมีช่องกรอกเฉพาะราคาต่อหน่วย และจำนวนต้องเป็นข้อความอ่านอย่างเดียว",
+  "กล่องแก้ใบรับเข้าต้องแก้ได้แค่ราคา เลขล็อต และเลขที่ใบส่งของ จำนวนกับวันที่เป็นข้อความอ่านอย่างเดียว",
   async ({ page, bdd }) => {
-    const row = page.getByRole("row").filter({ hasText: bdd.item.code }).first();
-    await expect(row).toBeVisible({ timeout: 15_000 });
-    // ราคาเป็นช่องเดียวในแถวที่แก้ได้ — จำนวนที่แก้ได้จะทำให้สต๊อกกับใบรับเข้าเล่าคนละเรื่อง
-    // (ดู api/receive/[id] PATCH: schema รับแค่ unitCost)
-    await expect(row.getByRole("spinbutton")).toHaveCount(1);
-    await expect(row.getByRole("textbox")).toHaveCount(0);
-    await expect(row).toContainText(String(bdd.qty));
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("ราคาต่อหน่วย (บาท)")).toBeVisible({ timeout: 10_000 });
+    // แก้ได้เฉพาะป้ายกำกับ: ราคา (ผิดบนกระดาษได้) + เลขล็อต/เลขที่ใบส่งของ (ชื่อเรียกงวด).
+    // จำนวนกับวันที่คือของที่เคลื่อนจริง — แก้ตรงนี้แล้วสต๊อกกับใบรับเข้าเล่าคนละเรื่อง
+    // (ดู api/receive/[id] PATCH: schema รับแค่ unitCost / lotNumber / deliveryRef)
+    await expect(dialog.getByRole("spinbutton")).toHaveCount(1);
+    await expect(dialog.getByRole("textbox")).toHaveCount(2);
+    await expect(dialog.getByLabel("เลขล็อต")).toHaveValue(bdd.lotNumber);
+    // จำนวนกับวันที่อยู่ในกล่องเพื่อบอกว่ากำลังแก้ใบไหน — เห็นได้ แก้ไม่ได้
+    await expect(dialog).toContainText(String(bdd.qty));
   }
 );

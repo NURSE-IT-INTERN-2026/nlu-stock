@@ -17,14 +17,18 @@ Given(
 );
 
 When(
-  "ฉันเปิดแท็บ {string} ของหน้า {string} แล้วแก้ช่องราคาต่อหน่วยของแถวนั้นเป็น {int}",
+  "ฉันเปิดแท็บ {string} ของหน้า {string} แล้วกดแถวนั้นเพื่อแก้ราคาต่อหน่วยเป็น {int}",
   async ({ page, bdd }, tab: string, _pageLabel: string, price: number) => {
     await page.goto("/reports?tab=receive-history");
     await expect(page.getByRole("button", { name: tab, exact: true })).toBeVisible({ timeout: 15_000 });
-    const row = page.getByRole("row").filter({ hasText: bdd.item.code }).first();
-    await row.getByRole("spinbutton").fill(String(price));
-    await row.getByRole("spinbutton").blur();
-    // the PATCH fires on blur — wait for it in the DB, not on the page
+    const row = page.getByRole("button", { name: new RegExp(bdd.item.code) }).filter({ visible: true }).first();
+    await row.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("ราคาต่อหน่วย (บาท)")).toBeVisible({ timeout: 10_000 });
+    await dialog.getByLabel("ราคาต่อหน่วย (บาท)").fill(String(price));
+    await dialog.getByRole("button", { name: "บันทึก", exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+    // the dialog closes optimistically after the PATCH resolves — confirm it in the DB
     await expect
       .poll(async () => {
         const { rows } = await pool.query(
@@ -41,9 +45,9 @@ Then(
   "ฉันจะเห็นราคา {int} คงอยู่เมื่อโหลดแท็บใหม่",
   async ({ page, bdd }, price: number) => {
     await page.reload();
-    const row = page.getByRole("row").filter({ hasText: bdd.item.code }).first();
-    await expect(row.getByRole("spinbutton")).toHaveValue(String(price), { timeout: 15_000 });
-    // price persisted server-side too, not just in the input
+    const row = page.getByRole("button", { name: new RegExp(bdd.item.code) }).filter({ visible: true }).first();
+    await expect(row).toContainText(String(price), { timeout: 15_000 });
+    // price persisted server-side too, not just on screen
     const { rows } = await pool.query(
       `SELECT "unitCost" FROM receive_records WHERE "itemId" = $1 ORDER BY "receivedAt" DESC LIMIT 1`,
       [bdd.item.id]

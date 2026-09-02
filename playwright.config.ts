@@ -33,7 +33,10 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
-    actionTimeout: 15_000,
+    // next dev คอมไพล์ route แรกที่ถูกเปิดในแต่ละรอบ — เทสตัวที่บังเอิญเป็นคนแรกที่แตะ
+    // /reports หรือ /receive จึงรอนานกว่าตัวอื่นหลายวินาที ค่า 15s เดิมทำให้แต่ละรอบมีตัวแดง
+    // สลับหน้ากันไปโดยที่รันเดี่ยวผ่านหมด
+    actionTimeout: 30_000,
     // always headed with a visible pause — the owner watches every run (HEADLESS=1 / SLOWMO= override)
     headless: process.env.HEADLESS === "1",
     launchOptions: { slowMo: Number(process.env.SLOWMO ?? 800) },
