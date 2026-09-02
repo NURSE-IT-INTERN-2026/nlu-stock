@@ -57,6 +57,8 @@ interface RepairTrip {
   code: string;
   statusLabel: string;
   subject: string;
+  /** ชิ้นไหน (C01) — null บนของที่ไม่ได้ติดตามรายชิ้น */
+  subCode: string | null;
   date: string;
   openedAt: string;
   closedAt: string | null;
@@ -293,9 +295,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           {events.map((u, i) => {
             const key = unitKey(u);
             const on = active != null && unitKey(active) === key;
-            return isTrip(u)
-              ? <CaseBlock key={key} trip={u} unit={unit} selected={on} onSelect={() => setSelected(key)} last={i === events.length - 1} />
-              : <MovementRow key={key} e={u} unit={unit} selected={on} onSelect={() => setSelected(key)} last={i === events.length - 1} />;
+            return <TimelineRow key={key} u={u} unit={unit} selected={on} onSelect={() => setSelected(key)} last={i === events.length - 1} />;
           })}
         </ol>
       )}
@@ -442,25 +442,18 @@ const caseMeta = (t: string) => CASE_META[t] ?? CASE_META.REPAIR;
 const caseIdOf = (trip: RepairTrip) => `${trip.caseType}:${trip.id}`;
 
 /**
- * The trip's second line. In the table it must NOT repeat the count or the date — those columns
- * are right there saying the same thing, and a row that prints "23 ชิ้น" twice is what makes the
- * eye stop. On mobile there are no columns to carry them, so `full` puts them back.
+ * บรรทัดล่างของเคส. ไม่พิมพ์จำนวนซ้ำ — มันอยู่ในช่องขวาของแถวแล้ว ช่องเดียวกับที่กิจกรรมเดี่ยว
+ * พิมพ์ตัวเลขของมัน และแถวที่เขียน "23 ชิ้น" สองที่คือแถวที่ทำให้สายตาสะดุด.
  */
-function tripMeta(trip: RepairTrip, unit: string, full = false): string {
+function tripMeta(trip: RepairTrip): string {
   const opened = OPENED_VERB[trip.caseType] ?? "แจ้ง";
   return [
-    full && trip.qty != null ? `${trip.qty}${unit ? ` ${unit}` : ""}` : null,
     trip.done
       ? `${opened} ${fmtDate(trip.openedAt, TH_DATE)}`
       : `${opened} ${fmtDate(trip.openedAt, TH_DATE)} · ผ่านมา ${dayCount(trip.openedAt)} วัน`,
     trip.cost != null ? `ค่าใช้จ่าย ${trip.cost.toLocaleString("th-TH")}` : null,
     trip.attachments > 0 ? `หลักฐาน ${trip.attachments}` : null,
   ].filter(Boolean).join(" · ");
-}
-
-function CaseIcon({ trip, className }: { trip: RepairTrip; className?: string }) {
-  const Icon = caseMeta(trip.caseType).icon;
-  return <Icon className={className} />;
 }
 
 /** The rail every entry hangs off. `last` stops the line instead of running it off the end. */
@@ -477,96 +470,122 @@ function Rail({ children, last, dot }: { children: ReactNode; last?: boolean; do
 }
 
 /**
- * เคสหนึ่งเคสในประวัติของพัสดุ — กล่องเดียว มีขั้นตอนอยู่ข้างใน อ่านเก่า→ใหม่ เหมือนหน้า /cases เป๊ะ
- * เพราะมันคือเคสเดียวกัน เลขเดียวกัน. เคสที่ปิดแล้วมาแบบพับ เคสที่ยังค้างมาแบบกาง — สิ่งที่ค้างอยู่คือ
- * สิ่งที่คนเปิดหน้านี้มาหา.
+ * ทุกแถวในไทม์ไลน์ — เคสหรือกิจกรรมเดี่ยว — เป็นการ์ดใบเดียวกัน.
+ *
+ * เดิมมีสอง renderer: เคสได้กล่องมีขอบ มีชื่อประเภทตัวหนา มีป้ายสถานะ; กิจกรรมเดี่ยวได้แถวเปล่า
+ * ไม่มีขอบ ชื่อประเภทอยู่ในชิปสี ชื่อเรื่องขึ้นเป็นหัว. ผลคือไล่สายตาลงมาในลิสต์เดียวกันแล้วต้อง
+ * สลับวิธีอ่านทุกสองแถว ทั้งที่คำถามคือคำถามเดิม — "นี่เรื่องอะไร ของขยับเท่าไหร่ เมื่อไหร่".
+ *
+ * ที่ยังต่างคือ**เนื้อ** ไม่ใช่โครง: กิจกรรมเดี่ยวไม่มีเลขเคสและไม่มีป้ายสถานะ เพราะมันเกิดครั้งเดียว
+ * จบ ไม่มีใครรออยู่ปลายทาง (เหตุผลเดียวกับที่ EventDetailPane ไม่พิมพ์ป้าย). ช่องที่ไม่มีของก็แค่
+ * ไม่ขึ้น — ไม่ต้องประดิษฐ์เลขเคสให้ของที่ไม่มี lifecycle เพียงเพื่อให้สองแถวเท่ากัน.
  */
-function CaseBlock({ trip, unit, selected, onSelect, last }: {
-  trip: RepairTrip;
-  unit: string;
-  selected: boolean;
-  onSelect: () => void;
-  last?: boolean;
-}) {
-  const tone = tripTone(trip);
-  return (
-    <Rail
-      last={last}
-      dot={<span aria-hidden className={cn("mt-3.5 grid size-6 shrink-0 place-items-center rounded-full", tone)}>
-        <CaseIcon trip={trip} className="size-3.5" />
-      </span>}
-    >
-      {/* เดิมการ์ดกางขั้นตอนอยู่ในตัวเอง แล้วมีปุ่มลิงก์ออกไปอีกหน้า. ตอนนี้ขั้นตอนอยู่ในช่องขวา
-          ทั้งหมด — กางซ้ำที่นี่ด้วยคือเล่าเรื่องเดียวกันสองที่บนจอเดียว. */}
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-current={selected}
-        className={cn(
-          "w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left transition",
-          selected
-            ? "border-primary bg-primary/5"
-            : trip.done ? "border-border hover:bg-muted/40" : "border-warning/40 hover:bg-muted/40",
-        )}
-      >
-        {/* ประเภท → เรื่อง → เลขอ้างอิง. รหัสเคยนำหัวการ์ด ซึ่งอ่านแล้วรู้แค่ว่า "นี่คือเคส" —
-            RC-2569-0320 กับ RC-2569-0321 หน้าตาเหมือนกันเป๊ะ. ชื่อพัสดุไม่อยู่ที่นี่: หน้านี้คือ
-            หน้าของพัสดุตัวนั้นอยู่แล้ว เขียนซ้ำทุกการ์ดคือ noise (หน้าเคสเขียน เพราะปนหลายตัว). */}
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-semibold">{caseMeta(trip.caseType).name}</span>
-          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", tone)}>
-            {trip.statusLabel || (trip.done ? caseMeta(trip.caseType).done : caseMeta(trip.caseType).open)}
-          </span>
-        </span>
-        {trip.subject && (
-          <span className="mt-0.5 block truncate text-sm text-foreground">{trip.subject}</span>
-        )}
-        <span className="mt-1 block truncate text-[11px] text-muted-foreground">
-          {trip.code && <><span className="font-mono">{trip.code}</span> · </>}
-          {tripMeta(trip, unit, true)} · {trip.steps.length} ขั้นตอน
-        </span>
-      </button>
-    </Rail>
-  );
+type Row = {
+  icon: typeof Package;
+  tone: string;
+  name: string;
+  status: string | null;
+  title: string;
+  sub: string | null;
+  meta: ReactNode;
+  /** ตัวเลขมุมขวา; `neutral` = นับจำนวน ไม่ใช่การขยับสต๊อก จึงไม่ทาสี */
+  value: number | null;
+  neutral: boolean;
+  delta: number | null;
+  change?: { from: number; to: number } | null;
+  /** ยังค้างอยู่ — ขอบเหลือง. กิจกรรมเดี่ยวจบในตัวเสมอ */
+  open: boolean;
+};
+
+function rowOf(u: Unit): Row {
+  if (isTrip(u)) {
+    const m = caseMeta(u.caseType);
+    return {
+      icon: m.icon,
+      tone: tripTone(u),
+      name: m.name,
+      status: u.statusLabel || (u.done ? m.done : m.open),
+      title: u.subject,
+      sub: null,
+      meta: (
+        <>
+          {u.code && <><span className="font-mono">{u.code}</span> · </>}
+          {/* เคสสามใบของสามชิ้นในรายการเดียวกันอ่านเหมือนกันทุกตัวอักษรถ้าไม่บอกว่าชิ้นไหน */}
+          {u.subCode && <><span className="font-mono">{u.subCode}</span> · </>}
+          {tripMeta(u)} · {u.steps.length} ขั้นตอน
+        </>
+      ),
+      value: u.qty,
+      neutral: true,
+      delta: null,
+      open: !u.done,
+    };
+  }
+  const m = TYPE_META[u.type] ?? TYPE_META.ADJUSTMENT;
+  return {
+    icon: m.icon,
+    tone: m.chip,
+    name: EVENT_TYPE_LABELS[u.type] ?? u.type,
+    status: null,
+    title: u.note,
+    sub: u.subtitle || null,
+    meta: <>{u.user} · <span className="tabular-nums">{fmtDate(u.date, TH_DATE)} {timeOf(u.date)} น.</span></>,
+    value: u.delta ?? u.qty,
+    neutral: u.delta === null,
+    delta: u.delta,
+    change: u.change,
+    open: false,
+  };
 }
 
-function MovementRow({ e, unit, selected, onSelect, last }: {
-  e: TimelineEvent;
+function TimelineRow({ u, unit, selected, onSelect, last }: {
+  u: Unit;
   unit: string;
   selected: boolean;
   onSelect: () => void;
   last?: boolean;
 }) {
+  const r = rowOf(u);
+  const Icon = r.icon;
   return (
     <Rail
       last={last}
-      dot={<span aria-hidden className={cn("mt-3 size-3 shrink-0 rounded-full", TYPE_META[e.type].rail)} />}
+      dot={<span aria-hidden className={cn("mt-3.5 grid size-6 shrink-0 place-items-center rounded-full", r.tone)}>
+        <Icon className="size-3.5" />
+      </span>}
     >
+      {/* เคสไม่กางขั้นตอนในตัวเอง — ช่องขวาเล่าครบอยู่แล้ว กางซ้ำคือเรื่องเดียวกันสองที่บนจอเดียว */}
       <button
         type="button"
         onClick={onSelect}
         aria-current={selected}
         className={cn(
-          "group grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border px-3 py-2 text-left transition",
-          selected ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted/40",
+          "group grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition",
+          selected
+            ? "border-primary bg-primary/5"
+            : r.open ? "border-warning/40 hover:bg-muted/40" : "border-border hover:bg-muted/40",
         )}
       >
         <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2">
-            <TypeChip type={e.type} />
-            <span className="truncate text-sm font-medium">{e.note}</span>
+          {/* ประเภท → เรื่อง → เลขอ้างอิง. รหัสเคยนำหัวการ์ด ซึ่งอ่านแล้วรู้แค่ว่า "นี่คือเคส" —
+              RC-2569-0320 กับ RC-2569-0321 หน้าตาเหมือนกันเป๊ะ. ชื่อพัสดุไม่อยู่ที่นี่: หน้านี้คือ
+              หน้าของพัสดุตัวนั้นอยู่แล้ว เขียนซ้ำทุกการ์ดคือ noise (หน้าเคสเขียน เพราะปนหลายตัว). */}
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm font-semibold">{r.name}</span>
+            {r.status && (
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", r.tone)}>
+                {r.status}
+              </span>
+            )}
             <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </span>
-          {e.subtitle && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{e.subtitle}</span>}
-          <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-            <Avatar name={e.user} />
-            {e.user}
-            <span className="tabular-nums">· {fmtDate(e.date, TH_DATE)} {timeOf(e.date)} น.</span>
-          </span>
+          {r.title && <span className="mt-0.5 block truncate text-sm text-foreground">{r.title}</span>}
+          {r.sub && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{r.sub}</span>}
+          <span className="mt-1 block truncate text-[11px] text-muted-foreground">{r.meta}</span>
         </span>
         <span className="shrink-0 text-right">
-          <Delta value={e.delta ?? e.qty} unit={unit} neutral={e.delta === null} />
-          <ChangeHint delta={e.delta} change={e.change} />
+          <Delta value={r.value} unit={unit} neutral={r.neutral} />
+          <ChangeHint delta={r.delta} change={r.change} />
         </span>
       </button>
     </Rail>
@@ -769,17 +788,6 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
       <dd className="min-w-0 text-right text-sm text-foreground">{value}</dd>
     </div>
-  );
-}
-
-function TypeChip({ type }: { type: TimelineEventType }) {
-  const meta = TYPE_META[type] ?? TYPE_META.ADJUSTMENT;
-  const Icon = meta.icon;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap", meta.chip)}>
-      <Icon className="size-3.5" />
-      {EVENT_TYPE_LABELS[type] ?? type}
-    </span>
   );
 }
 

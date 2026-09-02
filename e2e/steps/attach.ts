@@ -34,8 +34,14 @@ Then("ฉันจะเห็นหลักฐาน {int} รูปในแ�
 });
 
 Then(
-  "ประวัติของ X บนสุดต้องเป็น {string} เปิดดูแล้วมีรายละเอียดและหลักฐาน {int} ไฟล์",
-  async ({ page, bdd }, label: string, files: number) => {
-    await expectHistory(page, bdd.item.code, [label], { contains: "E2E จอแตก", evidence: files });
+  "ประวัติของ X บนสุดต้องเป็นการ์ดเคส {string} ของชิ้น {string} เปิดดูแล้วมีรายละเอียดและหลักฐาน {int} ไฟล์",
+  async ({ page, bdd }, label: string, sub: string, files: number) => {
+    // แจ้งชำรุดเปิดเคสซ่อมทันที (รอส่งซ่อม) ประวัติจึงต้องขึ้นเป็นใบเคสที่มีเลข RC และบอกชิ้น
+    // ไม่ใช่แถว "เปลี่ยนสถานะ" ลอย ๆ ที่กดแล้วไม่มีเคสให้เปิด
+    await expectHistory(page, bdd.item.code, [new RegExp(String.raw`${label}[\s\S]*${sub}`)], {
+      row: label,
+      contains: "E2E จอแตก",
+      evidence: files,
+    });
   }
 );

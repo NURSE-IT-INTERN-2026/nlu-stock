@@ -29,6 +29,8 @@ export type TimelineCase<T extends TripStep = TripStep> = {
   statusLabel: string;
   /** เคสนี้เรื่องอะไร — บรรทัดที่คนอ่าน. รหัสเป็นเลขอ้างอิง ดู src/lib/cases.ts. */
   subject: string;
+  /** ชิ้นไหนของรายการนี้ (C01) — null บนของที่ไม่ได้ติดตามรายชิ้น. เติมโดย route จาก cases.ts. */
+  subCode: string | null;
   /** Where the trip sits in the desc timeline — its newest step. */
   date: Date;
   openedAt: Date;
@@ -83,6 +85,7 @@ function buildTrip<T extends TripStep>(
     caseType,
     code: "",
     statusLabel: "",
+    subCode: null,
     subject: "",
     date: newest.date,
     openedAt: oldest.date,
@@ -164,7 +167,9 @@ export function groupTimelineCases<T extends TripStep>(
     const opens = e.type === "REPAIR_SENT" || (e.type === "STATUS_CHANGE" && e.details.newStatus === "DAMAGED");
     const closes = e.type === "REPAIR_RETURN";
     if (!opens && !closes) continue;
-    const id = open.get(sid) ?? e.id;
+    // ผู้เรียกชี้เคสมาแล้วก็ใช้ไอดีนั้น — เดาเองจะได้คนละไอดีกับ src/lib/cases.ts เมื่อแถวเปิดเคส
+    // (เช่น ชำรุดที่แจ้งตอนรับคืน) ถูกกรองทิ้งไปก่อนถึงไทม์ไลน์ในฐานะแถวซ้ำของใบคืน
+    const id = tripOf.get(e.id) ?? open.get(sid) ?? e.id;
     tripOf.set(e.id, id);
     if (closes) open.delete(sid);
     else open.set(sid, id);

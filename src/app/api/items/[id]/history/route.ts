@@ -5,7 +5,7 @@ import {
   USAGE_TYPE_LABELS, RETURN_CONDITION_LABELS, type TimelineEventType,
 } from "@/lib/constants";
 import { isDuplicateOfLoanRow } from "@/lib/returns";
-import { AdjustmentReason } from "@/generated/prisma/enums";
+import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { NextRequest } from "next/server";
 import type { AttachRecordType } from "@/lib/attachments";
@@ -114,7 +114,7 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
   // ReceiveRecord / StockAdjustment / LocationChangeLog are item-level and drop out.
   const subItemId = searchParams.get("subItemId");
 
-  const events: TimelineEvent[] = [];
+  let events: TimelineEvent[] = [];
   // adjustment id → ค่าซ่อม of the job that closed it; merged in once both queries have run.
   const repairJobs = new Map<string, { id: string; cost: number | null; attachments: string[]; bookingId: string | null }>();
   // adjustment id → its own หลักฐาน, so a closing row can reach the booking it closed without a
@@ -436,6 +436,12 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
 
   await Promise.all(queries);
 
+  // subItemId → C01. เคสรู้จักชิ้นด้วย subCode ส่วนแถวในไทม์ไลน์ถือแต่ id — ต้องมีตัวแปลง
+  const subCodeOf = new Map(
+    (await prisma.subItem.findMany({ where: { itemId: id }, select: { id: true, subCode: true } }))
+      .map((s) => [s.id, s.subCode] as const),
+  );
+
   for (const e of events) {
     const job = repairJobs.get(e.id);
     if (job) {
@@ -478,24 +484,64 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
   // `type` takes a comma-separated list as well as a single value, so one เคส in the picker
   // ("ซ่อมแซม") is one request covering แจ้งชำรุด/ส่งซ่อม/รับคืนจากซ่อม.
   const wanted = typeFilter ? new Set(typeFilter.split(",")) : null;
-  const loanCaseOf = (e: TimelineEvent) => {
+  // ปิดงานซ่อมของชิ้นที่ติดตามรายชิ้นเขียนสองแถวในทรานแซกชันเดียว: MaintenanceRecord (กลายเป็น
+  // REPAIR_RETURN) กับ ItemStatusLog "ส่งซ่อม → พร้อมใช้งาน" — เหตุการณ์เดียว ห่างกันไม่กี่ ms.
+  // แถวสถานะไม่ได้บอกอะไรที่ REPAIR_RETURN ไม่ได้บอก จึงตัดทิ้งแบบเดียวกับขอบยืม-คืน. ตัดเฉพาะ
+  // ชิ้นที่มีแถวรับคืนจริง — ทางที่ออกจาก ส่งซ่อม โดยไม่เขียน MaintenanceRecord จะได้ไม่หายเงียบ.
+  const returnedPieces = new Set(
+    events.filter((e) => e.type === "REPAIR_RETURN").map((e) => e.details.subItemId as string | null),
+  );
+  events = events.filter(
+    (e) =>
+      !(e.type === "STATUS_CHANGE" &&
+        e.details.previousStatus === ItemStatus.UNDER_REPAIR &&
+        returnedPieces.has((e.details.subItemId as string | null) ?? null)),
+  );
+
+  // เคสทั้งกองต้องรู้จักก่อนจับกลุ่ม ไม่ใช่หลัง: ไอดีของทริปต้องเป็นไอดีเดียวกับที่ src/lib/cases.ts
+  // ใช้ ไม่งั้นการ์ดจะไม่มีเลขเคส ป้ายสถานะตกไปใช้คำสำรอง และกดแล้วขึ้น "ไม่พบเคสนี้".
+  const known = new Map(
+    (await listCases({ itemId: id, ...(subItemId ? { subItemId } : {}) })).map((c) => [c.id, c]),
+  );
+
+  // งานซ่อมของชิ้นหนึ่งเรียงต่อกันเสมอ (ชิ้นมีสถานะเดียว) — เคสของแถวหนึ่งคือเคสล่าสุดที่เปิดไม่
+  // หลังแถวนั้น. ใช้ขอบล่างอย่างเดียวโดยตั้งใจ: แถวปิดถูกเขียนหลัง updatedAt ของเคสเสมอ
+  // (คนละมิลลิวินาที) การกำหนดขอบบนจะทำให้แถวปิดหลุดออกจากเคสของตัวเอง.
+  const pieceRepairs = new Map<string, { openedAt: Date; key: string; done: boolean }[]>();
+  for (const c of known.values()) {
+    if (c.type !== "REPAIR" || !c.subCode) continue;
+    const list = pieceRepairs.get(c.subCode) ?? [];
+    list.push({ openedAt: c.openedAt, key: c.id.slice(c.id.indexOf(":") + 1), done: c.state !== "OPEN" });
+    pieceRepairs.set(c.subCode, list);
+  }
+  for (const list of pieceRepairs.values()) list.sort((a, b) => +a.openedAt - +b.openedAt);
+
+  const REPAIR_ROW = new Set(["REPAIR_SENT", "REPAIR_RETURN"]);
+  const caseKeyOf = (e: TimelineEvent) => {
     const key = loanKeyOf.get(e.id);
-    if (!key) return null;
     // "BORROW" ที่นี่คือชื่อตารางต้นทาง ไม่ใช่ประเภทที่จะแสดง — ไอดีเคสของ ยืม/ตั้งใช้/เบิก
     // ขึ้นต้นด้วยคำนี้ทั้งหมด (ดู src/lib/cases.ts) และประเภทจริงถูกเขียนทับด้านล่างจาก listCases.
-    return { key, type: "BORROW" as const, done: (loanOutstanding.get(key) ?? 0) === 0 };
+    if (key) return { key, type: "BORROW" as const, done: (loanOutstanding.get(key) ?? 0) === 0 };
+
+    const sub = e.details.subItemId as string | null | undefined;
+    const code = sub ? subCodeOf.get(sub) : null;
+    if (!code) return null;
+    const isRepairRow =
+      REPAIR_ROW.has(e.type) ||
+      (e.type === "STATUS_CHANGE" && e.details.newStatus === ItemStatus.DAMAGED);
+    if (!isRepairRow) return null;
+    const list = pieceRepairs.get(code);
+    if (!list) return null;
+    let hit: { key: string; done: boolean } | null = null;
+    for (const c of list) if (c.openedAt <= e.date) hit = c;
+    return hit ? { key: hit.key, type: "REPAIR" as const, done: hit.done } : null;
   };
 
   // จัดกลุ่มก่อนแล้วค่อยกรอง ไม่ใช่ทางกลับกัน: กรองก่อนจะทำให้เลือก "ซ่อมแซม" แล้วได้แถวแบนๆ
   // สามแถวแทนที่จะได้การ์ดเคสที่เล่าเรื่องเดียวกันครบทั้งใบ — ซึ่งคือสิ่งเดียวที่การ์ดมีไว้ทำ.
   // เคสถูกเก็บไว้เมื่อขั้นตอนใดขั้นตอนหนึ่งของมันตรงกับที่เลือก และเก็บไปทั้งใบ.
-  const grouped = groupTimelineCases(events, bookings, closedBy, loanCaseOf);
+  const grouped = groupTimelineCases(events, bookings, closedBy, caseKeyOf);
 
-  // สถานะกับคำค้นเป็นคำถามระดับเคส จึงต้องรู้จักเคสทั้งกองก่อนตัด ไม่ใช่แค่ใบที่อยู่หน้าปัจจุบัน.
-  // Scoped to this item, so the extra build is a handful of indexed lookups.
-  const known = new Map(
-    (await listCases({ itemId: id, ...(subItemId ? { subItemId } : {}) })).map((c) => [c.id, c]),
-  );
   const caseOf = (u: TimelineCase<TimelineEvent>) => known.get(`${u.caseType}:${u.id}`);
 
   const isCase = (u: TimelineEvent | TimelineCase<TimelineEvent>): u is TimelineCase<TimelineEvent> => "steps" in u;
@@ -535,6 +581,8 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
     t.code = c.code;
     t.statusLabel = c.statusLabel;
     t.subject = c.subject;
+    // ของที่ติดตามรายชิ้น การ์ดสามใบของสามชิ้นอ่านเหมือนกันหมดถ้าไม่บอกว่าชิ้นไหน
+    t.subCode = c.subCode;
     // ตั้งใช้ในห้อง ถูกจับกลุ่มมาในกอง "ยืม" เพราะมันอยู่ตารางเดียวกัน แต่ป้ายที่คนอ่านต้องเป็น
     // ประเภทจริงของเคส ไม่ใช่ชื่อของตารางที่มันบังเอิญอยู่.
     t.caseType = c.type;
