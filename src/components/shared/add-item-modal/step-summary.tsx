@@ -12,6 +12,8 @@ interface StepSummaryProps {
   codeMeta?: CodeMeta | null;
   initialQty?: number;
   description?: string;
+  /** ข้อความที่จัดเก็บที่เลือกไว้ — ว่าง = ยังไม่ระบุ ซึ่งอนุญาต */
+  locationLabel?: string;
 }
 
 export function StepSummary({
@@ -23,6 +25,7 @@ export function StepSummary({
   codeMeta,
   initialQty = 0,
   description,
+  locationLabel,
 }: StepSummaryProps) {
   const usageLabel = USAGE_OPTIONS.find((o) => o.id === usageType)?.title ?? "—";
 
@@ -42,6 +45,11 @@ export function StepSummary({
         {/* Section: หมวดหมู่ */}
         <Section label="หมวดหมู่">
           <Row label="ชื่อหมวดหมู่" value={categoryName || "—"} />
+        </Section>
+
+        {/* ที่จัดเก็บ — โชว์ "ยังไม่ระบุ" ไม่ใช่ "—" เพราะช่องว่างตรงนี้ตั้งใจได้ ไม่ใช่กรอกตกหล่น */}
+        <Section label="ที่จัดเก็บ">
+          <Row label="ห้องที่ลงทะเบียน" value={locationLabel || "ยังไม่ระบุ"} />
         </Section>
 
         {/* Section: หน่วย */}

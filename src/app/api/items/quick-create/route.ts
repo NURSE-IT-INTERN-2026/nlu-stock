@@ -15,6 +15,9 @@ const quickCreateSchema = z.object({
   copyCount: z.number().int().min(1).default(1),
   initialQty: z.number().int().min(0).default(0),
   description: z.string().max(1000).optional(),
+  // ห้องที่ลงทะเบียนไว้ — ไม่บังคับ เพราะของบางอย่างยังไม่รู้ที่เก็บตอนสร้าง และ DistributionTable
+  // เป็นตัวตอบว่าของอยู่ไหนจริงๆ อยู่แล้ว. ว่างไว้ = ยังไม่ระบุ ไปตั้งทีหลังที่ ย้ายที่ตั้ง ได้
+  locationId: z.string().min(1).nullish(),
 });
 
 export async function POST(request: NextRequest) {
@@ -57,6 +60,7 @@ export async function POST(request: NextRequest) {
       name: data.name,
       categoryId: data.categoryId,
       issueUnitId: data.issueUnitId,
+      locationId: data.locationId ?? null,
       description: data.description,
       trackIndividually,
       ...(subItems.length > 0

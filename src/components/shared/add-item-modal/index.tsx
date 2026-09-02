@@ -25,6 +25,7 @@ import type { AddItemModalProps, CategoryWizardState, ItemFormState, WizardStep 
 import { USAGE_OPTIONS } from "./types";
 import { StepItemDetails } from "./step-item-details";
 import { StepCategoryUnits } from "./step-category-units";
+import { type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
 import type { CodeMeta } from "./code-builder";
 import { StepSummary } from "./step-summary";
 import { StepSelect } from "../category-select-modal/step-select";
@@ -87,6 +88,9 @@ export function AddItemModal({
     codeMeta: CodeMeta | null;
     initialQty: number;
     qtyValid: boolean;
+    /** ที่จัดเก็บที่เลือกไว้ — ยังไม่ resolve เป็น id จนกว่าจะกดสร้างจริง ไม่งั้นแค่พิมพ์ผ่านๆ
+     *  ก็ไปสร้าง Location เปล่าค้างในทะเบียนแล้ว (resolveLocationId เป็น findOrCreate) */
+    locationRef: LocationRef | null;
   }>({
     step: "details",
     form: {
@@ -106,6 +110,7 @@ export function AddItemModal({
     codeMeta: null,
     initialQty: 1,
     qtyValid: true,
+    locationRef: null,
   });
 
   const reset = useCallback(() => {
@@ -127,6 +132,7 @@ export function AddItemModal({
       codeMeta: null,
       initialQty: 1,
       qtyValid: true,
+      locationRef: null,
       catWizard: { ...INITIAL_CAT_WIZARD },
     });
   }, [defaultCode]);
@@ -156,6 +162,7 @@ export function AddItemModal({
         codeMeta: null,
         initialQty: 1,
         qtyValid: true,
+        locationRef: null,
       }));
     }
   }, [state.form.usageType]);
@@ -254,6 +261,11 @@ export function AddItemModal({
       setState((s) => ({ ...s, isSubmitting: true }));
       try {
         const isFlat = state.form.profile?.dispenseType !== "ITEM";
+        // ที่จัดเก็บไม่บังคับ: กรอกไม่ครบ/ไม่กรอก = null แล้วไปตั้งทีหลังที่ ย้ายที่ตั้ง ได้
+        // ล้มตรงนี้ก็ไม่ควรทำให้สร้างพัสดุไม่ได้ — ห้องที่ผูกไว้แก้ง่ายกว่าพัสดุที่ไม่ได้สร้าง
+        const locationId = state.locationRef
+          ? await resolveLocationId(state.locationRef).catch(() => null)
+          : null;
         const created = await quickCreateItem({
           code: state.form.code,
           name: state.form.name,
@@ -262,6 +274,7 @@ export function AddItemModal({
           copyCount: state.codeMeta?.copyCount ?? 1,
           initialQty: isFlat ? state.initialQty : 0,
           description: state.form.description || undefined,
+          locationId,
         });
         toast.success(`สร้างพัสดุ "${created.name}" สำเร็จ`);
         onCreated(created);
@@ -440,6 +453,7 @@ export function AddItemModal({
             initialQty={state.initialQty}
             onInitialQtyChange={(q) => setState((s) => ({ ...s, initialQty: q }))}
             onQtyValidChange={(v) => setState((s) => ({ ...s, qtyValid: v }))}
+            onLocationChange={(ref) => setState((s) => ({ ...s, locationRef: ref }))}
             description={state.form.description}
             onDescriptionChange={(d) => setState((s) => ({ ...s, form: { ...s.form, description: d } }))}
           />
@@ -451,6 +465,12 @@ export function AddItemModal({
             code={state.form.code}
             categoryName={state.form.categoryName}
             issueUnitName={state.form.issueUnitName}
+            locationLabel={
+              state.locationRef?.kind === "ok"
+                ? [state.locationRef.building, state.locationRef.floor, state.locationRef.room, state.locationRef.detail]
+                    .filter(Boolean).join(" / ")
+                : ""
+            }
             codeMeta={state.codeMeta}
             initialQty={state.initialQty}
             description={state.form.description}

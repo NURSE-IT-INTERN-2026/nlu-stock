@@ -41,7 +41,7 @@ npm run test:e2e    # ทั้งชุด ~3 นาที
 ```bash
 npx playwright test 14-send-repair     # ไฟล์เดียว (ชื่อ match ไฟล์ .feature)
 npx playwright test --grep "ส่งซ่อม"   # ทุก scenario ที่ชื่อเข้า keyword
-npm run test:e2e:ui                    # UI mode — รันซ้ำ เห็น timeline ทุก step
+npm run test:e2e:ui                    # UI mode — headless เอง (มี viewer ในตัว) รันซ้ำ เห็น timeline ทุก step
 HEADLESS=1 npm run test:e2e            # ปิดหน้าต่าง เร็ว (~40s) — สำหรับ CI
 SLOWMO=2000 npm run test:e2e           # ช้าลง ~2 วิ/action ดูละเอียดทีละ step
 ```

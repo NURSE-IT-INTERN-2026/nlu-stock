@@ -318,6 +318,8 @@ export interface QuickCreateItemPayload {
   copyCount?: number;
   initialQty?: number;
   description?: string;
+  /** ห้องที่ลงทะเบียนไว้ — ไม่ใส่ = ยังไม่ระบุ ตั้งทีหลังได้ที่ ย้ายที่ตั้ง */
+  locationId?: string | null;
 }
 
 export function quickCreateItem(data: QuickCreateItemPayload) {

@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "tsx --env-file-if-exists=.env.local --test src/lib/*.test.ts",
     "test:e2e": "bddgen && playwright test",
-    "test:e2e:ui": "bddgen && playwright test --ui",
+    "test:e2e:ui": "bddgen && HEADLESS=1 SLOWMO=0 playwright test --ui",
     "bdd:gen": "bddgen"
   },
   "prisma": {

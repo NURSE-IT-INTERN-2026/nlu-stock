@@ -19,9 +19,12 @@ import type { UnitOption } from "@/lib/api";
 import { CodeBuilder } from "./code-builder";
 import type { CodeMeta } from "./code-builder";
 import { NumericInput } from "@/components/shared/numeric-input";
+import { LocationCascadePicker, type LocationRef } from "@/components/shared/location-cascade-picker";
 import type { FormProfile } from "./types";
 
 interface StepCategoryUnitsProps {
+  /** ห้องที่ลงทะเบียนไว้ — ไม่บังคับ ปล่อยว่างได้ */
+  onLocationChange: (ref: LocationRef) => void;
   code: string;
   onCodeChange: (code: string) => void;
   categoryId: string;
@@ -47,6 +50,7 @@ interface StepCategoryUnitsProps {
 }
 
 export function StepCategoryUnits({
+  onLocationChange,
   code,
   onCodeChange,
   categoryId,
@@ -198,6 +202,13 @@ export function StepCategoryUnits({
           </Select>
         </div>
       )}
+
+      {/* ที่จัดเก็บ — ไม่บังคับ. ของที่ยังไม่รู้ที่เก็บตอนสร้างก็สร้างได้ ไปตั้งทีหลังที่ ย้ายที่ตั้ง
+          และตัวที่ตอบว่า "ของอยู่ไหนจริงๆ" คือ DistributionTable ในหน้ารายละเอียด ไม่ใช่ฟิลด์นี้ */}
+      <div className="space-y-2">
+        <Label className="text-xs">ที่จัดเก็บ</Label>
+        <LocationCascadePicker initialLocationId={null} onChange={onLocationChange} />
+      </div>
 
       {/* Description */}
       <div className="space-y-2">
