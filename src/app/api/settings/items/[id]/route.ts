@@ -96,6 +96,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
   }
 
+  // ค่าก่อนแก้ของฟิลด์ที่ต้องเก็บร่องรอย — อ่านทีเดียวก่อนเขียน แล้วเทียบกับผลลัพธ์ที่ update คืนมา
+  const before = await prisma.item.findUnique({
+    where: { id },
+    select: {
+      code: true, name: true, purchasePrice: true, isActive: true,
+      category: { select: { name: true } },
+      issueUnit: { select: { name: true } },
+    },
+  });
+
   try {
     const item = await prisma.item.update({
       where: { id },
@@ -123,6 +133,30 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             : Promise.resolve();
         }),
       );
+    }
+
+    // ร่องรอยการแก้ทะเบียน — เฉพาะฟิลด์ที่เขียนความหมายของประวัติเก่าทับย้อนหลัง (ดู ItemFieldLog).
+    // เทียบด้วย label ที่คนอ่าน ไม่ใช่ id และเขียนเฉพาะช่องที่ขยับจริง — กดบันทึกทั้งฟอร์มโดยไม่
+    // แก้อะไรต้องไม่ทิ้งแถวเปล่าไว้ทุกครั้ง
+    if (before) {
+      const moved: { field: string; fromLabel: string | null; toLabel: string | null }[] = [];
+      const diff = (field: string, from: unknown, to: unknown) => {
+        const f = from == null || from === "" ? null : String(from);
+        const t = to == null || to === "" ? null : String(to);
+        if (f !== t) moved.push({ field, fromLabel: f, toLabel: t });
+      };
+      const active = (v: boolean) => (v ? "ใช้งาน" : "ปิดใช้งาน");
+      if ("code" in data) diff("รหัส", before.code, item.code);
+      if ("name" in data) diff("ชื่อ", before.name, item.name);
+      if ("categoryId" in data) diff("หมวดหมู่", before.category?.name, item.category?.name);
+      if ("issueUnitId" in data) diff("หน่วยนับ", before.issueUnit?.name, item.issueUnit?.name);
+      if ("purchasePrice" in data) diff("ราคาซื้อ", before.purchasePrice, item.purchasePrice);
+      if ("isActive" in data) diff("สถานะทะเบียน", active(before.isActive), active(item.isActive));
+      if (moved.length > 0) {
+        await prisma.itemFieldLog.createMany({
+          data: moved.map((m) => ({ ...m, itemId: id, changedBy: auth.user.userId })),
+        });
+      }
     }
 
     // Semantic search embeds name + nameEn + code + category — a rename leaves the old

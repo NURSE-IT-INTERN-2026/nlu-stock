@@ -417,6 +417,32 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
     );
   }
 
+  // แก้ข้อมูลทะเบียนของพัสดุ — ระดับรายการ ทุกชิ้นถือร่วมกัน (ชื่อ/หมวด/หน่วยเป็นของทั้งกอง)
+  if (fetchReceive) {
+    queries.push(
+      prisma.itemFieldLog.findMany({
+        where: { itemId: id },
+        include: { changer: { select: { name: true } } },
+        orderBy: { changedAt: "desc" },
+      }).then((records) => {
+        for (const r of records) {
+          events.push({
+            id: r.id,
+            type: "FIELD_CHANGE",
+            date: r.changedAt,
+            delta: null,
+            qty: null,
+            note: `แก้${r.field}`,
+            subtitle: `${r.fromLabel ?? "—"} → ${r.toLabel ?? "—"}`,
+            notes: "",
+            user: r.changer.name,
+            details: { field: r.field, fromLabel: r.fromLabel, toLabel: r.toLabel },
+          });
+        }
+      })
+    );
+  }
+
   // แก้ราคาต่อหน่วยของใบรับเข้าย้อนหลัง — ระดับรายการเหมือนใบรับเข้าเอง ทุกชิ้นถือร่วมกัน
   if (fetchReceive) {
     queries.push(

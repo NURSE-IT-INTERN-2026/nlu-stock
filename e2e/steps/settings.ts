@@ -1,5 +1,6 @@
 import { createBdd } from "playwright-bdd";
 import { test, expect, pool } from "../fixtures";
+import { createConsumable } from "./helpers";
 
 const { Given, When, Then } = createBdd(test);
 
@@ -64,5 +65,30 @@ Then(
     await expect(
       page.getByRole("group", { name: "หมวดหมู่ย่อย" }).getByRole("button", { name: bdd.categoryName, exact: true })
     ).toBeVisible({ timeout: 15_000 });
+  }
+);
+
+Given("มีรายการ X อยู่ในทะเบียน", async ({ request, bdd, uniqueCode }) => {
+  bdd.item = await createConsumable(request, uniqueCode, 5);
+});
+
+When(
+  "ฉันเปิดหน้าตั้งค่า แท็บรายการพัสดุ กดแก้ไขที่แถวของ X แล้วเปลี่ยนชื่อ",
+  async ({ page, bdd }) => {
+    bdd.renamed = `${bdd.item.name} (แก้ชื่อแล้ว)`;
+    await page.goto("/settings?tab=items");
+    // ทะเบียนมีเกือบพันรายการ — ค้นก่อนแล้วค่อยกดแถว ไม่งั้นแถวที่ต้องการอยู่คนละหน้า
+    await page.getByPlaceholder(/ค้นหา/).first().fill(bdd.item.code);
+    const row = page
+      .getByText(bdd.item.code, { exact: false })
+      .locator('xpath=ancestor::*[.//button[@aria-label="แก้ไข"]][1]')
+      .first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole("button", { name: "แก้ไข", exact: true }).first().click();
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByPlaceholder("เช่น เครื่องดื่มหัวปลีแบบผง").fill(bdd.renamed);
+    await dialog.getByRole("button", { name: /^บันทึกการแก้ไข/ }).click();
+    await expect(page.getByText("แก้ไขรายการสำเร็จ")).toBeVisible({ timeout: 15_000 });
   }
 );

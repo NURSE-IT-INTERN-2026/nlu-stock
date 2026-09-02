@@ -133,6 +133,7 @@ model User {
   returnRecords      ReturnRecord[]
   attachmentChanges  AttachmentLog[]
   priceChanges       ReceivePriceLog[]
+  fieldChanges       ItemFieldLog[]
 
   @@map("users")
 }
@@ -315,6 +316,7 @@ model Item {
   statusLogs         ItemStatusLog[]
   locationChanges    LocationChangeLog[]
   priceChanges       ReceivePriceLog[]
+  fieldChanges       ItemFieldLog[]
   templateLines      DispenseTemplateLine[]
   returnRecords      ReturnRecord[]
 
@@ -651,6 +653,27 @@ model ItemStatusLog {
 // --- Location Change Log (audit trail for ย้ายที่ตั้ง) ---
 // fromLabel/toLabel denormalized: an audit log is point-in-time, so the
 // location name as it was at move time is what we want to show.
+// --- Item field edit log (แก้ข้อมูลทะเบียนของพัสดุ) ---
+// เก็บเฉพาะฟิลด์ที่เขียนความหมายของประวัติเก่าทับย้อนหลัง — ชื่อ/รหัส (แถวเบิกเมื่อปีที่แล้วอ่าน
+// ใหม่เป็นชื่อใหม่), หมวดหมู่ (ลาก profile ไปด้วย: dispenseType, prefix รหัส, การจัดกลุ่มในรายงาน),
+// หน่วยนับ ("5 กล่อง" กลายเป็น "5 ชิ้น"), ราคาซื้อ (เงิน), และการปลดออกจากทะเบียน.
+// ฟิลด์ประดับ (คำอธิบาย รูป ผู้ขาย รอบเวลา ขั้นต่ำ) ไม่เก็บ — แก้บ่อยจนกลบห้าอย่างข้างบน.
+// เก็บเป็น label ไม่ใช่ id: "cat_abc → cat_def" อ่านไม่ออก ต้อง "วัสดุสิ้นเปลือง → ครุภัณฑ์".
+model ItemFieldLog {
+  id        String   @id @default(cuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  field     String
+  fromLabel String?
+  toLabel   String?
+  changedBy String
+  changer   User     @relation(fields: [changedBy], references: [id])
+  changedAt DateTime @default(now())
+
+  @@index([itemId, changedAt])
+  @@map("item_field_logs")
+}
+
 // --- Price edit log (แก้ราคาต่อหน่วยของใบรับเข้าย้อนหลัง) ---
 // ใบรับเข้าถือราคาปัจจุบันได้ค่าเดียว แต่ราคานั้นเป็นตัวตั้งของ Item.purchasePrice, Lot.unitCost
 // และมูลค่าคงคลังทั้งรายงาน — แก้ทีเดียวตัวเลขขยับทั้งกระดาน โดยไม่เหลือร่องรอยว่าเคยเป็นเท่าไหร่
