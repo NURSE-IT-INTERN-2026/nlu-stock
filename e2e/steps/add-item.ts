@@ -113,25 +113,16 @@ Then("รายการใหม่ต้องผูกกับที่จ�
   expect(rows[0], `${bdd.newItem.name} ไม่ผูกที่จัดเก็บ`).toMatchObject(LOCATION);
 });
 
-Then("ประวัติระดับรายการของรายการใหม่ต้องมีแถวยอดตั้งต้น", async ({ request, bdd }) => {
-  // หน้ารายละเอียดของของที่ติดตามรายชิ้นเปิดมาที่ชิ้น C01 เสมอ และแท็บประวัติของมันถูกกรอง
-  // ตามชิ้น — ยอดตั้งต้นเป็นแถวระดับรายการ (ไม่ผูกชิ้นไหน) จึงไม่โผล่บนจอนั้น
-  // ยันผ่าน API ตัวเดียวกับที่หน้าประวัติเรียก แต่ไม่กรองชิ้น
-  const { rows } = await pool.query(`SELECT id FROM items WHERE name = $1`, [bdd.newItem.name]);
-  const res = await request.get(`/api/items/${rows[0].id}/history?perPage=50`);
-  expect(res.ok(), `ประวัติเปิดไม่ได้ (HTTP ${res.status()})`).toBeTruthy();
-  const body = await res.json();
-  const opening = (body.events ?? []).filter(
-    (e: { note?: string }) => e.note === "ยอดตั้งต้นตอนขึ้นทะเบียน"
-  );
-  expect(opening.length, "ไม่มีแถวยอดตั้งต้นในประวัติ").toBe(1);
-});
-
-Then("ประวัติของรายการใหม่ต้องมีแถวยอดตั้งต้น", async ({ page, bdd }) => {
-  // ของที่เพิ่งขึ้นทะเบียนมีของอยู่ในคลังทันที ประวัติจึงต้องตอบได้ว่ายอดนั้นมาจากไหน
-  // ไม่ใช่ "ยังไม่มีประวัติของพัสดุนี้" ทั้งที่ยอดขึ้นไปแล้ว
-  await openNewItem(page, bdd.newItem.name);
-  await page.getByRole("button", { name: "ประวัติ", exact: true }).click();
-  const rows = page.locator("ol > li > div > button");
-  await expect(rows.first()).toContainText("ยอดตั้งต้นตอนขึ้นทะเบียน", { timeout: 15_000 });
-});
+Then(
+  "ประวัติของรายการใหม่ต้องมีแถวยอดตั้งต้น {int} ไป {int}",
+  async ({ page, bdd }, from: number, to: number) => {
+    // ของที่เพิ่งขึ้นทะเบียนมีของอยู่ในคลังทันที ประวัติจึงต้องตอบได้ว่ายอดนั้นมาจากไหน
+    // ไม่ใช่ "ยังไม่มีประวัติของพัสดุนี้" ทั้งที่ยอดขึ้นไปแล้ว. ของที่ติดตามรายชิ้นก็ต้องเห็น
+    // เหมือนกัน ทั้งที่หน้าเปิดมาที่ชิ้น C01 — ยอดตั้งต้นเป็นของทั้งกอง ทุกชิ้นถือร่วมกัน
+    await openNewItem(page, bdd.newItem.name);
+    await page.getByRole("button", { name: "ประวัติ", exact: true }).click();
+    const row = page.locator("ol > li > div > button").filter({ hasText: "ยอดตั้งต้นตอนขึ้นทะเบียน" }).first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row).toContainText(`${from} → ${to}`);
+  }
+);

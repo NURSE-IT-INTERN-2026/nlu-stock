@@ -111,7 +111,8 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
   const { from: fromDate, to: toDate } = caseRangeBounds(searchParams.get("range"));
   const q = searchParams.get("q")?.trim().toLowerCase() || null;
   // Piece mode: only the sources that carry a subItemId can be scoped to one copy.
-  // ReceiveRecord / StockAdjustment / LocationChangeLog are item-level and drop out.
+  // ReceiveRecord / StockAdjustment / LocationChangeLog have no subItemId — they are facts about
+  // the whole item, and every copy inherits them.
   const subItemId = searchParams.get("subItemId");
 
   let events: TimelineEvent[] = [];
@@ -130,13 +131,17 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
   const loanKeyOf = new Map<string, string>(); // event id → dispense record id
   const loanOutstanding = new Map<string, number>(); // dispense record id → units still out
 
-  const itemLevel = !subItemId;
   // เดิมมีโหมด `?lost=1` ที่ยิงคำถามคนละคำถามผ่านเส้นทางเดียวกันนี้ — เปลี่ยนทั้งเงื่อนไข where,
   // ชื่อแถว และรูปร่างของ details ทั้งหมด เพื่อป้อนแท็บประวัติสูญหายที่แยกต่างหาก. ตอนนี้ของหาย
   // เป็นเคส LC ซึ่งอ่านจาก src/lib/cases.ts เหมือนเคสอื่น โหมดนั้นจึงหายไปทั้งโหมด.
-  const fetchReceive = itemLevel;
-  const fetchAdjust = itemLevel;
-  const fetchLocation = itemLevel;
+  // ...and they are fetched in piece mode too. Dropping them left a tracked item's copies with
+  // no way to reach รับเข้า, ปรับสต๊อก or ย้ายที่ตั้ง at all: the page always opens on a copy
+  // (item-detail-shell renders the piece branch), so item-level rows had no screen to appear on.
+  // A brand-new tracked item read "ยังไม่มีประวัติของพัสดุนี้" while holding three pieces whose
+  // opening balance was sitting in the ledger.
+  const fetchReceive = true;
+  const fetchAdjust = true;
+  const fetchLocation = true;
 
   // ponytail: every row for this item is loaded, then sorted and sliced in memory. Paging
   // across 7 tables in SQL means a UNION ALL query or a materialised ledger; neither is
