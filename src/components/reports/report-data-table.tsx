@@ -58,21 +58,13 @@ export function ReportDataTable<T extends Record<string, any>>({
   const paged = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Rows open a detail view, so they have to answer the keyboard too — a click handler on a
-  // <tr>/<div> is invisible to Tab and Enter on its own.
-  const rowProps = (row: T) =>
-    onRowClick
-      ? {
-          role: "button" as const,
-          tabIndex: 0,
-          onClick: () => onRowClick(row),
-          onKeyDown: (e: React.KeyboardEvent) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onRowClick(row);
-            }
-          },
-        }
-      : {};
+  // <tr> is invisible to Tab and Enter on its own. The handler that used to come with it,
+  // role="button" on the <tr>, is what a table must not do: a row that calls itself a button
+  // stops being a row, and every cell under it stops belonging to a column. Screen readers lose
+  // the whole grid. The keyboard gets its answer from a real <button> wrapping the first cell
+  // instead (below) — activating it fires a click that bubbles to this handler, so the two paths
+  // stay one path and neither fires twice.
+  const rowProps = (row: T) => (onRowClick ? { onClick: () => onRowClick(row) } : {});
   // select-none: on touch, a tap that drifts a pixel selects the row's text instead of opening it.
   const rowCls = onRowClick
     ? "cursor-pointer select-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
@@ -125,13 +117,24 @@ export function ReportDataTable<T extends Record<string, any>>({
               // Zebra rows come from Table's `grid` skin: tracking one row across seven columns
               // is where the eye slips a line.
               <TableRow key={i} className={rowCls} {...rowProps(row)}>
-                {columns.map((col) => (
-                  <TableCell key={col.key} className={cn("px-2", col.className)}>
-                    {col.render
-                      ? col.render(row)
-                      : (row[col.key] as React.ReactNode) ?? "—"}
-                  </TableCell>
-                ))}
+                {columns.map((col, ci) => {
+                  const content = col.render
+                    ? col.render(row)
+                    : (row[col.key] as React.ReactNode) ?? "—";
+                  return (
+                    <TableCell key={col.key} className={cn("px-2", col.className)}>
+                      {/* หนึ่งแถวมีตัวควบคุมตัวเดียว อยู่ที่ช่องแรก — ปุ่มเปล่าโดยตั้งใจ: click ที่
+                          เกิดจากการกด Enter/Space วิ่งขึ้นไปหา onClick ของแถวเอง */}
+                      {onRowClick && ci === 0 ? (
+                        <button type="button" className="w-full text-left focus-visible:outline-none">
+                          {content}
+                        </button>
+                      ) : (
+                        content
+                      )}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>

@@ -21,7 +21,7 @@ When(
   async ({ page, bdd }, tab: string, _pageLabel: string, price: number) => {
     await page.goto("/reports?tab=receive-history");
     await expect(page.getByRole("button", { name: tab, exact: true })).toBeVisible({ timeout: 15_000 });
-    const row = page.getByRole("button", { name: new RegExp(bdd.item.code) }).filter({ visible: true }).first();
+    const row = page.getByRole("row").filter({ hasText: bdd.item.code }).filter({ visible: true }).first();
     await row.click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel("ราคาต่อหน่วย (บาท)")).toBeVisible({ timeout: 10_000 });
@@ -45,7 +45,7 @@ Then(
   "ฉันจะเห็นราคา {int} คงอยู่เมื่อโหลดแท็บใหม่",
   async ({ page, bdd }, price: number) => {
     await page.reload();
-    const row = page.getByRole("button", { name: new RegExp(bdd.item.code) }).filter({ visible: true }).first();
+    const row = page.getByRole("row").filter({ hasText: bdd.item.code }).filter({ visible: true }).first();
     await expect(row).toContainText(String(price), { timeout: 15_000 });
     // price persisted server-side too, not just on screen
     const { rows } = await pool.query(

@@ -166,9 +166,8 @@ Given("มีใบรับเข้าของ X จำนวน {int} หน
 When("ฉันเปิดแท็บ {string} ของหน้ารายงาน แล้วกดแถวของ X", async ({ page, bdd }, tab: string) => {
   await page.goto("/reports?tab=receive-history");
   await expect(page.getByRole("button", { name: tab, exact: true })).toBeVisible({ timeout: 15_000 });
-  // แถวของตารางรายงานกดเปิดรายละเอียดได้ จึงประกาศตัวเป็น role="button"
-  // (src/components/reports/report-data-table.tsx) — getByRole("row") ไม่เจอ
-  const row = page.getByRole("button", { name: new RegExp(bdd.item.code) }).filter({ visible: true }).first();
+  // แท็บรายงานที่ไม่ได้เปิดอยู่ยัง mount ค้างไว้ — ต้องกรองเอาแถวที่มองเห็นจริง
+  const row = page.getByRole("row").filter({ hasText: bdd.item.code }).filter({ visible: true }).first();
   await expect(row).toBeVisible({ timeout: 15_000 });
   await row.click();
 });
