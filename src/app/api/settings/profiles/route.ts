@@ -53,7 +53,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const profile = await prisma.categoryProfile.create({ data });
+    // ทุกประเภทได้หมวดย่อยตัวตั้งต้นชื่อเดียวกันติดมาด้วยเสมอ: Item ผูกกับ CategoryType ไม่ใช่
+    // profile ประเภทที่ไม่มีหมวดย่อยจึงรับพัสดุไม่ได้ และหายไปจากตัวกรองที่ปั้นรายการประเภท
+    // จากหมวดย่อย. UI ซ่อนชั้นนี้ตอนมีตัวเดียว — คนใช้เลยเห็นเป็น "ประเภทที่ไม่ต้องมีหมวดย่อย"
+    // โดยไม่ต้องแตะ schema.
+    const profile = await prisma.$transaction(async (tx) => {
+      const created = await tx.categoryProfile.create({ data });
+      // CategoryType.name unique ทั้งตาราง — ชื่อเดียวกับประเภทอาจถูกจองไว้แล้ว
+      const taken = await tx.categoryType.findUnique({ where: { name: created.name } });
+      const max = await tx.categoryType.aggregate({ _max: { sortOrder: true } });
+      await tx.categoryType.create({
+        data: {
+          name: taken ? `${created.name} (${created.code})` : created.name,
+          profileId: created.id,
+          sortOrder: (max._max.sortOrder ?? 0) + 1,
+        },
+      });
+      return created;
+    });
     return json(profile, 201);
   } catch {
     // Unique violation on code or name.

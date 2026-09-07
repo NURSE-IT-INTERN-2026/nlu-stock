@@ -419,7 +419,7 @@ export function ProfilesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>ลบประเภท</AlertDialogTitle>
             <AlertDialogDescription>
-              ต้องการลบประเภท &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? ลบได้เฉพาะประเภทที่ไม่มีหมวดหมู่ย่อย
+              ต้องการลบประเภท &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? ลบได้เฉพาะประเภทที่ยังไม่มีพัสดุ — หมวดหมู่ย่อยในประเภทจะถูกลบไปด้วย
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

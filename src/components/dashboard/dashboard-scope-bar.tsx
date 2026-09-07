@@ -26,8 +26,9 @@ const KIND_TYPES: Record<DispenseKind, DispenseType[]> = {
 // /api/categories fetch carries both levels: every category names its profile, so the profile
 // list is just the distinct profiles of the categories in view.
 //
-// ponytail: a profile with zero categories never appears here. It also owns zero items,
-// so filtering to it would show an empty dashboard either way.
+// ประเภทโผล่ที่นี่ได้เพราะหมวดย่อยตัวใดตัวหนึ่งของมันอ้างถึง — ทุกประเภทจึงมีตัวตั้งต้นติดมา
+// หนึ่งตัวเสมอตั้งแต่ตอนสร้าง (ดู POST /api/settings/profiles). ประเภทที่ศูนย์หมวดย่อยคือของเก่า
+// ก่อนกติกานั้น และรับพัสดุไม่ได้อยู่แล้ว
 export function DashboardScopeBar({
   kind, profileId, categoryId, onChange,
 }: {

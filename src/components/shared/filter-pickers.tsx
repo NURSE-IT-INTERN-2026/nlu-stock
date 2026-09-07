@@ -73,11 +73,16 @@ export function CategoryPicker({ profiles, categories, value, onChange, classNam
   React.useEffect(() => { if (open) { setDraftProfile(value.profileId); setDraftCategory(value.categoryId); } }, [open, value.profileId, value.categoryId]);
 
   const profile = profiles.find((p) => p.id === draftProfile) ?? null;
-  const scoped = draftProfile ? categories.filter((c) => c.profile?.id === draftProfile) : categories;
+  const subsOf = (profileId: string) => categories.filter((c) => c.profile?.id === profileId);
+  const scoped = draftProfile ? subsOf(draftProfile) : categories;
 
   const selProfile = profiles.find((p) => p.id === value.profileId);
+  // ประเภทที่มีหมวดย่อยตัวเดียวคือตัวตั้งต้นที่ระบบสร้างให้ (ดู POST /api/settings/profiles) —
+  // คนใช้ไม่เคยเห็นมันตอนเลือก จึงไม่ควรโผล่ในป้ายว่า "ยา / ยา"
   const label = selProfile
-    ? (value.categoryId ? `${selProfile.name} / ${categories.find((c) => c.id === value.categoryId)?.name ?? ""}` : selProfile.name)
+    ? (value.categoryId && subsOf(selProfile.id).length > 1
+        ? `${selProfile.name} / ${categories.find((c) => c.id === value.categoryId)?.name ?? ""}`
+        : selProfile.name)
     : null;
 
   const apply = (p: string, c: string | null) => { onChange({ profileId: p, categoryId: c }); setOpen(false); };
@@ -109,8 +114,13 @@ export function CategoryPicker({ profiles, categories, value, onChange, classNam
               const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
               return (
                 <button key={p.id} onClick={() => {
-                  // no subcategories → dead-end, apply profile-only filter immediately
-                  if (!requireCategory && !categories.some((c) => c.profile?.id === p.id)) { apply(p.id, null); return; }
+                  // ชั้นสองมีอะไรให้เลือกจริงก็ต่อเมื่อมีหมวดย่อยตั้งแต่สองตัวขึ้นไป: ตัวเดียว = ตัวตั้งต้น
+                  // ที่ระบบสร้างให้ตอนสร้างประเภท, ศูนย์ตัว = ประเภทเก่าก่อนกติกานั้น. ทั้งสองกรณีจบที่นี่
+                  const subs = subsOf(p.id);
+                  if (subs.length <= 1 && (subs.length === 1 || !requireCategory)) {
+                    apply(p.id, subs[0]?.id ?? null);
+                    return;
+                  }
                   setDraftProfile(p.id); setDraftCategory(null);
                 }} className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors", draftProfile === p.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-muted text-foreground/85")}>
                   <PIcon className="size-4 shrink-0 text-muted-foreground" />

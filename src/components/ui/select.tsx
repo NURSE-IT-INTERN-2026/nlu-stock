@@ -61,9 +61,11 @@ function SelectContent({
   children,
   side = "bottom",
   sideOffset = 4,
-  align = "center",
+  align = "start",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  // Base UI ตั้งต้นเป็น true: ป็อปอัพคร่อมตัว trigger โดยเลื่อน item ที่เลือกไว้ไปซ้อนตรงนั้น
+  // ทั้งแอปต้องการให้กางลงใต้กล่องเสมอ ไม่ใช่ทับกล่อง
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<

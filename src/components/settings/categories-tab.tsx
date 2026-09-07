@@ -270,16 +270,19 @@ export function CategoriesTab() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <FilterPill active={filterProfile === "ALL"} onClick={() => setFilterProfile("ALL")}>
-            ทุกประเภท
-          </FilterPill>
-          {profiles.map((p) => (
-            <FilterPill key={p.id} active={filterProfile === p.id} onClick={() => setFilterProfile(p.id)} color={p.color}>
-              {p.name}
-            </FilterPill>
-          ))}
-        </div>
+        {/* เดิมเป็นแถบ pill ตัวละประเภท — ขึ้นบรรทัดใหม่เรื่อยๆ เมื่อประเภทเพิ่มขึ้น (เพิ่มได้จาก UI)
+            จึงเปลี่ยนเป็น dropdown ที่ความสูงคงที่ */}
+        <Select value={filterProfile} onValueChange={(v) => setFilterProfile(v as string)}>
+          <SelectTrigger size="sm" className="w-48 bg-card">
+            <SelectValue>{profiles.find((p) => p.id === filterProfile)?.name ?? "ทุกประเภท"}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">ทุกประเภท</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button size="sm" onClick={openCreate} className="shrink-0"><Plus className="h-4 w-4 mr-1" />เพิ่มหมวดหมู่</Button>
       </div>
 
@@ -368,29 +371,5 @@ export function CategoriesTab() {
         mode="create"
       />
     </div>
-  );
-}
-
-function FilterPill({ active, onClick, color, children }: {
-  active: boolean;
-  onClick: () => void;
-  color?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-xs font-medium transition-all whitespace-nowrap",
-        active
-          ? "border-primary bg-primary text-primary-foreground"
-          : color
-            ? cn(color, "border-current/30 hover:border-current/60")
-            : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-accent/40",
-      )}
-    >
-      {children}
-    </button>
   );
 }

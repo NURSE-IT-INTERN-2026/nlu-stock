@@ -36,6 +36,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const profile = await prisma.categoryProfile.update({ where: { id }, data });
+    // หมวดย่อยตัวตั้งต้น (ดู POST /api/settings/profiles) ใช้ชื่อเดียวกับประเภทและถูกซ่อนใน UI
+    // เปลี่ยนชื่อประเภทจึงต้องลากมันตามไป ไม่งั้นตัวกรองจะโผล่ชั้นสองที่ยังใช้ชื่อเก่า.
+    // แตะเฉพาะตอนที่มันยังเป็นหมวดย่อยตัวเดียวและยังไม่ถูกตั้งชื่อเอง
+    if (typeof patch.name === "string" && patch.name !== current.name) {
+      const subs = await prisma.categoryType.findMany({ where: { profileId: id } });
+      const untouched = [current.name, `${current.name} (${current.code})`];
+      if (subs.length === 1 && untouched.includes(subs[0].name)) {
+        // ชื่อใหม่อาจชนหมวดย่อยอื่น — ปล่อยชื่อเดิมไว้ดีกว่าทำ PUT ทั้งก้อนพัง
+        await prisma.categoryType
+          .update({ where: { id: subs[0].id }, data: { name: profile.name } })
+          .catch(() => {});
+      }
+    }
     return json(profile);
   } catch {
     return notFound("Profile not found");
@@ -48,11 +61,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id } = await params;
 
-  const subCount = await prisma.categoryType.count({ where: { profileId: id } });
-  if (subCount > 0) return error("ลบไม่ได้เนื่องจากประเภทนี้มีหมวดหมู่ย่อย", 409);
+  // เดิมกันไว้ที่ "มีหมวดหมู่ย่อย" — ใช้ไม่ได้แล้วเพราะทุกประเภทมีตัวตั้งต้นติดมาหนึ่งตัวเสมอ
+  // ด่านจริงคือพัสดุ: หมวดย่อยที่ไม่มีของอยู่เป็นแค่โครง ลบไปพร้อมประเภทได้
+  const itemCount = await prisma.item.count({ where: { category: { profileId: id } } });
+  if (itemCount > 0) return error("ลบไม่ได้เนื่องจากประเภทนี้มีพัสดุอยู่", 409);
 
   try {
-    await prisma.categoryProfile.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.categoryType.deleteMany({ where: { profileId: id } }),
+      prisma.categoryProfile.delete({ where: { id } }),
+    ]);
     return json({ success: true });
   } catch {
     return notFound("Profile not found");
