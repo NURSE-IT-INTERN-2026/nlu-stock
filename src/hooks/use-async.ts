@@ -70,28 +70,42 @@ export function useAsync<T>(
   };
 }
 
-// Global refresh nonce: the dashboard "รีเฟรช" button bumps this; every dashboard hook
-// reads it via useSyncExternalStore and folds it into useAsync deps → re-fetches together.
-// Replaces queryClient.invalidateQueries({ queryKey: ["dashboard"] }).
-let refreshNonce = 0;
-const refreshSubs = new Set<() => void>();
-
-export function refreshDashboard() {
-  refreshNonce++;
-  refreshSubs.forEach((s) => s());
-}
-
-function subscribeRefresh(cb: () => void) {
-  refreshSubs.add(cb);
-  return () => {
-    refreshSubs.delete(cb);
+// Global refresh nonces: a counter every interested hook folds into its useAsync deps, so
+// one bump re-fetches all of them together. Replaces queryClient.invalidateQueries().
+// subscribe/snapshot are created once per store — a fresh closure each render would make
+// useSyncExternalStore re-subscribe on every render.
+function createNonceStore() {
+  let nonce = 0;
+  const subs = new Set<() => void>();
+  const subscribe = (cb: () => void) => {
+    subs.add(cb);
+    return () => {
+      subs.delete(cb);
+    };
+  };
+  const snapshot = () => nonce;
+  return {
+    bump() {
+      nonce++;
+      subs.forEach((s) => s());
+    },
+    // snapshot doubles as getServerSnapshot: 0 on the server, and the first client render
+    // matches because nothing can have bumped it before hydration.
+    useNonce: () => useSyncExternalStore(subscribe, snapshot, snapshot),
   };
 }
 
-function getRefreshSnapshot() {
-  return refreshNonce;
-}
+// ทุกอย่างในหน้าแดชบอร์ด — ปุ่ม "รีเฟรช" เป็นคนกด
+const dashboardStore = createNonceStore();
+export const refreshDashboard = dashboardStore.bump;
+export const useDashboardRefreshNonce = dashboardStore.useNonce;
 
-export function useDashboardRefreshNonce() {
-  return useSyncExternalStore(subscribeRefresh, getRefreshSnapshot);
-}
+// ข้อมูลตั้งต้นที่แก้ได้จากหน้าตั้งค่า: ประเภท หมวดหมู่ สถานที่ หน่วยนับ. แยกจากแดชบอร์ดเพราะ
+// คนละจังหวะกัน — ตัวนี้ถูกกดโดยการบันทึกของผู้ใช้ ไม่ใช่ปุ่มรีเฟรช
+//
+// ที่ต้องมี: tab ทั้งเจ็ดของหน้าตั้งค่าถูก mount ค้างพร้อมกันหมด (settings/page.tsx ซ่อนด้วย
+// class ไม่ได้ unmount) และ dialog แก้พัสดุก็ mount ค้างทั้งที่ยังไม่เปิด — fetch ที่ยิงครั้งเดียว
+// ตอน mount จึงไม่มีวันเห็นสิ่งที่ tab ข้างๆ เพิ่งบันทึกไป
+const lookupStore = createNonceStore();
+export const refreshLookups = lookupStore.bump;
+export const useLookupNonce = lookupStore.useNonce;

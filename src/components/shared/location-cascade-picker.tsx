@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/shared/combobox";
 import { getPublicLocations, findOrCreateLocation } from "@/lib/api";
+import { refreshLookups } from "@/hooks/use-async";
 
 interface Loc {
   id: string;
@@ -26,6 +27,8 @@ export type LocationRef =
 export async function resolveLocationId(ref: LocationRef): Promise<string | null> {
   if (ref.kind !== "ok") return null;
   const loc = await findOrCreateLocation({ building: ref.building, floor: ref.floor, room: ref.room, detail: ref.detail });
+  // อาจเพิ่งสร้างสถานที่ใหม่ — ตัวกรองสถานที่ของหน้าที่เปิดค้างอยู่ต้องเห็นด้วย
+  refreshLookups();
   return loc.id;
 }
 

@@ -38,7 +38,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { getCategories, updateCategory, deleteCategory, getProfiles } from "@/lib/api";
+import { getCategories, updateCategory, deleteCategory } from "@/lib/api";
+import { refreshLookups } from "@/hooks/use-async";
+import { useProfiles } from "@/hooks/use-lookup-data";
 import type { ProfileOption } from "@/lib/api";
 import {
   AlertDialog,
@@ -104,7 +106,7 @@ function CategoryRow({ cat, onEdit, onDelete }: { cat: CategoryType; onEdit: (c:
 
 export function CategoriesTab() {
   const [categories, setCategories] = useState<CategoryType[]>([]);
-  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
+  const { profiles } = useProfiles();
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectModalOpen, setSelectModalOpen] = useState(false);
@@ -135,7 +137,6 @@ export function CategoriesTab() {
 
   useEffect(() => {
     fetchCategories();
-    getProfiles().then(setProfiles).catch(() => setProfiles([]));
   }, [fetchCategories]);
 
   function openCreate() {
@@ -161,6 +162,7 @@ export function CategoriesTab() {
       toast.success("อัปเดตหมวดหมู่สำเร็จ");
       setDialogOpen(false);
       fetchCategories();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     }
@@ -179,6 +181,7 @@ export function CategoriesTab() {
       await deleteCategory(id);
       toast.success("ลบหมวดหมู่สำเร็จ");
       fetchCategories();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
@@ -365,6 +368,7 @@ export function CategoriesTab() {
         onClose={() => setSelectModalOpen(false)}
         onSelect={() => {
           fetchCategories();
+          refreshLookups();
           setSelectModalOpen(false);
         }}
         title="เพิ่มหมวดหมู่"

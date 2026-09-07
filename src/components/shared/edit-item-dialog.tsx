@@ -17,10 +17,10 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { LocationCascadePicker, type LocationRef, resolveLocationId } from "@/components/shared/location-cascade-picker";
-import { getSettingsItem, getUnits, saveSettingsItem, updateSubItemFields } from "@/lib/api";
+import { getSettingsItem, saveSettingsItem, updateSubItemFields } from "@/lib/api";
 import { CONDITION_LABELS } from "@/lib/constants";
 import type { CategoryOption, LocationOption, UnitOption } from "@/lib/api";
-import { useCategories } from "@/hooks/use-lookup-data";
+import { useCategories, useUnits } from "@/hooks/use-lookup-data";
 
 // Full Settings-shape item (matches /api/settings/items/[id] GET include).
 interface SettingsItem {
@@ -125,7 +125,7 @@ interface Props {
 
 export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }: Props) {
   const { categories } = useCategories();
-  const [units, setUnits] = useState<UnitOption[]>([]);
+  const { units } = useUnits();
   const [item, setItem] = useState<SettingsItem | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [locRef, setLocRef] = useState<LocationRef>({ kind: "none" });
@@ -137,10 +137,8 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
   const [subNotes, setSubNotes] = useState("");
   const [subLocRef, setSubLocRef] = useState<LocationRef>({ kind: "none" });
 
-  // .catch is not optional: an unhandled rejection here is a full-page error overlay, and
-  // this fires on mount whether the dialog is open or not. Empty list degrades to a picker
-  // with nothing in it, which is what a save would have been blocked on anyway.
-  useEffect(() => { getUnits().then(setUnits).catch(() => setUnits([])); }, []);
+  // dialog นี้ mount ค้างตั้งแต่โหลดหน้าไม่ว่าจะเปิดหรือยัง — fetch ครั้งเดียวตอน mount แปลว่า
+  // หน่วยนับที่เพิ่งเพิ่มจาก tab หน่วยนับจะไม่มา. useUnits ฟัง nonce ให้แล้ว
 
   // Fetch full Settings-shape item whenever the dialog opens for a new item.
   useEffect(() => {

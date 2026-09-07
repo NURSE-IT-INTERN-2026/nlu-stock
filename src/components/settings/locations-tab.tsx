@@ -16,6 +16,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { getLocations, createLocation, updateLocation, deleteLocation, getItems } from "@/lib/api";
+import { refreshLookups } from "@/hooks/use-async";
 import { Combobox } from "@/components/shared/combobox";
 import {
   AlertDialog,
@@ -319,6 +320,7 @@ export function LocationsTab() {
       }
       setDialogOpen(false);
       fetchLocations();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     }
@@ -337,6 +339,7 @@ export function LocationsTab() {
       await deleteLocation(id);
       toast.success("ลบสถานที่สำเร็จ");
       fetchLocations();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }

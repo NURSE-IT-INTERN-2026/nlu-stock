@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { getUnits, createUnit, updateUnit, deleteUnit } from "@/lib/api";
+import { refreshLookups } from "@/hooks/use-async";
 import type { UnitRow } from "@/lib/api";
 import {
   AlertDialog,
@@ -137,6 +138,7 @@ export function UnitsTab() {
         toast.success("เพิ่มหน่วยสำเร็จ");
       }
       fetchUnits();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
       if (editing) openEdit(editing);
@@ -151,6 +153,7 @@ export function UnitsTab() {
       await deleteUnit(id);
       toast.success("ลบหน่วยสำเร็จ");
       fetchUnits();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
     }
