@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Plus, Pencil, Search, Trash2, UserCheck, UserX, Users, X } from "lucide-react";
@@ -87,13 +87,20 @@ export function UsersTab() {
   }, []);
 
   // แบ่งหน้าฝั่ง server จริง ไม่ใช่ตัดจาก array ที่โหลดมา — route คุม perPage อยู่แล้ว
+  //
+  // คำค้นเปลี่ยนเร็วกว่าคำตอบกลับมา: พิมพ์ต่ออีกตัวระหว่างที่รอบก่อนยังค้างอยู่ แล้วรอบเก่ากลับ
+  // ทีหลัง ตารางจะโชว์ผลของคำที่ผู้ใช้ลบทิ้งไปแล้ว. นับรอบไว้ แล้วทิ้งคำตอบที่ไม่ใช่รอบล่าสุด
+  const reqId = useRef(0);
   const fetchUsers = useCallback(async () => {
+    const id = ++reqId.current;
     setLoading(true);
     try {
       const data = await getSettingsUsers({ page, perPage: PAGE_SIZE.DEFAULT, role: roleFilter, q: debounced });
+      if (id !== reqId.current) return;
       setUsers(data.users as UserRecord[]);
       setTotal(data.total);
     } catch {
+      if (id !== reqId.current) return;
       toast.error("โหลดข้อมูลไม่สำเร็จ");
     }
     setLoading(false);
@@ -101,9 +108,6 @@ export function UsersTab() {
   }, [page, roleFilter, debounced]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
-
-  // หน้าที่ค้างอยู่ไม่มีความหมายกับผลค้นหาชุดใหม่ — page 7 ของคำเก่ามักว่างเปล่า
-  useEffect(() => { setPage(1); }, [debounced]);
 
   function openCreate() {
     setEditing(null);
@@ -357,7 +361,9 @@ export function UsersTab() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              // รีเซ็ตหน้าตรงนี้ ไม่ใช่ใน effect ที่ฟัง debounced: effect จะยิงรอบหนึ่งด้วยเลขหน้าเก่า
+              // ก่อน setPage(1) จะมีผล — สองรอบต่อการพิมพ์หนึ่งครั้ง โดยรอบแรกทิ้งเปล่า
+              onChange={(e) => { setQuery(e.target.value); setPage(1); }}
               placeholder="ค้นหาชื่อหรืออีเมล"
               className="pl-9"
               aria-label="ค้นหาผู้ใช้งาน"

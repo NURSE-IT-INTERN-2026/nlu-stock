@@ -176,7 +176,13 @@ export function LocationPicker({ value, locations, onChange, className }: { valu
   const [open, setOpen] = React.useState(false);
   const label = formatLocation(value);
   const [draft, setDraft] = React.useState<LocationFilter>(value);
-  React.useEffect(() => { if (open) setDraft(value); }, [open, value]);
+  // ผูกกับสี่ช่อง ไม่ใช่กับตัว object เหมือน CategoryPicker ข้างบน: ผู้เรียกที่ยังไม่ได้ตั้งตัวกรอง
+  // ส่ง `values.location ?? {}` ซึ่งเป็น object ใหม่ทุก render (ดู report-filters) — ผูกกับ object
+  // แปลว่า parent re-render ครั้งใดก็ตามที่ป็อปอัพยังเปิดอยู่จะล้างที่ผู้ใช้ไล่เลือกค้างไว้ทิ้ง
+  const { building, floor, room, detail } = value;
+  React.useEffect(() => {
+    if (open) setDraft({ building, floor, room, detail });
+  }, [open, building, floor, room, detail]);
 
   const tree = React.useMemo(() => buildTree(locations), [locations]);
   const buildings = [...tree.keys()];
