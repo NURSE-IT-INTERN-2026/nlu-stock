@@ -153,9 +153,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       if ("purchasePrice" in data) diff("ราคาซื้อ", before.purchasePrice, item.purchasePrice);
       if ("isActive" in data) diff("สถานะทะเบียน", active(before.isActive), active(item.isActive));
       if (moved.length > 0) {
-        await prisma.itemFieldLog.createMany({
-          data: moved.map((m) => ({ ...m, itemId: id, changedBy: auth.user.userId })),
-        });
+        // ไม่ await ต่อกับ catch ข้างนอก: การ update commit ไปแล้ว ถ้า log ล้ม (เช่น changedBy
+        // ชี้ไปที่ผู้ใช้ที่เพิ่งถูกลบถาวร แต่ token ยังไม่หมดอายุ) catch นั้นจะตอบ 404
+        // "Item not found" ทับการบันทึกที่สำเร็จไปแล้ว — หน้าจอจะบอกว่าบันทึกไม่ผ่านทั้งที่ผ่าน
+        await prisma.itemFieldLog
+          .createMany({ data: moved.map((m) => ({ ...m, itemId: id, changedBy: auth.user.userId })) })
+          .catch((e) => console.error("Field log failed for", id, e));
       }
     }
 
@@ -188,7 +191,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     select: {
       id: true,
       trackIndividually: true,
-      availableQty: true,
       code: true,
       category: { select: { profile: { select: { dispenseType: true } } } },
     },
@@ -239,25 +241,31 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         });
         disposed++;
       }
-    } else if (item.availableQty > 0) {
+    } else {
       // Non-tracked: drain whatever is on the shelf to 0. allocateAcrossLots spreads the
       // negative delta across lots FEFO; for lot-less consumables it returns false and we
       // own availableQty directly (then recompute is a no-op for them — no lots to resync).
-      const prev = item.availableQty;
-      await allocateAcrossLots(tx, id, -prev);
-      await tx.stockAdjustment.create({
-        data: {
-          itemId: id,
-          delta: -prev,
-          previousQty: prev,
-          newQty: 0,
-          reason: AdjustmentReason.DISPOSAL,
-          notes: `ตัดจำหน่าย — ลบรายการพัสดุ ${item.code}`,
-          adjustedBy: auth.user.userId,
-        },
-      });
-      await tx.item.update({ where: { id }, data: { availableQty: 0 } });
-      disposed = prev;
+      //
+      // ยอดต้องอ่านใหม่ในนี้ หลัง lock: ค่าที่อ่านไว้ก่อนเปิด transaction เป็นยอดของอีกเวลาหนึ่ง
+      // ใบรับเข้าที่ commit คั่นระหว่างนั้นจะทำให้ StockAdjustment บันทึก previousQty/delta ผิด
+      // แล้วของที่รับเข้ามาก็หายไปจากบัญชีโดยไม่มีแถวไหนอธิบาย
+      const prev = (await tx.item.findUnique({ where: { id }, select: { availableQty: true } }))?.availableQty ?? 0;
+      if (prev > 0) {
+        await allocateAcrossLots(tx, id, -prev);
+        await tx.stockAdjustment.create({
+          data: {
+            itemId: id,
+            delta: -prev,
+            previousQty: prev,
+            newQty: 0,
+            reason: AdjustmentReason.DISPOSAL,
+            notes: `ตัดจำหน่าย — ลบรายการพัสดุ ${item.code}`,
+            adjustedBy: auth.user.userId,
+          },
+        });
+        await tx.item.update({ where: { id }, data: { availableQty: 0 } });
+        disposed = prev;
+      }
     }
 
     await recomputeItemCounts(tx, id);

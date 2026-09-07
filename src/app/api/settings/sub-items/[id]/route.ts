@@ -27,21 +27,34 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id } = await params;
 
-  const hasRecords = await prisma.dispenseRecord.count({ where: { subItemId: id } })
-    .then((c) => c > 0)
-    .catch(() => false);
-
-  if (hasRecords) return notFound("Cannot delete sub-item with transaction records");
-
-  const sub = await prisma.subItem.findUnique({ where: { id }, select: { itemId: true } });
+  // ทุก relation ที่ชี้มาที่ sub_items แล้ว **กันการลบ** (ไม่ได้ตั้ง onDelete = Restrict):
+  // เดิมนับแค่ dispenseRecords ชิ้นที่เคยถูกเปลี่ยนสถานะอย่างเดียว (ชำรุด → ส่งซ่อม → รับซ่อม
+  // เขียน ItemStatusLog ทุกครั้ง) จึงผ่านด่านนี้ไปตายที่ FK แทน. maintenanceRecords/cartLines
+  // ไม่อยู่ในนี้เพราะเป็น Cascade — หายไปพร้อมชิ้น. เพิ่ม relation ใหม่ที่ SubItem เมื่อไหร่
+  // ให้กลับมาดูว่ามันเป็น Cascade หรือ Restrict.
+  const sub = await prisma.subItem.findUnique({
+    where: { id },
+    select: {
+      itemId: true,
+      _count: { select: { dispenseRecords: true, statusLogs: true, returnRecords: true, kitContents: true } },
+    },
+  });
   if (!sub) return notFound("Sub-item not found");
+  if (Object.values(sub._count).some((n) => n > 0)) {
+    return error("ลบไม่ได้เพราะชิ้นนี้มีประวัติการใช้งานแล้ว");
+  }
 
   // Same reason as the create side: the parent's counters ARE the sub-item counts.
-  await prisma.$transaction(async (tx) => {
-    await lockItems(tx, [sub.itemId]);
-    await tx.subItem.delete({ where: { id } });
-    await recomputeItemCounts(tx, sub.itemId);
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockItems(tx, [sub.itemId]);
+      await tx.subItem.delete({ where: { id } });
+      await recomputeItemCounts(tx, sub.itemId);
+    });
+  } catch {
+    // ประวัติที่เกิดขึ้นระหว่างเช็คกับลบ (เจ้าหน้าที่อีกคนเพิ่งเบิกชิ้นนี้ไป) — FK กันไว้ให้แล้ว
+    return error("ลบไม่ได้เพราะชิ้นนี้มีประวัติการใช้งานแล้ว");
+  }
 
   return json({ success: true });
 }
