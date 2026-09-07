@@ -29,7 +29,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   dispense: "เบิก-ยืมพัสดุ",
   receive: "รับเข้า-คืนพัสดุ",
   reports: "รายงาน & สถิติ",
-  alerts: "การแจ้งเตือน",
+  alerts: "รายการที่ต้องจัดการ",
   settings: "ตั้งค่าระบบ",
   cart: "เบิก-ยืมพัสดุ",
 };
@@ -47,7 +47,7 @@ function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
       : []
   );
   // On a root-level page that supplies a detail, promote the single segment to a
-  // clickable crumb so we render "Page › detail" (e.g. "การแจ้งเตือน › ทั้งหมด").
+  // clickable crumb so we render "Page › detail" (e.g. "รายการที่ต้องจัดการ › ทั้งหมด").
   const trail = detail && segments.length === 1
     ? [{ label: labelFor(segments[0]), href: "/" + segments[0] }]
     : intermediate;
@@ -114,7 +114,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
         {/* Alerts */}
         <button
           type="button"
-          aria-label="การแจ้งเตือน"
+          aria-label="รายการที่ต้องจัดการ"
           onClick={() => router.push("/alerts")}
           className="relative hidden lg:flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
         >

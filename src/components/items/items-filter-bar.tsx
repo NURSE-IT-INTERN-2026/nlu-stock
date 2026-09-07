@@ -36,13 +36,11 @@ export interface ItemsFilterBarProps {
   profiles: ProfileOption[];
   categories: CategoryOption[];
   locations: LocationOption[];
-  alerts: { lowStock: number; nearExpiry: number; overdueMaintenance: number };
   value: FilterState;
   onChange: (next: FilterState) => void;
   resultCount?: number;
   onScanQR: () => void;
   className?: string;
-  hideAlertPicker?: boolean;
   hideScan?: boolean;
   // When provided, renders a "ยืมอยู่" toggle (onLoan lives on /items, not /alerts).
   onLoanCount?: number;
@@ -56,14 +54,17 @@ export interface ItemsFilterBarProps {
 
 const ALL_STATUS_KEYS = Object.keys(STATUS_LABELS) as ItemStatus[];
 
-const PRESETS: { key: PresetKey; label: string; countKey: "lowStock" | "nearExpiry" | "overdueMaintenance"; activeCls: string; badgeCls: string }[] = [
-  { key: "lowStock", label: "ต่ำกว่าขั้นต่ำ", countKey: "lowStock", activeCls: "bg-primary text-primary-foreground", badgeCls: "bg-white/25" },
-  { key: "nearExpiry", label: "ใกล้หมดอายุ", countKey: "nearExpiry", activeCls: "bg-warning text-warning-foreground", badgeCls: "bg-black/10" },
-  { key: "overdueMaint", label: "บำรุงเกินกำหนด", countKey: "overdueMaintenance", activeCls: "bg-destructive text-destructive-foreground", badgeCls: "bg-white/25" },
-];
+// Presets arrive by link only (?lowStock=true …) — there is no picker for them here, so all
+// this needs to carry is the wording of the chip that says one is on.
+const PRESET_LABELS: Record<PresetKey, string> = {
+  lowStock: "ต่ำกว่าขั้นต่ำ",
+  nearExpiry: "ใกล้หมดอายุ",
+  overdueMaint: "บำรุงเกินกำหนด",
+  onLoan: "ยืมอยู่",
+};
 
 export function ItemsFilterBar({
-  profiles, categories, locations, alerts, value, onChange, resultCount, onScanQR, className, hideAlertPicker, hideScan, onLoanCount, trailingAction, allStatuses,
+  profiles, categories, locations, value, onChange, resultCount, onScanQR, className, hideScan, onLoanCount, trailingAction, allStatuses,
 }: ItemsFilterBarProps) {
   const scopedCategories = value.profileId
     ? categories.filter((c) => c.profile?.id === value.profileId)
@@ -139,10 +140,6 @@ export function ItemsFilterBar({
           onLoanCount={onLoanCount ?? undefined}
           onLoanToggle={typeof onLoanCount === "number" ? () => update({ preset: value.preset === "onLoan" ? null : "onLoan" }) : undefined}
         />
-        {!hideAlertPicker && (
-          <AlertPicker value={value.preset} alerts={alerts} onChange={(p) => update({ preset: p })} />
-        )}
-
         <div className="basis-full sm:basis-auto flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto">
           {typeof resultCount === "number" && (
             <span className="tabular-nums">
@@ -181,7 +178,7 @@ export function ItemsFilterBar({
               <ActiveChip key={s} label={STATUS_LABELS[s] ?? s} onRemove={() => update({ status: value.status.filter((x) => x !== s) })} />
             ))}
             {value.preset && (
-              <ActiveChip tone="alert" icon={<Bell className="size-3" />} label={value.preset === "onLoan" ? "ยืมอยู่" : PRESETS.find((p) => p.key === value.preset)?.label ?? ""} onRemove={() => update({ preset: null })} />
+              <ActiveChip tone="alert" icon={<Bell className="size-3" />} label={PRESET_LABELS[value.preset]} onRemove={() => update({ preset: null })} />
             )}
           </div>
         </>
@@ -262,32 +259,3 @@ function StatusPicker({ options, value, onChange, onLoanActive, onLoanCount, onL
   );
 }
 
-// ─── Alerts (single preset, inline) ───
-function AlertPicker({ value, alerts, onChange }: { value: PresetKey | null; alerts: ItemsFilterBarProps["alerts"]; onChange: (p: PresetKey | null) => void }) {
-  return (
-    <div className="w-full sm:w-auto sm:inline-flex sm:items-center sm:h-9 sm:gap-1.5 sm:pl-2 sm:pr-1 p-1.5 rounded-lg border border-border bg-background basis-full sm:basis-auto shrink-0">
-      <div className="flex items-center gap-1.5 mb-1.5 sm:mb-0">
-        <Bell className="size-4 text-orange-500 shrink-0" />
-        <span className="text-xs font-semibold text-foreground/80 sm:hidden">การแจ้งเตือน</span>
-        <span className="text-sm font-medium text-foreground/80 mr-0.5 hidden sm:inline">การแจ้งเตือน</span>
-      </div>
-      <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
-        {PRESETS.map((a) => {
-          const active = value === a.key;
-          const count = alerts[a.countKey];
-          return (
-            <button key={a.key} type="button" onClick={() => onChange(active ? null : a.key)} className={cn(
-              "flex flex-col items-center justify-center gap-1 min-h-9 px-1 py-1 sm:flex-row sm:inline-flex sm:h-7 sm:px-2 rounded-md text-xs font-medium transition text-center leading-tight",
-              active ? a.activeCls : "bg-orange-500/15 text-orange-700 hover:brightness-95",
-            )}>
-              <span className="leading-tight">{a.label}</span>
-              {count > 0 && (
-                <span className={cn("inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold tabular-nums", active ? a.badgeCls : "bg-white text-orange-700")}>{count}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}

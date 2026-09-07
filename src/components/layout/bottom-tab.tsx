@@ -21,7 +21,7 @@ import { withBase } from "@/lib/base-path";
 const tabs = [
   { href: "/", label: "หน้าหลัก", icon: LayoutDashboard },
   { href: "/items", label: "พัสดุ", icon: Package },
-  { href: "/alerts", label: "แจ้งเตือน", icon: Bell },
+  { href: "/alerts", label: "ต้องจัดการ", icon: Bell },
   { href: "/dispense", label: "เบิก", icon: ShoppingCart },
   { href: "/receive", label: "รับเข้า", icon: Truck, stockOnly: true },
 ];

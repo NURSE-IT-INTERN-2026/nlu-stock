@@ -16,7 +16,6 @@ import { useSession } from "@/components/layout/auth-guard";
 import { canManageStock } from "@/lib/roles";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { CreateKitModal } from "@/components/shared/create-kit-modal";
-import { useAlerts } from "@/hooks/use-alerts";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { useInventoryList } from "@/hooks/use-inventory-list";
 import { Pagination } from "@/components/shared/pagination";
@@ -95,7 +94,6 @@ function StockCell({ item }: { item: ItemRecord }) {
 
 function ItemsContent() {
   const { user } = useSession();
-  const alerts = useAlerts();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isMobile, setIsMobile] = useState(false);
@@ -214,12 +212,10 @@ function ItemsContent() {
           profiles={profiles}
           categories={categories}
           locations={locations}
-          alerts={alerts}
           value={filter}
           onChange={handleFilterChange}
           resultCount={total}
           onScanQR={() => setScannerOpen(true)}
-          hideAlertPicker
           trailingAction={isSuperAdmin ? (
             <Button
               type="button"

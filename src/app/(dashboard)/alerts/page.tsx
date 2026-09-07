@@ -205,7 +205,7 @@ function AlertsContent() {
     { key: "dueCount", label: "ถึงรอบตรวจนับ", count: alerts.dueCount },
   ];
 
-  // Reflect the active tab in the header breadcrumb ("การแจ้งเตือน › <tab>").
+  // Reflect the active tab in the header breadcrumb ("รายการที่ต้องจัดการ › <tab>").
   const activeTabLabel = alertChips.find((c) => c.key === alertType)?.label ?? "ทั้งหมด";
   useEffect(() => {
     setDetail(activeTabLabel);
@@ -226,7 +226,7 @@ function AlertsContent() {
   // No alerts at all → clean empty state, no tab strip / filter bar.
   //
   // ponytail: `total` ไม่มี overdueReturn/damagedPending อยู่ในนั้นแล้ว (ดู lib/alerts) หน้านี้จึง
-  // พูดว่า "ไม่มีรายการแจ้งเตือน" ได้ทั้งที่ยังมีของค้างคืน — ถ้า openCases ไม่ครอบสองก้อนนั้น.
+  // พูดว่า "ไม่มีรายการที่ต้องจัดการ" ได้ทั้งที่ยังมีของค้างคืน — ถ้า openCases ไม่ครอบสองก้อนนั้น.
   // ตอนนี้ครอบอยู่ (isTodo รับ BORROW เลยกำหนด, ชิ้น DAMAGED เปิดเป็นเคส REPAIR) แต่มันจริง
   // เพราะ implementation สามที่พ้องกัน ไม่ใช่เพราะโครงสร้างบังคับ. ถ้าวันไหนแก้จังหวะ stamp
   // returnedAt หรือเกณฑ์ isTodo แล้วสองเซ็ตนั้นหลุดออกจากกัน gate นี้จะพังเงียบ — ตอนนั้นค่อย
@@ -236,7 +236,7 @@ function AlertsContent() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <CheckCircle2 className="size-12 text-success/60 mb-3" />
-        <p className="text-lg font-medium">ไม่มีรายการแจ้งเตือน</p>
+        <p className="text-lg font-medium">ไม่มีรายการที่ต้องจัดการ</p>
         <p className="text-sm text-muted-foreground mt-1">ทุกพัสดุอยู่ในเกณฑ์ปกติ</p>
       </div>
     );
@@ -328,12 +328,10 @@ function AlertsContent() {
           profiles={profiles}
           categories={categories}
           locations={locations}
-          alerts={alerts}
           value={filter}
           onChange={handleFilterChange}
           resultCount={total}
           onScanQR={() => {}}
-          hideAlertPicker
           hideScan
         />
 
@@ -348,7 +346,7 @@ function AlertsContent() {
               <TableRow>
                 <TableHead className="w-28 px-2">รหัสพัสดุ</TableHead>
                 <TableHead className="px-2">ชื่อ</TableHead>
-                <TableHead className="w-48 px-2">การแจ้งเตือน</TableHead>
+                <TableHead className="w-48 px-2">ประเภท</TableHead>
                 <TableHead className="w-56 px-2">รายละเอียด</TableHead>
                 <TableHead className="w-44 px-2 hidden xl:table-cell">สถานที่</TableHead>
               </TableRow>
@@ -365,7 +363,7 @@ function AlertsContent() {
               ) : items.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    ไม่มีรายการแจ้งเตือน
+                    ไม่มีรายการที่ต้องจัดการ
                   </TableCell>
                 </TableRow>
               ) : items.map((item) => (
@@ -416,7 +414,7 @@ function AlertsContent() {
               <Skeleton key={i} className="h-20 w-full rounded-2xl" />
             ))
           ) : items.length === 0 ? (
-            <div className="rounded-2xl border border-border/60 bg-card px-4 py-10 text-center text-sm text-muted-foreground">ไม่มีรายการแจ้งเตือน</div>
+            <div className="rounded-2xl border border-border/60 bg-card px-4 py-10 text-center text-sm text-muted-foreground">ไม่มีรายการที่ต้องจัดการ</div>
           ) : items.map((item) => {
             const primary = alertType === "all" ? (item.alertTypes.find((t) => ALERT_ICON[t]) ?? "lowStock") : alertType;
             const meta = ALERT_ICON[primary] ?? ALERT_ICON.lowStock;

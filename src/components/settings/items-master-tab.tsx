@@ -178,13 +178,11 @@ export function ItemsMasterTab() {
           profiles={profiles}
           categories={categories}
           locations={locations}
-          alerts={{ lowStock: 0, nearExpiry: 0, overdueMaintenance: 0 }}
           value={filter}
           onChange={handleFilterChange}
           resultCount={total}
           onScanQR={() => {}}
           hideScan
-          hideAlertPicker
           allStatuses
           trailingAction={
             <div className="flex gap-2 w-full">

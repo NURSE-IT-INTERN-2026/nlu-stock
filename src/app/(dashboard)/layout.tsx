@@ -20,7 +20,7 @@ const pageTitles: Record<string, string> = {
   "/": "หน้าหลัก",
   "/items": "รายการพัสดุทั้งหมด",
   "/scan": "สแกน QR",
-  "/alerts": "การแจ้งเตือน",
+  "/alerts": "รายการที่ต้องจัดการ",
   "/dispense": "เบิก-ยืมพัสดุ",
   "/receive": "รับพัสดุเข้า",
   "/maintenance": "บันทึกการบำรุงรักษา",

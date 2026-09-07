@@ -63,7 +63,7 @@ npx tsx -e '(async()=>{const {PrismaClient}=await import("./src/generated/prisma
 - **ระหว่าง scenario**: กดปุ่ม `ล้าง` บน `/cart` หรือ `localStorage.removeItem("dispense-cart")` ไม่งั้นของเดิมติดมาทำให้เทสเพี้ยน
 
 ### Navigation labels (อ้างอิงตอนคลิก)
-- Bottom tab (mobile): หน้าหลัก / พัสดุ / แจ้งเตือน / เบิก / รับเข้า
+- Bottom tab (mobile): หน้าหลัก / พัสดุ / ต้องจัดการ / เบิก / รับเข้า
 - Header cart icon: aria-label `ดูตะกร้า`
 - `/receive` มี 4 tab (`?tab=`): `receive`(รับเข้าพัสดุ) / `in_use`(คืนเข้าพัสดุ) / `return`(รับคืน) / `repair`(รับซ่อม)
 
