@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireAuth, requireSuperAdmin, handleError } from "@/lib/api-utils";
-import { restoreDamagedQty } from "@/lib/stock";
+import { requireAdmin, requireAuth, handleError } from "@/lib/api-utils";
+import { lockItems, restoreDamagedQty } from "@/lib/stock";
 import { AdjustmentReason, RepairVenue } from "@/generated/prisma/enums";
 
 // The qty half of the repair lifecycle. A tracked piece walks ชำรุด → ส่งซ่อม → รับคืน on
@@ -158,10 +158,10 @@ export async function POST(req: NextRequest) {
 }
 
 // ยกเลิกคำขอชำรุด — the แจ้งชำรุด was wrong (ตรวจแล้วใช้งานได้ปกติ / แจ้งผิดรายการ), so the units
-// go straight back on the shelf. SUPERADMIN only, matching the tracked piece's button: it is a
-// reversal, not a step, and the one step in this flow that may be undone.
+// go straight back on the shelf. Open to every stock manager, matching the tracked piece's
+// button: it is a reversal, not a step, and the one step in this flow that may be undone.
 export async function DELETE(req: NextRequest) {
-  const auth = await requireSuperAdmin(req);
+  const auth = await requireAdmin(req);
   if (auth.denied) return auth.denied;
 
   const body = await req.json();
@@ -174,6 +174,8 @@ export async function DELETE(req: NextRequest) {
       const adj = await tx.stockAdjustment.findUnique({ where: { id: adjustmentId } });
       if (!adj || adj.reason !== AdjustmentReason.DAMAGED_PENDING_REPAIR) throw new Error("ไม่พบรายการชำรุด");
       if (adj.recoveredAt) throw new Error("รายการนี้ปิดไปแล้ว");
+      // ปิดรายการชำรุด = จำนวนกลับเข้าคลัง — ผู้เขียนสต็อกเหมือนกัน ต้องเข้าคิวเดียวกัน
+      await lockItems(tx, [adj.itemId]);
 
       // No status log here, unlike ส่งซ่อม: that step moves no stock, so without a log row it
       // would leave no trace at all. This one writes a DAMAGE_CANCELLED adjustment carrying the

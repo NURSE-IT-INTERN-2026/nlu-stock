@@ -4,7 +4,7 @@ import { itemUpdateSchema } from "@/lib/validators";
 import { sanitizeItemByProfile, isItemTracked } from "@/lib/category-profile";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
-import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { allocateAcrossLots, lockItems, recomputeItemCounts } from "@/lib/stock";
 import { embedItem } from "@/lib/gemini";
 import { STATUS_LABELS } from "@/lib/constants";
 import type { DispenseType } from "@/generated/prisma/enums";
@@ -214,6 +214,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    await lockItems(tx, [id]);
     let disposed = 0;
 
     if (item.trackIndividually) {

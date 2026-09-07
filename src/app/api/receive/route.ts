@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError } from "@/lib/api-utils";
-import { recomputeItemCounts } from "@/lib/stock";
+import { lockItems, recomputeItemCounts } from "@/lib/stock";
 import { receiveRequestSchema } from "@/lib/validators";
 import { autoLotNumber, OPENING_LOT_NUMBER } from "@/lib/lot-code";
 import { syncItemPurchasePrice, syncLotUnitCost } from "@/lib/cost";
@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
   try {
     const recordIds = await prisma.$transaction(async (tx) => {
       const ids: string[] = [];
+      // รับเข้าก็บวก availableQty จากค่าที่อ่านมา — ผู้เขียนที่ไม่ล็อกคนเดียวก็พอทำให้ยอดเพี้ยน
+      await lockItems(tx, items.map((ri) => ri.itemId));
 
       for (const ri of items) {
         const item = await tx.item.findUnique({

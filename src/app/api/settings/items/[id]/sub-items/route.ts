@@ -3,6 +3,8 @@ import { requireSuperAdmin, requireAdmin, json, notFound, error, parseBody } fro
 import { subItemCreateSchema, subItemBatchCreateSchema } from "@/lib/validators";
 import { DEFAULT_LOCATION_ID } from "@/lib/default-location";
 import { nextMaintenanceFromCycle } from "@/lib/maintenance";
+import { lockItems, recomputeItemCounts } from "@/lib/stock";
+import type { Prisma } from "@/generated/prisma/client";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -61,18 +63,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (parseErr) return parseErr;
     if (!data) return error("No data");
 
-    const subItems = [];
+    const subItems: Prisma.SubItemCreateManyInput[] = [];
     for (let i = data.startNumber; i <= data.endNumber; i++) {
       const numStr = String(i).padStart(String(data.endNumber).length, "0");
       subItems.push({ itemId: id, subCode: `${data.prefix}${numStr}`, name: item.name, locationId: seededLocationId, nextMaintenanceDate: seedNextMaintenance });
     }
 
-    const result = await prisma.subItem.createMany({
-      data: subItems,
-      skipDuplicates: true,
+    // A tracked item's availableQty/totalQty ARE the sub-item counts — writing pieces
+    // without recomputing leaves the item reading 3 while 5 exist, and dispense/ยืมเอง
+    // read those counters to decide what can go out.
+    const created = await prisma.$transaction(async (tx) => {
+      await lockItems(tx, [id]);
+      const result = await tx.subItem.createMany({ data: subItems, skipDuplicates: true });
+      await recomputeItemCounts(tx, id);
+      return result.count;
     });
 
-    return json({ created: result.count }, 201);
+    return json({ created }, 201);
   }
 
   // Single create mode
@@ -82,8 +89,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (parseErr) return parseErr;
   if (!data) return error("No data");
 
-  const subItem = await prisma.subItem.create({
-    data: { ...data, itemId: id, locationId: seededLocationId, nextMaintenanceDate: seedNextMaintenance ?? undefined },
+  const subItem = await prisma.$transaction(async (tx) => {
+    await lockItems(tx, [id]);
+    const created = await tx.subItem.create({
+      data: { ...data, itemId: id, locationId: seededLocationId, nextMaintenanceDate: seedNextMaintenance ?? undefined },
+    });
+    await recomputeItemCounts(tx, id);
+    return created;
   });
 
   return json(subItem, 201);

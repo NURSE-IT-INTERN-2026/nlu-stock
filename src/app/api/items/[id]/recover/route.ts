@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/api-utils";
-import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { allocateAcrossLots, lockItems, recomputeItemCounts } from "@/lib/stock";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
@@ -27,6 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const qty = await prisma.$transaction(async (tx) => {
+      await lockItems(tx, [itemId]);
       if (source === "PIECE") {
         const log = await tx.itemStatusLog.findUnique({ where: { id: recordId } });
         if (!log || log.itemId !== itemId) throw new Error("ไม่พบรายการ");

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { requireAdmin, json, notFound, error, parseBody } from "@/lib/api-utils";
 import { stockAdjustSchema } from "@/lib/validators";
-import { allocateAcrossLots, holdsTotalQty, recomputeItemCounts } from "@/lib/stock";
+import { allocateAcrossLots, holdsTotalQty, lockItems, recomputeItemCounts } from "@/lib/stock";
 import { countCycleFor, nextCountFrom } from "@/lib/stock-count";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 import { ADJUSTMENT_REASON_LABELS } from "@/lib/constants";
@@ -21,6 +21,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const isCount = data.stockCount === true;
 
   const result = await prisma.$transaction(async (tx) => {
+    // ปรับยอดอ่านยอดเดิมมาบวกลบ — read-then-write เต็มตัว ต้องล็อกก่อนอ่าน
+    await lockItems(tx, [id]);
     const item = await tx.item.findUnique({
       where: { id },
       include: { category: { select: { profile: { select: { dispenseType: true } } } } },

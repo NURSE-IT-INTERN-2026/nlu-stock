@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, handleError } from "@/lib/api-utils";
 import { dispenseRequestSchema } from "@/lib/validators";
-import { recomputeItemCounts } from "@/lib/stock";
+import { lockItems, recomputeItemCounts } from "@/lib/stock";
 import { isManualHold } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { ItemStatus } from "@/generated/prisma/enums";
@@ -33,6 +33,10 @@ export async function POST(req: NextRequest) {
   try {
     const recordIds = await prisma.$transaction(async (tx) => {
       const ids: string[] = [];
+      // ต้องมาก่อนการอ่านทุกบรรทัด: ค่าที่ validate ด้านล่างคือค่าที่ใช้ตัดสินใจ ถ้าอ่านก่อนล็อก
+      // ก็ยังเป็นค่าที่คนอื่นเปลี่ยนทับได้ระหว่างทาง. เรียงตาม itemId ใน lockItems ด้วย
+      // จึงไม่เกิด deadlock กับตะกร้าอีกใบที่มีของซ้ำกันคนละลำดับ.
+      await lockItems(tx, items.map((di) => di.itemId));
 
       for (const di of items) {
         // Fetch item with relations for validation
@@ -100,8 +104,11 @@ export async function POST(req: NextRequest) {
           // Tracked durable: update sub-item status (ยืม ON_LOAN / ตั้งใช้ในห้อง IN_USE)
           const newStatus = inRoom ? ItemStatus.IN_USE : ItemStatus.ON_LOAN;
           const sub = item.subItems[0];
-          await tx.subItem.update({
-            where: { id: di.subItemId },
+          // updateMany + เงื่อนไข status ไม่ใช่ update เปล่า: การอ่าน sub.status ด้านบนเกิดก่อน
+          // บรรทัดนี้เสมอ และถึงจะมี lockItems คุมอยู่แล้ว การ์ดนี้ก็ทำให้ route นี้ถูกต้อง
+          // ด้วยตัวเองโดยไม่ต้องเชื่อว่าคนแก้คนถัดไปจะจำเรื่องล็อกได้ — แบบเดียวกับ /api/borrow.
+          const claimed = await tx.subItem.updateMany({
+            where: { id: di.subItemId, status: ItemStatus.AVAILABLE },
             // นำไปใช้งาน (INUSE) moves this one physical piece — mirror the destination onto
             // the sub-item's own locationId (only when it resolved to a real Location).
             data: {
@@ -109,6 +116,7 @@ export async function POST(req: NextRequest) {
               ...(inRoom && locationId ? { locationId } : {}),
             },
           });
+          if (claimed.count === 0) throw new Error(`ชิ้นย่อย ${sub.subCode} มีคนเบิกตัดหน้าไปแล้ว`);
           // This is the ONLY writer that moves a piece INTO ON_LOAN/IN_USE, which is what lets
           // an item's ประวัติ drop those rows as duplicates of the เบิก row it sits beside
           // (api/items/[id]/history). A second writer would make that event vanish silently.

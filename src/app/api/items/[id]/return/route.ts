@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError } from "@/lib/api-utils";
-import { holdsTotalQty, recomputeItemCounts } from "@/lib/stock";
+import { holdsTotalQty, lockItems, recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn, logReturn, type ReturnStatus } from "@/lib/returns";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
@@ -30,6 +30,8 @@ export async function POST(
 
   try {
     await prisma.$transaction(async (tx) => {
+      // ก่อนอ่าน: ค่าที่อ่านต่อจากนี้คือค่าที่ใช้ตัดสินใจ
+      await lockItems(tx, [itemId]);
       const item = await tx.item.findUnique({ where: { id: itemId } });
       if (!item) throw new Error("Item not found");
 

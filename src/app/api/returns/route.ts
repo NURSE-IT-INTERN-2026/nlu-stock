@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireAdmin, handleError } from "@/lib/api-utils";
-import { recomputeItemCounts } from "@/lib/stock";
+import { lockItems, recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn } from "@/lib/returns";
 
 import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
@@ -109,6 +109,14 @@ export async function POST(req: NextRequest) {
   try {
     await prisma.$transaction(async (tx) => {
       const affectedItems = new Set<string>();
+      // ล็อก item ของทุกชิ้นที่จะคืนก่อน แล้วค่อยอ่าน — คืนของก็ขยับ availableQty เหมือนเบิก
+      // และ recomputeItemCounts ก็นับ sub_items ใหม่แบบเดียวกัน ผู้เขียนที่ไม่ล็อกคนเดียว
+      // ก็พอทำให้ตัวนับเพี้ยนได้ทั้งวง.
+      const locked = await tx.subItem.findMany({
+        where: { id: { in: entries.map((e) => e.subItemId) } },
+        select: { itemId: true },
+      });
+      await lockItems(tx, locked.map((s) => s.itemId));
       for (const e of entries) {
         const sub = await tx.subItem.findUnique({
           where: { id: e.subItemId },

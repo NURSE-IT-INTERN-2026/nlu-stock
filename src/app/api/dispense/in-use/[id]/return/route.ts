@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError, notFound, error } from "@/lib/api-utils";
-import { recomputeItemCounts } from "@/lib/stock";
+import { lockItems, recomputeItemCounts } from "@/lib/stock";
 import { logReturn } from "@/lib/returns";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     await prisma.$transaction(async (tx) => {
+      await lockItems(tx, [record.itemId]);
       const resolved = record.resolvedQty + qty;
       await tx.dispenseRecord.update({
         where: { id: record.id },
