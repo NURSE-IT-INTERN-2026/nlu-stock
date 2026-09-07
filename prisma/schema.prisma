@@ -134,6 +134,7 @@ model User {
   attachmentChanges  AttachmentLog[]
   priceChanges       ReceivePriceLog[]
   fieldChanges       ItemFieldLog[]
+  cartLines          CartLine[]
 
   @@map("users")
 }
@@ -319,6 +320,7 @@ model Item {
   fieldChanges       ItemFieldLog[]
   templateLines      DispenseTemplateLine[]
   returnRecords      ReturnRecord[]
+  cartLines          CartLine[]
 
   @@index([categoryId, isActive])
   @@index([locationId])
@@ -370,6 +372,7 @@ model SubItem {
   maintenanceRecords MaintenanceRecord[]
   returnRecords      ReturnRecord[]
 
+  cartLines           CartLine[]
   @@unique([itemId, subCode])
   @@index([itemId, status])
   @@index([inKitSubItemId])
@@ -395,6 +398,7 @@ model Lot {
   adjustments     StockAdjustment[]
   priceChanges    ReceivePriceLog[]
 
+  cartLines       CartLine[]
   @@unique([itemId, lotNumber])
   @@index([itemId, expiryDate])
   @@map("lots")
@@ -609,10 +613,24 @@ model MaintenanceRecord {
   // แจ้งชำรุด row, where it always was.
   repairBookingId   String?
   repairBooking     StockAdjustment?  @relation("RepairBooking", fields: [repairBookingId], references: [id])
+  // The ส่งบำรุงรักษาภายนอก log row this job closed. บำรุงรักษาภายนอก is a two-step job — the
+  // piece leaves the unit first and the result is recorded when it comes back — but only the
+  // second step writes a row here, so until this column existed the trip had no case identity
+  // while it was open: staff sent a piece out and had nothing to point at until it returned.
+  // This is the link that lets the open trip and the finished record be the SAME case, and
+  // therefore carry the same MC number from ส่ง through รับคืน (see lib/case-codes).
+  //
+  // Unlike repairBookingId this IS backfilled, because it is not a guess: the pairing rule
+  // (newest PENDING_MAINTENANCE log for this piece before the record was written) is the very
+  // one getCase has always used to draw the ส่ง step, so the backfill only writes down what the
+  // screen was already showing. Null on ภายใน rounds — those have no trip.
+  sentLogId         String?
+  sentLog           ItemStatusLog?    @relation("MaintenanceTrip", fields: [sentLogId], references: [id])
 
   createdAt DateTime @default(now())
 
   @@index([subItemId])
+  @@index([sentLogId])
   @@map("maintenance_records")
 }
 
@@ -650,6 +668,8 @@ model ItemStatusLog {
   // the tracked-piece half: a piece handed back ชำรุด flips status here instead of booking qty.
   fromReturnId   String?
   fromReturn     ReturnRecord? @relation("OpenedByReturn", fields: [fromReturnId], references: [id])
+  // The บำรุงรักษาภายนอก job that closed the trip this row opened — see MaintenanceRecord.sentLogId.
+  closedByMaint  MaintenanceRecord[] @relation("MaintenanceTrip")
 
   @@map("item_status_logs")
 }
@@ -792,4 +812,40 @@ model Course {
   syncedAt DateTime @default(now())
 
   @@map("courses")
+}
+
+// ตะกร้าของคนคนหนึ่ง — draft ล้วน ยังไม่ใช่การเบิก
+//
+// ย้ายมาจาก localStorage เพราะ requirement คือ "ล็อกอินเครื่องอื่น ตะกร้ายังอยู่" ซึ่งที่เก็บฝั่ง
+// เบราว์เซอร์ทำไม่ได้ ไม่ว่าจะตั้งชื่อ key ยังไง. ผลพลอยได้คือ freshness: GET /api/cart join
+// items สดทุกครั้ง เลขบนจอจึงเป็นเลขใน DB ณ วินาทีนั้น ไม่ใช่ snapshot ตอนกดเพิ่ม
+//
+// ไม่มีตาราง carts แยก: ตะกร้าของคนหนึ่ง = แถวที่ userId ตรง. ยังไม่มี status/วันหมดอายุ/
+// checkout/การโอนเจ้าของให้เก็บ — เพิ่มตารางแม่ตอนมีของให้ใส่จริง
+//
+// **ตะกร้าไม่จองสต็อก** ของชิ้นสุดท้ายอยู่ในตะกร้าห้าคนพร้อมกันได้ ใครกดยืนยันก่อนได้ไป —
+// /api/borrow กับ /api/dispense เป็นคนตัดสินเจ้าเดียว (lockItems + validate + ตัดสต็อก)
+model CartLine {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String
+  // Cascade: ของถูกลบออกจากคลัง = หลุดจากทุกตะกร้าเอง ไม่ต้องมีงานเก็บกวาด และไม่มีบรรทัด
+  // ที่ชี้ไปยัง itemId ที่ไม่มีอยู่จริงจนยิง 500 ตอนกดยืนยัน (อาการเดิมของตะกร้าใน localStorage)
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  subItemId String?
+  subItem   SubItem? @relation(fields: [subItemId], references: [id], onDelete: Cascade)
+  lotId     String?
+  lot       Lot?     @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  // "itemId-subItemId-lotId" — คีย์เดียวกับที่ฝั่ง client ใช้แยกบรรทัดอยู่แล้ว. มีคอลัมน์นี้เพราะ
+  // unique ที่มี NULL ปนใน Postgres ถือว่าทุกแถวต่างกันหมด: unique([userId, itemId, subItemId,
+  // lotId]) จะยอมให้บรรทัดเดิมซ้ำได้ไม่จำกัดเมื่อ subItemId/lotId เป็น null
+  lineKey   String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, lineKey])
+  @@index([userId])
+  @@map("cart_lines")
 }
