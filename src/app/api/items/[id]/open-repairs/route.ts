@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/api-utils";
+import { isSelfBorrower } from "@/lib/roles";
 import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 import { deriveRepairTrip } from "@/lib/repairs";
 
@@ -18,6 +19,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id: itemId } = await params;
   const subItemId = req.nextUrl.searchParams.get("subItemId");
+
+  // นศ./บุคลากรเห็นได้ว่าของชิ้นนี้กำลังซ่อมอยู่ — นั่นคือเหตุผลที่แบนเนอร์มีอยู่ และเป็นคำตอบว่า
+  // ทำไมของถึงหยิบไม่ได้ แต่ "ใครเป็นคนแจ้ง" เป็นชื่อเจ้าหน้าที่ ไม่ใช่ข้อมูลของงานซ่อม. ตัดเฉพาะ
+  // ช่องนั้นช่องเดียว ไม่ปิดทั้ง route — แบนเนอร์ยังขึ้นครบ อาการ/ร้าน/วันที่ยังอยู่.
+  const hideBy = isSelfBorrower(auth.user.role);
 
   const OPEN: ItemStatus[] = [ItemStatus.DAMAGED, ItemStatus.UNDER_REPAIR];
 
@@ -75,7 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // On a piece the two dates are one date — the status it sits in says which one it is.
         reportedAt: trip.startedAt,
         repairSentAt: p.status === ItemStatus.UNDER_REPAIR ? trip.startedAt : null,
-        by: logs.at(-1)?.changer.name ?? null,
+        by: hideBy ? null : logs.at(-1)?.changer.name ?? null,
       };
     }),
     ...bookings.map((b) => ({
@@ -89,7 +95,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       repairNote: b.repairNote,
       reportedAt: b.adjustedAt.toISOString(),
       repairSentAt: b.repairSentAt?.toISOString() ?? null,
-      by: b.adjuster.name,
+      by: hideBy ? null : b.adjuster.name,
     })),
   ]
     // รอส่งซ่อม first — the half nobody has started yet — then newest trip first inside each.

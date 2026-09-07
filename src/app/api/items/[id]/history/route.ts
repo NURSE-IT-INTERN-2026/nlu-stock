@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound, getSearchParams, paginate } from "@/lib/api-utils";
+import { requireAuth, json, notFound, forbidden, getSearchParams, paginate } from "@/lib/api-utils";
+import { isSelfBorrower } from "@/lib/roles";
 import {
   ADJUSTMENT_REASON_LABELS, STATUS_LABELS, MAINT_TYPE_LABELS, MAINT_RESULT_LABELS,
   USAGE_TYPE_LABELS, RETURN_CONDITION_LABELS, type TimelineEventType,
@@ -78,6 +79,12 @@ const loanStatus = (r: { quantity: number; resolvedQty: number; dueAt: Date | nu
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
+  // ประวัติ is a list of who did what to this thing — every row carries a `user`, and the
+  // เบิก rows carry the recipient and the course as well. There is nothing on this tab a
+  // borrower needs in order to decide whether they can take the item, so they do not get it.
+  // The tab is hidden for them too (item-detail-shell), but this is the line that binds:
+  // hiding a tab does not stop anyone from typing the URL.
+  if (isSelfBorrower(auth.user.role)) return forbidden();
 
   const { id } = await params;
   const data = await itemHistory(id, getSearchParams(request));

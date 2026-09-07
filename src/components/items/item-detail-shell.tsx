@@ -164,7 +164,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<string>("overview");
   // "item" = non-tracked aggregate; "piece" = tracked (a copy); "empty" = tracked with 0 subs.
   const [mode, setMode] = useState<"item" | "piece" | "empty">("item");
 
@@ -209,6 +208,31 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     : null;
   const isMulti = (item?.subItems.length ?? 0) > 1;
 
+  // ยืมเองของ "ชิ้นนี้" — ยืมได้ไหม และถ้าไม่ได้ เพราะอะไร
+  //
+  // เดิมคำนวณแค่ can แล้วซ่อนปุ่มเมื่อ false: นศ.ที่สแกนป้ายบนกล่องของที่ถูกยืมออกไปหมด เปิดมา
+  // เจอแค่ QR code ไม่มีคำอธิบายสักคำ. item mode มีข้อความอยู่แล้ว (item-detail-overview)
+  // แต่ของนับรายชิ้นเปิดเป็น piece mode เสมอ จึงไม่มีวันได้เห็น
+  const pieceBorrow = useMemo(() => {
+    const blank = { can: false, note: null as string | null };
+    if (!item || !sub || !isSelfBorrower(user?.role ?? "")) return blank;
+    const lendable = isSelfBorrowable({
+      selfBorrowable: item.selfBorrowable,
+      selfBorrowLimit: item.selfBorrowLimit,
+      availableQty: item.availableQty,
+      trackIndividually: item.trackIndividually,
+      dispenseType: item.category.profile?.dispenseType ?? "ITEM",
+      profileSelfBorrowable: item.category.profile?.selfBorrowable ?? false,
+      profileSelfBorrowLimit: item.category.profile?.selfBorrowLimit ?? 1,
+    });
+    if (lendable && sub.status === "AVAILABLE") return { can: true, note: null };
+    if (!lendable) return { can: false, note: "ไม่เปิดให้ยืมเอง — ติดต่อเจ้าหน้าที่" };
+    // availableQty ของ tracked item คือจำนวนชิ้นที่ว่าง (recomputeItemCounts) — 0 แปลว่า
+    // ทั้งรายการไม่เหลือให้ยืม ไม่ใช่แค่ชิ้นที่สแกนมา
+    if (item.availableQty <= 0) return { can: false, note: "ของหมด — ยืมไม่ได้ตอนนี้" };
+    return { can: false, note: `ชิ้นนี้${STATUS_LABELS[sub.status] ?? sub.status} — ยืมชิ้นอื่นได้` };
+  }, [item, sub, user?.role]);
+
   // Fetch the selected piece's detail (tracked only).
   useEffect(() => {
     if (mode !== "piece" || !selectedSubCode) { setSub(null); return; }
@@ -234,12 +258,6 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
 
   // Switch copy via query (shallow — item not refetched).
   const selectCopy = (subCode: string) => router.replace(`/items/${itemId}?copy=${subCode}`, { scroll: false });
-
-  // Reset tab when switching copy (the history tab owns its own filter state). A KIT recipe
-  // opens on ชุดประกอบ — the sets and the recipe are the page, ข้อมูลทั่วไป is the footnote.
-  useEffect(() => {
-    setTab(item?.category.profile?.code === "KIT" ? "kit" : "overview");
-  }, [mode, itemId, selectedSubCode, item?.category.profile?.code]);
 
   const { setDetail } = usePageHeader();
   useEffect(() => {
@@ -320,10 +338,13 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const hasExpiryAlert = expiredLots.length > 0 || soonLots.length > 0;
 
   // ── Tabs ──
+  // ประวัติ is who-did-what, and /api/items/:id/history refuses a borrower outright — showing
+  // the tab would just be a tab that 403s.
+  const canSeeHistory = !isSelfBorrower(user?.role ?? "");
   const itemTabs = item ? [
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info },
     { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(item.imageUrl || (item.images?.length ?? 0) > 0) || !!canAct },
-    { key: "history", label: "ประวัติ", icon: Clock },
+    { key: "history", label: "ประวัติ", icon: Clock, show: canSeeHistory },
     // Consumables are used up, never repaired. Everything else can be, so it gets the
     // tab — and a repair record forces it open regardless, so history is never hidden.
     { key: "maintenance", label: "ตรวจบำรุงตามรอบ", icon: Wrench, show: item.category.profile?.dispenseType !== "CONSUMABLE" || item.maintenanceRecords.length > 0 },
@@ -334,12 +355,24 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     { key: "overview", label: "ข้อมูลทั่วไป", icon: Info },
     { key: "media", label: "รูปภาพ", icon: ImageIcon, show: !!(sub.imageUrl || (sub.images?.length ?? 0) > 0) || !!canAct },
     { key: "subcodes", label: `รหัสย่อย (${siblings.length})`, icon: Hash, show: siblings.length > 1 },
-    { key: "history", label: "ประวัติ", icon: Clock },
+    { key: "history", label: "ประวัติ", icon: Clock, show: canSeeHistory },
     // Counts รอบ only now — the CORRECTIVE rows are shown in ประวัติ, so counting them on this
     // tab would promise a list that is no longer here.
     { key: "maintenance", label: `ตรวจบำรุงตามรอบ${preventiveCount ? ` (${preventiveCount})` : ""}`, icon: Wrench, show: sub.item.category.profile?.dispenseType !== "CONSUMABLE" || sub.maintenanceRecords.length > 0 },
   ].filter((t) => t.show !== false) : [];
   const tabs = mode === "item" ? itemTabs : pieceTabs;
+
+  // The open tab lives in the URL, so a reload or a shared link lands where it left off.
+  // A KIT recipe still opens on ชุดประกอบ — the sets are the page, ข้อมูลทั่วไป is the footnote.
+  // An unknown or now-hidden key falls back to that default instead of showing nothing.
+  const defaultTab = item?.category.profile?.code === "KIT" ? "kit" : "overview";
+  const tabParam = searchParams.get("tab");
+  const tab = tabs.some((t) => t.key === tabParam) ? tabParam! : defaultTab;
+  const setTab = (key: string) => {
+    const p = new URLSearchParams(searchParams);
+    p.set("tab", key);
+    router.replace(`/items/${itemId}?${p}`, { scroll: false });
+  };
 
   return (
     <div>
@@ -393,7 +426,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
           ) : null}
 
           {/* ── Tab bar (shared) ── */}
-          <div className="border-t border-border px-2 sm:px-6 flex items-center gap-1 bg-muted/30 overflow-x-auto">
+          <div className="border-t border-border px-2 sm:px-6 flex items-center gap-1 bg-muted/30 overflow-x-auto overflow-y-hidden">
             {tabs.map((t) => (
               <TabBtn key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
                 {t.label}
@@ -443,20 +476,10 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   isMulti={isMulti}
                   canAct={canAct}
                   // Only this exact copy, and only while it is on the shelf.
-                  canSelfBorrow={
-                    isSelfBorrower(user?.role ?? "") &&
-                    sub.status === "AVAILABLE" &&
-                    !!item &&
-                    isSelfBorrowable({
-                      selfBorrowable: item.selfBorrowable,
-                      selfBorrowLimit: item.selfBorrowLimit,
-                      availableQty: item.availableQty,
-                      trackIndividually: item.trackIndividually,
-                      dispenseType: item.category.profile?.dispenseType ?? "ITEM",
-                      profileSelfBorrowable: item.category.profile?.selfBorrowable ?? false,
-                      profileSelfBorrowLimit: item.category.profile?.selfBorrowLimit ?? 1,
-                    })
-                  }
+                  canSelfBorrow={pieceBorrow.can}
+                  // เหตุผลเมื่อกดยืมไม่ได้ — piece mode เคยซ่อนปุ่มแล้วขึ้น QR เฉยๆ นศ.ที่สแกน
+                  // ป้ายบนกล่องมาจึงเห็นหน้าที่ไม่บอกอะไรเลยว่าทำไมยืมไม่ได้
+                  borrowNote={pieceBorrow.note}
                   onSelfBorrow={() => setPieceBorrowOpen(true)}
                   qrDataUrl={qrDataUrl}
                   onStation={() => setStationOpen(true)}
@@ -566,7 +589,7 @@ function TabBtn({ active, onClick, icon: Icon, children }: { active: boolean; on
     <button onClick={onClick} className={cn("relative inline-flex items-center gap-2 px-3 sm:px-4 py-3.5 text-sm transition-colors whitespace-nowrap", active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground")}>
       <Icon className="size-4 shrink-0" />
       {children}
-      {active && <motion.span layoutId="item-detail-tab" transition={{ type: "spring", stiffness: 450, damping: 35 }} className="absolute inset-x-3 -bottom-px h-0.5 bg-primary rounded-full" />}
+      {active && <motion.span layoutId="item-detail-tab" transition={{ type: "spring", stiffness: 450, damping: 35 }} className="absolute inset-x-3 bottom-0 h-0.5 bg-primary rounded-full" />}
     </button>
   );
 }
@@ -892,8 +915,11 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
             const loan = s.dispenseRecords[0] ?? null;
             // Same fallback as the รหัสย่อย table: a piece with no location sits where its spec sits.
             const loc = s.location ?? itemLocation;
-            const where = s.status === "ON_LOAN" && loan
-              ? recipientLabel(loan) ?? loan.staff.name
+            // A borrower is served this row with no loan record attached (GET /api/items/:id
+            // withholds it), so the piece says only that it is out — "ถูกยืม", not by whom.
+            // Staff still get the name, which is what makes the row actionable for them.
+            const where = s.status === "ON_LOAN"
+              ? (loan ? recipientLabel(loan) ?? loan.staff.name : "ถูกยืม")
               : roomFromNotes(loan?.notes) ?? (loc ? locationLabel(loc) : null);
             // Repeating the spec's own location on every row says nothing — only a piece
             // that sits somewhere else (or is out with someone) is worth a second line.
@@ -928,8 +954,10 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
 }
 
 // ── Piece overview tab (detail rows + manage tiles + QR) ──
-function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, onSelfBorrow, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
+function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, borrowNote, onSelfBorrow, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
   sub: SubItemData; isMulti: boolean; canAct: boolean; canSelfBorrow: boolean; qrDataUrl: string;
+  /** ทำไมชิ้นนี้ยืมไม่ได้ — null เมื่อยืมได้ หรือเมื่อคนดูไม่ใช่ นศ./บุคลากร */
+  borrowNote: string | null;
   onSelfBorrow: () => void;
   onStation: () => void; onReportDamage: () => void; onStatus: (s: "AVAILABLE" | "LOST" | "DISPOSED") => void; onEdit: () => void; onReceive: () => void;
 }) {
@@ -1019,6 +1047,13 @@ function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, onSelfBorrow, qrDa
                   <Button className="w-full" onClick={onSelfBorrow}>
                     <HandCoins className="size-4 mr-1" />ยืมพัสดุนี้
                   </Button>
+                </div>
+              </>
+            ) : borrowNote ? (
+              <>
+                <SectionHeader title="ยืมพัสดุ" />
+                <div className="p-4 sm:p-5">
+                  <p className="text-sm text-muted-foreground">{borrowNote}</p>
                 </div>
               </>
             ) : (

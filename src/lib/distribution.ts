@@ -123,6 +123,23 @@ export async function getItemDistribution(itemId: string): Promise<DistributionR
 }
 
 /**
+ * The same rows with custody anonymised: every ถูกยืม row folded into one that says how many
+ * units are out and nothing about who has them.
+ *
+ * นศ./บุคลากร who scan a QR see this. Whether a copy is spoken for is what decides if they can
+ * take it; whose name is on it is not. `since`/`dueAt` go with the name deliberately — a due
+ * date next to a course code narrows a person down about as well as printing the name would.
+ * Only the borrower rows are touched: a location row is a shelf, not a person.
+ */
+export function withoutCustodyNames(rows: DistributionRow[]): DistributionRow[] {
+  const rest = rows.filter((r) => r.kind !== "borrower");
+  const onLoan = rows.reduce((n, r) => (r.kind === "borrower" ? n + r.qty : n), 0);
+  return onLoan > 0
+    ? [...rest, { kind: "borrower" as const, label: "ถูกยืม", qty: onLoan, state: "ON_LOAN" as const }]
+    : rest;
+}
+
+/**
  * Stock pulled out of service as ชำรุด and not yet handed back.
  *
  * Derived from the adjustments that booked it, not from a counter: each แจ้งชำรุด writes a

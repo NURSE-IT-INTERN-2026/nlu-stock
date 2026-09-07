@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireAdmin, json, notFound, error } from "@/lib/api-utils";
+import { isSelfBorrower } from "@/lib/roles";
 import { NextRequest } from "next/server";
 
 // GET /api/items/:id/sub-items/:subId — single sub-item with parent context + history.
@@ -11,6 +12,7 @@ export async function GET(
   if (auth.denied) return auth.denied;
 
   const { id: itemIdRef, subId } = await params;
+  const borrower = isSelfBorrower(auth.user.role);
 
   // Resolve parent item by id OR code (so URLs can be human-readable codes).
   const parent = await prisma.item.findFirst({
@@ -39,22 +41,35 @@ export async function GET(
           issueUnit: { select: { id: true, name: true } },
         },
       },
-      dispenseRecords: {
-        orderBy: { dispensedAt: "desc" },
-        include: { staff: { select: { name: true } } },
-      },
-      statusLogs: {
-        orderBy: { changedAt: "desc" },
-        include: { changer: { select: { name: true } } },
-      },
-      maintenanceRecords: {
-        orderBy: { performedAt: "desc" },
-        include: { performer: { select: { name: true } } },
-      },
+      // The three per-copy histories, every one of them naming a person — and unlike the item
+      // route these are not even capped at 5, so this is the widest view of "who had this".
+      // A borrower gets none: the copy's own status still says ถูกยืม, which is all they need
+      // to know whether they can take it. Same rule as GET /api/items/:id.
+      ...(borrower
+        ? {}
+        : {
+            dispenseRecords: {
+              orderBy: { dispensedAt: "desc" as const },
+              include: { staff: { select: { name: true } } },
+            },
+            statusLogs: {
+              orderBy: { changedAt: "desc" as const },
+              include: { changer: { select: { name: true } } },
+            },
+            maintenanceRecords: {
+              orderBy: { performedAt: "desc" as const },
+              include: { performer: { select: { name: true } } },
+            },
+          }),
     },
   });
 
   if (!sub) return notFound("Sub-item not found");
+  // Keys the piece page indexes into without guarding (sub.maintenanceRecords.filter,
+  // sub.dispenseRecords.find) — empty, never missing.
+  if (borrower) {
+    return json({ ...sub, dispenseRecords: [], statusLogs: [], maintenanceRecords: [] });
+  }
   return json(sub);
 }
 
