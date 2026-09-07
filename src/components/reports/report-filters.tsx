@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePicker, parseISODate, thaiDate } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -27,7 +27,7 @@ import {
 } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import {
-  CategoryPicker, LocationPicker, type LocationFilter,
+  CategoryPicker, LocationPicker, formatLocation, type LocationFilter,
 } from "@/components/shared/filter-pickers";
 
 export interface FilterValues {
@@ -97,27 +97,32 @@ interface ReportFiltersProps {
   values: FilterValues;
   onChange: (values: FilterValues) => void;
   actions?: ReactNode;
-  /** ตัวแรกในแถวตัวกรอง — ที่ของ chip เลือก segment. มันคือตัวกรองอย่างหนึ่งเหมือนกัน
+  /** ตัวแรกในแถวบนสุด — ที่ของ chip เลือก segment. มันคือตัวกรองอย่างหนึ่งเหมือนกัน
    *  การปล่อยให้ลอยอยู่นอกการ์ดทำให้อ่านเป็นหัวเรื่องที่ไม่มีบ้าน */
   leading?: ReactNode;
   /** ทับกรอบการ์ดของตัวเอง เวลาถูกวางอยู่ในการ์ดใบใหญ่แล้ว */
   className?: string;
 }
 
-// 150px เดิมเหลือที่ให้ข้อความ 74px แต่ "31 ธ.ค. 2569" กว้าง 87px — วันที่จึงถูกตัดเป็น
-// "31 ธ.ค. 2…" ทุกครั้งที่เดือนหรือวันเป็นสองหลัก. 176px เหลือที่ให้ข้อความ 100px ซึ่งพอสำหรับ
-// วันที่ยาวที่สุดที่ thaiDate สร้างได้ บวกที่เผื่อไว้เล็กน้อย.
-// บนมือถือกว้างเต็มแถว ไม่ใช่ครึ่งแถว: จอ 375px หารสองแล้วเหลือที่ให้ข้อความ 59px ซึ่งตัดวันที่
-// ทุกกรณี — สองช่องเรียงกันจึงแสดงเต็มไม่ได้เลย ต้องซ้อนกัน
-/** ปุ่ม cascade ของหน้าพัสดุเกิดมา h-9 rounded-lg — แถวตัวกรองรายงานเป็นชิป h-8 rounded-full */
-const pickerCls = "h-8 rounded-full";
+/** ทรงของ select ตอนนั่งเรียงในแถว: สูงเท่าชิปอื่น กว้างพอให้ป้ายไทยไม่ถูกตัด */
+const selectInlineCls = "h-8 w-auto min-w-[8.5rem]";
 
 /** location เป็น object: ว่าง = ไม่ได้กรอง. ใช้ทั้งตัวนับและตอนตัดสินใจว่าจะเก็บค่าลง state มั้ย */
 function locActive(loc?: LocationFilter): boolean {
   return !!(loc && (loc.building || loc.floor || loc.room || loc.detail));
 }
 
-const dateInputCls = "h-8 w-full min-w-0 sm:w-44 rounded-full border-border bg-background text-sm";
+const th = (iso?: string) => (iso ? thaiDate(parseISODate(iso)) : null);
+
+/** "1 ม.ค. 2569 – 31 ธ.ค. 2569" — ป้ายบนปุ่มช่วงวันที่ และบนชิปสรุป */
+function rangeLabel(values: FilterValues): string {
+  const from = th(values.dateFrom);
+  const to = th(values.dateTo);
+  if (from && to) return `${from} – ${to}`;
+  if (from) return `ตั้งแต่ ${from}`;
+  if (to) return `ถึง ${to}`;
+  return "ทุกช่วงเวลา";
+}
 
 function FilterSelect({
   icon: Icon,
@@ -125,6 +130,7 @@ function FilterSelect({
   placeholder,
   onValueChange,
   selectedLabel,
+  className,
   children,
 }: {
   icon: LucideIcon;
@@ -132,11 +138,12 @@ function FilterSelect({
   placeholder: string;
   onValueChange: (v: string) => void;
   selectedLabel?: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <Select value={value} onValueChange={(v) => onValueChange(v ?? "")}>
-      <SelectTrigger className="min-w-[120px] max-w-full flex-1 sm:flex-none gap-2 rounded-full border-border bg-background">
+      <SelectTrigger className={cn("w-full gap-2 rounded-full border-border bg-background", className)}>
         <Icon className="size-4 text-muted-foreground shrink-0" />
         {/* ponytail: pass explicit label as children — Base UI Select.Value falls back to the
           raw value (id) when it can't resolve from unmounted popup items. Every other select
@@ -157,10 +164,12 @@ function FilterSearch({
   value,
   placeholder,
   onCommit,
+  className,
 }: {
   value: string;
   placeholder: string;
   onCommit: (v: string) => void;
+  className?: string;
 }) {
   const [text, setText] = useState(value);
 
@@ -179,7 +188,7 @@ function FilterSearch({
   }, [text, value, onCommit]);
 
   return (
-    <div className="relative w-full sm:w-[190px]">
+    <div className={cn("relative w-full min-w-0", className)}>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={text}
@@ -192,13 +201,113 @@ function FilterSearch({
   );
 }
 
+/** ช่วงวันที่ยุบเหลือปุ่มเดียวที่อ่านออกว่ากรองช่วงไหนอยู่ — สองช่องเรียงกันกับคำว่า "ถึง"
+ *  กินความกว้างครึ่งแถวเพื่อบอกเรื่องเดียว และบนมือถือต้องซ้อนกันสามบรรทัด */
+function DateRangeButton({
+  values,
+  onChange,
+  years,
+  quick,
+}: {
+  values: FilterValues;
+  onChange: (v: FilterValues) => void;
+  years: string[];
+  quick: boolean;
+}) {
+  const picked = !!(values.dateFrom || values.dateTo);
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-full justify-start gap-2 rounded-full font-normal sm:w-auto"
+          />
+        }
+      >
+        <CalendarRange className="size-4 shrink-0 text-muted-foreground" />
+        <span className={cn("truncate", !picked && "text-muted-foreground")}>
+          {rangeLabel(values)}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64">
+        {quick && (
+          <div className="flex flex-wrap gap-1.5">
+            {years.map((y) => {
+              const on = values.dateFrom === `${y}-01-01` && values.dateTo === `${y}-12-31`;
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => onChange({ ...values, dateFrom: `${y}-01-01`, dateTo: `${y}-12-31` })}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                    on
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {`พ.ศ. ${Number(y) + 543}`}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <FieldLabel label="จากวันที่">
+          <DatePicker
+            value={values.dateFrom ?? ""}
+            onChange={(v) => onChange({ ...values, dateFrom: v || undefined })}
+            placeholder="จากวันที่"
+            className="h-8 rounded-md"
+          />
+        </FieldLabel>
+        <FieldLabel label="ถึงวันที่">
+          <DatePicker
+            value={values.dateTo ?? ""}
+            onChange={(v) => onChange({ ...values, dateTo: v || undefined })}
+            placeholder="ถึงวันที่"
+            className="h-8 rounded-md"
+          />
+        </FieldLabel>
+        {picked && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 self-end text-primary hover:bg-primary/10 hover:text-primary"
+            onClick={() => onChange({ ...values, dateFrom: undefined, dateTo: undefined })}
+          >
+            ล้างช่วงวันที่
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function FieldLabel({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+/** ตัวกรองที่เปิดอยู่หนึ่งตัว — ป้ายที่อ่านรู้เรื่องบวกวิธีเอาออก */
+interface Chip {
+  key: string;
+  label: string;
+  clear: () => void;
+}
+
 export function ReportFilters({ config, values, onChange, actions, leading, className }: ReportFiltersProps) {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   // 639 ไม่ใช่ 767 ของ useIsMobile: การ์ดนี้สลับเป็นแถวเดียวที่ `sm:` — จุดที่ตัวกรองเลิกซ้อนกัน
-  // คือจุดเดียวกับที่ไม่ต้องยุบเป็นปุ่มแล้ว
+  // คือจุดเดียวกับที่แผ่นเลื่อนเลิกคุ้มกว่า popover
   const isMobile = useIsMobile(639);
 
   useEffect(() => {
@@ -217,137 +326,62 @@ export function ReportFilters({ config, values, onChange, actions, leading, clas
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
 
-  // นับเฉพาะตัวกรองที่มองเห็นอยู่จริง — segment ที่ไม่มีช่องวันที่ (ภาพนิ่ง) ยังถือค่าวันที่ของ
-  // segment ก่อนหน้าไว้ใน state และจะทำให้ปุ่ม "ล้างตัวกรอง" โผล่มาโดยไม่มีอะไรบนจอให้ล้าง
+  // แถวหลักถือแค่สองอย่างที่คนแตะทุกครั้ง: ช่วงเวลา กับช่องค้นหา. เหตุผล/วิชา มาก่อนชื่อผู้ดำเนินการ
+  // เพราะเป็นตัวที่คนพิมพ์หาจริง — ตัวที่เหลือลงไปอยู่หลังปุ่ม "ตัวกรอง"
+  const primarySearch = config.recipientSearch
+    ? ({ key: "recipient", placeholder: config.recipientSearch } as const)
+    : config.staffSearch
+      ? ({ key: "staff", placeholder: config.staffSearch } as const)
+      : null;
+
   const dateActive = config.dateRange || config.yearQuick;
-  const activeCount = [
-    dateActive ? values.dateFrom : undefined, dateActive ? values.dateTo : undefined,
-    values.profileId, values.categoryId,
-    locActive(values.location), values.staff, values.recipient, values.usageType, values.status,
-    values.year && values.year !== String(currentYear) ? values.year : undefined,
-  ].filter(Boolean).length;
 
-  // ponytail: ตัวกรองชุดเดียว วาดสองที่ — แถวบนการ์ดบนจอกว้าง, ใน bottom sheet บนมือถือ.
-  // ค่าเปลี่ยนทันทีทั้งสองทาง ไม่มี draft state ให้ Apply: ตารางอยู่หลัง sheet อยู่แล้ว
-  // ปุ่ม "ดูผลลัพธ์" จึงแค่ปิดแผ่น ไม่ต้องมีสำเนาค่าอีกชุดให้หลุดกัน
-  const controls = (
+  // ── ตัวกรองชั้นสอง ──────────────────────────────────────────────────────
+  // ชุดเดียว วาดสองทรง: `inline` = ชิปเรียงต่อในแถวบนจอกว้างที่ยังมีที่เหลือ,
+  // ไม่ inline = ช่องเต็มความกว้างพร้อมป้ายกำกับ ในแผ่นเลื่อนบนมือถือ
+  const secondary = (inline: boolean) => {
+    const wrap = (label: string, node: ReactNode) =>
+      inline ? node : <FieldLabel label={label}>{node}</FieldLabel>;
+    return (
     <>
-      {config.yearQuick && (() => {
-        // ปีที่ "เลือกอยู่" อ่านย้อนจากค่าใน date picker — ไม่มี state ของตัวเอง จึงไม่มีวัน
-        // เถียงกับ picker: พิมพ์ช่วงเองเมื่อไรป้ายก็ตกเป็น "กำหนดเอง" เอง
-        const selected = years.find(
-          (y) => values.dateFrom === `${y}-01-01` && values.dateTo === `${y}-12-31`,
-        );
-        return (
-          <FilterSelect
-            icon={CalendarRange}
-            value={selected ?? "custom"}
-            placeholder="ปี"
-            selectedLabel={selected ? `พ.ศ. ${Number(selected) + 543}` : "กำหนดเอง"}
-            onValueChange={(v) => {
-              if (v === "custom") return;
-              onChange({ ...values, dateFrom: `${v}-01-01`, dateTo: `${v}-12-31` });
-            }}
-          >
-            {years.map((y) => (
-              <SelectItem key={y} value={y}>{`พ.ศ. ${Number(y) + 543}`}</SelectItem>
-            ))}
-          </FilterSelect>
-        );
-      })()}
-      {config.dateRange && (
-        // ซ้อนบนมือถือ เรียงกันบนจอกว้าง. "ถึง" ต้องอยู่ต่อไปแม้ตอนซ้อน — พอเลือกวันแล้ว
-        // placeholder "จากวันที่/ถึงวันที่" ถูกแทนที่ด้วยตัววันที่ ไม่มีอะไรเหลือบอกว่าช่องไหนคือช่องไหน
-        <div className="flex w-full flex-col items-stretch gap-1.5 sm:w-auto sm:flex-row sm:items-center">
-          <DatePicker
-            value={values.dateFrom ?? ""}
-            onChange={(v) => onChange({ ...values, dateFrom: v || undefined })}
-            placeholder="จากวันที่"
-            className={dateInputCls}
-          />
-          <span className="text-center text-xs text-muted-foreground sm:text-left">ถึง</span>
-          <DatePicker
-            value={values.dateTo ?? ""}
-            onChange={(v) => onChange({ ...values, dateTo: v || undefined })}
-            placeholder="ถึงวันที่"
-            className={dateInputCls}
-          />
-        </div>
-      )}
-
-      {config.categories && (
+      {config.categories && wrap("ประเภท / หมวดหมู่",
         <CategoryPicker
-          className={pickerCls}
+          className={cn("h-8 rounded-full", !inline && "w-full")}
           profiles={profiles}
           categories={categories}
           value={{ profileId: values.profileId ?? "", categoryId: values.categoryId ?? null }}
           onChange={({ profileId, categoryId }) =>
             onChange({ ...values, profileId: profileId || undefined, categoryId: categoryId ?? undefined })
           }
-        />
+        />,
       )}
 
-      {config.locations && (
+      {config.locations && wrap("สถานที่",
         <LocationPicker
-          className={pickerCls}
+          className={cn("h-8 rounded-full", !inline && "w-full")}
           locations={locations}
           value={values.location ?? {}}
           onChange={(loc) => onChange({ ...values, location: locActive(loc) ? loc : undefined })}
-        />
+        />,
       )}
 
-      {config.staffSearch && (
+      {config.staffSearch && primarySearch?.key !== "staff" && wrap("ผู้ดำเนินการ",
         <FilterSearch
           value={values.staff ?? ""}
           placeholder={config.staffSearch}
           onCommit={(v) => onChange({ ...values, staff: v.trim() || undefined })}
-        />
+          className={cn(inline && "w-48")}
+        />,
       )}
 
-      {config.recipientSearch && (
-        <FilterSearch
-          value={values.recipient ?? ""}
-          placeholder={config.recipientSearch}
-          onCommit={(v) => onChange({ ...values, recipient: v.trim() || undefined })}
-        />
-      )}
-      {config.year && (
-        // The value stays CE because that is what the dates in the database are; only the
-        // label is พ.ศ. Showing ค.ศ. here was the one place in the app that did — every
-        // date beside it renders through TH_DATE as พ.ศ.
-        <FilterSelect
-          icon={CalendarRange}
-          value={values.year ?? String(currentYear)}
-          placeholder="ปี"
-          selectedLabel={`พ.ศ. ${Number(values.year ?? currentYear) + 543}`}
-          onValueChange={(v) => onChange({ ...values, year: String(v) })}
-        >
-          {years.map((y) => (
-            <SelectItem key={y} value={y}>{`พ.ศ. ${Number(y) + 543}`}</SelectItem>
-          ))}
-        </FilterSelect>
-      )}
-    </>
-  );
-
-  // ตัวกรองชั้นสอง: อยู่แค่บางรายงาน และเป็นตัวที่คนเปิดดูเป็นครั้งคราว ไม่ใช่ตัวที่ตั้งไว้ทุกครั้ง
-  // อย่างช่วงวันที่/หมวดหมู่/ผู้เบิก. ซ่อนไว้หลังปุ่มเพื่อให้แถวแรกอ่านได้จบบนจอ 1440 โดยไม่ต้องเลื่อน
-  const advancedKeys = [
-    config.usageTypes ? values.usageType : undefined,
-    config.statusOptions ? values.status : undefined,
-  ];
-  const hasAdvanced = !!(config.usageTypes || config.statusOptions);
-  const advancedCount = advancedKeys.filter(Boolean).length;
-
-  const advancedControls = (
-    <>
-      {config.usageTypes && (
+      {config.usageTypes && wrap("ประเภทการใช้งาน",
         <FilterSelect
           icon={Activity}
           value={values.usageType ?? "all"}
-          placeholder="ประเภทการใช้งาน"
+          placeholder="ทุกประเภท"
           selectedLabel={values.usageType ? USAGE_TYPE_LABELS[values.usageType] : undefined}
           onValueChange={(v) => onChange({ ...values, usageType: v === "all" ? undefined : String(v) })}
+          className={cn(inline && selectInlineCls)}
         >
           <SelectItem value="all">ทุกประเภท</SelectItem>
           {/* LABELS, not OPTIONS: a filter has to reach every value the data holds,
@@ -356,135 +390,242 @@ export function ReportFilters({ config, values, onChange, actions, leading, clas
           {Object.entries(USAGE_TYPE_LABELS).map(([value, label]) => (
             <SelectItem key={value} value={value}>{label}</SelectItem>
           ))}
-        </FilterSelect>
+        </FilterSelect>,
       )}
 
-      {config.statusOptions && (
+      {config.statusOptions && wrap("สถานะ",
         <FilterSelect
           icon={ListChecks}
           value={values.status ?? "all"}
-          placeholder="สถานะ"
+          placeholder="ทุกสถานะ"
           selectedLabel={values.status ? config.statusOptions?.find((o) => o.value === values.status)?.label : undefined}
           onValueChange={(v) => onChange({ ...values, status: v === "all" ? undefined : String(v) })}
+          className={cn(inline && selectInlineCls)}
         >
           <SelectItem value="all">ทุกสถานะ</SelectItem>
           {config.statusOptions.map((o) => (
             <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
           ))}
-        </FilterSelect>
+        </FilterSelect>,
+      )}
+      </>
+    );
+  };
+
+  const hasSecondary = !!(
+    config.categories || config.locations || config.usageTypes || config.statusOptions ||
+    (config.staffSearch && primarySearch?.key !== "staff")
+  );
+
+  // ชิปแถวล่างพูดแทนตัวกรองที่ถูกซ่อนอยู่หลังปุ่มเท่านั้น — ช่วงวันที่กับช่องค้นหาอ่านค่าตัวเอง
+  // ได้อยู่แล้วบนแถวหลัก การทำชิปซ้ำอีกใบคือความรกที่เพิ่งย้ายที่
+  const chips: Chip[] = [];
+  if (values.profileId) {
+    const name = profiles.find((p) => p.id === values.profileId)?.name;
+    chips.push({
+      key: "profile",
+      label: `ประเภท: ${name ?? values.profileId}`,
+      // หมวดย่อยเป็นลูกของประเภท — ปล่อยไว้ลอยๆ จะกรองด้วยค่าที่ไม่มีปุ่มไหนแสดงอยู่
+      clear: () => onChange({ ...values, profileId: undefined, categoryId: undefined }),
+    });
+  }
+  if (values.categoryId) {
+    const name = categories.find((c) => c.id === values.categoryId)?.name;
+    chips.push({
+      key: "category",
+      label: `หมวดหมู่: ${name ?? values.categoryId}`,
+      clear: () => onChange({ ...values, categoryId: undefined }),
+    });
+  }
+  if (values.location && locActive(values.location)) {
+    chips.push({
+      key: "location",
+      label: `สถานที่: ${formatLocation(values.location) ?? ""}`,
+      clear: () => onChange({ ...values, location: undefined }),
+    });
+  }
+  if (values.staff && primarySearch?.key !== "staff") {
+    chips.push({
+      key: "staff",
+      label: `ผู้ดำเนินการ: ${values.staff}`,
+      clear: () => onChange({ ...values, staff: undefined }),
+    });
+  }
+  if (config.usageTypes && values.usageType) {
+    chips.push({
+      key: "usageType",
+      label: USAGE_TYPE_LABELS[values.usageType] ?? values.usageType,
+      clear: () => onChange({ ...values, usageType: undefined }),
+    });
+  }
+  if (config.statusOptions && values.status) {
+    const label = config.statusOptions.find((o) => o.value === values.status)?.label;
+    chips.push({
+      key: "status",
+      label: label ?? values.status,
+      clear: () => onChange({ ...values, status: undefined }),
+    });
+  }
+
+  // นับเฉพาะตัวกรองที่มองเห็นอยู่จริง — segment ที่ไม่มีช่องวันที่ (ภาพนิ่ง) ยังถือค่าวันที่ของ
+  // segment ก่อนหน้าไว้ใน state และจะทำให้ปุ่ม "ล้างทั้งหมด" โผล่มาโดยไม่มีอะไรบนจอให้ล้าง
+  const activeCount =
+    chips.length +
+    [
+      dateActive ? values.dateFrom : undefined, dateActive ? values.dateTo : undefined,
+      primarySearch ? values[primarySearch.key] : undefined,
+      values.year && values.year !== String(currentYear) ? values.year : undefined,
+    ].filter(Boolean).length;
+
+  const panelBtnCls = "h-8 shrink-0 gap-2 rounded-full";
+  const panelLabel = (
+    <>
+      <SlidersHorizontal className="size-4 text-muted-foreground" />
+      ตัวกรอง
+      {chips.length > 0 && (
+        <span className="inline-flex size-4.5 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
+          {chips.length}
+        </span>
       )}
     </>
   );
 
   return (
-    <div data-testid="report-filters" className={cn("rounded-2xl border border-border/60 bg-card p-3 sm:p-4", className)}>
-      {/* ตัวกรองเป็นคอลัมน์ที่ยืดหยุ่นทางซ้าย ปุ่ม export เกาะขวาบนคงที่ — ไม่ได้อยู่ในสายเดียวกับ
-          ตัวกรอง เพราะพอตัวกรองล้นบรรทัด ปุ่มที่ ml-auto จะโดนดันลงไปนั่งท้ายแถวสองพร้อมช่องโหว่
-          กลางแถว. แยกคอลัมน์แล้วตัวกรองขึ้นบรรทัดใหม่ในเขตของตัวเอง ปุ่มไม่ขยับ */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-        {/* gap-y เล็กกว่า gap-x: ระยะห่างแนวตั้งบวกกับความสูงว่างในตัวปุ่มเอง แถวที่ขึ้นบรรทัดใหม่
-            จึงดูหลุดจากแถวแรกทั้งที่ gap เท่ากัน */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5">
-          {/* basis-full บนมือถือ: ราง segment กับตัวกรองที่เหลือเบียดกันในบรรทัดเดียวแล้วป้ายไทยหด
-              จนอ่านไม่ออก — จอกว้างค่อยนั่งแถวเดียวกันแบบพอดีตัว */}
-          {leading && <div className="min-w-0 basis-full sm:basis-auto">{leading}</div>}
-          {/* บนมือถือตัวกรองทุกช่องกว้างเต็มแถว ซ้อนกันหกบรรทัดกินจอไปครึ่งหนึ่งก่อนถึงข้อมูล —
-              ยุบเป็นปุ่มเดียวที่บอกจำนวนตัวกรองที่เปิดอยู่ แล้วเปิดเป็นแผ่นเลื่อนขึ้นมาแทน */}
-          {isMobile ? (
-            // ปุ่มตัวกรองนั่งแถวเดียวกับ Excel/PDF: ทั้งสามเป็นปุ่มเปิดของอย่างอื่น ไม่ใช่ค่าที่ต้องอ่าน
-            <div className="flex w-full items-center gap-2">
+    <div
+      data-testid="report-filters"
+      className={cn("flex flex-col gap-2 rounded-2xl border border-border/60 bg-card p-3 sm:p-4", className)}
+    >
+      {/* แถวบน: ตัวเลือก segment กับปุ่มส่งออก — สองอย่างที่ไม่ใช่ "ค่าที่กรอง" แต่เป็นตัวเลือกว่า
+          กำลังดูรายงานอะไร และจะเอาออกไปยังไง */}
+      {(leading || actions) && (
+        <div className="flex items-center gap-2">
+          {/* flex-1 ไม่ใช่ w-fit: รางกินที่ที่เหลือทั้งแถว โดยยังนั่งบรรทัดเดียวกับปุ่มส่งออกทุกความกว้าง
+              — รางเองมี overflow-x-auto อยู่แล้ว จอแคบจึงเลื่อนแทนที่จะหักปุ่มลงบรรทัดใหม่ */}
+          {leading && <div className="min-w-0 flex-1">{leading}</div>}
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        </div>
+      )}
+
+      {/* แถวหลัก: ช่วงเวลา + ค้นหา + ปุ่มตัวกรองที่เหลือ. บนมือถือช่วงเวลาขึ้นบรรทัดของตัวเอง
+          เพราะวันที่เต็มรูปแบบสองตัวไม่พอดีครึ่งจอ 375px */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {config.year ? (
+          <div className="w-full sm:w-44">
+            {/* The value stays CE because that is what the dates in the database are; only the
+                label is พ.ศ. Showing ค.ศ. here was the one place in the app that did — every
+                date beside it renders through TH_DATE as พ.ศ. */}
+            <FilterSelect
+              icon={CalendarRange}
+              value={values.year ?? String(currentYear)}
+              placeholder="ปี"
+              selectedLabel={`พ.ศ. ${Number(values.year ?? currentYear) + 543}`}
+              onValueChange={(v) => onChange({ ...values, year: String(v) })}
+            >
+              {years.map((y) => (
+                <SelectItem key={y} value={y}>{`พ.ศ. ${Number(y) + 543}`}</SelectItem>
+              ))}
+            </FilterSelect>
+          </div>
+        ) : dateActive ? (
+          <DateRangeButton
+            values={values}
+            onChange={onChange}
+            years={years}
+            quick={!!config.yearQuick}
+          />
+        ) : null}
+
+        {primarySearch && (
+          <div className="min-w-0 flex-1 sm:min-w-[11rem]">
+            <FilterSearch
+              value={values[primarySearch.key] ?? ""}
+              placeholder={primarySearch.placeholder}
+              onCommit={(v) => onChange({ ...values, [primarySearch.key]: v.trim() || undefined })}
+            />
+          </div>
+        )}
+
+        {/* จอกว้างยังมีที่เหลือทั้งแถว — กางตัวกรองที่เหลือไว้เลย ไม่ต้องซ่อนหลังปุ่มให้ต้องกดหา.
+            ยุบเป็นปุ่มเดียว + แผ่นเลื่อน เฉพาะตอนที่ที่หมดจริงคือบนมือถือ */}
+        {hasSecondary &&
+          (isMobile ? (
+            <>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setSheetOpen(true)}
-                className="h-8 flex-1 justify-center gap-2 rounded-full"
+                className={panelBtnCls}
+                onClick={() => setPanelOpen(true)}
               >
-                <SlidersHorizontal className="size-4" />
-                ตัวกรอง
-                {activeCount > 0 && (
-                  <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
-                    {activeCount}
-                  </span>
-                )}
+                {panelLabel}
               </Button>
-              {actions && <div className="flex-[2] [&_button]:rounded-full">{actions}</div>}
-            </div>
-          ) : (
-            <>
-              {controls}
-              {hasAdvanced && (
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Button variant="outline" size="sm" className="h-8 gap-2 rounded-full" />
-                    }
-                  >
-                    <SlidersHorizontal className="size-4 text-muted-foreground" />
-                    ตัวกรองเพิ่มเติม
-                    {advancedCount > 0 && (
-                      <span className="inline-flex size-4.5 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
-                        {advancedCount}
-                      </span>
-                    )}
-                  </PopoverTrigger>
-                  {/* บล็อกธรรมดา ไม่ใช่ flex: ช่องพวกนี้มี flex-1 ไว้แบ่งที่ในแถว ซึ่งกลายเป็น
-                      "ยืดความสูง" ทันทีที่พ่อเป็น flex-col */}
-                  <PopoverContent align="start" className="w-64">
-                    <div className="space-y-2.5 [&>*]:w-full">{advancedControls}</div>
-                  </PopoverContent>
-                </Popover>
-              )}
-      {/* ล้างตัวกรองอยู่ท้ายแถวตัวกรอง ไม่ใช่ข้างปุ่ม export — มันล้างตัวกรอง ไม่ได้ส่งออกอะไร
-          และการนั่งรวมกับ export ทำให้ก้อนขวาบนกว้างจนตัวกรองเหลือที่ไม่พอบรรทัดเดียว */}
-      {activeCount > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange({})}
-          className="h-7 w-full rounded-full text-primary hover:text-primary hover:bg-primary/10 sm:w-auto"
-        >
-          <X className="size-3.5" />
-          ล้างตัวกรอง
-        </Button>
-      )}
+              <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
+                <SheetContent side="bottom" className="max-h-[85vh] rounded-t-2xl">
+                  <SheetHeader className="pb-0">
+                    <SheetTitle>ตัวกรอง</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-3 overflow-y-auto px-4">{secondary(false)}</div>
+                  <SheetFooter className="flex-row gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => onChange({})}
+                      disabled={activeCount === 0}
+                      className="flex-1 rounded-full"
+                    >
+                      ล้างทั้งหมด
+                    </Button>
+                    <Button onClick={() => setPanelOpen(false)} className="flex-1 rounded-full">
+                      ดูผลลัพธ์
+                    </Button>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
             </>
-          )}
-        </div>
+          ) : (
+            secondary(true)
+          ))}
 
-        {/* ปุ่มในนี้เป็นเม็ดยาทรงเดียวกับ select ทั้งแถว: ExportButtons ถูกใช้นอกหน้ารายงานด้วย
-            จึงบังคับทรงจากตรงนี้ที่เดียว ไม่ใช่ไปเปลี่ยนปุ่มให้ทุกที่ */}
-        {actions && !isMobile && (
-          <div className="shrink-0 sm:ml-2 [&_button]:rounded-full">{actions}</div>
+        {/* ล้างตัวกรองท้ายแถว ไม่ใช่ในแถบสรุป — บนจอกว้างค่าที่กรองอยู่อ่านได้จากตัวช่องเองแล้ว */}
+        {!isMobile && activeCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange({})}
+            className="h-8 shrink-0 rounded-full px-2 text-primary hover:bg-primary/10 hover:text-primary"
+          >
+            ล้างทั้งหมด
+          </Button>
         )}
       </div>
 
-      {isMobile && (
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="bottom" className="max-h-[85vh] rounded-t-2xl">
-            <SheetHeader className="pb-0">
-              <SheetTitle>ตัวกรอง</SheetTitle>
-            </SheetHeader>
-            {/* [&>*]:w-full: ช่องพวกนี้เป็น w-fit/flex-1 ซึ่งแปลว่า "แบ่งที่ในแถว" — พอเรียงเป็น
-                คอลัมน์มันจึงหดตามเนื้อหาแทนที่จะเต็มแผ่น */}
-            <div className="flex flex-col gap-3 overflow-y-auto px-4 [&>*]:w-full">
-              {controls}
-              {advancedControls}
-            </div>
-            <SheetFooter className="flex-row gap-2">
-              <Button
-                variant="outline"
-                onClick={() => onChange({})}
-                disabled={activeCount === 0}
-                className="flex-1 rounded-full"
+      {/* แถวสรุป: บอกว่าอะไรถูกกรองอยู่บ้างโดยไม่ต้องเปิดแผ่นตัวกรองดู — มีเฉพาะตอนที่ตัวกรอง
+          ถูกซ่อนอยู่จริง ไม่งั้นเป็นการพูดซ้ำสิ่งที่ช่องข้างบนบอกอยู่แล้ว */}
+      {isMobile && chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5">
+          {chips.length > 0 && <span className="text-xs text-muted-foreground">กำลังกรอง:</span>}
+          {chips.map((c) => (
+            <span
+              key={c.key}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground"
+            >
+              {c.label}
+              <button
+                type="button"
+                onClick={c.clear}
+                aria-label={`ลบตัวกรอง ${c.label}`}
+                className="rounded-full p-0.5 text-muted-foreground hover:bg-primary/15 hover:text-foreground"
               >
-                ล้างตัวกรอง
-              </Button>
-              <Button onClick={() => setSheetOpen(false)} className="flex-1 rounded-full">
-                ดูผลลัพธ์
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={() => onChange({})}
+            className="ml-auto text-xs font-medium text-primary hover:underline"
+          >
+            ล้างทั้งหมด
+          </button>
+        </div>
       )}
     </div>
   );

@@ -226,7 +226,7 @@ export function AnnualCostTab() {
         leading={
           <Tabs value={side} onValueChange={(v) => setSide(v as Side)}>
             {/* สีอยู่บนราง ไม่ใช่บนแต่ละช่อง เพราะตัวที่ทาสีคือแถบที่เลื่อน ไม่ใช่ปุ่ม */}
-            <TabsList variant="segment" className="w-full min-w-0 sm:w-fit" style={segmentStyle(spec.token)}>
+            <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
               <TabsIndicator />
               {(Object.keys(SIDES) as Side[]).map((k) => (
                 <TabsTrigger key={k} value={k}>

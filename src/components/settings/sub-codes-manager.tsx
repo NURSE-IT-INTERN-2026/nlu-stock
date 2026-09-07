@@ -190,21 +190,21 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           <div className={cn(DIALOG_BODY, "space-y-4 px-1")}>
             {!editing && (
               <div>
-                <Label>รหัสย่อย</Label>
-                <Input value={editForm.subCode} onChange={(e) => setEditForm({ ...editForm, subCode: e.target.value })} placeholder="เช่น ITM001-01" />
+                <Label htmlFor="sub-code">รหัสย่อย</Label>
+                <Input id="sub-code" value={editForm.subCode} onChange={(e) => setEditForm({ ...editForm, subCode: e.target.value })} placeholder="เช่น ITM001-01" />
               </div>
             )}
             <div>
-              <Label>ชื่อ</Label>
-              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="เช่น โต๊ะเขียนหนังสือ #1" />
+              <Label htmlFor="sub-name">ชื่อ</Label>
+              <Input id="sub-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="เช่น โต๊ะเขียนหนังสือ #1" />
             </div>
             {/* No สถานะ field: this PUT writes the row with no ItemStatusLog, so a status set
                 here would leave no history and could skip the ชำรุด → ส่งซ่อม → รับซ่อม order.
                 Status moves happen on the item/รับเข้า screens instead. */}
             <div>
-              <Label>สภาพ</Label>
+              <Label htmlFor="sub-condition">สภาพ</Label>
               <Select value={editForm.condition} onValueChange={(v) => setEditForm({ ...editForm, condition: v ?? NO_CONDITION })}>
-                <SelectTrigger><SelectValue>{editForm.condition === NO_CONDITION ? "ไม่ระบุ" : labelFor(CONDITION_LABELS, editForm.condition)}</SelectValue></SelectTrigger>
+                <SelectTrigger id="sub-condition"><SelectValue>{editForm.condition === NO_CONDITION ? "ไม่ระบุ" : labelFor(CONDITION_LABELS, editForm.condition)}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_CONDITION}>ไม่ระบุ</SelectItem>
                   {Object.entries(CONDITION_LABELS).map(([value, label]) => (
@@ -214,12 +214,12 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               </Select>
             </div>
             <div>
-              <Label>หมายเลขซีเรียล</Label>
-              <Input value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} placeholder="เช่น 12-6515-020-0001" />
+              <Label htmlFor="sub-serial">หมายเลขซีเรียล</Label>
+              <Input id="sub-serial" value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} placeholder="เช่น 12-6515-020-0001" />
             </div>
             <div>
-              <Label>หมายเหตุ</Label>
-              <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+              <Label htmlFor="sub-notes">หมายเหตุ</Label>
+              <Input id="sub-notes" value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
             </div>
           </div>
           <DialogFooter className="shrink-0">
@@ -239,17 +239,17 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           </DialogHeader>
           <div className={cn(DIALOG_BODY, "space-y-4 px-1")}>
             <div>
-              <Label>คำนำหน้า</Label>
-              <Input value={batchForm.prefix} onChange={(e) => setBatchForm({ ...batchForm, prefix: e.target.value })} />
+              <Label htmlFor="batch-prefix">คำนำหน้า</Label>
+              <Input id="batch-prefix" value={batchForm.prefix} onChange={(e) => setBatchForm({ ...batchForm, prefix: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>เลขเริ่มต้น</Label>
-                <Input type="number" value={batchForm.startNumber} onChange={(e) => setBatchForm({ ...batchForm, startNumber: parseInt(e.target.value) || 0 })} />
+                <Label htmlFor="batch-start">เลขเริ่มต้น</Label>
+                <Input id="batch-start" type="number" value={batchForm.startNumber} onChange={(e) => setBatchForm({ ...batchForm, startNumber: parseInt(e.target.value) || 0 })} />
               </div>
               <div>
-                <Label>เลขสิ้นสุด</Label>
-                <Input type="number" value={batchForm.endNumber} onChange={(e) => setBatchForm({ ...batchForm, endNumber: parseInt(e.target.value) || 0 })} />
+                <Label htmlFor="batch-end">เลขสิ้นสุด</Label>
+                <Input id="batch-end" type="number" value={batchForm.endNumber} onChange={(e) => setBatchForm({ ...batchForm, endNumber: parseInt(e.target.value) || 0 })} />
               </div>
             </div>
             <Separator />

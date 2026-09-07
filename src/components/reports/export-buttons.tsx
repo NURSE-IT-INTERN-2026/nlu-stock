@@ -1,7 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { FileSpreadsheet, FileDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown, Download, FileSpreadsheet, FileDown } from "lucide-react";
+import { withBase } from "@/lib/base-path";
 import type { FilterValues } from "./report-filters";
 
 interface ExportButtonsProps {
@@ -25,30 +32,33 @@ export function ExportButtons({ reportType, filters }: ExportButtonsProps) {
     params.set(k, String(v));
   }
 
-  const baseUrl = `/api/reports/export?${params.toString()}`;
+  // window.open is one of the things Next does NOT prefix with basePath — without
+  // withBase the app served from /nlu-stock opens /api/... and gets a 404.
+  const baseUrl = withBase(`/api/reports/export?${params.toString()}`);
 
+  // ponytail: เมนูเดียว ไม่ใช่สองปุ่ม — รูปแบบไฟล์เป็นทางเลือกของ "ส่งออก" อย่างเดียวกัน
+  // การกางทั้งสองไว้ตลอดกินที่แถวหัวการ์ดเท่ากับตัวกรองสองตัว
+  // CSV ถูกตัดออก — เขียน UTF-8 โดยไม่มี BOM ทำให้ชื่อไทยเพี้ยนทุกไฟล์เมื่อเปิดใน Excel
+  // บน Windows ซึ่งเป็นที่เดียวที่ไฟล์พวกนี้ถูกเปิดจริง. xlsx เก็บ encoding ในตัวไฟล์
   return (
-    <div className="flex w-full gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
-      {/* CSV ถูกตัดออก — เขียน UTF-8 โดยไม่มี BOM ทำให้ชื่อไทยเพี้ยนทุกไฟล์เมื่อเปิดใน Excel
-          บน Windows ซึ่งเป็นที่เดียวที่ไฟล์พวกนี้ถูกเปิดจริง. xlsx เก็บ encoding ในตัวไฟล์. */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1"
-        onClick={() => window.open(`${baseUrl}&format=xlsx`, "_blank")}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" />}
       >
-        <FileSpreadsheet className="h-3.5 w-3.5" />
-        Excel
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1"
-        onClick={() => window.open(`${baseUrl}&format=pdf`, "_blank")}
-      >
-        <FileDown className="h-3.5 w-3.5" />
-        PDF
-      </Button>
-    </div>
+        <Download className="size-3.5" />
+        ส่งออก
+        <ChevronDown className="size-3.5 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuItem onClick={() => window.open(`${baseUrl}&format=xlsx`, "_blank")}>
+          <FileSpreadsheet className="size-4" />
+          Excel
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => window.open(`${baseUrl}&format=pdf`, "_blank")}>
+          <FileDown className="size-4" />
+          PDF
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

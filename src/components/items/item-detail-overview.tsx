@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { countCycleFor } from "@/lib/stock-count";
 import { formatSubCode, qrUrl, CONDITION_LABELS, STATUS_LABELS, type ItemStatus } from "@/lib/constants";
+import { isManualHold } from "@/lib/status-utils";
 import { canManageStock, isSelfBorrower } from "@/lib/roles";
 
 import { QrPrintDialog, type QrPrintItem } from "@/components/shared/qr-print-dialog";
@@ -126,7 +127,12 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
     profileSelfBorrowLimit: item.category.profile?.selfBorrowLimit ?? 1,
   };
   const canSelfBorrow = isBorrower && isSelfBorrowable(borrowRule);
-  const borrowMax = selfBorrowMax(borrowRule);
+  // ชำรุด/ส่งซ่อม/สูญหาย ของที่ไม่ได้นับรายชิ้น ไม่ขยับยอดคงเหลือ — ป้ายยังอ่านว่า "เหลือ 5"
+  // ทั้งที่ /api/borrow ปฏิเสธ. ตัดที่นี่ด้วย เพื่อให้ปุ่มกับคำตอบของ server ตรงกัน. ของนับ
+  // รายชิ้นไม่เข้าเงื่อนไขนี้: สถานะรวมของมันคือสถานะที่แรงที่สุดในบรรดาชิ้นย่อย ชำรุดชิ้นเดียว
+  // ก็จะบล็อกอีกเก้าชิ้นที่ยังดีอยู่.
+  const borrowHeld = !item.trackIndividually && isManualHold(item.status);
+  const borrowMax = borrowHeld ? 0 : selfBorrowMax(borrowRule);
   // เบิกใช้ vs ยืม — the card and the dialog have to say which one the button does.
   const borrowIsConsume = isConsumeOnly(borrowRule);
   const [borrowOpen, setBorrowOpen] = useState(false);
@@ -332,7 +338,9 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                     that the dialog cannot say is that there is nothing to open it for. */}
                 <div className="p-4 sm:p-5">
                   {borrowMax <= 0 ? (
-                    <p className="text-sm text-muted-foreground">ตอนนี้ไม่มีของพร้อมจ่าย</p>
+                    <p className="text-sm text-muted-foreground">
+                      {borrowHeld ? `สถานะ ${STATUS_LABELS[item.status]} — ยืมไม่ได้` : "ของหมด — ยืมไม่ได้ตอนนี้"}
+                    </p>
                   ) : (
                     <Button className="w-full" onClick={() => setBorrowOpen(true)}>
                       <HandCoins className="size-4 mr-1" />{borrowIsConsume ? "เบิกพัสดุนี้" : "ยืมพัสดุนี้"}

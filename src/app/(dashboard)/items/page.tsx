@@ -430,7 +430,7 @@ function ItemsContent() {
         key={bulkMoveOpen ? "open" : "closed"}
         open={bulkMoveOpen}
         onOpenChange={setBulkMoveOpen}
-        items={items.filter((i) => selected.has(i.id)).map((i) => ({ id: i.id, code: i.code, name: i.name }))}
+        items={items.filter((i) => selected.has(i.id)).map((i) => ({ id: i.id, code: i.code, name: i.name, location: i.location }))}
         onSuccess={() => { clearSelection(); refetch(); }}
       />
     </div>

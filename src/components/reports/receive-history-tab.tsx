@@ -87,7 +87,7 @@ export function ReceiveHistoryTab() {
   // ไม่งั้นมันลอยอยู่นอกการ์ดคนเดียวทั้งหน้า
   const chips = (
     <Tabs value={sub} onValueChange={(v) => selectSub(v as SubTab)}>
-      <TabsList variant="segment" className="w-full min-w-0 sm:w-fit" style={segmentStyle(spec.token)}>
+      <TabsList variant="segment" className="w-full min-w-0" style={segmentStyle(spec.token)}>
         <TabsIndicator />
         {SUB_TABS.map(({ value, label }) => (
           <TabsTrigger key={value} value={value}>

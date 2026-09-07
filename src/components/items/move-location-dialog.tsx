@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Printer, Check } from "lucide-react";
+import { MapPin, Printer, Check, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DIALOG_SHELL_FIT, DIALOG_BODY, Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -14,6 +14,8 @@ interface MoveItem {
   id: string;
   code: string;
   name: string;
+  /** ที่อยู่ปัจจุบันของรายการนี้ — ใช้กันการย้ายไปที่เดิม (ดู alreadyHere) */
+  location?: { building: string; floor: string; room: string; detail: string | null } | null;
 }
 
 interface Props {
@@ -36,10 +38,25 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
 
   const effectiveItems = done ? doneItems : items;
   const bulk = effectiveItems.length > 1;
-  const canSave = ref.kind === "ok";
+
+  // ย้ายไปที่ที่ของอยู่แล้ว = ไม่มีอะไรเกิดขึ้น: PATCH /api/items/[id] เขียน LocationChangeLog
+  // เฉพาะตอน locationId เปลี่ยนจริง ผลคือ toast เขียว "ย้ายเรียบร้อย" ทั้งที่ประวัติไม่มีแถวใหม่
+  // ซึ่งอ่านได้ว่าระบบทำงานพลาด. บอกไปตรงๆ ก่อนกดดีกว่าเงียบแล้วไม่เกิดอะไร
+  //
+  // เทียบด้วย building/floor/room/detail ไม่ใช่ id เพราะ picker คืนเป็นคำอธิบายที่ยังไม่ผูก id
+  // (ปลายทางอาจเป็นสถานที่ใหม่ที่ยังไม่มีในตาราง — resolveLocationId เพิ่งไปสร้างตอนกดบันทึก)
+  const sameAsRef = (loc: MoveItem["location"]) =>
+    ref.kind === "ok" && !!loc &&
+    loc.building === ref.building && loc.floor === ref.floor &&
+    loc.room === ref.room && (loc.detail ?? "") === (ref.detail ?? "");
+  // เลือกหลายรายการที่อยู่คนละที่ ย้ายได้ตามปกติ — บล็อกเฉพาะตอนไม่มีรายการไหนขยับเลย
+  const alreadyHere = ref.kind === "ok" && items.length > 0 && items.every((i) => sameAsRef(i.location));
+
+  const canSave = ref.kind === "ok" && !alreadyHere;
 
   const submit = async () => {
-    if (ref.kind !== "ok") return;
+    // ปุ่มถูก disable อยู่แล้ว การ์ดนี้ไว้กันทางเข้าอื่น (กด Enter, เปลี่ยนปลายทางระหว่างบันทึก)
+    if (ref.kind !== "ok" || alreadyHere) return;
     setSaving(true);
     // find-or-create the destination once (picker emits a descriptor, not an id).
     const locationId = await resolveLocationId(ref).catch(() => null);
@@ -96,6 +113,15 @@ export function MoveLocationDialog({ open, onOpenChange, items, currentLocationI
               initialLocationId={currentLocationId ?? null}
               onChange={setRef}
             />
+            {alreadyHere && (
+              <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  {bulk ? "ทุกรายการที่เลือกอยู่ที่นี่อยู่แล้ว" : `${items[0]?.name ?? "รายการนี้"} อยู่ที่นี่อยู่แล้ว`}
+                  {" — เลือกที่ตั้งอื่น"}
+                </span>
+              </p>
+            )}
           </div>
         )}
 
