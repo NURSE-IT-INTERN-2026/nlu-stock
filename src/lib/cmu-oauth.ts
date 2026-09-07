@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import { getJwtSecret } from "./auth-config";
+import { getJwtSecret, OAUTH_STATE_AUD } from "./auth-config";
 import { BASE_PATH } from "./base-path";
 
 /** Nonce half of the CSRF pair. The other half rides in the signed `state` param. */
@@ -72,10 +72,14 @@ export function callbackUri(headers: Headers, fallbackOrigin: string): string {
 // is useless: a forged state fails the signature, and a replayed state fails the nonce
 // compare. Without this an attacker can walk a signed-in user onto *their* account.
 
+// This token is handed to the browser in a URL, and it is signed with the same secret as the
+// session cookie — so it is stamped with its own `aud` and verified against it, and a session
+// token can never be replayed as a state (nor a state as a session). See auth-config.
 export async function signState(next: string) {
   const nonce = crypto.randomUUID();
   const token = await new SignJWT({ nonce, next })
     .setProtectedHeader({ alg: "HS256" })
+    .setAudience(OAUTH_STATE_AUD)
     .setExpirationTime("10m")
     .setIssuedAt()
     .sign(getJwtSecret());
@@ -85,7 +89,7 @@ export async function signState(next: string) {
 export async function readState(state: string, nonceCookie: string | undefined) {
   if (!nonceCookie) return null;
   try {
-    const { payload } = await jwtVerify(state, getJwtSecret());
+    const { payload } = await jwtVerify(state, getJwtSecret(), { audience: OAUTH_STATE_AUD });
     if (payload.nonce !== nonceCookie) return null;
     const next = typeof payload.next === "string" ? payload.next : "/";
     return { next };

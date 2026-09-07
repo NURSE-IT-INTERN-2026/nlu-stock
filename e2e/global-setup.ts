@@ -3,6 +3,7 @@ import { SignJWT } from "jose";
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import dotenv from "dotenv";
+import { SESSION_AUD } from "../src/lib/auth-config";
 
 dotenv.config({ path: ".env.test", override: true });
 
@@ -57,8 +58,13 @@ async function writeAuthFile(
   user: { id: string; email: string; name: string },
   role: string,
 ) {
+  // Must match lib/auth signToken exactly, `aud` included: the app rejects any JWT that is not
+  // stamped for a session, because the OAuth `state` token is signed with this same secret and
+  // is handed to the browser in a URL. A token minted here without it verifies as garbage and
+  // every scenario bounces to /login.
   const token = await new SignJWT({ userId: user.id, email: user.email, name: user.name, role })
     .setProtectedHeader({ alg: "HS256" })
+    .setAudience(SESSION_AUD)
     .setExpirationTime("24h")
     .setIssuedAt()
     .sign(new TextEncoder().encode(JWT_SECRET));

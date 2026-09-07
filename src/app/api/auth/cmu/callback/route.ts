@@ -88,7 +88,11 @@ export async function GET(request: NextRequest) {
   response.cookies.delete(OAUTH_STATE_COOKIE);
   response.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: request.nextUrl.protocol === "https:",
+    // NODE_ENV, not request.nextUrl.protocol: the faculty server and ngrok terminate TLS in
+    // front of us, so the socket here is plain http even though the browser is on https —
+    // the same reason callbackUri() has to read x-forwarded-proto. Deriving the flag from the
+    // socket dropped Secure off the 24h session cookie in production. Matches api/auth/logout.
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24, // 24h — same as the JWT

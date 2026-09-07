@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(url);
   response.cookies.set(OAUTH_STATE_COOKIE, nonce, {
     httpOnly: true,
-    secure: request.nextUrl.protocol === "https:",
+    // See the callback route: TLS is terminated upstream, so the socket protocol says http
+    // in production and would strip Secure off the CSRF nonce.
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 600, // matches the 10m state JWT
