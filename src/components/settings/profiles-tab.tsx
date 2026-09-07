@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getProfiles, createProfile, updateProfile, deleteProfile } from "@/lib/api";
+import { refreshLookups } from "@/hooks/use-async";
 import type { ProfileOption } from "@/lib/api";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -153,6 +154,8 @@ export function ProfilesTab() {
       }
       setDialogOpen(false);
       fetchProfiles();
+      // tab อื่นของหน้าตั้งค่ากับ dialog ที่ mount ค้างอยู่ ไม่มีทางรู้เรื่องนี้เองถ้าไม่บอก
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     }
@@ -163,6 +166,7 @@ export function ProfilesTab() {
     try {
       await updateProfile(p.id, { isActive: !p.isActive });
       fetchProfiles();
+      refreshLookups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "อัปเดตไม่สำเร็จ");
     }
@@ -176,6 +180,7 @@ export function ProfilesTab() {
     try {
       await deleteProfile(id);
       toast.success("ลบประเภทสำเร็จ");
+      refreshLookups();
       fetchProfiles();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
@@ -226,12 +231,12 @@ export function ProfilesTab() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="p-code" required>รหัสย่อ</Label>
-          <Input id="p-code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="MED" maxLength={6} className="bg-card font-mono uppercase" />
+          <Input id="p-code" disabled={locked} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="MED" maxLength={6} className="bg-card font-mono uppercase" />
           <p className="text-xs text-muted-foreground mt-1">ตัวอักษรภาษาอังกฤษพิมพ์ใหญ่ 2-6 ตัว — ใช้ในรหัสพัสดุ NLU-รหัส-001</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="p-dispense" required>ประเภทการเบิกจ่าย</Label>
-          <Select value={form.dispenseType} onValueChange={(v) => v && setForm({ ...form, dispenseType: v as FormState["dispenseType"] })}>
+          <Select disabled={locked} value={form.dispenseType} onValueChange={(v) => v && setForm({ ...form, dispenseType: v as FormState["dispenseType"] })}>
             <SelectTrigger id="p-dispense" className="bg-card"><SelectValue>{dispenseLabel(form.dispenseType)}</SelectValue></SelectTrigger>
             <SelectContent>
               {DISPENSE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -239,6 +244,10 @@ export function ProfilesTab() {
           </Select>
           <p className="text-xs text-muted-foreground mt-1">{DISPENSE_HELP[form.dispenseType]}</p>
         </div>
+        {/* หมายเหตุตัวเดียวคุมทั้งสามช่องที่แช่ไว้ (รหัสย่อ, ประเภทการเบิกจ่าย, ติดตามทรัพย์สิน) —
+            handleSave ไม่ส่งสามช่องนี้ตอน locked ปล่อยให้พิมพ์ได้คือให้แก้แล้วเงียบหาย
+            ต้องอยู่เหนือกล่องยืมเอง ไม่งั้นอ่านเป็นคำเตือนของช่องนั้นซึ่งตรงข้ามกับความจริง */}
+        {locked && <p className="text-xs text-amber-600">⚠ รหัสย่อ ประเภทการเบิกจ่าย และติดตามทรัพย์สิน ล็อกไว้เพราะประเภทนี้มีพัสดุอยู่แล้ว</p>}
         <div className="space-y-2 rounded-lg border bg-card p-3">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
@@ -250,9 +259,6 @@ export function ProfilesTab() {
             </div>
             <Switch id="p-asset" disabled={locked} checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
           </div>
-          {/* Sits with the switch it applies to, not at the bottom of the box — under the
-              ยืมเอง fields it read as a warning about them, which is the opposite of true. */}
-          {locked && <p className="text-xs text-amber-600">⚠ ล็อกไว้เพราะประเภทนี้มีพัสดุอยู่แล้ว</p>}
         </div>
 
         <div className="space-y-2 rounded-lg border bg-card p-3">
