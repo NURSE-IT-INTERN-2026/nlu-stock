@@ -4,6 +4,33 @@ import { isManualHold, WRITTEN_OFF } from "@/lib/status-utils";
 
 type TxClient = Prisma.TransactionClient;
 
+/**
+ * จองแถว items ไว้ก่อนอ่านค่าที่จะใช้ตัดสินใจ — ทุก transaction ที่ขยับสต็อกต้องเรียกอันนี้เป็น
+ * อย่างแรก ไม่งั้น lock ไม่มีความหมาย: ผู้เขียนคนเดียวที่ไม่ได้จองก็ทำให้ invariant พังได้ทั้งวง.
+ *
+ * กันสองอาการที่ compare-and-set บน availableQty กันไม่ได้:
+ *
+ *  1. TOCTOU ของพัสดุรายชิ้น — อ่าน sub.status = AVAILABLE แล้วค่อยเขียน. สองคนอ่านพร้อมกัน
+ *     เห็นว่างทั้งคู่ ของชิ้นเดียวออกไปสองใบ.
+ *  2. write-skew ของ recomputeItemCounts — availableQty ของ tracked item คำนวณจาก
+ *     COUNT(sub_items) ใน JS. A ยืม C01, B ยืม C02 พร้อมกัน ต่างฝ่ายต่างนับก่อนอีกฝ่าย commit
+ *     ได้เลขเดียวกันทั้งคู่ แถว items ถูกล็อกตอน UPDATE ก็จริง แต่ค่าที่จะเขียนคำนวณเสร็จไปแล้ว
+ *     จาก snapshot เก่า.
+ *
+ * ล็อกทีละ id เรียงตาม id: ลำดับเดียวกันทุก request = ตะกร้าสองใบที่มีของซ้ำกันคนละลำดับไม่
+ * ไขว้กันจนเป็น deadlock. `WHERE id IN (...) FOR UPDATE` ทำแบบนี้ไม่ได้ เพราะลำดับที่ Postgres
+ * ล็อกคือลำดับที่ scan คืนมา ซึ่งไม่การันตี.
+ *
+ * id ที่ไม่มีจริงล็อกไม่ติดเฉยๆ — คนเรียกเป็นคนบอกเองว่า "ไม่พบพัสดุ".
+ */
+export async function lockItems(tx: TxClient, itemIds: (string | null | undefined)[]): Promise<void> {
+  const ids = [...new Set(itemIds.filter((id): id is string => !!id))].sort();
+  for (const id of ids) {
+    // ตาราง items ตาม @@map — `FROM "Item"` ไม่มีอยู่จริงใน schema นี้
+    await tx.$executeRaw`SELECT id FROM items WHERE id = ${id} FOR UPDATE`;
+  }
+}
+
 // Higher rank = wins when an item has sub-items in mixed states.
 // "Needs attention" states beat "in use" states beat "available".
 // DISPOSED top: once removed from inventory it shouldn't be masked by other states.
@@ -212,7 +239,15 @@ export function damagedQtyOf(
  * `recoveredAt` is what takes the booking off the ชำรุด bucket (damagedQtyOf above), and it is
  * stamped inside the same transaction as the qty move so the two can never disagree.
  *
- * Caller must have checked the booking is open; `label` heads the audit adjustment row.
+ * Stamping it is also how this function CLAIMS the booking: the write below is conditional on
+ * the row still being open, and losing that race throws instead of paying the qty out twice.
+ * A caller's own `if (adj.recoveredAt)` guard cannot do this job — it reads a snapshot, and
+ * whether that snapshot is still true by the time the qty moves depends on the caller having
+ * taken the item lock BEFORE the read. api/repairs DELETE did not, so two staff cancelling the
+ * same แจ้งชำรุด both passed the guard and both credited the units back. The check belongs on
+ * the write, where the database can settle it, rather than in each door that leads here.
+ *
+ * `reason` heads the audit adjustment row.
  */
 export async function restoreDamagedQty(
   tx: TxClient,
@@ -227,7 +262,11 @@ export async function restoreDamagedQty(
   const { adj, reason, note, userId } = input;
   const qty = adj.previousQty - adj.newQty;
 
-  await tx.stockAdjustment.update({ where: { id: adj.id }, data: { recoveredAt: new Date() } });
+  const claimed = await tx.stockAdjustment.updateMany({
+    where: { id: adj.id, recoveredAt: null },
+    data: { recoveredAt: new Date() },
+  });
+  if (claimed.count === 0) throw new Error("รายการชำรุดนี้ถูกปิดไปแล้ว");
 
   const before = await tx.item.findUniqueOrThrow({ where: { id: adj.itemId }, select: { availableQty: true } });
   if (adj.lotId) {

@@ -1,6 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { ItemStatus, LoanType } from "@/generated/prisma/enums";
-import { allocateAcrossLots, recomputeItemCounts } from "@/lib/stock";
+import { allocateAcrossLots, lockItems, recomputeItemCounts } from "@/lib/stock";
 import { logReturn } from "@/lib/returns";
 
 type TxClient = Prisma.TransactionClient;
@@ -145,6 +145,9 @@ export async function assembleKitSets(
   if (kit.category.profile.code !== "KIT") throw new Error(`${kit.name} ไม่ใช่อุปกรณ์ประกอบวิชา`);
 
   const components = await loadKitComponents(tx, kitItemId);
+  // ประกอบชุด = ตัดของหลายรายการพร้อมกัน ล็อกทั้งชุดกับตัว KIT เองก่อนเริ่มตัด (lockItems
+  // เรียงตาม id ให้แล้ว) — ชุดสองชุดที่ใช้ของซ้ำกันคนละลำดับจึงไม่ไขว้ล็อกกันเป็น deadlock.
+  await lockItems(tx, [kitItemId, ...components.map((c) => c.itemId)]);
   if (components.length === 0) {
     throw new Error("ชุดนี้ยังไม่ได้ผูกส่วนประกอบกับพัสดุจริง — แก้รายการส่วนประกอบก่อน");
   }
@@ -429,6 +432,18 @@ export async function cancelKitSet(
   const setLabel = `${set.item.code}-${set.subCode}`;
   const affected = new Set<string>();
 
+  // ของที่คืนโดยจำนวนไม่ได้อยู่ใน kitContents (นั่นมีแต่ชิ้นที่นับรายชิ้น) ต้องอ่านสูตรมาก่อน
+  // เพื่อจะได้ล็อกทุกอย่างในคราวเดียว
+  const components = await loadKitComponents(tx, set.itemId);
+  // ล็อกครั้งเดียว ก่อนเขียนอะไรทั้งสิ้น — ทางกลับของ assembleKitSets และต้องเป็นชุด id ชุด
+  // เดียวกับที่ assemble ล็อก. แยกล็อกสองรอบไม่ได้: lockItems เรียงให้แค่ภายในรอบของมันเอง
+  // ยกเลิกชุดที่ถือ id สูงไว้แล้วไปขอ id ต่ำ สวนกับประกอบชุดที่ไล่จากต่ำไปสูง = deadlock.
+  await lockItems(tx, [
+    set.itemId,
+    ...set.kitContents.map((p) => p.itemId),
+    ...components.map((c) => c.itemId),
+  ]);
+
   // 1. Tracked pieces: back on the shelf, INUSE record closed.
   for (const piece of set.kitContents) {
     await tx.subItem.update({
@@ -457,7 +472,6 @@ export async function cancelKitSet(
 
   // 2. Non-tracked components. Durables go back by qty; consumables were never cut and are
   //    only listed so staff know what is still physically in the box.
-  const components = await loadKitComponents(tx, set.itemId);
   const consumables: CancelSetResult["consumables"] = [];
   for (const c of components) {
     if (c.kind === "CONSUMABLE") {
