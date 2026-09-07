@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
   const profileId = params.get("profileId");
   if (profileId) where.category = { profileId };
 
-  // Status multi-select — see itemStatusWhere. AND (not OR) because where.OR is already
-  // taken by search / dueCount / alerts.
+  // Status multi-select — see itemStatusWhere. AND (not OR) because where.OR belongs to
+  // search. Every other filter that wants an OR goes through andWhere for the same reason.
   const statusList = (params.get("status") ?? "").split(",").filter(Boolean) as ItemStatus[];
   andWhere(where, itemStatusWhere(statusList));
 
@@ -90,8 +90,21 @@ export async function GET(request: NextRequest) {
   // ถึงรอบตรวจนับ. null = never counted (legacy row the backfill missed) → also due.
   const dueCount = params.get("dueCount");
   if (dueCount === "true") {
-    where.OR = [{ nextCountDate: null }, { nextCountDate: { lt: now } }];
+    // andWhere, not where.OR = : search above already owns where.OR, and assigning it here
+    // threw the typed term away — the tab answered every due-count item instead of the one
+    // being looked for, silently, with the result counter agreeing.
+    andWhere(where, { OR: [{ nextCountDate: null }, { nextCountDate: { lt: now } }] });
   }
+
+  // ถึงรอบตรวจนับ: ค้างนานสุดขึ้นก่อน. ผู้ใช้ขอ "ย้อนหลัง 1 เดือน" ซึ่งเป็นการเรียง ไม่ใช่การกรอง —
+  // ของที่เลยกำหนดนานกว่าหนึ่งเดือนคือของที่แย่ที่สุดในลิสต์ กรองมันทิ้งคือซ่อนแถวที่เร่งที่สุด. เรียงแบบนี้
+  // แล้วเดือนล่าสุดอยู่ในสายตาอยู่แล้ว โดยที่ของค้างเก่ายังนับอยู่ใน badge และยังเปิดเจอ.
+  // nulls first: null = ไม่เคยตรวจนับ ซึ่ง isCountDue นับว่าถึงกำหนดแล้ว จึงต้องอยู่บนสุด ไม่ใช่ล่างสุด
+  // แบบที่ Postgres เรียง ASC ให้เอง. code asc ต่อท้ายให้เป็น total order — cursor ข้างล่างพึ่งมัน.
+  const listOrder: Prisma.ItemOrderByWithRelationInput[] =
+    dueCount === "true"
+      ? [{ nextCountDate: { sort: "asc", nulls: "first" } }, { code: "asc" }]
+      : [{ code: "asc" }];
 
   // Union mode: items matching ANY alert condition (used by /alerts page).
   const alerts = params.get("alerts");
@@ -99,13 +112,17 @@ export async function GET(request: NextRequest) {
     const lowStockIds = (await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM items WHERE "availableQty" < "minThreshold" AND "isActive" = true
     `).map((r) => r.id);
-    where.OR = [
-      { id: { in: lowStockIds } },
-      { lots: { some: expiryAlert } },
-      { nextMaintenanceDate: { lt: now } },
-      { nextCountDate: null },
-      { nextCountDate: { lt: now } },
-    ];
+    // AND, same reason as dueCount above: this is "matches any alert" narrowed by whatever
+    // else is filtering, not a replacement for it.
+    andWhere(where, {
+      OR: [
+        { id: { in: lowStockIds } },
+        { lots: { some: expiryAlert } },
+        { nextMaintenanceDate: { lt: now } },
+        { nextCountDate: null },
+        { nextCountDate: { lt: now } },
+      ],
+    });
   }
 
   // When a status filter is on, the list ships the matching pieces so the table can expand
@@ -181,15 +198,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (useCursor) {
-    // Cursor mode (mobile load-more). orderBy code asc is a stable total order (code @unique),
-    // so cursor on id paginates without skips/dups.
+    // Cursor mode (mobile load-more). listOrder always ends in code asc, a stable total order
+    // (code @unique), so cursor on id paginates without skips/dups.
     const cursorRow = cursorParam
       ? await prisma.item.findUnique({ where: { id: cursorParam }, select: { id: true } })
       : null;
     const effectiveCursor = cursorRow?.id; // invalid/stale cursor → falls back to first page
     const fetched = await prisma.item.findMany({
       where,
-      orderBy: { code: "asc" },
+      orderBy: listOrder,
       take: limit + 1, // ponytail: +1 to know exactly whether more remain (exact nextCursor, no false "has more")
       ...(effectiveCursor ? { cursor: { id: effectiveCursor }, skip: 1 } : {}),
       include: itemInclude,
@@ -203,7 +220,7 @@ export async function GET(request: NextRequest) {
   }
 
   const [rawItems, total] = await Promise.all([
-    prisma.item.findMany({ where, skip, take, orderBy: { code: "asc" }, include: itemInclude }),
+    prisma.item.findMany({ where, skip, take, orderBy: listOrder, include: itemInclude }),
     prisma.item.count({ where }),
   ]);
   return json({ items: rawItems.map(transformItem), page, perPage, total, nextCursor: null });
