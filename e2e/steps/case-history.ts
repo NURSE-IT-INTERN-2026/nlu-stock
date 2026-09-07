@@ -30,7 +30,7 @@ When("ฉันรับ C01 คืนจากซ่อมด้วยผล {s
   await page.goto("/repairs?tab=receive");
   const row = page
     .getByText(bdd.item.code, { exact: false })
-    .locator(`xpath=ancestor::div[.//button[contains(., "รับคืนจากส่งซ่อม")]][1]`)
+    .locator(`xpath=ancestor::*[self::tr or self::div][.//button[contains(., "รับคืนจากส่งซ่อม") or contains(@aria-label, "รับคืนจากส่งซ่อม")]][1]`)
     .first();
   await expect(row).toBeVisible({ timeout: 15_000 });
   await row.getByRole("button", { name: "รับคืนจากส่งซ่อม", exact: true }).click();

@@ -4,6 +4,7 @@ import { test as base } from "playwright-bdd";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import { Pool } from "pg";
 import { withBase } from "../src/lib/base-path";
+import { DEFAULT_LOCATION_ID } from "../src/lib/default-location";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -23,6 +24,25 @@ export async function dbAvailableSubItem(itemId: string) {
     [itemId]
   );
   return rows[0] ?? null;
+}
+
+/**
+ * A real registered location for anything the suite creates. Every item born through the
+ * เพิ่มรายการ wizard has one (the wizard blocks ถัดไป until อาคาร/ชั้น/ห้อง are filled), so a
+ * fixture item without one is not a cheaper item — it is an item that cannot exist, and the
+ * คืนเข้าคลัง dialog says so out loud ("ยังไม่ได้ตั้งสถานที่จัดเก็บให้พัสดุนี้").
+ * Skips the seed fallback id for the same reason src/lib/default-location.ts exists.
+ */
+let homeLocationId: string | null = null;
+export async function dbHomeLocation() {
+  if (homeLocationId) return homeLocationId;
+  const { rows } = await pool.query(
+    `SELECT id FROM locations WHERE id <> $1 ORDER BY id LIMIT 1`,
+    [DEFAULT_LOCATION_ID]
+  );
+  if (!rows[0]) throw new Error("no location in DB — reseed before running e2e");
+  homeLocationId = rows[0].id as string;
+  return homeLocationId;
 }
 
 /** First open lot id + remainingQty for a consumable item. */
@@ -84,6 +104,7 @@ export async function makeTracked(
       issueUnitId: unit.id,
       copyCount,
       initialQty: 0,
+      locationId: await dbHomeLocation(),
     },
   });
   if (!res.ok()) throw new Error(`makeTracked failed: ${res.status()}`);

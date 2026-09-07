@@ -78,6 +78,9 @@ When(
     await dialog.getByRole("combobox").click();
     await page.getByRole("option", { name: result }).click();
     await dialog.getByRole("button", { name: "บันทึก", exact: true }).click();
+    // ต้องรอ toast จริง ๆ: คลิกแล้ว dialog ยังค้างสถานะกำลังบันทึกอยู่อีกครู่ สเต็ปถัดไปที่อ่านสถานะ
+    // ชิ้นทันทีจะอ่านค่าก่อนบันทึกเสร็จ แล้วรายงานว่าเป็นบั๊กของระบบทั้งที่เป็นจังหวะของเทสเอง
+    await expect(page.getByText(/บันทึกการบำรุงรักษาแล้ว|รับคืนจากบำรุงรักษาแล้ว/).first()).toBeVisible({ timeout: 15_000 });
   }
 );
 
@@ -92,15 +95,19 @@ When(
     await dialog.getByRole("combobox").click();
     await page.getByRole("option", { name: result }).click();
     await dialog.getByRole("button", { name: "บันทึก", exact: true }).click();
+    // ต้องรอ toast จริง ๆ: คลิกแล้ว dialog ยังค้างสถานะกำลังบันทึกอยู่อีกครู่ สเต็ปถัดไปที่อ่านสถานะ
+    // ชิ้นทันทีจะอ่านค่าก่อนบันทึกเสร็จ แล้วรายงานว่าเป็นบั๊กของระบบทั้งที่เป็นจังหวะของเทสเอง
+    await expect(page.getByText(/บันทึกการบำรุงรักษาแล้ว|รับคืนจากบำรุงรักษาแล้ว/).first()).toBeVisible({ timeout: 15_000 });
   }
 );
 
-/** Both panels stay mounted (one hidden) — skip their twin search boxes and scope
- *  straight to the row div that carries our code and the action button. */
+/** Both panels stay mounted (one hidden) — skip their twin search boxes and scope straight to
+ *  the row that carries our code and the action button. Desktop draws a <tr> and mobile a <div>,
+ *  and the table's buttons are icon-only, so the name lives in aria-label rather than the text. */
 function rowWithButton(page: import("@playwright/test").Page, code: string, button: string) {
   return page
     .getByText(code, { exact: false })
-    .locator(`xpath=ancestor::div[.//button[contains(., "${button}")]][1]`)
+    .locator(`xpath=ancestor::*[self::tr or self::div][.//button[contains(., "${button}") or contains(@aria-label, "${button}")]][1]`)
     .first();
 }
 
@@ -109,10 +116,9 @@ Then(
   async ({ page, bdd }, tab: string, badge: string) => {
     await page.goto("/repairs?tab=receive");
     await expect(page.getByRole("button", { name: /^รับคืนจากส่งซ่อม/ }).first()).toBeVisible();
-    await expect(page.getByText(bdd.item.code, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByText(badge, { exact: true }).filter({ visible: true }).first()
-    ).toBeVisible();
+    const row = rowWithButton(page, bdd.item.code, "รับคืนจากส่งซ่อม");
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row.getByText(badge, { exact: true })).toBeVisible();
   }
 );
 
@@ -121,10 +127,9 @@ Then(
   async ({ page, bdd }, tab: string, badge: string) => {
     await page.goto("/repairs?tab=receive");
     await expect(page.getByRole("button", { name: /^รับคืนจากส่งซ่อม/ }).first()).toBeVisible();
-    await expect(page.getByText(bdd.item.code, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByText(badge, { exact: true }).filter({ visible: true }).first()
-    ).toBeVisible();
+    const row = rowWithButton(page, bdd.item.code, "รับคืนจากส่งซ่อม");
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row.getByText(badge, { exact: true })).toBeVisible();
   }
 );
 

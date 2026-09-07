@@ -14,11 +14,15 @@ When(
     await page.goto(`/items/${bdd.item.code}`);
     await page.getByRole("button", { name: label }).click();
     const dialog = page.getByRole("dialog");
-    // LocationCascadePicker fields carry placeholders, not labels
-    // Comboboxes are controlled inputs — typing IS selecting (seeded: อาคาร 2 / ชั้น 4 / 402)
-    await dialog.getByPlaceholder("เช่น อาคาร 2").fill("อาคาร 2");
-    await dialog.getByPlaceholder("เช่น 4", { exact: true }).fill("ชั้น 4");
+    // LocationCascadePicker fields carry placeholders, not labels. พิมพ์อย่างเดียวไม่พอ:
+    // combobox remount ตอนตัวเลือกโหลดเสร็จแล้วลบค่าที่พิมพ์ทิ้ง (เคยหลุดเป็นเทสแดงสลับรอบ)
+    // — พิมพ์ prefix แล้วคลิกตัวเลือกจาก dropdown เหมือนที่ move.ts ทำ
+    await dialog.getByPlaceholder("เช่น อาคาร 2").fill("อาคาร");
+    await dialog.getByRole("button", { name: "อาคาร 2", exact: true }).first().click();
+    await dialog.getByPlaceholder("เช่น 4", { exact: true }).fill("ชั้น");
+    await dialog.getByRole("button", { name: "ชั้น 4", exact: true }).first().click();
     await dialog.getByPlaceholder("เช่น 402", { exact: true }).fill("402");
+    await dialog.getByRole("button", { name: "402", exact: true }).first().click();
     // the cascade emits its ref from an effect — give it a tick before saving,
     // or the dialog falls back to the previous location and nothing moves
     await page.waitForTimeout(400);

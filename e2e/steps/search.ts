@@ -1,5 +1,5 @@
 import { createBdd } from "playwright-bdd";
-import { test, expect, pool } from "../fixtures";
+import { test, expect, pool, dbHomeLocation } from "../fixtures";
 
 const { When, Then } = createBdd(test);
 
@@ -78,6 +78,7 @@ When(
         categoryId: cat.id,
         issueUnitId: unit.id,
         initialQty: 1,
+        locationId: await dbHomeLocation(),
       },
     });
     expect(res.ok()).toBeTruthy();

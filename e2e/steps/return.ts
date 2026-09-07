@@ -10,7 +10,7 @@ Given("มีการยืมชิ้นย่อย C01 ของ X ค้�
   bdd.item = item;
 });
 
-Given("มีรายการ X ถูกนำไปตั้งใช้ในห้องค้างอยู่", async ({ request, bdd, uniqueCode }) => {
+Given("มีรายการ X ที่มีสถานที่จัดเก็บตามทะเบียน ถูกนำไปตั้งใช้ในห้องค้างอยู่", async ({ request, bdd, uniqueCode }) => {
   const item = await createCountItem(request, uniqueCode, 3);
   await stationInUse(request, item.id);
   bdd.item = item;
@@ -79,6 +79,8 @@ When(
       .locator("xpath=ancestor-or-self::*[contains(@class,'card')][1]");
     await row.getByRole("button", { name: action }).click();
     const dialog = page.getByRole("dialog");
+    // ของที่คืนได้ต้องมีที่ให้คืน — ถ้าตรงนี้เป็น placeholder แปลว่า fixture สร้างของที่เกิดจริงไม่ได้
+    await expect(dialog.getByText("ยังไม่ได้ตั้งสถานที่จัดเก็บให้พัสดุนี้")).toHaveCount(0);
     await dialog.getByRole("button", { name: action }).click();
   }
 );

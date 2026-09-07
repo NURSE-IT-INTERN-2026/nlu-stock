@@ -1,0 +1,252 @@
+<title>คู่มืออ่านรหัส NLU</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#F4F6F8; --surface:#FFFFFF; --surface-2:#EDF1F5;
+    --ink:#14202C; --muted:#5B6C7C; --line:#DCE3EA;
+    --accent:#1F5FA8;
+    --seg-fixed:#7C8A97;   /* NLU */
+    --seg-cat:#1F5FA8;     /* หมวด */
+    --seg-num:#0E7167;     /* เลขวิ่ง */
+    --seg-copy:#7A3E8F;    /* สำเนา */
+    --seg-year:#9A6407;    /* ปี */
+    --ok:#0E7167; --warn:#9A6407;
+    --shadow:0 1px 2px rgba(20,32,44,.06), 0 8px 24px -16px rgba(20,32,44,.35);
+  }
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans Thai","Noto Sans Thai",system-ui,sans-serif;
+    font-size:16px; line-height:1.7;
+  }
+  .wrap{max-width:940px; margin:0 auto; padding:40px 20px 80px; display:flex; flex-direction:column; gap:44px;}
+
+  header{display:flex; flex-direction:column; gap:10px; border-bottom:2px solid var(--ink); padding-bottom:22px;}
+  .eyebrow{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);}
+  h1{font-family:"Bai Jamjuree","IBM Plex Sans Thai",sans-serif; font-weight:700; font-size:clamp(30px,5vw,44px); line-height:1.15; margin:0; text-wrap:balance;}
+  .lede{color:var(--muted); max-width:62ch; margin:0;}
+
+  section{display:flex; flex-direction:column; gap:18px;}
+  h2{font-family:"Bai Jamjuree","IBM Plex Sans Thai",sans-serif; font-weight:600; font-size:24px; margin:0; display:flex; align-items:baseline; gap:12px; text-wrap:balance;}
+  h2 .tag{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500; color:var(--muted); letter-spacing:.08em;}
+  h3{font-family:"Bai Jamjuree","IBM Plex Sans Thai",sans-serif; font-weight:600; font-size:17px; margin:0;}
+  p{margin:0; max-width:66ch;}
+  .note{color:var(--muted); font-size:14.5px;}
+
+  /* anatomy */
+  .anatomy{background:var(--surface); border:1px solid var(--line); border-radius:4px; box-shadow:var(--shadow); padding:22px 24px; display:flex; flex-direction:column; gap:18px; overflow-x:auto;}
+  .code{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:clamp(20px,3.6vw,30px); letter-spacing:.01em; white-space:nowrap;}
+  .code .d{color:var(--seg-fixed); font-weight:400;}
+  .s-fixed{color:var(--seg-fixed);} .s-cat{color:var(--seg-cat);} .s-num{color:var(--seg-num);}
+  .s-copy{color:var(--seg-copy);} .s-year{color:var(--seg-year);}
+  .legend{display:flex; flex-wrap:wrap; gap:10px 28px; list-style:none; margin:0; padding:0;}
+  .legend li{display:flex; gap:10px; align-items:flex-start; min-width:200px; flex:1 1 220px;}
+  .swatch{width:3px; border-radius:2px; align-self:stretch; margin-top:4px; margin-bottom:4px;}
+  .legend .k{font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600; display:block;}
+  .legend .v{font-size:14px; color:var(--muted); line-height:1.5; display:block;}
+
+  table{border-collapse:collapse; width:100%; font-size:14.5px;}
+  .scroller{overflow-x:auto; border:1px solid var(--line); border-radius:4px; background:var(--surface);}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top;}
+  thead th{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:500; background:var(--surface-2);}
+  tbody tr:last-child td{border-bottom:none;}
+  td code, .mono{font-family:"IBM Plex Mono",monospace; font-size:13.5px; font-variant-numeric:tabular-nums; white-space:nowrap;}
+
+  .rows{display:flex; flex-direction:column; gap:0; border-top:1px solid var(--line);}
+  .row{display:grid; grid-template-columns:minmax(160px,220px) 1fr; gap:6px 24px; padding:14px 0; border-bottom:1px solid var(--line);}
+  @media (max-width:620px){ .row{grid-template-columns:1fr;} }
+  .row .lbl{font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600;}
+  .row .txt{font-size:15px; color:var(--muted);}
+  .row .txt b{color:var(--ink); font-weight:600;}
+
+  .callout{border-left:3px solid var(--warn); padding:2px 0 2px 16px; color:var(--muted); font-size:14.5px; max-width:66ch;}
+  .callout b{color:var(--ink);}
+
+  footer{border-top:1px solid var(--line); padding-top:18px; color:var(--muted); font-size:13px; display:flex; flex-wrap:wrap; gap:6px 18px;}
+  footer .mono{font-size:12.5px;}
+  a{color:var(--accent);}
+  a:focus-visible, :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">คลังพัสดุ · คณะพยาบาลศาสตร์</div>
+  <h1>รหัสในระบบอ่านยังไง</h1>
+  <p class="lede">ทุกตัวเลขที่เห็นบนป้าย บนใบเบิก และในหน้าจอ มีที่มาและกติกาของมัน หน้านี้แยกให้ดูทีละส่วนว่าแต่ละช่วงของรหัสหมายถึงอะไร และอันไหนที่ห้ามเขียนทับ</p>
+</header>
+
+<!-- 1. ITEM CODE -->
+<section>
+  <h2>รหัสพัสดุ <span class="tag">Item.code</span></h2>
+  <p>รหัสประจำตัวของ “รายการ” หนึ่งรายการ ตัวเดียวกับที่พิมพ์ลงป้าย QR ตั้งแล้วไม่เปลี่ยนอีก</p>
+
+  <div class="anatomy">
+    <div class="code"><span class="s-fixed">NLU</span><span class="d">-</span><span class="s-cat">BAT</span><span class="d">-</span><span class="s-num">043</span></div>
+    <ul class="legend">
+      <li><span class="swatch" style="background:var(--seg-fixed)"></span><span><span class="k">NLU</span><span class="v">คงที่ทุกใบ ย่อจากชื่อคลัง ไม่มีความหมายอื่น</span></span></li>
+      <li><span class="swatch" style="background:var(--seg-cat)"></span><span><span class="k">BAT</span><span class="v">รหัสประเภทพัสดุ 3 ตัว — บอกว่าของชิ้นนี้เล่นตามกติกาแบบไหน</span></span></li>
+      <li><span class="swatch" style="background:var(--seg-num)"></span><span><span class="k">043</span><span class="v">เลขวิ่ง 3 หลักของประเภทนั้น เริ่ม 001 ใหม่ในแต่ละประเภท</span></span></li>
+    </ul>
+  </div>
+
+  <h3>รหัสประเภท</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>รหัส</th><th>ประเภท</th><th>วิธีนับของ</th></tr></thead>
+      <tbody>
+        <tr><td><code>CON</code></td><td>วัสดุสิ้นเปลือง</td><td>นับจำนวนคงเหลือ เบิกแล้วไม่คืน มีล็อตได้</td></tr>
+        <tr><td><code>DUR</code></td><td>วัสดุคงทน</td><td>ยืม-คืน นับเป็นจำนวน ไม่แยกชิ้น</td></tr>
+        <tr><td><code>KRU</code></td><td>ครุภัณฑ์</td><td>ยืม-คืน รายชิ้น มีข้อมูลจัดซื้อ/ประกัน</td></tr>
+        <tr><td><code>BAT</code></td><td>หนังสือและของเล่น</td><td>ยืม-คืน รายชิ้น</td></tr>
+        <tr><td><code>KIT</code></td><td>อุปกรณ์ประกอบวิชา</td><td>ยืม-คืน รายชุด ชุดอยู่ถาวร ยืมซ้ำได้หลังคืน</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">เพิ่มประเภทใหม่ได้จากหน้าตั้งค่า รหัส 3 ตัวที่ตั้งไว้จะกลายเป็นช่วงกลางของรหัสพัสดุทันที</p>
+
+  <div class="callout"><b>รหัสเก่ายาวกว่านี้</b> ของที่ขึ้นทะเบียนก่อนปี 2569 บางตัวมีช่วงที่สี่ต่อท้าย เช่น <span class="mono">NLU-BAT-013-S06</span> — <span class="mono">S06</span> คือขนาดชุด (6 เล่ม) ตอนนี้เลิกใช้แล้ว แต่ป้ายที่ติดไปแล้วยังสแกนได้ปกติ ระบบอ่านแค่ช่วงที่สาม รหัสเดิม <span class="mono">ELE</span> ย้ายไปรวมกับ <span class="mono">KRU</span> ส่วน <span class="mono">BOOK</span> กับ <span class="mono">TOY</span> รวมเป็น <span class="mono">BAT</span></div>
+</section>
+
+<!-- 2. COPY -->
+<section>
+  <h2>รหัสชิ้น <span class="tag">SubItem.subCode</span></h2>
+  <p>ของที่ติดตามรายชิ้น (ครุภัณฑ์ หนังสือ ของเล่น ชุดวิชา) แต่ละชิ้นมีรหัสของตัวเองต่อท้ายรหัสพัสดุ</p>
+
+  <div class="anatomy">
+    <div class="code"><span class="s-fixed">NLU</span><span class="d">-</span><span class="s-cat">BAT</span><span class="d">-</span><span class="s-num">043</span><span class="d">-</span><span class="s-copy">C02</span></div>
+    <ul class="legend">
+      <li><span class="swatch" style="background:var(--seg-num)"></span><span><span class="k">NLU-BAT-043</span><span class="v">รายการแม่ — ชื่อ ประเภท ที่เก็บ อยู่ตรงนี้</span></span></li>
+      <li><span class="swatch" style="background:var(--seg-copy)"></span><span><span class="k">C02</span><span class="v">ชิ้นที่ 2 ของรายการนี้ ซ่อม ยืม หาย แยกกันได้รายชิ้น</span></span></li>
+    </ul>
+  </div>
+
+  <div class="callout"><b>มีชิ้นเดียวจะไม่เห็น <span class="mono">C01</span></b> เพราะชิ้นนั้นคือตัวรายการอยู่แล้ว หน้าจอจึงแสดงแค่ <span class="mono">NLU-KRU-007</span> — พอเพิ่มชิ้นที่สอง <span class="mono">-C01</span> กับ <span class="mono">-C02</span> จะโผล่พร้อมกันทั้งคู่ ไม่ใช่ระบบเปลี่ยนรหัสเอง</div>
+</section>
+
+<!-- 3. QR -->
+<section>
+  <h2>ป้าย QR <span class="tag">/items/…</span></h2>
+  <p>QR ที่พิมพ์ออกไปเก็บเป็น URL เต็ม กล้องมือถือทั่วไปสแกนแล้วเปิดหน้าพัสดุได้เลย ไม่ต้องเปิดแอปก่อน</p>
+  <div class="anatomy">
+    <div class="code" style="font-size:clamp(14px,2.4vw,20px)"><span class="s-fixed">https://…/nlu-stock</span><span class="d">/items/</span><span class="s-num">NLU-BAT-043</span><span class="d">?copy=</span><span class="s-copy">C02</span></div>
+    <ul class="legend">
+      <li><span class="swatch" style="background:var(--seg-num)"></span><span><span class="k">/items/NLU-BAT-043</span><span class="v">เปิดหน้ารายการ</span></span></li>
+      <li><span class="swatch" style="background:var(--seg-copy)"></span><span><span class="k">?copy=C02</span><span class="v">เด้งไปที่ชิ้นนั้นโดยตรง ป้ายของรายการที่มีชิ้นเดียวจะไม่มีท่อนนี้</span></span></li>
+    </ul>
+  </div>
+  <p class="note">ป้ายรุ่นเก่าที่เก็บแค่รหัสเปล่า ๆ เช่น <span class="mono">NLU-BAT-043-01</span> ยังสแกนในแอปได้ ไม่ต้องพิมพ์ใหม่</p>
+</section>
+
+<!-- 4. LOT -->
+<section>
+  <h2>เลขล็อต <span class="tag">Lot.lotNumber</span></h2>
+  <p>ล็อตคือ “ของกองนี้เข้ามาพร้อมกัน” ใช้กับวัสดุสิ้นเปลืองที่ต้องรู้วันหมดอายุ ของส่วนใหญ่ในคลัง<b>ไม่มีล็อต</b> และไม่จำเป็นต้องมี</p>
+
+  <div class="rows">
+    <div class="row">
+      <div class="lbl">LOT-A24 / 2409B</div>
+      <div class="txt"><b>เลขจากผู้ผลิต</b> — พิมพ์ตามที่อยู่บนกล่องทุกตัวอักษร ระบบไม่แปลง ไม่ตัด เพราะนี่คือตัวตนจริงของกองนั้น หน้าจอแสดงเป็น <span class="mono">Lot LOT-A24</span></div>
+    </div>
+    <div class="row">
+      <div class="lbl">RCV-20260721</div>
+      <div class="txt"><b>ระบบตั้งให้เอง</b> เมื่อรับเข้าโดยไม่กรอกเลขล็อต — <span class="mono">RCV</span> + ปี ค.ศ. 4 หลัก + เดือน 2 หลัก + วัน 2 หลัก ตามวันที่รับของจริง หน้าจอไม่แสดงรหัสนี้ แต่แสดงว่า <b>“รับเข้า 21 ก.ค. 2569”</b></div>
+    </div>
+    <div class="row">
+      <div class="lbl">RCV-20260721-2</div>
+      <div class="txt">รับของชนิดเดียวกันวันเดียวกันแต่ตั้งใจแยกกอง เลขท้ายคือกองที่เท่าไหร่ของวันนั้น แสดงเป็น <b>“รับเข้า 21 ก.ค. 2569 (2)”</b><br>ปกติรับซ้ำในวันเดียวกันจะ<b>รวมเข้ากองเดิม</b> ไม่สร้างล็อตใหม่</div>
+    </div>
+    <div class="row">
+      <div class="lbl">OPENING</div>
+      <div class="txt"><b>ยอดยกมา</b> — ของที่อยู่บนชั้นมาก่อนที่รายการนี้จะเริ่มมีล็อต ระบบพักยอดเดิมไว้ในกองนี้ตอนรับเข้าครั้งแรก ไม่งั้นยอดเก่าจะหายไปทั้งก้อน</div>
+    </div>
+  </div>
+
+  <div class="callout"><b>เห็นชื่องวดแต่ไม่ใช่ล็อต</b> ครุภัณฑ์กับวัสดุคงทนไม่มีล็อต แต่รับเข้ามาเป็นงวดเหมือนกัน ช่องชื่องวดของใบรับเข้าจึงเป็นข้อความอิสระ พิมพ์ได้ตามจริง เช่น <span class="mono">งบปี 69 รอบ 1</span> — เว้นว่างไว้ หน้าจอจะแสดงวันที่รับเข้าในรูป <span class="mono">RCV-YYYYMMDD</span> แทน</div>
+</section>
+
+<!-- 5. CASE -->
+<section>
+  <h2>เลขเคส <span class="tag">RC-2569-0128</span></h2>
+  <p>เคสคือเรื่องหนึ่งเรื่องที่มีจุดเริ่มและจุดจบ — ส่งซ่อมหนึ่งครั้ง ยืมหนึ่งครั้ง ของหายหนึ่งชิ้น เลขนี้คือเลขที่เขียนบนกล่องได้ ส่งให้ร้านซ่อมได้ และอ้างอิงข้ามปีได้</p>
+
+  <div class="anatomy">
+    <div class="code"><span class="s-cat">RC</span><span class="d">-</span><span class="s-year">2569</span><span class="d">-</span><span class="s-num">0128</span></div>
+    <ul class="legend">
+      <li><span class="swatch" style="background:var(--seg-cat)"></span><span><span class="k">RC</span><span class="v">ประเภทของเรื่อง 2 ตัวอักษร</span></span></li>
+      <li><span class="swatch" style="background:var(--seg-year)"></span><span><span class="k">2569</span><span class="v">ปี พ.ศ. ที่เรื่องเริ่ม ไม่ใช่ปีที่ปิด</span></span></li>
+      <li><span class="swatch" style="background:var(--seg-num)"></span><span><span class="k">0128</span><span class="v">เลขวิ่ง 4 หลัก นับรวมทุกประเภทในปีนั้น</span></span></li>
+    </ul>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>คำนำหน้า</th><th>ประเภทเคส</th><th>ปิดเคสที่ไหน</th></tr></thead>
+      <tbody>
+        <tr><td><code>RC</code></td><td>ซ่อมแซม</td><td>เมื่อซ่อมเสร็จหรือตัดจำหน่าย</td></tr>
+        <tr><td><code>MC</code></td><td>บำรุงรักษา</td><td>เมื่อรับของกลับจากรอบบำรุง</td></tr>
+        <tr><td><code>BR</code></td><td>ยืมพัสดุ</td><td>หน้ารับคืน มีกำหนดคืน</td></tr>
+        <tr><td><code>IU</code></td><td>ตั้งใช้ในห้อง</td><td>หน้าสถานะ ไม่มีกำหนดคืน</td></tr>
+        <tr><td><code>DS</code></td><td>เบิกใช้</td><td>เกิดมาเสร็จแล้ว ของออกไปไม่กลับ</td></tr>
+        <tr><td><code>LC</code></td><td>สูญหาย</td><td>เมื่อเจอของหรือจำหน่ายออก</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rows">
+    <div class="row">
+      <div class="lbl">เลขไม่ต่อเนื่อง</div>
+      <div class="txt">ปกติ ไม่ใช่ข้อมูลหาย — เลขวิ่งนับรวมทั้งปีทุกประเภท ถ้าไล่ดูเฉพาะ <span class="mono">RC</span> จะเห็น 0128 แล้วข้ามไป 0134 เพราะช่วงที่หายไปเป็นเคสประเภทอื่น</div>
+    </div>
+    <div class="row">
+      <div class="lbl">เลขไม่เปลี่ยนอีก</div>
+      <div class="txt">จ่ายครั้งเดียวตอนเปิดเคส แล้วเก็บลงตาราง เลขที่เขียนไว้บนกล่องเมื่อวานยังชี้เคสเดิมเสมอ ต่อให้แก้ประเภทเคสภายหลัง <b>เปลี่ยนแค่คำนำหน้า ตัวเลขคงเดิม</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. DOC -->
+<section>
+  <h2>เลขใบเบิก <span class="tag">DOC-2569-0455</span></h2>
+  <p>กดเบิก/ยืมหนึ่งครั้งได้หนึ่งใบ ทุกบรรทัดในใบนั้นอยู่ใต้เลขนี้ รวมของสิ้นเปลืองที่ไม่มีเคสของตัวเอง</p>
+  <div class="rows">
+    <div class="row">
+      <div class="lbl">DOC ≠ DS</div>
+      <div class="txt"><span class="mono">DOC-2569-0455</span> คือ<b>ใบ</b> ส่วน <span class="mono">DS-2569-0456</span> คือ<b>บรรทัดหนึ่งในใบ</b> — ใบเดียวมีได้ทั้งเคสยืม เคสตั้งใช้ในห้อง และเคสเบิกใช้ปนกัน</div>
+    </div>
+    <div class="row">
+      <div class="lbl">ใช้เลขกองเดียวกัน</div>
+      <div class="txt">ใบเบิกหยิบเลขจากถังเดียวกับเคส เลขจึงไม่ซ้ำกันทั้งระบบ และก็เป็นอีกเหตุผลที่เลขของแต่ละคำนำหน้าไม่ต่อเนื่อง</div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. quick reference -->
+<section>
+  <h2>สรุปหน้าเดียว</h2>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>เห็นแบบนี้</th><th>คืออะไร</th><th>ใครตั้ง</th></tr></thead>
+      <tbody>
+        <tr><td><code>NLU-KRU-007</code></td><td>รหัสพัสดุ 1 รายการ</td><td>เจ้าหน้าที่ ระบบเสนอเลขถัดไปให้</td></tr>
+        <tr><td><code>NLU-KRU-007-C02</code></td><td>ชิ้นที่ 2 ของรายการนั้น</td><td>ระบบ ตอนสร้างชิ้น</td></tr>
+        <tr><td><code>LOT-A24</code></td><td>เลขล็อตจากผู้ผลิต</td><td>เจ้าหน้าที่ พิมพ์ตามกล่อง</td></tr>
+        <tr><td><code>RCV-20260721</code></td><td>ล็อตของวันที่รับเข้า</td><td>ระบบ เมื่อไม่กรอกเลขล็อต</td></tr>
+        <tr><td><code>OPENING</code></td><td>ยอดยกมาก่อนมีล็อต</td><td>ระบบ ครั้งเดียวต่อรายการ</td></tr>
+        <tr><td><code>BR-2569-0128</code></td><td>เคสยืม ลำดับ 128 ของปี 2569</td><td>ระบบ ตอนเปิดเคส</td></tr>
+        <tr><td><code>DOC-2569-0455</code></td><td>ใบเบิก/ยืม 1 ใบ</td><td>ระบบ ตอนกดจ่ายของ</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <span>ที่มาของกติกา:</span>
+  <span class="mono">docs/adr/0001-nlu-code-scheme.md</span>
+  <span class="mono">src/lib/lot-code.ts</span>
+  <span class="mono">src/lib/case-codes.ts</span>
+  <span class="mono">src/lib/constants.ts</span>
+</footer>
+
+</div>

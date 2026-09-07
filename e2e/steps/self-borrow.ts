@@ -71,3 +71,58 @@ Then("นักศึกษาต้องไม่ได้เห็นหน�
   // middleware.ts BORROWER_PAGES ปล่อยแค่ /items/[code] กับ /scan — ที่เหลือต้องถูกพาออก
   await expect(borrowerPage).not.toHaveURL(/\/settings/, { timeout: 15_000 });
 });
+
+// ── ของหมด: ปุ่มยืมต้องไม่โผล่ ─────────────────────────────────────────────
+Given("มีรายการนับรายชิ้น X ที่ทุกชิ้นถูกยืมออกไปแล้ว", async ({ request, bdd, uniqueCode }) => {
+  bdd.item = await makeTracked(request, uniqueCode, 1);
+  // ยืมออกด้วย SQL ตรง ๆ — สนใจแค่ "ชั้นวางว่าง" ไม่ได้เทสเส้นทางการยืม (สองเคสข้างบนทำแล้ว)
+  await pool.query(`UPDATE sub_items SET status = 'ON_LOAN' WHERE "itemId" = $1`, [bdd.item.id]);
+  await pool.query(`UPDATE items SET "availableQty" = 0 WHERE id = $1`, [bdd.item.id]);
+});
+
+When("นักศึกษาเปิดหน้าพัสดุ X ตามที่ QR ชี้มา", async ({ borrowerPage, bdd }) => {
+  await borrowerPage.goto(`/items/${bdd.item.code}`);
+});
+
+Then("นักศึกษาต้องเห็นว่าของหมด และไม่มีปุ่มให้ยืม", async ({ borrowerPage }) => {
+  await expect(borrowerPage.getByText(/ของหมด/)).toBeVisible({ timeout: 15_000 });
+  await expect(borrowerPage.getByRole("button", { name: "ยืมพัสดุนี้" })).toHaveCount(0);
+});
+
+// ── ตะกร้าหลายรายการ: 1 การยืนยัน = 1 ใบ (loanGroupId เดียว) ────────────────
+When(
+  "นักศึกษาเปิดหน้าเบิก-ยืม ใส่ X ลงตะกร้าสองชิ้น ระบุกิจกรรม แล้วยืนยัน",
+  async ({ borrowerPage, bdd }) => {
+    await borrowerPage.goto(`/dispense?q=${bdd.item.code}`);
+    const card = borrowerPage.getByRole("article").filter({ hasText: bdd.item.code });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await card.getByRole("button", { name: "เพิ่ม", exact: true }).click();
+    // ชิ้นที่สอง — ของนับรายชิ้นจะหยิบ sub-item ตัวถัดไปที่ยังไม่อยู่ในตะกร้า
+    await card.getByRole("button", { name: "เพิ่มจำนวน" }).click();
+
+    await borrowerPage.getByRole("button", { name: "ดูตะกร้า" }).click();
+    // ทรงเดียวกับ /cart: ปุ่มที่ footer เปิด dialog กรอกข้อมูล แล้วค่อยยืนยัน
+    await borrowerPage.getByRole("button", { name: "ยืมพัสดุ", exact: true }).click();
+
+    const dialog = borrowerPage.getByRole("dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole("combobox").first().click();
+    await borrowerPage.getByRole("option", { name: "กิจกรรม" }).click();
+    await dialog.getByLabel("ระบุกิจกรรมที่นำไปใช้").fill(ACTIVITY);
+    await dialog.getByRole("button", { name: /^ยืนยันการ/ }).click();
+  }
+);
+
+Then("ทั้งสองชิ้นต้องถูกยืมในใบเดียวกัน", async ({ bdd }) => {
+  const { rows } = await pool.query(
+    `SELECT d."loanGroupId", s.status
+       FROM dispense_records d
+       JOIN sub_items s ON s.id = d."subItemId"
+      WHERE d."itemId" = $1`,
+    [bdd.item.id],
+  );
+  expect(rows).toHaveLength(2);
+  // ตะกร้าเดียว = ใบเดียว: /api/borrow แจก loanGroupId ก้อนเดียวให้ทุกบรรทัด
+  expect(new Set(rows.map((r) => r.loanGroupId)).size).toBe(1);
+  expect(rows.every((r) => r.status === "ON_LOAN")).toBe(true);
+});

@@ -3,10 +3,13 @@ import { test, expect, pool } from "../fixtures";
 
 const { Given, When, Then } = createBdd(test);
 
-/** A non-consumable whose รอบบำรุง is due — shift the date if the seed has none due today. */
+/** A non-consumable whose รอบบำรุง is due — shift the date if the seed has none due today.
+ *  Years overdue, not a day: the table sorts soonest-due first and pages at 10, and the seed
+ *  already carries rows overdue by a day. A tie there put this item on page 2, where the step
+ *  looking for its row on page 1 could not see it. */
 async function dueMaintenanceItem(uniqueCode: string) {
   const { rows } = await pool.query(
-    `UPDATE items SET "nextMaintenanceDate" = now() - interval '1 day'
+    `UPDATE items SET "nextMaintenanceDate" = now() - interval '5 years'
      WHERE id = (
        SELECT i.id FROM items i
         JOIN categories c ON c.id = i."categoryId"

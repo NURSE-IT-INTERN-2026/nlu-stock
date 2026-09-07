@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
-import { makeTracked, pool } from "../fixtures";
+import { makeTracked, pool, dbHomeLocation } from "../fixtures";
 
 /** Create a CONSUMABLE item with a known qty, via the same API the wizard uses. */
 export async function createConsumable(
@@ -15,7 +15,14 @@ export async function createConsumable(
   ).rows[0];
   const unit = (await pool.query(`SELECT id FROM units LIMIT 1`)).rows[0];
   const res = await request.post("/api/items/quick-create", {
-    data: { code, name: `E2E ${code}`, categoryId: cat.id, issueUnitId: unit.id, initialQty },
+    data: {
+      code,
+      name: `E2E ${code}`,
+      categoryId: cat.id,
+      issueUnitId: unit.id,
+      initialQty,
+      locationId: await dbHomeLocation(),
+    },
   });
   if (!res.ok()) throw new Error(`createConsumable failed: ${res.status()}`);
   return res.json();
@@ -84,7 +91,14 @@ export async function createCountItem(
   ).rows[0];
   const unit = (await pool.query(`SELECT id FROM units LIMIT 1`)).rows[0];
   const res = await request.post("/api/items/quick-create", {
-    data: { code, name: `E2E ${code}`, categoryId: cat.id, issueUnitId: unit.id, initialQty },
+    data: {
+      code,
+      name: `E2E ${code}`,
+      categoryId: cat.id,
+      issueUnitId: unit.id,
+      initialQty,
+      locationId: await dbHomeLocation(),
+    },
   });
   if (!res.ok()) throw new Error(`createCountItem failed: ${res.status()}`);
   return res.json();
@@ -92,12 +106,11 @@ export async function createCountItem(
 
 /** File an INUSE dispense for a COUNT item via API — setup for the คืนเข้าคลัง scenario. */
 export async function stationInUse(request: APIRequestContext, itemId: string) {
-  const loc = (await pool.query(`SELECT id FROM locations LIMIT 1`)).rows[0];
   const res = await request.post("/api/dispense", {
     data: {
       items: [{ itemId, quantity: 1 }],
       loanType: "INUSE",
-      locationId: loc.id,
+      locationId: await dbHomeLocation(),
       notes: "E2E ตั้งใช้ในห้อง",
     },
   });
