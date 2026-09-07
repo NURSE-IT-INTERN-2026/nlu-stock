@@ -14,6 +14,7 @@ import { useCart } from "@/components/dispense/cart-context";
 import { useAlerts } from "@/hooks/use-alerts";
 import { logout } from "@/lib/api";
 import { ROLE_LABELS, labelFor, type Role } from "@/lib/constants";
+import { isSelfBorrower } from "@/lib/roles";
 import type { SessionUser } from "@/types";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { withBase } from "@/lib/base-path";
@@ -32,6 +33,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   alerts: "รายการที่ต้องจัดการ",
   settings: "ตั้งค่าระบบ",
   cart: "เบิก-ยืมพัสดุ",
+  borrow: "ยืนยันการเบิก-ยืม",
 };
 
 function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
@@ -130,7 +132,9 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
         <button
           type="button"
           aria-label="ดูตะกร้า"
-          onClick={() => router.push("/cart")}
+          // Same basket, two confirm screens: /cart is the staff form (ผู้รับ, ชุดเบิก,
+          // ตั้งใช้ในห้อง) and middleware bounces a borrower off it.
+          onClick={() => router.push(isSelfBorrower(user.role) ? "/borrow" : "/cart")}
           className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
         >
           <ShoppingBasket className="size-5" />

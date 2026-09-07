@@ -48,11 +48,14 @@ export function Sidebar({ user, collapsed, onToggle }: SidebarProps) {
     return pathname.startsWith(href);
   }
 
-  // A borrower has exactly one destination — the item they scanned, reached by scanning it.
-  // /items is the staff catalogue and is blocked for them, so the menu offers the scanner
-  // instead; everything else here would only be a dead link.
+  // A borrower reaches stock two ways: scanning the label in front of them, or the เบิก-ยืม
+  // grid, which the server filters to items they are allowed to take. /items is the staff
+  // catalogue and is blocked for them; everything else here would only be a dead link.
   const filteredNav = isSelfBorrower(user.role)
-    ? [{ href: "/scan", label: "สแกน QR", icon: QrCode }]
+    ? [
+        { href: "/scan", label: "สแกน QR", icon: QrCode },
+        { href: "/dispense", label: "เบิก-ยืมพัสดุ", icon: ShoppingCart },
+      ]
     : navItems.filter(
         (item) =>
           (!item.superOnly || user.role === "SUPERADMIN") &&

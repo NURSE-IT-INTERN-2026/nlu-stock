@@ -7,6 +7,7 @@ import { withBase } from "@/lib/base-path";
 import { scopeQuery, type DashboardScope } from "@/lib/dashboard-scope";
 import type { AttachRecordType } from "@/lib/attachments";
 import type { CaseState, CaseType } from "@/lib/case-types";
+import type { CartItem } from "@/lib/validators/dispense";
 
 // The wire shape of src/lib/cases.ts — same fields, Dates already serialised to ISO strings.
 // Declared here rather than imported so a client bundle never reaches into a module that
@@ -357,17 +358,44 @@ export function getSettingsUsers(params?: { page?: number; perPage?: number; rol
 }
 
 /** ยืมเอง — นศ./บุคลากรกดยืมจากหน้าพัสดุที่สแกนมา. Staff get 403; they use the เบิก/ยืม screen. */
-export function selfBorrow(data: {
+// ── ตะกร้า (server-backed) ──
+// userId ไม่เคยส่งไปกับ request — server อ่านจาก JWT เอง ทุกตัวคืนตะกร้าทั้งใบกลับมา
+// เพื่อให้ client ไม่ต้องเดาว่าผลลัพธ์หน้าตาเป็นยังไงหลังแก้ (และได้เลขสดจาก DB ไปในตัว)
+export function getCart() {
+  return request<{ items: CartItem[] }>("/api/cart");
+}
+
+export function addCartLine(data: { itemId: string; subItemId?: string | null; lotId?: string | null; quantity?: number }) {
+  return request<{ items: CartItem[] }>("/api/cart", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function patchCartLine(data: { lineKey: string; quantity?: number; subItemId?: string | null; lotId?: string | null }) {
+  return request<{ items: CartItem[] }>("/api/cart", { method: "PATCH", body: JSON.stringify(data) });
+}
+
+/** ไม่ส่ง lineKey = ล้างทั้งตะกร้า */
+export function deleteCartLine(lineKey?: string) {
+  const qs = lineKey ? `?line=${encodeURIComponent(lineKey)}` : "";
+  return request<{ items: CartItem[] }>(`/api/cart${qs}`, { method: "DELETE" });
+}
+
+export interface SelfBorrowLine {
   itemId: string;
   quantity?: number;
   subItemId?: string | null;
+}
+
+/** ยืมเอง — one line from a QR scan, or a whole basket from หน้าเบิก-ยืม. Same route, and the
+ *  server treats a basket as all-or-nothing. */
+export function selfBorrow(data: {
+  lines: SelfBorrowLine[];
   usageType: string;
   courseCode?: string | null;
   usageNote?: string | null;
   /** จำนวนวัน ไม่ใช่วันที่ — see lib/self-borrow.ts. */
   days?: number;
 }) {
-  return request<{ success: boolean; id: string }>("/api/borrow", {
+  return request<{ success: boolean; ids: string[]; loanGroupId: string }>("/api/borrow", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -786,6 +814,8 @@ export interface SubItemByStatus {
   // proof taken when the piece came back from a loan broken). null on rows with no log at all.
   evidenceLogId: string | null;
   evidenceUrls: string[];
+  /** ผู้แจ้งชำรุด (DAMAGED) / ผู้ส่งซ่อม (UNDER_REPAIR) — whoever wrote the row that opened the trip. */
+  by: string | null;
   location: { building: string; floor: string; room: string; detail: string | null } | null;
   item: {
     id: string;

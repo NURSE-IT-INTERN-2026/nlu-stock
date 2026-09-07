@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, json, getSearchParams, paginate } from "@/lib/api-utils";
+import { isSelfBorrower } from "@/lib/roles";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -23,8 +24,22 @@ export async function GET(req: NextRequest) {
   const detail = searchParams.get("detail") ?? "";
   const hasLoc = building || floor || room || detail;
 
+  // BORROWER สแกน/เลือกของเอง — this grid is their catalogue, so it must not list a single
+  // row they are not allowed to take. Both switches are ANDed the same way lib/self-borrow
+  // reads them: the ประเภท closes a whole class of stock, the item closes one exception.
+  // Availability is deliberately NOT filtered here — ของหมดยังต้องเห็น (the card says หมด);
+  // hiding it makes a shelf that exists look like a shelf that does not.
+  const borrowerOnly = isSelfBorrower(auth.user.role);
+  // One `category` key: profileId and the borrower gate both write to it, and two spreads
+  // would silently drop whichever landed first.
+  const categoryFilter = {
+    ...(profileId && { profileId }),
+    ...(borrowerOnly && { profile: { selfBorrowable: true } }),
+  };
+
   const where = {
     isActive: true,
+    ...(borrowerOnly && { selfBorrowable: true }),
     ...(ids.length > 0 && { id: { in: ids } }),
     ...(q && {
       OR: [
@@ -34,7 +49,7 @@ export async function GET(req: NextRequest) {
       ],
     }),
     ...(categoryId && { categoryId }),
-    ...(profileId && { category: { profileId } }),
+    ...(Object.keys(categoryFilter).length > 0 && { category: categoryFilter }),
     ...(hasLoc && {
       location: {
         ...(building && { building }),
@@ -49,7 +64,7 @@ export async function GET(req: NextRequest) {
     prisma.item.findMany({
       where,
       include: {
-        category: { select: { name: true, profile: { select: { name: true, dispenseType: true, assetTracking: true, color: true } } } },
+        category: { select: { name: true, profile: { select: { name: true, dispenseType: true, assetTracking: true, color: true, selfBorrowable: true, selfBorrowLimit: true } } } },
         issueUnit: { select: { id: true, name: true } },
         lots: {
           where: { remainingQty: { gt: 0 } },

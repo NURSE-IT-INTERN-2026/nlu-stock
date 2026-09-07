@@ -1,6 +1,9 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { toast } from "sonner";
+import { addCartLine, deleteCartLine, getCart, patchCartLine } from "@/lib/api";
+import { cartLineKey } from "@/lib/cart";
 import type { CartItem } from "@/lib/validators/dispense";
 
 interface CartState {
@@ -11,77 +14,100 @@ interface CartState {
   clearCart: () => void;
   itemCount: number;
   getItemQty: (itemId: string) => number;
+  /** ดึงตะกร้าใหม่จาก server — หน้าจอที่อยากได้ยอดสดกดเรียกเองได้ */
+  refresh: () => Promise<void>;
 }
 
 const CartContext = createContext<CartState | null>(null);
 
-const STORAGE_KEY = "dispense-cart";
-
-export function CartProvider({ children }: { children: ReactNode }) {
+// ตะกร้าอยู่ใน DB (ตาราง cart_lines) ไม่ใช่ localStorage — requirement คือล็อกอินเครื่องอื่น
+// แล้วตะกร้ายังอยู่ ซึ่งที่เก็บฝั่งเบราว์เซอร์ทำไม่ได้ไม่ว่าจะตั้งชื่อ key ยังไง
+//
+// ทุก mutation อัปเดตในหน่วยความจำก่อน (optimistic) แล้วค่อยยิง API — คนกด +/- รัวๆ ต้องไม่
+// เห็นตัวเลขกระตุก. ทุก endpoint คืนตะกร้าทั้งใบกลับมา ผลที่ได้จึงถูกเขียนทับด้วยค่าจริงจาก DB
+// เสมอ พลาดเมื่อไหร่ก็เด้งกลับพร้อมบอกเหตุ ไม่ปล่อยให้จอโกหกเงียบๆ
+//
+// เจตนาที่ต้องไม่หายไป: **ตะกร้าไม่จองสต็อก** ของชิ้นสุดท้ายอยู่ในตะกร้าหลายคนพร้อมกันได้
+// ใครกดยืนยันก่อนได้ไป — /api/borrow และ /api/dispense ตัดสินใต้ row lock เป็นเจ้าเดียว
+export function CartProvider({ userId, children }: { userId?: string; children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
-  // hydrated = we've loaded from localStorage; until then the persist effect stays silent
-  // so the initial [] never overwrites the saved cart on mount (StrictMode-safe).
-  const [hydrated, setHydrated] = useState(false);
+  // คิวเดียว ยิงทีละใบตามลำดับที่ผู้ใช้กด — ไม่ใช่ยิงพร้อมกันแล้วหวังว่าจะถึงตามลำดับ
+  // กด + สี่ครั้งรัวๆ คือ PATCH 4 ใบ ถ้าปล่อยขนานกัน เบราว์เซอร์เปิดหลายคอนเนกชันได้ ใบที่ยิง
+  // ก่อนอาจถึงทีหลัง แล้ว "จำนวน 4" ถูกทับด้วย "จำนวน 3" ที่มาช้า จอกับ DB จบไม่ตรงกันเงียบๆ
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw));
-    } catch (e) {
-      console.error("[cart] load failed", e);
-    }
-    setHydrated(true);
+  const enqueue = useCallback((call: () => Promise<{ items: CartItem[] }>, fallbackMsg: string) => {
+    chain.current = chain.current
+      .catch(() => {})
+      .then(() => call())
+      .then((d) => setItems(d.items))
+      .catch(async (e) => {
+        toast.error(e instanceof Error ? e.message : fallbackMsg);
+        // ค่าที่จออยู่ตอนนี้เป็นค่าที่เดาไว้ตอน optimistic update — ดึงของจริงมาทับ
+        try { setItems((await getCart()).items); } catch { /* ยังใช้ค่าเดิมต่อได้ */ }
+      });
+    return chain.current;
   }, []);
 
+  /** ดึงตะกร้าใหม่จาก server — ต่อท้ายคิวเดียวกัน จะได้ไม่แซงคำสั่งที่ยังค้างอยู่ */
+  const refresh = useCallback(async () => {
+    await enqueue(() => getCart(), "โหลดตะกร้าไม่สำเร็จ");
+  }, [enqueue]);
+
+  // โหลดตะกร้าของคนที่ล็อกอินอยู่ และโหลดใหม่เมื่อสลับคน (ล็อกอินคนใหม่ในแท็บเดิม)
   useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch (e) {
-      console.error("[cart] persist failed", e);
-    }
-  }, [items, hydrated]);
+    if (!userId) { setItems([]); return; }
+    void refresh();
+  }, [userId, refresh]);
 
   const addItem = useCallback((item: CartItem) => {
     setItems((prev) => {
-      const key = (i: CartItem) => `${i.itemId}-${i.lotId ?? ""}-${i.subItemId ?? ""}`;
+      const key = (i: CartItem) => cartLineKey(i.itemId, i.subItemId, i.lotId);
       const idx = prev.findIndex((i) => key(i) === key(item));
-      if (idx >= 0) {
-        const existing = prev[idx];
-        const newQty = Math.min(existing.quantity + item.quantity, item.availableQty);
-        const updated = [...prev];
-        updated[idx] = { ...existing, quantity: newQty };
-        return updated;
-      }
-      const clampedQty = Math.min(item.quantity, item.availableQty);
-      return [...prev, { ...item, quantity: clampedQty }];
+      if (idx < 0) return [...prev, { ...item, quantity: Math.min(item.quantity, item.availableQty) }];
+      const updated = [...prev];
+      updated[idx] = { ...prev[idx], quantity: Math.min(prev[idx].quantity + item.quantity, item.availableQty) };
+      return updated;
     });
-  }, []);
+    void enqueue(
+      () => addCartLine({ itemId: item.itemId, subItemId: item.subItemId, lotId: item.lotId, quantity: item.quantity }),
+      "เพิ่มลงตะกร้าไม่สำเร็จ",
+    );
+  }, [enqueue]);
 
   const removeItem = useCallback((itemId: string, lotId?: string | null, subItemId?: string | null) => {
-    setItems((prev) =>
-      prev.filter((i) => !(i.itemId === itemId && (i.lotId ?? null) === (lotId ?? null) && (i.subItemId ?? null) === (subItemId ?? null)))
-    );
-  }, []);
+    const key = cartLineKey(itemId, subItemId, lotId);
+    setItems((prev) => prev.filter((i) => cartLineKey(i.itemId, i.subItemId, i.lotId) !== key));
+    void enqueue(() => deleteCartLine(key), "ลบออกจากตะกร้าไม่สำเร็จ");
+  }, [enqueue]);
 
   const updateItem = useCallback((itemId: string, updates: Partial<CartItem>, lotId?: string | null, subItemId?: string | null) => {
+    const key = cartLineKey(itemId, subItemId, lotId);
     setItems((prev) =>
-      prev.map((i) =>
-        i.itemId === itemId && (i.lotId ?? null) === (lotId ?? null) && (i.subItemId ?? null) === (subItemId ?? null)
-          ? { ...i, ...updates }
-          : i
-      )
+      prev.map((i) => (cartLineKey(i.itemId, i.subItemId, i.lotId) === key ? { ...i, ...updates } : i)),
     );
-  }, []);
+    void enqueue(
+      () => patchCartLine({
+        lineKey: key,
+        ...(updates.quantity !== undefined ? { quantity: updates.quantity } : {}),
+        ...("subItemId" in updates ? { subItemId: updates.subItemId } : {}),
+        ...("lotId" in updates ? { lotId: updates.lotId } : {}),
+      }),
+      "แก้ไขตะกร้าไม่สำเร็จ",
+    );
+  }, [enqueue]);
 
-  const clearCart = useCallback(() => setItems([]), []);
+  const clearCart = useCallback(() => {
+    setItems([]);
+    void enqueue(() => deleteCartLine(), "ล้างตะกร้าไม่สำเร็จ");
+  }, [enqueue]);
 
   const getItemQty = useCallback((itemId: string) =>
     items.filter((i) => i.itemId === itemId).reduce((s, i) => s + i.quantity, 0),
   [items]);
 
   return (
-    <CartContext value={{ items, addItem, removeItem, updateItem, clearCart, itemCount: items.length, getItemQty }}>
+    <CartContext value={{ items, addItem, removeItem, updateItem, clearCart, itemCount: items.length, getItemQty, refresh }}>
       {children}
     </CartContext>
   );

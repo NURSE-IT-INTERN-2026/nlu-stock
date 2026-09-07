@@ -41,10 +41,13 @@ export function BottomTab({ user }: BottomTabProps) {
 
   const canStock = canManageStock(user.role);
   const isBorrower = isSelfBorrower(user.role);
-  // Borrowers get the scanner, not the catalogue — /items is staff-only and middleware
-  // bounces them off it.
+  // Borrowers get the scanner and the เบิก-ยืม grid, not /items — the staff catalogue lists
+  // every row in the คลัง, while /dispense is filtered server-side to what they may take.
   const visibleTabs = isBorrower
-    ? [{ href: "/scan", label: "สแกน QR", icon: QrCode, stockOnly: false }]
+    ? [
+        { href: "/scan", label: "สแกน QR", icon: QrCode, stockOnly: false },
+        { href: "/dispense", label: "เบิก-ยืม", icon: ShoppingCart, stockOnly: false },
+      ]
     : tabs.filter((t) => !t.stockOnly || canStock);
 
   async function handleLogout() {

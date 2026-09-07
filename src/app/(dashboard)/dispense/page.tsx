@@ -20,6 +20,9 @@ import { parseScannedCode, STATUS_LABELS } from "@/lib/constants";
 import { isManualHold } from "@/lib/status-utils";
 import type { ItemStatus } from "@/generated/prisma/enums";
 import { useCart, buildCartItem, toDispenseableItem } from "@/components/dispense/cart-context";
+import { useSession } from "@/components/layout/auth-guard";
+import { isSelfBorrower } from "@/lib/roles";
+import { selfBorrowMax } from "@/lib/self-borrow";
 import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/shared/pagination";
 import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/shared/filter-pickers";
@@ -36,7 +39,9 @@ interface SearchItem {
   status: ItemStatus;
   issueUnit: { id: string; name: string };
   trackIndividually: boolean;
-  category: { name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; color: string } };
+  category: { name: string; profile: { name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; color: string; selfBorrowable: boolean; selfBorrowLimit: number } };
+  selfBorrowable: boolean;
+  selfBorrowLimit: number | null;
   lots: { id: string; lotNumber: string; expiryDate: string | null; remainingQty: number }[];
   subItems: { id: string; subCode: string; status: string; condition: string | null }[];
   location: { building: string; floor: string; room: string; detail: string | null } | null;
@@ -44,6 +49,10 @@ interface SearchItem {
 
 function DispenseContent() {
   const { getItemQty, items: cartItems, updateItem, removeItem, addItem } = useCart();
+  const { user } = useSession();
+  // BORROWER เห็นกริดเดียวกับเจ้าหน้าที่ แต่ /api/dispense/items กรองเหลือเฉพาะของที่ยืมเองได้
+  // อยู่แล้ว — ที่หน้านี้ต้องทำเพิ่มคือเพดานต่อครั้ง ซึ่ง API ปฏิเสธทีหลังถ้าเกิน
+  const isBorrower = isSelfBorrower(user?.role ?? "");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
@@ -111,9 +120,31 @@ function DispenseContent() {
     gridRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // เพดานที่ "กดเพิ่มได้" ของ BORROWER: เพดานต่อครั้งของประเภท/รายชิ้น ตัดก่อนยอดคงเหลือ.
+  // ใช้เฉพาะของที่ไม่ได้นับรายชิ้น — รายชิ้นออกทีละชิ้นอยู่แล้ว และ selfBorrowMax คืน 1 เสมอ
+  // ซึ่งจะทำให้ป้าย "เหลือ" ของที่มีหลายชิ้นว่างอ่านผิด.
+  const stockCap = (item: SearchItem): number => {
+    const stock = item.trackIndividually ? item.subItems.length : item.availableQty;
+    if (!isBorrower || item.trackIndividually) return stock;
+    return Math.min(
+      stock,
+      selfBorrowMax({
+        selfBorrowable: item.selfBorrowable,
+        selfBorrowLimit: item.selfBorrowLimit,
+        availableQty: item.availableQty,
+        trackIndividually: item.trackIndividually,
+        dispenseType: item.category.profile.dispenseType,
+        profileSelfBorrowable: item.category.profile.selfBorrowable,
+        profileSelfBorrowLimit: item.category.profile.selfBorrowLimit,
+      }),
+    );
+  };
+
   const handleAdd = (item: SearchItem): boolean => {
     const usedSubIds = new Set(cartItems.filter((c) => c.itemId === item.id).map((c) => c.subItemId));
-    const result = buildCartItem(toDispenseableItem(item), usedSubIds);
+    // ส่งเพดานไปกับบรรทัดตะกร้าเลย เพื่อให้ตัว +/- ที่หน้ายืนยันใช้ตัวเลขเดียวกับกริดนี้
+    const source = { ...toDispenseableItem(item), availableQty: stockCap(item) };
+    const result = buildCartItem(source, usedSubIds);
     if (!result.ok) {
       toast.error(result.reason === "no-sub" ? "ไม่มีหน่วยย่อยให้เบิกเพิ่ม" : "สต๊อกหมดแล้ว", { id: result.reason });
       return false;
@@ -218,7 +249,11 @@ return (
             value={{ profileId: filterProfile, categoryId: filterCategory || null }}
             onChange={({ profileId, categoryId }) => { setFilterProfile(profileId); setFilterCategory(categoryId ?? ""); }}
           />
-          <LocationPicker locations={locations} value={filterLocation} onChange={setFilterLocation} />
+          {/* สถานที่จัดเก็บเป็นตัวกรองของเจ้าหน้าที่ — /api/settings/locations เปิดให้ superadmin
+              เท่านั้น ฝั่ง BORROWER จึงได้ list ว่างอยู่แล้ว ซ่อนไปเลยดีกว่าโชว์ปุ่มที่กดแล้วว่าง */}
+          {!isBorrower && (
+            <LocationPicker locations={locations} value={filterLocation} onChange={setFilterLocation} />
+          )}
           <div className="basis-full sm:basis-auto flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto">
             <span className="tabular-nums">
               พบ <span className="font-semibold text-foreground">{total.toLocaleString()}</span> รายการ
@@ -248,16 +283,22 @@ return (
               // "เหลือ 5" here. The server refuses it (api/dispense); say so before the click
               // rather than after. Tracked items keep their per-piece rules.
               const held = !item.trackIndividually && isManualHold(item.status);
-              const atMax = !item.trackIndividually && (held || inCart >= item.availableQty);
               const stockNum = item.trackIndividually ? item.subItems.length : item.availableQty;
-              const outOfStock = stockNum <= 0 || held;
+              // เจ้าหน้าที่: เพดาน = ยอดคงเหลือ. BORROWER: เพดานต่อครั้งอาจต่ำกว่ายอดคงเหลือ.
+              const maxAdd = stockCap(item);
+              const atMax = !item.trackIndividually && (held || inCart >= maxAdd);
+              const outOfStock = maxAdd <= 0 || held;
               // What is still addable, which is what the badge is asked. Stock already sitting
               // in the cart is spoken for: the badge used to keep saying "เหลือ 3" next to a +
               // button that had gone quietly disabled, so the number and the control disagreed.
-              const addable = Math.max(0, stockNum - inCart);
+              const addable = Math.max(0, maxAdd - inCart);
               // Tracked items used to hard-code "ชิ้น", which hid the real unit (เครื่อง/ตัว/ชุด).
               // Both kinds read from issueUnit now — "ชิ้น" only shows when that IS the unit.
-              const stockLabel = `${stockNum} ${item.issueUnit.name}`;
+              // BORROWER อ่านเพดานต่อครั้ง ไม่ใช่ยอดคงเหลือ: "คงเหลือ 20 ชิ้น" ข้างปุ่มที่กดได้
+              // แค่ครั้งละ 1 คือเลขที่ถูกแต่ตอบผิดคำถาม — คนยืมถามว่า "ฉันเอาได้เท่าไหร่".
+              const stockLabel = isBorrower
+                ? `ยืมได้ ${maxAdd} ${item.issueUnit.name}`
+                : `คงเหลือ ${stockNum} ${item.issueUnit.name}`;
               const locText = item.location && !locActive
                 ? [item.location.building, item.location.floor, item.location.room, item.location.detail].filter(Boolean).join(" / ")
                 : "";
@@ -277,7 +318,7 @@ return (
                         />
                       </div>
                       <span className={`absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ring-2 ring-card ${outOfStock ? "bg-destructive" : addable === 0 ? "bg-muted-foreground" : "bg-success"}`}>
-                        {held ? STATUS_LABELS[item.status] : outOfStock ? "หมด" : addable === 0 ? "อยู่ในตะกร้าหมด" : `เหลือ ${addable}`}
+                        {held ? STATUS_LABELS[item.status] : outOfStock ? "หมด" : addable === 0 ? "อยู่ในตะกร้าหมด" : `${isBorrower ? "ยืมได้" : "เหลือ"} ${addable}`}
                       </span>
                     </Link>
 
@@ -307,7 +348,7 @@ return (
                         thumbnail (what is still addable) is arithmetic the card shows, not a
                         third number the reader has to take on faith. */}
                     <span className="text-xs text-muted-foreground sm:text-sm">
-                      คงเหลือ <span className="font-semibold text-foreground">{stockLabel}</span>
+                      <span className="font-semibold text-foreground">{stockLabel}</span>
                       {inCart > 0 && <span className="ml-1.5">· ในตะกร้า <span className="font-semibold text-foreground">{inCart}</span></span>}
                     </span>
 

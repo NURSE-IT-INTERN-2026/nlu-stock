@@ -22,6 +22,7 @@ const pageTitles: Record<string, string> = {
   "/scan": "สแกน QR",
   "/alerts": "รายการที่ต้องจัดการ",
   "/dispense": "เบิก-ยืมพัสดุ",
+  "/borrow": "ยืนยันการเบิก-ยืม",
   "/receive": "รับพัสดุเข้า",
   "/maintenance": "บันทึกการบำรุงรักษา",
   "/repairs": "ซ่อมแซม",
@@ -69,7 +70,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <AlertProvider enabled={!isSelfBorrower(user.role)}>
-      <CartProvider>
+      <CartProvider userId={user.userId}>
       <PageHeaderProvider>
         <div className="flex min-h-dvh lg:h-dvh lg:overflow-hidden" style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "4rem" : "16rem" }}>
         <Sidebar
