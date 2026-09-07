@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { walkPieceCases, summariseCases, isOverdue, isTodo, caseRangeBounds, type CaseSummary, type CaseType } from "./cases";
+import { walkPieceCases, walkTrips, summariseCases, isOverdue, isTodo, caseRangeBounds, type CaseSummary, type CaseType } from "./cases";
 import { formatCode } from "./case-codes";
 
 const at = (day: number) => new Date(`2026-03-${String(day).padStart(2, "0")}T03:00:00Z`);
@@ -87,6 +87,49 @@ test("แก้ข้อมูลส่งซ่อม stacks onto the same case
   );
   assert.deepEqual(c.sent.map((s) => s.id), ["s1", "s2"]);
   assert.equal(c.closedByJob, null, "still at the shop");
+});
+
+// ── เที่ยวส่งบำรุงรักษาภายนอก ─────────────────────────────────────────────────
+type AnyTrip = Parameters<typeof walkTrips>[0][number];
+
+const trip = (
+  id: string, from: string, day: number,
+  { closed = false, status = "PENDING_MAINTENANCE", sub = "p1" as string | null } = {},
+): AnyTrip => ({
+  id, subItemId: sub, previousStatus: from, repairNote: id, reason: null, imageUrls: [],
+  changedAt: at(day), changer: { name: "Staff" },
+  item: { id: "i1", code: "NLU-DUR-001", name: "Notebook", status: "AVAILABLE", issueUnit: { name: "เครื่อง" } },
+  subItem: sub ? { subCode: sub, status } : null,
+  closedByMaint: closed ? [{ id: "m1" }] : [],
+} as unknown as AnyTrip);
+
+test("แก้ข้อมูลส่งบำรุงรักษา stacks onto the same trip", () => {
+  const [t] = walkTrips([
+    trip("s1", "AVAILABLE", 1),
+    trip("e1", "PENDING_MAINTENANCE", 2),
+    trip("e2", "PENDING_MAINTENANCE", 3),
+  ]);
+  assert.equal(t.opener.id, "s1");
+  assert.deepEqual(t.edits.map((e) => e.id), ["e1", "e2"], "การแก้ไม่ใช่การส่งรอบใหม่");
+});
+
+test("เที่ยวที่มีใบบันทึกผลผูกอยู่แล้วไม่ค้างอยู่ในกองที่ต้องทำ", () => {
+  assert.deepEqual(walkTrips([trip("s1", "AVAILABLE", 1, { closed: true })]), []);
+});
+
+test("ของที่กลับมาแล้วแต่ใบเก่าไม่ได้ผูกไว้ ก็ไม่ค้าง", () => {
+  // แถวก่อนมีคอลัมน์ผูก: ไม่มีใบบันทึกผลชี้กลับมา สถานะปัจจุบันจึงเป็นตัวตัดสิน
+  assert.deepEqual(walkTrips([trip("s1", "AVAILABLE", 1, { status: "AVAILABLE" })]), []);
+});
+
+test("ส่งซ้ำหลังรับคืน = คนละเที่ยว", () => {
+  const trips = walkTrips([
+    trip("s1", "AVAILABLE", 1, { closed: true }),
+    trip("e1", "PENDING_MAINTENANCE", 2),
+    trip("s2", "AVAILABLE", 10),
+  ]);
+  assert.deepEqual(trips.map((t) => t.opener.id), ["s2"], "เที่ยวแรกปิดไปแล้ว");
+  assert.deepEqual(trips[0].edits, [], "แถวแก้ของเที่ยวเก่าไม่ตกมาที่เที่ยวใหม่");
 });
 
 test("case code pads to four digits", () => {

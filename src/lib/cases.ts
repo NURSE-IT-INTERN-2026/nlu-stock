@@ -126,9 +126,10 @@ export const isOverdue = (c: Pick<CaseSummary, "dueAt" | "state">) =>
  * ตั้งใช้ในห้องไม่อยู่ในนี้: มันเปิดค้างถาวรโดยออกแบบ ไม่ใช่งานที่ใครติดค้าง. ยืมเข้ามาเฉพาะที่
  * เลยกำหนดแล้ว — ของที่ยังไม่ถึงกำหนดไม่ใช่งานสาย.
  *
- * บำรุงรักษาอยู่ในรายชื่อแต่ **นับได้ 0 เสมอ**: ระบบบันทึกตอนทำเสร็จแล้ว เคส MC จึงเกิดมาเป็น DONE
- * ทุกใบ (ดู maintSummary). "เกินกำหนดซ่อมบำรุง" ที่คนอยากเห็นคือ `Item.nextMaintenanceDate < now`
- * ซึ่งเป็นวันบนพัสดุ ไม่ใช่เคส — มันมีที่อยู่ของมันแล้วที่ alert `overdueMaint`.
+ * บำรุงรักษานับเฉพาะ **เที่ยวที่ส่งออกไปข้างนอกแล้วยังไม่กลับ** (ดู tripSummary) — นั่นคืองานที่มีคน
+ * รออยู่จริง. รอบที่ทำเองภายในบันทึกตอนทำเสร็จ เกิดมาเป็น DONE จึงไม่เคยเข้ามา. ส่วน
+ * "เกินกำหนดซ่อมบำรุง" ที่คนอยากเห็นคือ `Item.nextMaintenanceDate < now` ซึ่งเป็นวันบนพัสดุ
+ * ไม่ใช่เคส — มันมีที่อยู่ของมันแล้วที่ alert `overdueMaint`.
  */
 export const TODO_TYPES: CaseType[] = ["REPAIR", "MAINTENANCE", "LOST", "BORROW"];
 export const isTodo = (c: CaseSummary) =>
@@ -223,7 +224,11 @@ function caseSourceKey(caseId: string): string {
   const row = sourceId(caseId);
   // REPAIR มาได้จากสองตาราง: ใบแจ้งชำรุดของของนับจำนวน กับ log →ชำรุด ของชิ้นที่ติดตามรายชิ้น.
   // แยกด้วย prefix ของ cuid ไม่ได้ จึงให้ตัวเรียกบอกมาแทน — ดู repairSourceKey.
-  if (type === "MAINTENANCE") return sourceKey("maint", row);
+  // MAINTENANCE มาได้จากสองแถวเหมือน LOST: ภายในเป็นใบบันทึกผลใบเดียว ส่วนภายนอกเป็นเที่ยว
+  // ที่เปิดจาก log ตอนส่ง แล้วปิดด้วยใบบันทึกผลตอนรับคืน — สองครึ่งนั้นคือเคสเดียว เลขจึงผูกกับ
+  // แถว log ทั้งสองครึ่ง ไม่งั้นเลขที่เจ้าหน้าที่จดไว้ตอนส่งจะเปลี่ยนตอนของกลับมา.
+  // ไอดีของภายนอกพาชื่อตารางมาด้วย (`log:…`); ของเก่าที่เป็น cuid เปล่าคือ maintenance_records.
+  if (type === "MAINTENANCE") return row.includes(":") ? row : sourceKey("maint", row);
   if (type === "BORROW" || type === "INUSE" || type === "DISPENSE") return sourceKey("disp", row);
   // เคสสูญหายพาชื่อตารางมาในไอดีอยู่แล้ว เพราะมันมาได้จากสองตาราง (log:… / adj:…)
   if (type === "LOST") return row;
@@ -509,7 +514,12 @@ function pieceSummary(c: PieceCase): CaseSummary {
 }
 
 // ── MC: บำรุงรักษา ────────────────────────────────────────────────────────────
-// เคสจุดเดียว ไม่มีขั้นตอน: ระบบไม่ได้เปิดงานบำรุงไว้ล่วงหน้าแล้วรอทำ มันบันทึกตอนทำเสร็จแล้ว.
+// สองรูปทรงในประเภทเดียว:
+//   ภายใน  — เคสจุดเดียว ไม่มีขั้นตอน: ไม่ได้เปิดงานไว้ล่วงหน้าแล้วรอทำ มันบันทึกตอนทำเสร็จแล้ว
+//   ภายนอก — งานสองขั้น: ของออกจากหน่วยงานไปก่อน (แถว log) แล้วค่อยกลับมาบันทึกผล (ใบบันทึก)
+// ขั้นแรกของภายนอกไม่มีที่อยู่ใน maintenance_records เลย ตอนที่มันสำคัญที่สุด — ช่วงที่ของยัง
+// อยู่ข้างนอกและมีคนรออยู่ — เคสจึงเคยไม่มีตัวตนจนกว่างานจะจบ. ทั้งสองครึ่งผูกกันด้วย
+// MaintenanceRecord.sentLogId และถือเลข MC ใบเดียวกันตั้งแต่ส่งจนรับคืน.
 // `nextMaintenanceDate` เป็นวันบนพัสดุ ไม่ใช่งานที่ค้างอยู่ จึงไม่กลายเป็นเคสของตัวเอง.
 const maintArgs = {
   where: { type: MaintenanceType.PREVENTIVE },
@@ -517,6 +527,7 @@ const maintArgs = {
     item: { select: itemSelect },
     subItem: { select: { subCode: true } },
     performer: { select: { name: true } },
+    sentLog: { select: { changedAt: true } },
   },
 } as const;
 
@@ -524,7 +535,9 @@ type MaintRow = Awaited<ReturnType<typeof prisma.maintenanceRecord.findMany<type
 
 function maintSummary(m: MaintRow): CaseSummary {
   return {
-    id: `MAINTENANCE:${m.id}`,
+    // เที่ยวภายนอกถือไอดีของแถวตอนส่ง ทั้งตอนเปิดและตอนปิด — เคสเดียวกันต้องเรียกด้วยชื่อเดียวกัน
+    // ไม่งั้นเลขที่จ่ายไปตอนส่งจะไม่ใช่เลขเดียวกับตอนรับคืน. ใบเก่าที่ไม่มีเที่ยวถือไอดีของตัวเอง.
+    id: m.sentLogId ? `MAINTENANCE:log:${m.sentLogId}` : `MAINTENANCE:${m.id}`,
     type: "MAINTENANCE",
     code: "",
     state: "DONE",
@@ -539,10 +552,131 @@ function maintSummary(m: MaintRow): CaseSummary {
     unit: m.item.issueUnit.name,
     cost: m.cost ?? null,
     dueAt: null,
-    openedAt: m.performedAt,
+    // เคสเปิดตอนของออกจากหน่วยงาน ไม่ใช่ตอนบันทึกผล — ไม่งั้นงานที่ส่งไปเมื่อเดือนก่อนจะเรียงอยู่
+    // ที่วันนี้ และ "เปิดมากี่วันแล้ว" ก็ตอบเป็น 0 ทุกใบ
+    openedAt: m.sentLog?.changedAt ?? m.performedAt,
     updatedAt: m.createdAt,
     openedBy: m.performer.name,
   };
+}
+
+// ── เที่ยวส่งบำรุงรักษาภายนอกที่ยังไม่กลับ ────────────────────────────────────
+// แถวที่ **เข้า** กำลังบำรุงรักษาคือใบส่ง; แถว PENDING_MAINTENANCE → PENDING_MAINTENANCE ที่ตาม
+// มาคือ แก้ข้อมูลส่งบำรุงรักษา ของเที่ยวเดิม ไม่ใช่การส่งรอบใหม่ (คู่ขนานกับ แก้ข้อมูลส่งซ่อม).
+const tripLogSelect = {
+  id: true, subItemId: true, previousStatus: true, repairNote: true, reason: true,
+  imageUrls: true, changedAt: true,
+  changer: { select: { name: true } },
+  item: { select: { ...itemSelect, status: true } },
+  subItem: { select: { subCode: true, status: true } },
+  closedByMaint: { select: { id: true } },
+} as const;
+
+type TripLog = Awaited<ReturnType<typeof prisma.itemStatusLog.findMany<{ select: typeof tripLogSelect }>>>[number];
+export type Trip = { opener: TripLog; edits: TripLog[] };
+
+/**
+ * เที่ยวที่ยังเปิดค้าง. ปิดได้สองทาง และต้องเช็คทั้งคู่:
+ *   - มีใบบันทึกผลผูกกลับมาที่แถวส่ง (ทางปกติ)
+ *   - ของกลับมาเป็นสถานะอื่นแล้ว (แถวเก่าก่อนมีคอลัมน์ผูก และที่ backfill เดาไม่ได้) — ไม่งั้น
+ *     ของที่กลับมานานแล้วจะค้างอยู่ในกอง "ต้องทำ" ตลอดกาล
+ */
+export function walkTrips(logs: TripLog[]): Trip[] {
+  const open: Trip[] = [];
+  const byPiece = new Map<string, Trip>();
+  for (const l of logs) {
+    const key = `${l.item.id}:${l.subItemId ?? ""}`;
+    if (l.previousStatus === ItemStatus.PENDING_MAINTENANCE) {
+      byPiece.get(key)?.edits.push(l);
+      continue;
+    }
+    const trip: Trip = { opener: l, edits: [] };
+    byPiece.set(key, trip);
+    if (l.closedByMaint.length) continue;
+    // ของชิ้นที่ติดตามรายชิ้นอ่านสถานะของชิ้นนั้น ไม่ใช่ของทั้งรายการ — รายการที่มีสำเนาอื่นว่างอยู่
+    // ยังเป็น พร้อมใช้งาน ทั้งที่สำเนานี้ออกไปข้างนอกแล้ว
+    const status = l.subItem?.status ?? l.item.status;
+    if (status === ItemStatus.PENDING_MAINTENANCE) open.push(trip);
+  }
+  return open;
+}
+
+async function loadTripCases(itemId?: string, subItemId?: string): Promise<Trip[]> {
+  const logs = await prisma.itemStatusLog.findMany({
+    where: {
+      ...(itemId ? { itemId } : {}),
+      ...(subItemId ? { subItemId } : {}),
+      newStatus: ItemStatus.PENDING_MAINTENANCE,
+    },
+    select: tripLogSelect,
+    orderBy: { changedAt: "asc" },
+  });
+  return walkTrips(logs);
+}
+
+function tripSummary(t: Trip): CaseSummary {
+  const o = t.opener;
+  const last = t.edits[t.edits.length - 1] ?? o;
+  return {
+    id: `MAINTENANCE:log:${o.id}`,
+    type: "MAINTENANCE",
+    code: "",
+    state: "OPEN",
+    statusLabel: `อยู่ระหว่างบำรุงรักษาภายนอก ${days(o.changedAt)} วัน`,
+    // ข้อความล่าสุดชนะ: แก้ข้อมูลมีไว้แก้ชื่อร้านที่พิมพ์ผิดหรือเพิ่มรายการที่ให้ทำ
+    subject: last.repairNote?.trim() || o.repairNote?.trim() || "ส่งบำรุงรักษาภายนอก",
+    title: o.item.name,
+    itemId: o.item.id,
+    itemCode: o.item.code,
+    subCode: o.subItem?.subCode ?? null,
+    qty: null,
+    unit: o.item.issueUnit.name,
+    cost: null,
+    dueAt: null,
+    openedAt: o.changedAt,
+    updatedAt: last.changedAt,
+    openedBy: o.changer.name,
+  };
+}
+
+/** เที่ยวเดียวจากแถวตอนส่ง. `until` ตัดแถวแก้ข้อมูลของเที่ยวถัดไปออก เมื่ออ่านเที่ยวที่ปิดไปแล้ว. */
+async function tripOf(openerId: string, until?: Date): Promise<Trip | null> {
+  const opener = await prisma.itemStatusLog.findUnique({ where: { id: openerId }, select: tripLogSelect });
+  if (!opener || opener.previousStatus === ItemStatus.PENDING_MAINTENANCE) return null;
+  const edits = await prisma.itemStatusLog.findMany({
+    where: {
+      itemId: opener.item.id,
+      subItemId: opener.subItemId,
+      newStatus: ItemStatus.PENDING_MAINTENANCE,
+      previousStatus: ItemStatus.PENDING_MAINTENANCE,
+      changedAt: { gt: opener.changedAt, ...(until ? { lte: until } : {}) },
+    },
+    select: tripLogSelect,
+    orderBy: { changedAt: "asc" },
+  });
+  return { opener, edits };
+}
+
+/**
+ * ใบส่ง แล้วตามด้วยการแก้ข้อมูลทีละครั้ง — ครั้งละหนึ่งขั้น ไม่ยุบ.
+ *
+ * เดิมสองอย่างนี้ถูกยุบเป็นขั้นเดียว โดยเอาวันของใบส่งมาคู่กับข้อความล่าสุด ซึ่งอ่านแล้วเหมือนใบส่ง
+ * เขียนแบบนั้นมาตั้งแต่ต้น: การแก้หายไปทั้งการกระทำ ทั้งคนแก้ ทั้งเวลา และรูปที่แนบมาตอนแก้ก็ไป
+ * โผล่ใต้ใบส่ง. แถวมันแยกกันอยู่ในฐานข้อมูลอยู่แล้ว — ที่ขาดคือการแสดงมันออกมา.
+ */
+function tripSteps(t: Trip, waiting: string | null): CaseStep[] {
+  const rows = [t.opener, ...t.edits];
+  return rows.map((l, i) =>
+    step({
+      key: i === 0 ? "sent" : `sent-edit-${i}`,
+      label: i === 0 ? "ส่งบำรุงรักษาภายนอก" : "แก้ข้อมูลส่งบำรุงรักษา",
+      at: l.changedAt,
+      by: l.changer.name,
+      detail: l.repairNote?.trim() || null,
+      attachments: [{ recordType: "ItemStatusLog", recordId: l.id, urls: l.imageUrls }],
+      waiting: i === rows.length - 1 ? waiting : null,
+    }),
+  );
 }
 
 // ── BR: ยืม ───────────────────────────────────────────────────────────────────
@@ -688,7 +822,7 @@ async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceI
   const itemWhere = f.itemId ? { itemId: f.itemId } : {};
   const subWhere = f.subItemId ? { subItemId: f.subItemId } : {};
 
-  const [cancelIndex, qty, pieces, maints, losses, loans] = await Promise.all([
+  const [cancelIndex, qty, pieces, maints, trips, losses, loans] = await Promise.all([
     want("REPAIR") ? loadCancelIndex(f.itemId) : new Set<string>(),
     // A qty booking is about N units of an item, never about one copy — scoping to a copy
     // excludes it rather than showing a case that is not about the thing on screen.
@@ -699,6 +833,7 @@ async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceI
     want("MAINTENANCE")
       ? prisma.maintenanceRecord.findMany({ ...maintArgs, where: { ...maintArgs.where, ...itemWhere, ...subWhere } })
       : [],
+    want("MAINTENANCE") ? loadTripCases(f.itemId, f.subItemId) : [],
     want("LOST") ? loadLostCases(f.itemId, f.subItemId) : [],
     wantLoans
       ? prisma.dispenseRecord.findMany({
@@ -719,6 +854,7 @@ async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceI
     ...qty.map((b) => qtySummary(b, cancelIndex)),
     ...shownPieces.map(pieceSummary),
     ...maints.map(maintSummary),
+    ...trips.map(tripSummary),
     ...losses.map(lostSummary),
     ...loans.map(loanSummary).filter((c) => want(c.type)),
   ];
@@ -1029,49 +1165,48 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
   };
 
   if (type === "MAINTENANCE") {
-    const m = await prisma.maintenanceRecord.findUnique({ ...maintArgs, where: { id: src } });
-    if (!m || m.type !== MaintenanceType.PREVENTIVE) return null;
+    // เที่ยวภายนอกถูกเรียกด้วยไอดีของแถวตอนส่ง (`log:…`) ทั้งตอนยังไม่กลับและตอนจบแล้ว: ถ้ามีใบ
+    // บันทึกผลผูกกลับมาที่แถวนั้น เคสจบแล้ว ถ้ายังไม่มี ของยังอยู่ข้างนอกและเคสยังเปิดค้าง.
+    const logId = src.startsWith("log:") ? src.slice(4) : null;
+    const m = await prisma.maintenanceRecord.findFirst({
+      ...maintArgs,
+      where: logId ? { ...maintArgs.where, sentLogId: logId } : { ...maintArgs.where, id: src },
+    });
+
+    if (!m) {
+      if (!logId) return null;
+      const t = await tripOf(logId);
+      if (!t) return null;
+      const o = t.opener;
+      return finish(
+        tripSummary(t),
+        tripSteps(t, `รอรับคืน · ${days(t.edits[t.edits.length - 1]?.changedAt ?? o.changedAt)} วัน แล้ว`),
+        [
+          { label: "รายการพัสดุ", value: o.item.name },
+          { label: "รหัสพัสดุ", value: o.item.code },
+          ...(o.subItem ? [{ label: "รหัสย่อย", value: o.subItem.subCode }] : []),
+          { label: "บำรุงรักษาที่", value: "ภายนอก NLU" },
+          { label: "วันที่ส่ง", value: o.changedAt.toLocaleDateString("th-TH") },
+          { label: "ผู้ส่ง", value: o.changer.name },
+        ],
+        null,
+        [],
+      );
+    }
+
     const s = maintSummary(m);
-    // ภายนอกเป็นงานสองขั้น ไม่ใช่จุดเดียวเหมือนภายใน: ของออกจากหน่วยงานไปก่อน แล้วค่อยกลับมา
-    // บันทึกผล. ขั้นแรกไม่มีที่อยู่ใน maintenance_records — มันคือแถว log ตอนส่ง — ถ้าไม่ดึงมา
-    // ไทม์ไลน์จะเล่าว่าของกลับมาจากทริปที่ไม่เคยเห็นว่าออกไป.
-    // Newest first, so [0] is the last correction (แก้ข้อมูลส่งบำรุงรักษา appends a
-    // PENDING_MAINTENANCE → PENDING_MAINTENANCE row) and the last row that ENTERED the status
-    // is the departure. The step shows the departure's date with the correction's text — the
-    // trip left when it left, and says what it now says.
-    const sentLogs =
-      m.repairVenue === RepairVenue.EXTERNAL
-        ? await prisma.itemStatusLog.findMany({
-            where: {
-              itemId: m.itemId,
-              subItemId: m.subItemId ?? null,
-              newStatus: ItemStatus.PENDING_MAINTENANCE,
-              changedAt: { lte: m.createdAt },
-            },
-            orderBy: { changedAt: "desc" },
-            select: { id: true, previousStatus: true, changedAt: true, repairNote: true, imageUrls: true, changer: { select: { name: true } } },
-          })
-        : [];
-    const latest = sentLogs[0] ?? null;
-    const departed = sentLogs.find((l) => l.previousStatus !== ItemStatus.PENDING_MAINTENANCE) ?? latest;
-    const sent = latest && departed ? { ...latest, changedAt: departed.changedAt, by: departed.changer.name } : null;
+    // ขั้นแรกของงานภายนอกไม่มีที่อยู่ใน maintenance_records — มันคือแถว log ตอนส่ง — ถ้าไม่ดึงมา
+    // ไทม์ไลน์จะเล่าว่าของกลับมาจากเที่ยวที่ไม่เคยเห็นว่าออกไป. ใบเก่าก่อนมีคอลัมน์ผูก (backfill
+    // เดาไม่ได้) ยังไม่มีเที่ยวให้ดึง — การ์ดก็เหลือขั้นเดียวเหมือนเดิม ไม่ใช่พัง.
+    const trip = m.sentLogId ? await tripOf(m.sentLogId, m.createdAt) : null;
     const venueLabel = m.repairVenue === RepairVenue.EXTERNAL ? "ภายนอก NLU" : "ภายใน NLU";
     return finish(
       s,
       [
-        ...(sent
-          ? [step({
-              key: "sent",
-              label: "ส่งบำรุงรักษาภายนอก",
-              at: sent.changedAt,
-              by: sent.by,
-              detail: sent.repairNote,
-              attachments: [{ recordType: "ItemStatusLog", recordId: sent.id, urls: sent.imageUrls }],
-            })]
-          : []),
+        ...(trip ? tripSteps(trip, `อยู่ระหว่างบำรุงรักษา · ${days(trip.opener.changedAt, m.performedAt)} วัน`) : []),
         step({
           key: "done",
-          label: sent ? "รับคืนจากบำรุงรักษา" : "บำรุงรักษา",
+          label: trip ? "รับคืนจากบำรุงรักษา" : "บำรุงรักษา",
           at: m.performedAt,
           by: m.performer.name,
           detail: join(m.issue, m.description),
@@ -1086,7 +1221,7 @@ export async function getCase(caseId: string): Promise<CaseDetail | null> {
         // แถวเก่าก่อนมีคอลัมน์นี้เป็น null — ไม่เดาให้ว่าเป็นภายใน
         ...(m.repairVenue ? [{ label: "บำรุงรักษาที่", value: venueLabel }] : []),
         { label: "วันที่บำรุง", value: m.performedAt.toLocaleDateString("th-TH") },
-        ...(sent ? [{ label: "วันที่ส่ง", value: sent.changedAt.toLocaleDateString("th-TH") }] : []),
+        ...(trip ? [{ label: "วันที่ส่ง", value: trip.opener.changedAt.toLocaleDateString("th-TH") }] : []),
         { label: "ผู้ดำเนินการ", value: m.performer.name },
         ...(m.nextMaintenanceAt ? [{ label: "รอบถัดไป", value: m.nextMaintenanceAt.toLocaleDateString("th-TH") }] : []),
         ...(m.cost != null ? [{ label: "ค่าใช้จ่าย", value: m.cost.toLocaleString("th-TH") }] : []),

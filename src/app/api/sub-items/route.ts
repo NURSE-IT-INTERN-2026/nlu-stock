@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
           where: { newStatus: status },
           orderBy: { changedAt: "desc" },
           take: 10,
-          select: { id: true, repairVenue: true, reason: true, repairNote: true, damageNote: true, changedAt: true, previousStatus: true, imageUrls: true },
+          select: { id: true, repairVenue: true, reason: true, repairNote: true, damageNote: true, changedAt: true, previousStatus: true, imageUrls: true, changer: { select: { name: true } } },
         },
       }),
     },
@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
       repairSentAt: trip.startedAt,
       evidenceLogId: trip.openerId,
       evidenceUrls: trip.imageUrls,
+      by: trip.by,
     };
   });
 

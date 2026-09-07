@@ -15,14 +15,12 @@ assert.equal(canTransition("UNDER_REPAIR", "DISPOSED"), true);
 assert.equal(canTransition("UNDER_REPAIR", "UNDER_REPAIR"), true);
 assert.equal(canTransition("AVAILABLE", "AVAILABLE"), false, "self-edge มีแค่ UNDER_REPAIR กับ PENDING_MAINTENANCE");
 
-// ยกเลิกคำขอชำรุด is ADMIN-only, and it's the ONLY edge a role unlocks.
-assert.equal(canTransition("DAMAGED", "AVAILABLE"), false);
-assert.equal(canTransition("DAMAGED", "AVAILABLE", { isSuperAdmin: true }), true);
-assert.equal(canTransition("DAMAGED", "LOST", { isSuperAdmin: true }), false, "ADMIN ก็ข้ามขั้นไม่ได้");
+// ยกเลิกคำขอชำรุด — open to every stock manager now; the route's requireAdmin is the gate.
+assert.equal(canTransition("DAMAGED", "AVAILABLE"), true, "ยกเลิกคำขอชำรุด");
+assert.equal(canTransition("DAMAGED", "LOST"), false, "ยังข้ามขั้นไม่ได้");
 
 // Written-off can be undone (mirror of เรียกคืน): both LOST and DISPOSED → AVAILABLE.
 assert.equal(canTransition("DISPOSED", "AVAILABLE"), true, "ยกเลิกตัดจำหน่ายแล้วคืนได้");
-assert.equal(canTransition("DISPOSED", "AVAILABLE", { isSuperAdmin: true }), true);
 assert.equal(canTransition("LOST", "AVAILABLE"), true, "เจอของที่หายแล้วคืนได้");
 // Still terminal to anything but AVAILABLE.
 assert.equal(canTransition("DISPOSED", "DAMAGED"), false);
@@ -37,10 +35,7 @@ assert.equal(canTransition("ON_LOAN", "PENDING_MAINTENANCE"), false, "ต้อ�
 assert.equal(canTransition("PENDING_MAINTENANCE", "PENDING_MAINTENANCE"), true);
 // ...but no button offers it: the send is driven by /maintenance, which alone collects the trip.
 assert.equal(allowedTargets("AVAILABLE").includes("PENDING_MAINTENANCE"), false);
-assert.equal(allowedTargets("AVAILABLE", { isSuperAdmin: true }).includes("PENDING_MAINTENANCE"), false);
 
-// allowedTargets adds the admin edge without duplicating.
-assert.deepEqual([...allowedTargets("DAMAGED")].sort(), ["DISPOSED", "UNDER_REPAIR"]);
-assert.deepEqual([...allowedTargets("DAMAGED", { isSuperAdmin: true })].sort(), ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"]);
+assert.deepEqual([...allowedTargets("DAMAGED")].sort(), ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"]);
 
 console.log("status-utils: all assertions passed");

@@ -78,7 +78,10 @@ export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
   // same trip, so it appends a log row instead of restarting the clock (a corrected shop name
   // must not make a piece that has been out for three weeks read as sent today).
   PENDING_MAINTENANCE: ["AVAILABLE", "DAMAGED", "DISPOSED", "PENDING_MAINTENANCE"],
-  DAMAGED: ["UNDER_REPAIR", "DISPOSED"],
+  // AVAILABLE = ยกเลิกคำขอชำรุด: the piece turned out not to be broken. Open to anyone who can
+  // manage stock — the person who inspects the piece is the person who filed the report, and
+  // routing the correction through a superadmin only left wrong ชำรุด rows sitting in the queue.
+  DAMAGED: ["UNDER_REPAIR", "DISPOSED", "AVAILABLE"],
   UNDER_REPAIR: ["AVAILABLE", "DISPOSED", "UNDER_REPAIR"],
   LOST: ["AVAILABLE"],
   // ยกเลิกตัดจำหน่าย — mirror of LOST → AVAILABLE (เรียกคืน): a disposed piece can be
@@ -86,24 +89,13 @@ export const ALLOWED_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
   DISPOSED: ["AVAILABLE"],
 };
 
-// ยกเลิกคำขอชำรุด — the piece turned out not to be broken. SUPERADMIN only, and it is the ONLY
-// edge a role unlocks: a superadmin still cannot skip any other step.
-const SUPERADMIN_ONLY: readonly (readonly [ItemStatus, ItemStatus])[] = [["DAMAGED", "AVAILABLE"]];
-
-export function canTransition(
-  from: ItemStatus,
-  to: ItemStatus,
-  opts?: { isSuperAdmin?: boolean },
-): boolean {
-  if (ALLOWED_TRANSITIONS[from].includes(to)) return true;
-  return !!opts?.isSuperAdmin && SUPERADMIN_ONLY.some(([f, t]) => f === from && t === to);
+// No edge is role-gated any more: the state machine says what may happen, and requireAdmin at
+// the route says who may drive it. Skipping a step is still refused for everyone.
+export function canTransition(from: ItemStatus, to: ItemStatus): boolean {
+  return ALLOWED_TRANSITIONS[from].includes(to);
 }
 
 /** Targets reachable from `from` — use this to build/filter the status buttons a user sees. */
-export function allowedTargets(from: ItemStatus, opts?: { isSuperAdmin?: boolean }): ItemStatus[] {
-  const base = ALLOWED_TRANSITIONS[from].filter((s) => !FLOW_ONLY.has(s));
-  if (opts?.isSuperAdmin) {
-    for (const [f, t] of SUPERADMIN_ONLY) if (f === from && !base.includes(t)) base.push(t);
-  }
-  return base;
+export function allowedTargets(from: ItemStatus): ItemStatus[] {
+  return ALLOWED_TRANSITIONS[from].filter((s) => !FLOW_ONLY.has(s));
 }

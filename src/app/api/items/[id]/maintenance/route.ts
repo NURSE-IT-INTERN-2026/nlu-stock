@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleError } from "@/lib/api-utils";
-import { recomputeItemCounts, restoreDamagedQty } from "@/lib/stock";
+import { lockItems, recomputeItemCounts, restoreDamagedQty } from "@/lib/stock";
 import { canTransition } from "@/lib/status-utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { nextDateAfterJob } from "@/lib/maintenance";
@@ -55,6 +55,7 @@ export async function POST(
 
   try {
     const record = await prisma.$transaction(async (tx) => {
+      await lockItems(tx, [itemId]);
       // Scheduling is the server's call — see nextDateAfterJob for the rule and why.
       // A PREVENTIVE round may carry an override (staff typed their own date); the repair
       // screen has no such field, so any date arriving with a CORRECTIVE job is ignored
@@ -67,10 +68,13 @@ export async function POST(
       const qtyRepair = !!data.adjustmentId;
       const it = await tx.item.findUnique({
         where: { id: itemId },
-        select: { maintenanceCycleMonths: true, nextMaintenanceDate: true },
+        select: { maintenanceCycleMonths: true, nextMaintenanceDate: true, status: true },
       });
+      const subNow = data.subItemId
+        ? await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { nextMaintenanceDate: true, status: true } })
+        : null;
       const currentNext = data.subItemId
-        ? (await tx.subItem.findUnique({ where: { id: data.subItemId }, select: { nextMaintenanceDate: true } }))?.nextMaintenanceDate ?? null
+        ? subNow?.nextMaintenanceDate ?? null
         : it?.nextMaintenanceDate ?? null;
       const nextAt = qtyRepair
         ? undefined
@@ -99,6 +103,30 @@ export async function POST(
             })
           : null;
 
+      // A ภายนอก round is the second half of a trip that opened with a ส่งบำรุงรักษาภายนอก log.
+      // Link the two: that link is what lets the open trip and this record be ONE case holding
+      // one MC number from ส่ง through รับคืน (see MaintenanceRecord.sentLogId).
+      // The departure is the row that ENTERED กำลังบำรุงรักษา — the self-edges stacked on top of
+      // it are แก้ข้อมูลส่งบำรุงรักษา edits to the same trip, not departures of their own.
+      // Guarded on the piece actually being out right now: a ภายนอก round typed straight into
+      // the form without ever sending has no trip, and without this it would adopt the log of
+      // whichever trip happened last.
+      const inTrip =
+        (data.subItemId ? subNow?.status : it?.status) === ItemStatus.PENDING_MAINTENANCE;
+      const sentLog =
+        data.type === "PREVENTIVE" && inTrip
+          ? await tx.itemStatusLog.findFirst({
+              where: {
+                itemId,
+                subItemId: data.subItemId ?? null,
+                newStatus: ItemStatus.PENDING_MAINTENANCE,
+                previousStatus: { not: ItemStatus.PENDING_MAINTENANCE },
+              },
+              orderBy: { changedAt: "desc" },
+              select: { id: true },
+            })
+          : null;
+
       const rec = await tx.maintenanceRecord.create({
         data: {
           itemId,
@@ -113,6 +141,7 @@ export async function POST(
           nextMaintenanceAt: nextAt ?? undefined,
           subItemId: data.subItemId ?? undefined,
           repairVenue: venueLog?.repairVenue ?? data.repairVenue ?? undefined,
+          sentLogId: sentLog?.id,
         },
       });
 

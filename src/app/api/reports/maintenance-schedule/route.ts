@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
             code: true,
             name: true,
             model: true,
+            imageUrl: true,
             maintenanceCycleMonths: true,
             category: { select: { id: true, name: true, profileId: true } },
             location: { select: { building: true, floor: true, room: true, detail: true } },
@@ -97,6 +98,7 @@ export async function GET(request: NextRequest) {
     code: string;
     name: string;
     model: string;
+    imageUrl: string | null;
     categoryName: string;
     // Ids + raw location parts so a client can drive the shared items filter bar off these rows.
     categoryId: string;
@@ -128,6 +130,7 @@ export async function GET(request: NextRequest) {
       code: effectiveCode(s.item.code, s.subCode, s.item._count.subItems),
       name: s.item.name,
       model: s.item.model ?? "",
+      imageUrl: s.item.imageUrl,
       categoryName: s.item.category.name,
       categoryId: s.item.category.id,
       profileId: s.item.category.profileId,
@@ -157,6 +160,7 @@ export async function GET(request: NextRequest) {
       code: i.code,
       name: i.name,
       model: i.model ?? "",
+      imageUrl: i.imageUrl,
       categoryName: i.category.name,
       categoryId: i.category.id,
       profileId: i.category.profileId,

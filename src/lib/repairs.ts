@@ -20,6 +20,7 @@ export type RepairTripLog = {
   repairNote: string | null;
   damageNote: string | null;
   changedAt: Date;
+  changer?: { name: string } | null;
 };
 
 export type RepairTrip = {
@@ -31,6 +32,8 @@ export type RepairTrip = {
   /** The log row that opened the trip: the record whose imageUrls hold this job's หลักฐาน. */
   openerId: string | null;
   imageUrls: string[];
+  /** Who opened the trip — ผู้แจ้งชำรุด on a DAMAGED row, ผู้ส่งซ่อม on an UNDER_REPAIR one. */
+  by: string | null;
 };
 
 /**
@@ -67,5 +70,6 @@ export function deriveRepairTrip(logs: RepairTripLog[], status: string): RepairT
     // one pile per job, appended to through /api/attachments, never copied to a second row.
     openerId: start?.id ?? null,
     imageUrls: start?.imageUrls ?? [],
+    by: start?.changer?.name ?? null,
   };
 }

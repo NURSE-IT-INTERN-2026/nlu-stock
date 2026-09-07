@@ -8,7 +8,16 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClipboardList, History, PackageCheck, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ItemThumb } from "@/components/shared/item-thumb";
+import { ArrowDownUp, ClipboardList, History, Loader2, PackageCheck, Pencil, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -20,7 +29,7 @@ import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-car
 import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialog";
 import { ReportFilters, type FilterValues } from "@/components/reports/report-filters";
 import { ExportButtons } from "@/components/reports/export-buttons";
-import { getMaintenanceSummary, getReport } from "@/lib/api";
+import { getMaintenanceSummary, getReport, updateItemStatus } from "@/lib/api";
 import { toast } from "sonner";
 
 import { usePageHeader } from "@/components/layout/page-header-context";
@@ -44,7 +53,10 @@ interface ScheduleRow {
   code: string; // already formatted per-copy (effectiveCode) by the server
   name: string;
   model: string;
+  imageUrl: string | null;
   categoryName: string;
+  /** ItemStatus of the piece (tracked) or the item (flat) — only AVAILABLE may be sent out. */
+  status: string;
   location: string;
   lastMaintenanceDate: string;
   nextMaintenanceDate: string;
@@ -71,15 +83,68 @@ function fmtThaiDate(dateStr: string): string {
 // สถานะกำหนดบำรุง (คำนวณฝั่ง server ใน /api/reports/maintenance-schedule)
 // ปกติ = outline เพื่อให้เงียบที่สุด — แถวส่วนใหญ่เป็นค่านี้
 const STATUS_META = {
-  overdue: { label: "เกินกำหนดซ่อมบำรุง", variant: "destructive", tone: "text-destructive" },
-  "due-soon": { label: "ใกล้ถึงกำหนดซ่อมบำรุง", variant: "secondary", tone: "text-amber-600 dark:text-amber-400" },
-  "in-maintenance": { label: "กำลังบำรุงรักษา", variant: "secondary", tone: "text-sky-600 dark:text-sky-400" },
-  normal: { label: "ปกติ", variant: "outline", tone: "text-muted-foreground" },
-} as const satisfies Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; tone: string }>;
+  overdue: { label: "เกินกำหนดซ่อมบำรุง", variant: "destructive", tone: "text-destructive dark:text-danger-400", pill: "bg-destructive/10 text-destructive dark:text-danger-400" },
+  "due-soon": { label: "ใกล้ถึงกำหนดซ่อมบำรุง", variant: "secondary", tone: "text-amber-600 dark:text-amber-400", pill: "bg-warning/10 text-warning-700 dark:text-warning-200" },
+  "in-maintenance": { label: "กำลังบำรุงรักษา", variant: "secondary", tone: "text-sky-600 dark:text-sky-400", pill: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
+  normal: { label: "ปกติ", variant: "outline", tone: "text-muted-foreground", pill: "bg-muted text-muted-foreground" },
+} as const satisfies Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; tone: string; pill: string }>;
 
 function statusMeta(status: string) {
   return STATUS_META[status as keyof typeof STATUS_META] ?? STATUS_META.normal;
 }
+
+/** Soft-filled pill, the shape /repairs uses — a bordered Badge reads as a control, not a state. */
+function StatusPill({ status }: { status: string }) {
+  const meta = statusMeta(status);
+  return (
+    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium", meta.pill)}>
+      {meta.label}
+    </span>
+  );
+}
+
+/** The one or two things a row can have done to it, as icon buttons in the จัดการ column and as
+ *  full-width buttons on the mobile card — the same pair the ค้างซ่อม worklist draws. */
+function RowActions({
+  row, onOpen, iconOnly,
+}: {
+  row: ScheduleRow;
+  onOpen: (row: ScheduleRow, mode?: "record" | "edit") => void;
+  iconOnly?: boolean;
+}) {
+  // แก้ข้อมูล = เที่ยวเดิม (พิมพ์ชื่อร้านผิด, เพิ่มรายการที่ให้ทำ) — วันที่ส่งไม่ขยับ. คู่ขนานกับ
+  // แก้ข้อมูลส่งซ่อม ของ flow ซ่อม.
+  const actions = row.maintenanceStatus === "in-maintenance"
+    ? ([
+        { mode: "edit", label: "แก้ข้อมูลส่งบำรุงรักษา", Icon: Pencil },
+        { mode: "record", label: "บันทึกรับคืน", Icon: PackageCheck },
+      ] as const)
+    : ([{ mode: "record", label: "บันทึกบำรุงรักษา", Icon: ClipboardList }] as const);
+
+  return (
+    <>
+      {actions.map(({ mode, label, Icon }, i) => (
+        <Button
+          key={mode}
+          size={iconOnly ? "icon" : "sm"}
+          variant={i === 0 && actions.length > 1 ? "outline" : "default"}
+          className={iconOnly ? "size-8" : "h-9 flex-1"}
+          title={label}
+          aria-label={`${label} ${row.code} ${row.name}`}
+          onClick={() => onOpen(row, mode)}
+        >
+          <Icon className="size-3.5" />
+          {!iconOnly && label}
+        </Button>
+      ))}
+    </>
+  );
+}
+
+/** Only a piece sitting on the shelf can leave for a maintenance round — ON_LOAN has to come
+ *  back first, and one already out is out. Same rule the state machine enforces server-side. */
+const sendable = (row: { status: string; maintenanceStatus: string }) =>
+  row.status === "AVAILABLE" && row.maintenanceStatus !== "in-maintenance";
 
 // ── Page ──
 
@@ -128,6 +193,13 @@ function MaintenanceShell() {
   const [schedulePage, setSchedulePage] = useState(1);
   const [filter, setFilter] = useState<"all" | "overdue" | "due-soon" | "in-maintenance">("all");
   const [filters, setFilters] = useState<FilterValues>({});
+  // Soonest-due first is what the API already returns and what the queue is read in; the toggle
+  // is for the other question — "อะไรยังอีกนาน" when planning a batch to send out together.
+  const [latestFirst, setLatestFirst] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -181,10 +253,69 @@ function MaintenanceShell() {
     page: outPage, setPage: setOutPage, paged: pagedOutRows,
   } = useClientPage(outRows, PAGE_SIZE.COMPACT);
 
-  const filteredSchedule = filter === "all"
+  const filteredSchedule = (filter === "all"
     ? scheduleItems
-    : scheduleItems.filter((i) => i.maintenanceStatus === filter);
+    : scheduleItems.filter((i) => i.maintenanceStatus === filter)
+  ).slice().sort((a, b) => {
+    const d = new Date(a.nextMaintenanceDate).getTime() - new Date(b.nextMaintenanceDate).getTime();
+    return latestFirst ? -d : d;
+  });
   const pagedSchedule = filteredSchedule.slice((schedulePage - 1) * PAGE_SIZE.COMPACT, schedulePage * PAGE_SIZE.COMPACT);
+
+  const bulkable = pagedSchedule.filter(sendable);
+  const picked = filteredSchedule.filter((r) => selected.has(r.id) && sendable(r));
+  const allPickedOnPage = bulkable.length > 0 && bulkable.every((r) => selected.has(r.id));
+
+  const toggleRow = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const r of bulkable) {
+        if (allPickedOnPage) next.delete(r.id);
+        else next.add(r.id);
+      }
+      return next;
+    });
+
+  // ส่งบำรุงรักษาภายนอกทีละหลายชิ้น — the venue and the work order are one answer for the whole
+  // batch (they go to the same vendor in the same van), which is the only reason this bulks at
+  // all. บันทึกผล never will: the result and the cost are per piece.
+  const bulkSend = async () => {
+    setBulkSaving(true);
+    const results = await Promise.allSettled(
+      picked.map((r) =>
+        updateItemStatus(r.itemId, {
+          newStatus: "PENDING_MAINTENANCE",
+          subItemId: r.subItemId ?? undefined,
+          notes: `ส่งบำรุงรักษาภายนอก — ${bulkNote.trim()}`,
+          repairVenue: "EXTERNAL",
+          repairNote: bulkNote.trim(),
+        }),
+      ),
+    );
+    setBulkSaving(false);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    // Partial success is the normal outcome of a batch write, so it is counted rather than
+    // swallowed — "ส่งแล้ว" after three of ten went through is how rows go missing.
+    if (failed === picked.length) {
+      const first = results[0];
+      toast.error(first?.status === "rejected" && first.reason instanceof Error ? first.reason.message : "ส่งบำรุงรักษาไม่สำเร็จ");
+    } else if (failed > 0) {
+      toast.warning(`ส่งบำรุงรักษาแล้ว ${picked.length - failed} รายการ · ไม่สำเร็จ ${failed} รายการ`);
+    } else {
+      toast.success(`ส่งบำรุงรักษาภายนอกแล้ว ${picked.length} รายการ`);
+    }
+    setBulkOpen(false);
+    setBulkNote("");
+    setSelected(new Set());
+    fetchData();
+  };
 
   const toggleFilter = (target: "overdue" | "due-soon" | "in-maintenance") => {
     setFilter((f) => (f === target ? "all" : target));
@@ -301,7 +432,17 @@ function MaintenanceShell() {
               config={{ dateRange: true, locations: true }}
               values={filters}
               onChange={setFilters}
-              actions={<ExportButtons reportType="maintenance-schedule" filters={filters} />}
+              actions={
+                <>
+                  {/* Disabled rather than hidden: the checkboxes are visible from the start, so a
+                      button appearing the moment one is ticked reads as a different screen. */}
+                  <Button size="sm" className="h-9" disabled={picked.length === 0} onClick={() => setBulkOpen(true)}>
+                    <Send className="size-3.5" />
+                    ส่งบำรุงรักษาที่เลือก{picked.length > 0 && ` (${picked.length})`}
+                  </Button>
+                  <ExportButtons reportType="maintenance-schedule" filters={filters} />
+                </>
+              }
               className="rounded-none border-0 bg-transparent p-0 sm:p-0"
             />
 
@@ -335,26 +476,49 @@ function MaintenanceShell() {
               <Table grid zebra className="table-fixed">
                 <TableHeader sticky>
                   <TableRow>
+                    <TableHead className="w-10 px-2">
+                      <Checkbox
+                        checked={allPickedOnPage}
+                        disabled={bulkable.length === 0}
+                        onCheckedChange={toggleAll}
+                        aria-label="เลือกทั้งหน้า"
+                      />
+                    </TableHead>
+                    <TableHead className="w-14 px-2">รูป</TableHead>
                     <TableHead className="w-36 px-2">รหัสพัสดุ</TableHead>
+                    {/* The only column without a width — table-fixed hands it what the others
+                        leave over, so those have to stay honest or the name collapses. */}
                     <TableHead className="px-2">ชื่อ</TableHead>
-                    <TableHead className="w-40 px-2">สถานะ</TableHead>
+                    <TableHead className="w-36 px-2">สถานะ</TableHead>
                     <TableHead className="w-24 px-2">จำนวนวัน</TableHead>
-                    <TableHead className="w-36 px-2">กำหนดการซ่อมบำรุง</TableHead>
-                    <TableHead className="w-40 px-2">สถานที่</TableHead>
+                    {/* One sort control, not two: จำนวนวัน is a rendering of this same date, so
+                        sorting either would produce the identical order. */}
+                    <TableHead className="w-36 px-2">
+                      <button
+                        type="button"
+                        onClick={() => { setLatestFirst((v) => !v); setSchedulePage(1); }}
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                      >
+                        กำหนดการซ่อมบำรุง
+                        <ArrowDownUp className="size-3 shrink-0" />
+                      </button>
+                    </TableHead>
+                    <TableHead className="w-28 px-2">สถานที่</TableHead>
+                    <TableHead className="w-24 px-2">จัดการ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 6 }).map((_, j) => (
+                        {Array.from({ length: 9 }).map((_, j) => (
                           <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                         ))}
                       </TableRow>
                     ))
                   ) : filteredSchedule.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                         ไม่พบรายการตามตัวกรอง
                       </TableCell>
                     </TableRow>
@@ -365,25 +529,29 @@ function MaintenanceShell() {
                       <TableRow
                         key={row.id}
                       >
-                        {/* รหัส → ลิงก์ไปหน้าพัสดุ. ชื่อ → ปุ่มบันทึกบำรุง (target แค่ชื่อ ไม่ทั้งแถว) */}
+                        <TableCell className="px-2">
+                          <Checkbox
+                            checked={selected.has(row.id)}
+                            disabled={!sendable(row)}
+                            onCheckedChange={() => toggleRow(row.id)}
+                            aria-label={`เลือก ${row.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="px-2">
+                          <div className="size-9 overflow-hidden rounded-md bg-muted">
+                            <ItemThumb src={row.imageUrl} alt={row.name} />
+                          </div>
+                        </TableCell>
+                        {/* รหัส → ลิงก์ไปหน้าพัสดุ. ชื่อเป็นข้อความเฉย ๆ: การกระทำอยู่ในคอลัมน์
+                            จัดการแล้ว และปุ่มสองตัวที่ชื่อเหมือนกันในแถวเดียวทำให้ screen reader
+                            อ่านเจอสองอัน โดยที่ทั้งคู่ทำงานเดียวกัน */}
                         <TableCell className="font-mono text-xs px-2">
                           <Link href={`/items/${row.itemId}`} className="block truncate text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
                         </TableCell>
-                        <TableCell className="px-2">
-                          <button
-                            type="button"
-                            onClick={() => openRecordDialog(row)}
-                            aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
-                            className="block w-full truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none cursor-pointer"
-                          >
-                            {row.name}
-                          </button>
+                        <TableCell className="px-2 font-medium">
+                          <p className="line-clamp-2 whitespace-normal break-words">{row.name}</p>
                         </TableCell>
-                        <TableCell className="px-2">
-                          <Badge variant={meta.variant} className="px-1.5 py-0 leading-5 text-[11px]">
-                            {meta.label}
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="px-2"><StatusPill status={row.maintenanceStatus} /></TableCell>
                         <TableCell className={cn("text-xs px-2 tabular-nums", meta.tone)}>
                           {days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`}
                         </TableCell>
@@ -391,7 +559,12 @@ function MaintenanceShell() {
                           {fmtThaiDate(row.nextMaintenanceDate)}
                         </TableCell>
                         <TableCell className="px-2 text-xs text-muted-foreground">
-                          <span className="block truncate" title={row.location}>{row.location || "—"}</span>
+                          <span className="block line-clamp-2 whitespace-normal break-words" title={row.location}>{row.location || "—"}</span>
+                        </TableCell>
+                        <TableCell className="px-2">
+                          <div className="flex items-center gap-1">
+                            <RowActions row={row} onOpen={openRecordDialog} iconOnly />
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -412,33 +585,38 @@ function MaintenanceShell() {
                 const days = daysUntil(row.nextMaintenanceDate);
                 const meta = statusMeta(row.maintenanceStatus);
                 return (
-                  <div key={row.id} className="flex flex-col gap-1.5 px-4 py-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      {/* ชื่อ = ปุ่มบันทึกบำรุง (target แค่ชื่อ) */}
-                      <button
-                        type="button"
-                        onClick={() => openRecordDialog(row)}
-                        aria-label={`บันทึกบำรุงรักษา ${row.code} ${row.name}`}
-                        className="min-w-0 text-left font-medium leading-tight hover:underline focus-visible:underline focus-visible:outline-none"
-                      >
-                        {row.name}
-                      </button>
-                      <Badge variant={meta.variant} className="shrink-0">
-                        {meta.label}
-                      </Badge>
+                  <div key={row.id} className="flex gap-3 px-4 py-2.5">
+                    <Checkbox
+                      className="mt-1 shrink-0"
+                      checked={selected.has(row.id)}
+                      disabled={!sendable(row)}
+                      onCheckedChange={() => toggleRow(row.id)}
+                      aria-label={`เลือก ${row.name}`}
+                    />
+                    <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
+                      <ItemThumb src={row.imageUrl} alt={row.name} />
                     </div>
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <Link href={`/items/${row.itemId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
-                      <span className="flex items-center gap-1.5 tabular-nums">
-                        {fmtThaiDate(row.nextMaintenanceDate)}
-                        <span className={cn("text-xs", meta.tone)}>
-                          ({days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`})
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 font-medium leading-tight break-words">{row.name}</p>
+                        <span className="shrink-0"><StatusPill status={row.maintenanceStatus} /></span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <Link href={`/items/${row.itemId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
+                        <span className="flex items-center gap-1.5 tabular-nums">
+                          {fmtThaiDate(row.nextMaintenanceDate)}
+                          <span className={cn("text-xs", meta.tone)}>
+                            ({days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`})
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                      {row.location && (
+                        <div className="text-xs text-muted-foreground break-words">{row.location}</div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <RowActions row={row} onOpen={openRecordDialog} />
+                      </div>
                     </div>
-                    {row.location && (
-                      <div className="text-xs text-muted-foreground">{row.location}</div>
-                    )}
                   </div>
                 );
               })}
@@ -544,6 +722,46 @@ function MaintenanceShell() {
         maintenanceCycleMonths={dialogCycle}
         onSuccess={fetchData}
       />
+
+      {/* ส่งบำรุงรักษาภายนอกทีละหลายชิ้น. The single-row path goes through MaintenanceFormDialog,
+          which asks the same one question plus the fields only a result has — this asks that
+          question alone, once, for the whole batch. */}
+      <AlertDialog open={bulkOpen} onOpenChange={(v) => !v && setBulkOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ส่งบำรุงรักษาภายนอก</AlertDialogTitle>
+            <AlertDialogDescription>
+              ส่ง <span className="font-medium text-foreground">{picked.length} รายการ</span> ออกไปบำรุงรักษาภายนอก —
+              ทุกชิ้นจะขึ้นสถานะ &ldquo;กำลังบำรุงรักษา&rdquo; เมื่อของกลับมา กรุณากด &ldquo;บันทึกรับคืน&rdquo; ที่แท็บรับคืนจากบำรุงรักษา
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {/* Direct child of AlertDialogContent (not Header) so the separator's -mx-4 reaches
+              both dialog edges (Header is a centered grid → clips). */}
+          <div className="w-full space-y-3 text-left">
+            <div className="-mx-4"><Separator /></div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground" required>หน่วยงานผู้รับงานและรายการที่ให้ดำเนินการ</Label>
+              <Textarea
+                value={bulkNote}
+                onChange={(e) => setBulkNote(e.target.value)}
+                placeholder="เช่น ส่งบริษัท ABC ตรวจเช็คประจำปี เปลี่ยนอะไหล่ตามสภาพ…"
+                rows={3}
+                className="bg-card"
+              />
+            </div>
+            {/* หลักฐานแนบเป็นของรายชิ้น ไม่มีกองกลางให้แปะ — แนบทีหลังที่ปุ่มแก้ข้อมูลของแต่ละแถว */}
+            <p className="text-xs text-muted-foreground">
+              แนบหลักฐานได้ทีหลังที่ปุ่ม &ldquo;แก้ข้อมูลส่งบำรุงรักษา&rdquo; ของแต่ละรายการ
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction disabled={bulkSaving || !bulkNote.trim()} onClick={bulkSend}>
+              {bulkSaving && <Loader2 className="size-3.5 animate-spin" />}ยืนยันส่ง
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

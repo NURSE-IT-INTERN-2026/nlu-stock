@@ -152,6 +152,12 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   // ซึ่งเป็นตอนเดียวที่รู้ผล ค่าใช้จ่าย และรอบถัดไป.
   const sending = !fromRepair && !receiving && (editSend || venue === "EXTERNAL");
 
+  // input[type=date] ให้มาแต่วัน ซึ่งกลายเป็นเที่ยงคืน UTC = 07:00 ตามเวลาไทย — เร็วกว่าใบส่งของ
+  // วันเดียวกันแทบทุกครั้ง แล้วไทม์ไลน์ก็เล่าว่าของกลับมาก่อนที่จะถูกส่งออกไป. วันนี้จึงติดเวลาจริง
+  // ไปด้วย ส่วนวันย้อนหลังไม่มีใครรู้เวลาอยู่แล้ว ปล่อยเป็นเที่ยงคืนตามเดิม.
+  const stamped = (d: string) =>
+    d === new Date().toISOString().split("T")[0] ? new Date().toISOString() : d;
+
   const handleSubmit = async () => {
     const targetId = selectedItemId;
     if (!targetId) {
@@ -183,7 +189,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
       await createMaintenance(targetId, {
         type,
         result,
-        performedAt,
+        performedAt: stamped(performedAt),
         // The reported symptom lives on the ชำรุด log — carry it over; a PREVENTIVE round has none.
         issue: (fromRepair ? repairInfo?.damage : null) || null,
         description: description || null,
