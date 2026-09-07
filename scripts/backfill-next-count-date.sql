@@ -18,6 +18,9 @@
 --     countCycleMonths override — same rule as lib/stock-count countCycleFor. Kept in sync by
 --     hand: this runs once, that runs forever.
 --
+-- prisma/seed.ts ทำเรื่องเดียวกันท้าย seed แล้ว (ออฟเซ็ตจาก md5(code) เพื่อให้ reseed ได้ผลเท่าเดิม
+-- ตาม PRNG ที่ fix seed ไว้ทั้งไฟล์). สคริปต์นี้เหลือไว้ซ่อม DB ที่ seed ไปก่อนหน้านั้น.
+--
 -- Run once, against a database seeded without count dates:
 --   docker exec -i realnlu-stock-db-1 psql -U nlu_stock -d nlu_stock -v ON_ERROR_STOP=1 < scripts/backfill-next-count-date.sql
 --

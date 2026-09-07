@@ -1140,6 +1140,42 @@ async function main() {
   console.log(`  ${loanRecCount} open loan records across ${loanEventCount} borrow events`);
 
   // ============================================================
+  // ตรวจนับ (stock count) due dates
+  // ============================================================
+  // ทั้ง 7 จุดที่ create item ข้างบนไม่ได้ stamp nextCountDate — path สร้างของจริง (settings/items,
+  // items/quick-create) stamp ให้ แต่ seed แทรกตรงเข้า DB. lib/alerts ถือว่า null = ไม่เคยตรวจนับ
+  // = ถึงกำหนดแล้ว ปล่อยไว้ chip ถึงรอบตรวจนับ จึงติดทั้ง 918 แถวและ badge อ่านได้ 979.
+  // Alert ที่ดังกับทุกอย่างไม่ได้บอกอะไรเลย.
+  //
+  // ทำเป็น statement เดียวท้าย seed แทนที่จะไปแก้ทั้ง 7 จุด: จุดที่ 8 ที่ใครเพิ่มวันหลังก็โดนคลุมด้วย.
+  //   * เฉพาะ nextCountDate. lastCountDate ปล่อย null ไว้ตั้งใจ — stamp ลงไปคือกุว่ามีคนตรวจนับ
+  //     ทั้งที่ไม่มี และ audit trail คือสิ่งเดียวที่ห้ามแต่ง. null อ่านว่า "ไม่เคยตรวจนับ" ซึ่งจริง
+  //   * กระจายทั่ว cycle ไม่ใช่ now()+cycle. แปะวันเดียวกันหมดคือเลื่อนปัญหาไปหนึ่ง cycle แล้ว
+  //     badge เด้งกลับ 979 ในคืนเดียว. กระจายแล้วถึงกำหนดสัปดาห์ละไม่กี่ชิ้น ซึ่งคือความหมายของ
+  //     ตารางตรวจนับ
+  //   * ออฟเซ็ตมาจาก md5(code) ไม่ใช่ random(): code มาจาก CSV จึงคงที่ข้าม reseed. seed ทั้งไฟล์
+  //     เดินด้วย PRNG ที่ fix seed ไว้เพื่อให้ e2e snapshot นิ่ง — random() ตรงนี้จะพังข้อตกลงนั้น
+  //   * cycle จาก profile (CONSUMABLE 3 เดือน, ทนถาวร 12) พร้อม override รายชิ้น — กติกาเดียวกับ
+  //     lib/stock-count countCycleFor
+  //
+  // scripts/backfill-next-count-date.sql ทำเรื่องเดียวกันกับ DB ที่ seed ไปแล้วก่อนมีบล็อกนี้.
+  const counted = await prisma.$executeRaw`
+    UPDATE items i
+    SET "nextCountDate" = now() + (
+      (('x' || substr(md5(i.code), 1, 4))::bit(16)::int) / 65536.0 * COALESCE(
+        i."countCycleMonths",
+        CASE p."dispenseType" WHEN 'CONSUMABLE' THEN 3 ELSE 12 END
+      )
+    ) * interval '1 month'
+    FROM categories c, category_profiles p
+    WHERE c.id = i."categoryId"
+      AND p.id = c."profileId"
+      AND i."isActive" = true
+      AND i."nextCountDate" IS NULL
+  `;
+  console.log(`  ${counted} items given a first ตรวจนับ due date`);
+
+  // ============================================================
   // Stats
   // ============================================================
   const totalItems = await prisma.item.count();
