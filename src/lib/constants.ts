@@ -7,12 +7,11 @@ import type { Role } from "@/lib/roles";
 import { BASE_PATH } from "@/lib/base-path";
 
 // ─── Item Condition (sub-item สภาพ) ───
+// สามค่า ไม่ใช่หก: เจ้าหน้าที่ต้องตัดสินได้ด้วยการมองชิ้นนั้น ไม่ใช่เดาว่า "เก่า" ต่างจาก
+// "พอใช้" ตรงไหน. คู่กับอายุของ (ageFromReceipt) — ป้ายบอกสภาพ ตัวเลขบอกว่าใช้มานานแค่ไหน.
 export const CONDITION_LABELS: Record<string, string> = {
-  NEW: "ใหม่",
-  OLD: "เก่า",
-  USABLE: "ใช้งานได้",
-  FAIR: "สภาพพอใช้",
-  UNUSABLE: "ใช้งานไม่ได้",
+  GOOD: "ดี",
+  FAIR: "ปานกลาง",
   DAMAGED: "ชำรุด",
 };
 

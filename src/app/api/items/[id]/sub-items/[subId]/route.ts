@@ -112,4 +112,4 @@ export async function PUT(
   return json(updated);
 }
 
-const VALID_CONDITIONS = new Set(["NEW", "OLD", "USABLE", "FAIR", "UNUSABLE", "DAMAGED"]);
+const VALID_CONDITIONS = new Set(["GOOD", "FAIR", "DAMAGED"]);

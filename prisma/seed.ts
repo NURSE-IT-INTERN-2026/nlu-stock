@@ -44,16 +44,14 @@ const PROFILE_SPEC: ProfileSpec[] = [
 // Legacy enum codes that CSV imports still reference → map to current profile codes.
 const PROFILE_ALIASES: Record<string, string> = { ELE: "KRU", BOOK: "BAT", TOY: "BAT" };
 
-// Map Thai condition → ItemCondition enum
+// Map Thai condition → ItemCondition enum. The source sheets still carry the six older
+// words (ใหม่/เก่า/ใช้งานได้/…) — they fold into the three the app now shows.
 function mapCondition(th: string): ItemCondition {
   const t = (th || "").trim();
-  if (t === "ใหม่" || t === "ปกติ") return "NEW";
-  if (t === "ปานกลาง") return "FAIR";
-  if (t === "เก่า") return "OLD";
-  if (t === "ใช้งานได้") return "USABLE";
-  if (t === "ใช้งานไม่ได้") return "UNUSABLE";
-  if (t === "ชำรุด") return "DAMAGED";
-  return "USABLE";
+  if (t === "ใหม่" || t === "ปกติ" || t === "ดี" || t === "ใช้งานได้") return "GOOD";
+  if (t === "ปานกลาง" || t === "เก่า") return "FAIR";
+  if (t === "ใช้งานไม่ได้" || t === "ชำรุด") return "DAMAGED";
+  return "GOOD";
 }
 
 // A piece that arrives already lost/damaged still needs an audit trail: ประวัติสูญหาย and
@@ -505,7 +503,7 @@ async function main() {
           subCode: `C${String(ci + 1).padStart(2, "0")}`,
           name: group.codes.length > 1 ? `${stripTrailingNum(group.bookName)} (${ci + 1})` : group.bookName,
           status: "AVAILABLE",
-          condition: "NEW",
+          condition: "GOOD",
         },
       });
       bookSubCount++;
@@ -563,7 +561,7 @@ async function main() {
           subCode: `C${String(ci + 1).padStart(2, "0")}`,
           name: group.codes.length > 1 ? `${stripTrailingNum(group.toyName)} (${ci + 1})` : group.toyName,
           status: "AVAILABLE",
-          condition: "NEW",
+          condition: "GOOD",
         },
       });
       toySubCount++;

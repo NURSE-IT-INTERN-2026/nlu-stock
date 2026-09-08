@@ -70,12 +70,12 @@ enum RepairVenue {
   EXTERNAL
 }
 
+// สภาพของ — ป้ายที่คนแปะ ไม่ใช่สถานะการใช้งาน (ดู ItemStatus). ไม่มี state machine: แก้เป็น
+// อะไรก็ได้ และไม่กระทบยอดสต๊อก. เคยมี 6 ค่า (NEW/OLD/USABLE/FAIR/UNUSABLE/DAMAGED) ซึ่งเจ้าหน้าที่
+// แยกไม่ออกว่า "เก่า" ต่างจาก "พอใช้" ตรงไหน — เหลือ 3 ค่าที่ตัดสินได้ด้วยตาเปล่า.
 enum ItemCondition {
-  NEW
-  OLD
-  USABLE
+  GOOD
   FAIR
-  UNUSABLE
   DAMAGED
 }
 
