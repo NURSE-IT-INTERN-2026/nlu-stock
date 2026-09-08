@@ -41,7 +41,13 @@ export async function GET(request: NextRequest) {
       outstanding,
       // Rooms with something still standing in them. A record whose room was never named
       // (legacy) is real stock in an unknown place, so it counts as its own "จุด".
-      locations: new Set(openRows.map((r) => r.locationId ?? "unlocated")).size,
+      //
+      // A fully part-returned row that has not been stamped returnedAt holds nothing, so it
+      // does not make a จุด — the same rule api/dashboard/station-by-room draws its bars by.
+      // Counting it here made the card name more จุด than the chart's "แสดง 5 จาก N".
+      locations: new Set(
+        openRows.filter((r) => r.quantity - r.resolvedQty > 0).map((r) => r.locationId ?? "unlocated"),
+      ).size,
       maintenanceOverdue: extra as number,
     });
   }

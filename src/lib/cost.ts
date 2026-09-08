@@ -123,6 +123,10 @@ export async function lossEvents(
     db.itemStatusLog.findMany({
       where: {
         newStatus: { in: [ItemStatus.LOST, ItemStatus.DISPOSED] },
+        // ขาที่ **เข้า** สถานะเท่านั้น. api/items/[id]/adjust เขียน log ที่ previousStatus =
+        // newStatus ทุกครั้งที่ตรวจนับของที่ไม่ track รายชิ้น — บนพัสดุที่สถานะเป็น LOST/DISPOSED
+        // อยู่แล้ว แถวพวกนั้นอ่านเป็นของหายใบใหม่ ซ้ำกับ StockAdjustment ของการนับรอบเดียวกัน
+        previousStatus: { notIn: [ItemStatus.LOST, ItemStatus.DISPOSED] },
         recoveredAt: null,
         ...(range ? { changedAt: range } : {}),
         ...itemWhere,

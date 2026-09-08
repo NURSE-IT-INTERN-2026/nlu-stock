@@ -565,9 +565,10 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       // NOT ไม่ใช่ `not:` — พัสดุที่ยังไม่ผูก profile ต้องตกไปฝั่งอื่นๆ ไม่ใช่หายไปจากทั้งสองฝั่ง.
       // ไม่ส่ง side มาเลย = ทั้งสองฝั่ง ซึ่งเป็นพฤติกรรมเดิมของ endpoint นี้ — การเดาให้เป็น
       // สิ้นเปลืองจะตัดข้อมูลครึ่งหนึ่งทิ้งเงียบๆ ให้ลิงก์เก่าที่ยังไม่รู้จักพารามิเตอร์นี้
+      const sideKey = params.get("side");
       const sideItem: Prisma.ItemWhereInput =
-        params.get("side") === "consumable" ? isConsumable
-        : params.get("side") === "other" ? { NOT: isConsumable }
+        sideKey === "consumable" ? isConsumable
+        : sideKey === "other" ? { NOT: isConsumable }
         : {};
 
       // Mirrors api/reports/annual-cost: one row per receipt, whatever kind of พัสดุ it was.
@@ -592,11 +593,14 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         take: 10000,
       });
 
-      const repairs = await prisma.maintenanceRecord.findMany({
+      // ไม่มี sideItem: หน้าจอโยนใบซ่อมทุกใบไปฝั่งอื่นๆ ไม่ว่าพัสดุจะเป็นชนิดไหน
+      // (api/reports/annual-cost repairData) — กรองด้วยชนิดพัสดุตรงนี้จะทำให้ไฟล์ฝั่งอื่นๆ
+      // ทิ้งใบที่จออ่านอยู่ และไฟล์ฝั่งสิ้นเปลืองได้ใบที่จอไม่มีตารางให้มันแสดง
+      const repairs = sideKey === "consumable" ? [] : await prisma.maintenanceRecord.findMany({
         where: {
           performedAt: { gte: startOfYear, lte: endOfYear },
           cost: { not: null },
-          item: { AND: [catWhere, sideItem] },
+          item: catWhere,
         },
         include: { item: { select: { code: true, name: true, category: { select: { name: true } } } }, performer: { select: { name: true } } },
         take: 10000,
