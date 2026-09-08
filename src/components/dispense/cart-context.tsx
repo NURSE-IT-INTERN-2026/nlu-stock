@@ -61,19 +61,24 @@ export function CartProvider({ userId, children }: { userId?: string; children: 
   }, [userId, refresh]);
 
   const addItem = useCallback((item: CartItem) => {
+    const key = (i: CartItem) => cartLineKey(i.itemId, i.subItemId, i.lotId);
+    // POST /api/cart เป็น increment ล้วนๆ (ตั้งใจไม่ clamp) แล้วคืนตะกร้าทั้งใบมาทับ — ถ้าส่งจำนวนดิบ
+    // ไป ยอดใน DB จะทะลุเพดานแล้วลบค่าที่ clamp ไว้ตรงนี้ทิ้ง จึงต้องส่ง "ส่วนที่เพิ่มได้จริง"
+    const existing = items.find((i) => key(i) === key(item));
+    const delta = Math.min(item.quantity, item.availableQty - (existing?.quantity ?? 0));
+    if (delta <= 0) return; // เต็มเพดานแล้ว ไม่ต้องยิงให้ server เพิ่มเปล่าๆ
     setItems((prev) => {
-      const key = (i: CartItem) => cartLineKey(i.itemId, i.subItemId, i.lotId);
       const idx = prev.findIndex((i) => key(i) === key(item));
-      if (idx < 0) return [...prev, { ...item, quantity: Math.min(item.quantity, item.availableQty) }];
+      if (idx < 0) return [...prev, { ...item, quantity: delta }];
       const updated = [...prev];
-      updated[idx] = { ...prev[idx], quantity: Math.min(prev[idx].quantity + item.quantity, item.availableQty) };
+      updated[idx] = { ...prev[idx], quantity: prev[idx].quantity + delta };
       return updated;
     });
     void enqueue(
-      () => addCartLine({ itemId: item.itemId, subItemId: item.subItemId, lotId: item.lotId, quantity: item.quantity }),
+      () => addCartLine({ itemId: item.itemId, subItemId: item.subItemId, lotId: item.lotId, quantity: delta }),
       "เพิ่มลงตะกร้าไม่สำเร็จ",
     );
-  }, [enqueue]);
+  }, [enqueue, items]);
 
   const removeItem = useCallback((itemId: string, lotId?: string | null, subItemId?: string | null) => {
     const key = cartLineKey(itemId, subItemId, lotId);

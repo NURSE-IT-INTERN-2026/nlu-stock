@@ -256,7 +256,15 @@ export function StockOutTab() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("kind", next);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    setFilters((f) => ({ ...f, status: undefined }));
+    // ล้างเฉพาะค่าที่ segment ปลายทางไม่มีช่องให้แก้ — ค่าที่มองไม่เห็นยังกรองผลอยู่ แต่ไม่มีปุ่มถอน
+    // (เบิกใช้ ↔ ยืม มีช่องเหมือนกัน จึงพาค่าติดไปด้วยได้)
+    const target = KINDS[parseDispenseKind(next)].filters;
+    setFilters((f) => ({
+      ...f,
+      status: undefined,
+      recipient: target.recipientSearch ? f.recipient : undefined,
+      usageType: target.usageTypes ? f.usageType : undefined,
+    }));
     setOpenEvent(null);
   };
 

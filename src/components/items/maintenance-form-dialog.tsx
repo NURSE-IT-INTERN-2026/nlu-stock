@@ -99,18 +99,31 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   const [submitting, setSubmitting] = useState(false);
 
   // ── Reset on open/close ──
+  // ล้างทุกช่องที่เดียว: Escape/คลิกนอกกล่องไม่ผ่าน resetAndClose ค่าของแถวก่อนจึงค้างมาทับแถวใหม่
+  const resetForm = useCallback(() => {
+    setResult("AVAILABLE");
+    setVenue("INTERNAL");
+    setPerformedAt(new Date().toISOString().split("T")[0]);
+    setDescription("");
+    setCost("");
+    setNextOverride(null);
+    setAttachmentUrls([]);
+    setSelectedItemId(itemId ?? null);
+    setSearchQuery("");
+    setSearchResults([]);
+  }, [itemId]);
+
   useEffect(() => {
     if (open) {
-      setSelectedItemId(itemId ?? null);
-      setSearchQuery("");
-      setSearchResults([]);
+      // ล้างก่อน แล้วค่อยติดค่าตามโหมดทับ — สลับลำดับเมื่อไหร่ค่าที่ติดจะโดนล้างทิ้ง
+      resetForm();
       // The dialog is one instance reused by every row, so the venue has to be re-armed per
       // open — otherwise the last row's ภายนอก silently sends the next one out too.
       setVenue(receiving || editSend ? "EXTERNAL" : "INTERNAL");
       // แก้ข้อมูล = เปิดของเดิมมาแก้ ไม่ใช่พิมพ์ใหม่ทั้งหมด
       if (editSend) setDescription(sentInfo?.note ?? "");
     }
-  }, [open, itemId, receiving, editSend, sentInfo?.note]);
+  }, [open, receiving, editSend, sentInfo?.note, resetForm]);
 
   // ── Item search ──
   const doSearch = useCallback(async (q: string) => {
@@ -215,16 +228,7 @@ export function MaintenanceFormDialog({ open, onOpenChange, itemId, itemLabel, s
   };
 
   const resetAndClose = () => {
-    setResult("AVAILABLE");
-    setVenue("INTERNAL");
-    setPerformedAt(new Date().toISOString().split("T")[0]);
-    setDescription("");
-    setCost("");
-    setNextOverride(null);
-    setAttachmentUrls([]);
-    setSelectedItemId(itemId ?? null);
-    setSearchQuery("");
-    setSearchResults([]);
+    resetForm();
     onOpenChange(false);
   };
 

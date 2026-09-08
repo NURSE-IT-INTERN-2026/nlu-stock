@@ -66,8 +66,10 @@ export function ReportDataTable<T extends Record<string, any>>({
   // stay one path and neither fires twice.
   const rowProps = (row: T) => (onRowClick ? { onClick: () => onRowClick(row) } : {});
   // select-none: on touch, a tap that drifts a pixel selects the row's text instead of opening it.
+  // has-focus-visible: the row itself is never focused — the button in its first cell is — so the
+  // highlight has to follow the descendant, or tabbing through the table shows nothing at all.
   const rowCls = onRowClick
-    ? "cursor-pointer select-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+    ? "cursor-pointer select-none hover:bg-muted/50 has-focus-visible:bg-muted/50"
     : "";
 
   if (loading) {

@@ -104,6 +104,14 @@ export function usePagedList<T>({
     hasNext: page < totalPages,
     loadMore,
     setPage: goToPage,
-    refetch: () => setReloadKey((k) => k + 1),
+    // refetch = "reload what's on screen", not "start over". Filling in missing prices on
+    // นำเข้าคลัง saves row after row deep in the ledger, and a page-1 reset per save loses the
+    // user's place. goToPage carries the same reqId guard, so a stale reply still can't win.
+    // append (mobile) holds pages 1..N stacked — re-fetching one of them would drop the rest,
+    // so that mode keeps the page-1 reset.
+    refetch: () => {
+      if (mode === "pages") void goToPage(page);
+      else setReloadKey((k) => k + 1);
+    },
   };
 }
