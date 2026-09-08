@@ -151,7 +151,7 @@ export async function POST(
       const newStatus =
         data.result === "AVAILABLE" ? ItemStatus.AVAILABLE : ItemStatus.DISPOSED;
       const reason =
-        data.result === "DISPOSED" ? "ตัดจำหน่ายจากผลการบำรุงรักษา" : "บำรุงรักษาเสร็จสิ้น";
+        data.result === "DISPOSED" ? "แทงจำหน่ายจากผลการบำรุงรักษา" : "บำรุงรักษาเสร็จสิ้น";
 
       if (qtyRepair) {
         // Qty stock: the job closes one แจ้งชำรุด booking. `recoveredAt` is what takes it off
@@ -197,7 +197,7 @@ export async function POST(
               previousQty: before.availableQty,
               newQty: before.availableQty,
               reason: AdjustmentReason.DISPOSAL,
-              notes: `ตัดจำหน่ายจากผลการซ่อม ${qty}${adj.notes ? ` (${adj.notes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
+              notes: `แทงจำหน่ายจากผลการซ่อม ${qty}${adj.notes ? ` (${adj.notes})` : ""}${data.description ? ` — ${data.description}` : ""}`,
               adjustedBy: auth.user.userId,
             },
           });

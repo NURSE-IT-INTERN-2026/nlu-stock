@@ -67,7 +67,10 @@ export function InUseKpis() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard label="นำออกใช้งานเดือนนี้" value={thisMonth.toLocaleString("th-TH")} unit="ครั้ง" bar={[1, "bg-chart-1"]} />
-      <StatCard label="กำลังใช้งานอยู่" value={outstanding.toLocaleString("th-TH")} unit="ชิ้น" bar={[outstanding > 0 ? 0.7 : 0.04, "bg-chart-4"]} />
+      {/* คำเดียวกับ loanType INUSE ที่ใช้ทั่วระบบ ไม่ใช่คำใหม่ — และไม่ใช่ "ใช้งานอยู่" ซึ่งเป็น
+          ป้ายของ ItemStatus.IN_USE: การ์ดนี้นับจาก ledger (DispenseRecord ที่ยังไม่นำกลับ) จึงรวม
+          ของนับจำนวนที่ไม่มีสถานะรายชิ้นให้อ่านด้วย. หน่วยเป็นชิ้น ไม่ใช่ครั้ง เหมือนการ์ดซ้ายมือ. */}
+      <StatCard label="ตั้งใช้ในห้อง" value={outstanding.toLocaleString("th-TH")} unit="ชิ้น" bar={[outstanding > 0 ? 0.7 : 0.04, "bg-chart-4"]} />
       <StatCard label="จุดที่กระจายอยู่" value={locations.toLocaleString("th-TH")} unit="จุด" bar={[locations > 0 ? 0.6 : 0.04, "bg-chart-2"]} />
       <StatCard
         label="เลยกำหนดตรวจสอบ"

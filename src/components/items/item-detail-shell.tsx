@@ -107,8 +107,8 @@ interface SubItemData {
 const STOCK_STATUS_META: Record<string, { label: string; bar: string; dot: string }> = {
   AVAILABLE: { label: "พร้อมใช้งาน", bar: "bg-success", dot: "bg-success" },
   ON_LOAN: { label: "ถูกยืม", bar: "bg-primary", dot: "bg-primary" },
-  IN_USE: { label: "กำลังใช้งาน", bar: "bg-chart-3", dot: "bg-chart-3" },
-  PENDING_MAINTENANCE: { label: "กำลังบำรุงรักษา", bar: "bg-sky-500", dot: "bg-sky-500" },
+  IN_USE: { label: "ใช้งานอยู่", bar: "bg-chart-3", dot: "bg-chart-3" },
+  PENDING_MAINTENANCE: { label: "บำรุงรักษา", bar: "bg-sky-500", dot: "bg-sky-500" },
   UNDER_REPAIR: { label: "ส่งซ่อม", bar: "bg-warning", dot: "bg-warning" },
   DAMAGED: { label: "ชำรุด", bar: "bg-warning", dot: "bg-warning" },
 };
@@ -1024,11 +1024,11 @@ function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, borrowNote, onSelf
                   {/* Off-normal moves must respect the lifecycle order (e.g. can't lose a piece
                       that's already ส่งซ่อม); server enforces it too, this just hides dead options. */}
                   <DropdownMenuItem disabled={!canTransition(sub.status, "LOST")} onClick={() => onStatus("LOST")}><SearchX className="size-4" />สูญหาย</DropdownMenuItem>
-                  <DropdownMenuItem disabled={!canTransition(sub.status, "DISPOSED")} onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />ตัดจำหน่าย</DropdownMenuItem>
+                  <DropdownMenuItem disabled={!canTransition(sub.status, "DISPOSED")} onClick={() => onStatus("DISPOSED")}><Trash2 className="size-4" />แทงจำหน่าย</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               {sub.status === "DISPOSED" && (
-                <ActionTile icon={Undo2} label="ยกเลิกตัดจำหน่าย" tone="default" onClick={() => onStatus("AVAILABLE")} />
+                <ActionTile icon={Undo2} label="ยกเลิกแทงจำหน่าย" tone="default" onClick={() => onStatus("AVAILABLE")} />
               )}
               <ActionTile icon={Flag} label="แจ้งชำรุด" tone="destructive" onClick={onReportDamage} disabled={!canTransition(sub.status, "DAMAGED")} />
               <ActionTile icon={Pencil} label="แก้ไขข้อมูล" tone="default" onClick={onEdit} />
@@ -1133,7 +1133,7 @@ function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, return
                     {canAct && s.status === "DISPOSED" && (
                       <Button size="sm" variant="outline"
                         onClick={(e) => { e.stopPropagation(); onUndoDispose(s); }}>
-                        <Undo2 className="h-3.5 w-3.5 mr-1" />ยกเลิกตัดจำหน่าย
+                        <Undo2 className="h-3.5 w-3.5 mr-1" />ยกเลิกแทงจำหน่าย
                       </Button>
                     )}
                   </TableCell>

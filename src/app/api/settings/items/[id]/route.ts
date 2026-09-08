@@ -235,7 +235,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             subItemId: sub.id,
             previousStatus: sub.status,
             newStatus: ItemStatus.DISPOSED,
-            reason: `ตัดจำหน่าย — ลบรายการพัสดุ ${item.code}`,
+            reason: `แทงจำหน่าย — ลบรายการพัสดุ ${item.code}`,
             changedBy: auth.user.userId,
           },
         });
@@ -259,7 +259,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             previousQty: prev,
             newQty: 0,
             reason: AdjustmentReason.DISPOSAL,
-            notes: `ตัดจำหน่าย — ลบรายการพัสดุ ${item.code}`,
+            notes: `แทงจำหน่าย — ลบรายการพัสดุ ${item.code}`,
             adjustedBy: auth.user.userId,
           },
         });

@@ -45,7 +45,7 @@ export const MAINT_TYPE_LABELS: Record<MaintenanceType, string> = {
 export const MAINT_RESULT_LABELS: Record<MaintenanceResult, string> = {
   AVAILABLE: "พร้อมใช้งาน",
   NEEDS_MORE_REPAIR: "ต้องซ่อมเพิ่ม",
-  DISPOSED: "ตัดจำหน่าย",
+  DISPOSED: "แทงจำหน่าย",
 };
 
 // ─── Timeline event type ───
@@ -176,7 +176,7 @@ export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   DAMAGED_PENDING_REPAIR: "ชำรุด",
   COUNT_MISMATCH_SHORT: "นับแล้วขาด",
   COUNT_MISMATCH_OVER: "นับแล้วเกิน",
-  DISPOSAL: "ตัดจำหน่าย",
+  DISPOSAL: "แทงจำหน่าย",
   ASSEMBLY: "ประกอบเป็นชุด",
   REPAIR_RETURN: "รับคืนจากซ่อม",
   DAMAGE_CANCELLED: "ยกเลิกคำขอชำรุด",
@@ -199,7 +199,7 @@ export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
 export const STOCK_COUNT_MODE = "STOCK_COUNT";
 export const ADJUST_MODE_OPTIONS: { value: string; label: string; hint: string }[] = [
   { value: STOCK_COUNT_MODE, label: "ตรวจนับตามรอบ", hint: "กรอกยอดที่นับได้จริง — ระบบเทียบกับยอดในระบบให้" },
-  { value: "DISPOSAL", label: "ตัดจำหน่าย", hint: "ของหมดอายุ/ใช้ไม่ได้ ทิ้งออกจากระบบ" },
+  { value: "DISPOSAL", label: "แทงจำหน่าย", hint: "ของหมดอายุ/ใช้ไม่ได้ ทิ้งออกจากระบบ" },
   { value: "LOST", label: "สูญหาย", hint: "หาไม่เจอ ไม่ทราบสาเหตุ" },
 ];
 
@@ -210,18 +210,18 @@ export const ADJUST_MODE_OPTIONS: { value: string; label: string; hint: string }
 // the dialog requires a note on a short count so the doubt is written down.
 export const COUNT_SHORT_REASON_OPTIONS: { value: string; label: string }[] = [
   { value: "LOST", label: "สูญหาย" },
-  { value: "DISPOSAL", label: "ตัดจำหน่าย (ทิ้งไปแล้ว)" },
+  { value: "DISPOSAL", label: "แทงจำหน่าย (ทิ้งไปแล้ว)" },
 ];
 
 export const STATUS_LABELS = {
   AVAILABLE: "พร้อมใช้งาน",
   ON_LOAN: "ถูกยืม",
-  IN_USE: "ถูกใช้งาน",
-  PENDING_MAINTENANCE: "กำลังบำรุงรักษา",
+  IN_USE: "ใช้งานอยู่",
+  PENDING_MAINTENANCE: "บำรุงรักษา",
   DAMAGED: "ชำรุด",
   UNDER_REPAIR: "ส่งซ่อม",
   LOST: "สูญหาย",
-  DISPOSED: "ตัดจำหน่าย",
+  DISPOSED: "แทงจำหน่าย",
 } satisfies Record<ItemStatus, string>;
 
 export const STATUS_COLORS = {

@@ -89,14 +89,14 @@ const SIDES = {
     token: "issue" as Token,
     purchaseLabel: "ค่าจัดซื้อวัสดุสิ้นเปลือง",
     purchaseHint: "ราคาต่อหน่วยถูกกรอกตอนรับเข้าเป็นล็อต",
-    lossLabel: "สิ้นเปลืองที่สูญหาย / ตัดจำหน่าย",
+    lossLabel: "สิ้นเปลืองที่สูญหาย / แทงจำหน่าย",
   },
   other: {
     label: "อื่นๆ",
     token: "value" as Token,
     purchaseLabel: "ค่าจัดซื้อ",
     purchaseHint: "ราคาครุภัณฑ์ยังกรอกได้ไม่ครบทุกใบรับเข้า",
-    lossLabel: "สูญหาย / ตัดจำหน่าย",
+    lossLabel: "สูญหาย / แทงจำหน่าย",
   },
 };
 type Side = keyof typeof SIDES;
@@ -185,7 +185,7 @@ function statsFor(side: Side, s: SideSummary, loss: Loss, buddhistYear: number):
       label: spec.lossLabel,
       value: loss.qty > 0 ? `${loss.qty.toLocaleString()} หน่วย` : "—",
       hint: loss.qty === 0
-        ? "ไม่มีของหายหรือถูกตัดจำหน่ายในปีนี้"
+        ? "ไม่มีของหายหรือถูกแทงจำหน่ายในปีนี้"
         : loss.value > 0
           ? `มูลค่า ${loss.exact ? "" : "≈ "}${baht(loss.value)}${loss.unpricedQty > 0 ? ` · ตีราคาไม่ได้ ${loss.unpricedQty.toLocaleString()} หน่วย` : ""}`
           : `ยังตีราคาไม่ได้สักหน่วย (${loss.qty.toLocaleString()} หน่วย)`,

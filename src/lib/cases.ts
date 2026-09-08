@@ -367,7 +367,7 @@ function qtySummary(b: QtyBooking, cancelIndex: CancelIndex): CaseSummary {
   const statusLabel = cancelled
     ? "ยกเลิกคำขอ"
     : closer
-      ? closer.result === "DISPOSED" ? "ตัดจำหน่าย" : "ซ่อมเสร็จ"
+      ? closer.result === "DISPOSED" ? "แทงจำหน่าย" : "ซ่อมเสร็จ"
       // Closed, but the job that closed it cannot be named — a legacy row. "ปิดแล้ว" is all
       // this knows, and all it should say.
       : b.recoveredAt ? "ปิดแล้ว"
@@ -489,7 +489,7 @@ function pieceSummary(c: PieceCase): CaseSummary {
   const statusLabel = c.cancelledAt
     ? "ยกเลิกคำขอ"
     : job
-      ? job.result === "DISPOSED" ? "ตัดจำหน่าย" : "ซ่อมเสร็จ"
+      ? job.result === "DISPOSED" ? "แทงจำหน่าย" : "ซ่อมเสร็จ"
       : c.sent.length ? "อยู่ระหว่างซ่อม" : "รอส่งซ่อม";
   const last = c.sent[c.sent.length - 1];
   return {
@@ -543,7 +543,7 @@ function maintSummary(m: MaintRow): CaseSummary {
     state: "DONE",
     // ไม่ปั้น "รอบที่ 2/2569" ขึ้นมา — ระบบไม่ได้นับรอบไว้ที่ไหน เลขที่คำนวณสดจึงไม่มีใครเป็นเจ้าของ
     subject: m.issue?.trim() || m.description?.trim() || "ตรวจบำรุงตามรอบ",
-    statusLabel: m.result === "DISPOSED" ? "ตัดจำหน่าย" : m.result === "NEEDS_MORE_REPAIR" ? "ต้องซ่อมต่อ" : "เสร็จสิ้น",
+    statusLabel: m.result === "DISPOSED" ? "แทงจำหน่าย" : m.result === "NEEDS_MORE_REPAIR" ? "ต้องซ่อมต่อ" : "เสร็จสิ้น",
     title: m.item.name,
     itemId: m.item.id,
     itemCode: m.item.code,
@@ -972,7 +972,7 @@ function qtySteps(b: QtyBooking, sent: PieceLog[], cancelIndex: CancelIndex): Ca
   if (closer) {
     steps.push(step({
       key: "closed",
-      label: closer.result === "DISPOSED" ? "ตัดจำหน่าย" : "รับคืนจากซ่อม",
+      label: closer.result === "DISPOSED" ? "แทงจำหน่าย" : "รับคืนจากซ่อม",
       at: closer.createdAt,
       by: closer.performer.name,
       detail: closer.description ?? closer.issue,
@@ -1040,7 +1040,7 @@ function pieceSteps(c: PieceCase): CaseStep[] {
   if (job) {
     steps.push(step({
       key: "closed",
-      label: job.result === "DISPOSED" ? "ตัดจำหน่าย" : "ซ่อมเสร็จ พร้อมใช้งาน",
+      label: job.result === "DISPOSED" ? "แทงจำหน่าย" : "ซ่อมเสร็จ พร้อมใช้งาน",
       at: job.createdAt,
       by: job.performer.name,
       detail: join(job.issue, job.description),

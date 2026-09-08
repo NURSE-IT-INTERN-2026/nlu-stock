@@ -223,7 +223,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
 
       // หัวคอลัมน์ของที่ออกไปแล้วต่างกันคนละฝั่ง เพราะมันคนละเรื่อง: สิ้นเปลืองคือของที่เบิกไปใช้
       // ตามปกติ ส่วนคงทนคือของที่หายไปจากคลังถาวร. ใช้หัวเดียวกันจะอ่านผิดทันที.
-      const usedQtyHeader = side === "durable" ? "ตัดจำหน่าย/สูญหาย (ชิ้น)" : "เบิกไปใช้";
+      const usedQtyHeader = side === "durable" ? "แทงจำหน่าย/สูญหาย (ชิ้น)" : "เบิกไปใช้";
       const usedValueHeader = side === "durable" ? "มูลค่าที่เสียไป" : "มูลค่าที่ใช้ไป";
 
       return scoped.map((r) => ({
@@ -639,7 +639,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
       const lossRows = (await lossEvents(prisma, { gte: startOfYear, lte: endOfYear },
         { AND: [catWhere, sideItem] }))
         .map((e) => ({
-          ประเภท: e.kind === "LOST" ? "สูญหาย" : "ตัดจำหน่าย",
+          ประเภท: e.kind === "LOST" ? "สูญหาย" : "แทงจำหน่าย",
           รหัสพัสดุ: e.itemCode,
           รายการพัสดุ: e.itemName,
           หมวดหมู่: "",

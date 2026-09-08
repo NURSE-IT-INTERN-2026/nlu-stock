@@ -132,7 +132,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // (item-detail-overview โชว์เมนูสูญหาย/ตัดจำหน่ายเฉพาะของที่ track รายชิ้น) — กันไว้ตรงนี้
       // เพื่อให้ endpoint ถูกต้องด้วยตัวเองโดยไม่ต้องเชื่อว่าหน้าจอจะไม่เปลี่ยน.
       if (!cur.trackIndividually && WRITE_OFF.has(data.newStatus)) {
-        throw new Error("ของนับจำนวนต้องตัดจำหน่าย/แจ้งสูญหายผ่านการปรับสต็อก เพื่อให้ระบุจำนวนได้");
+        throw new Error("ของนับจำนวนต้องแทงจำหน่าย/แจ้งสูญหายผ่านการปรับสต็อก เพื่อให้ระบุจำนวนได้");
       }
 
       // Same short-circuit as the tracked branch, same exception: a self-edge (แก้ข้อมูลส่งซ่อม /

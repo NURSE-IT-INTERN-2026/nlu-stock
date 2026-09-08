@@ -27,10 +27,10 @@ interface SubItemOption {
 }
 
 const STATUS_ACTION_META: Record<string, { title: string; desc: string; submit: string; placeholder: string }> = {
-  AVAILABLE: { title: "กลับพร้อมใช้งาน", desc: "ล้างสถานะชำรุด/ส่งซ่อม/ตัดจำหน่าย กลับมาใช้งานได้", submit: "ยืนยันพร้อมใช้งาน", placeholder: "เช่น ซ่อมเสร็จแล้ว..." },
+  AVAILABLE: { title: "กลับพร้อมใช้งาน", desc: "ล้างสถานะชำรุด/ส่งซ่อม/แทงจำหน่าย กลับมาใช้งานได้", submit: "ยืนยันพร้อมใช้งาน", placeholder: "เช่น ซ่อมเสร็จแล้ว..." },
   DAMAGED: { title: "แจ้งชำรุด", desc: "เปลี่ยนสถานะพัสดุเป็นชำรุด", submit: "แจ้งชำรุด", placeholder: "อธิบายรายละเอียดการชำรุด..." },
   LOST: { title: "แจ้งสูญหาย", desc: "บันทึกพัสดุสูญหาย", submit: "ยืนยันสูญหาย", placeholder: "อธิบายสาเหตุการสูญหาย..." },
-  DISPOSED: { title: "ตัดจำหน่าย", desc: "ตัดพัสดุนี้ออกจากระบบ", submit: "ยืนยันตัดจำหน่าย", placeholder: "เหตุผลในการตัดจำหน่าย..." },
+  DISPOSED: { title: "แทงจำหน่าย", desc: "ตัดพัสดุนี้ออกจากระบบ", submit: "ยืนยันแทงจำหน่าย", placeholder: "เหตุผลในการแทงจำหน่าย..." },
 };
 
 interface Props {

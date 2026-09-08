@@ -290,7 +290,7 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                       <SearchX className="size-4" />สูญหาย
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onReportStatus("DISPOSED")}>
-                      <Trash2 className="size-4" />ตัดจำหน่าย
+                      <Trash2 className="size-4" />แทงจำหน่าย
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
