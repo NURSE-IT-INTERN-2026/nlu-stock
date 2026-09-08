@@ -9,6 +9,9 @@ import { kitSetLabelOf } from "@/lib/kits";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { NextRequest } from "next/server";
 
+/** สถานะที่พาของออกจากคลังถาวร — ต้องมีจำนวนกำกับ ซึ่งทางนี้ไม่มีให้. */
+const WRITE_OFF = new Set<ItemStatus>([ItemStatus.LOST, ItemStatus.DISPOSED]);
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
@@ -120,7 +123,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // ล็อกก่อนอ่านสถานะปัจจุบัน ด้วยเหตุผลเดียวกับสาขารายชิ้นข้างบน — ค่าที่ใช้ตัดสินและค่าที่
       // เขียนลง previousStatus ต้องมาจากการอ่านครั้งเดียวกันหลังล็อกแล้ว
       await lockItems(tx, [id]);
-      const cur = await tx.item.findUniqueOrThrow({ where: { id }, select: { status: true } });
+      const cur = await tx.item.findUniqueOrThrow({ where: { id }, select: { status: true, trackIndividually: true } });
+
+      // ของนับจำนวนตัดจำหน่าย/แจ้งสูญหายผ่านหน้าปรับสต็อก ซึ่งจดจำนวนจริงลง StockAdjustment.
+      // ทางนี้เขียนได้แค่สถานะ ไม่มีช่องให้จำนวน — รายงานของหาย (lib/cost lossEvents) จึงอ่าน
+      // แถวแบบนั้นเป็น 1 ชิ้นตามนิยามของ ItemStatusLog.qty ทำให้การตัดจำหน่ายถ่าน 50 ก้อน
+      // รายงานเป็นก้อนเดียว และไม่มีของถูกหักออกจากคลังเลย. หน้าจอไม่เปิดปุ่มนี้ให้อยู่แล้ว
+      // (item-detail-overview โชว์เมนูสูญหาย/ตัดจำหน่ายเฉพาะของที่ track รายชิ้น) — กันไว้ตรงนี้
+      // เพื่อให้ endpoint ถูกต้องด้วยตัวเองโดยไม่ต้องเชื่อว่าหน้าจอจะไม่เปลี่ยน.
+      if (!cur.trackIndividually && WRITE_OFF.has(data.newStatus)) {
+        throw new Error("ของนับจำนวนต้องตัดจำหน่าย/แจ้งสูญหายผ่านการปรับสต็อก เพื่อให้ระบุจำนวนได้");
+      }
 
       // Same short-circuit as the tracked branch, same exception: a self-edge (แก้ข้อมูลส่งซ่อม /
       // แก้ข้อมูลส่งบำรุงรักษา) is an edit to a trip that is still open, not a no-op.

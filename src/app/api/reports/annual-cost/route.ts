@@ -58,7 +58,9 @@ export async function GET(request: NextRequest) {
 
   const receiveWhere: Prisma.ReceiveRecordWhereInput = {
     receivedAt: inYear,
-    item: { isActive: true, ...(catWhere ?? {}) },
+    // ไม่มี isActive: การลบรายการพัสดุคือการเอาของออกจากคลัง ไม่ใช่การคืนเงิน — ใบรับเข้าปี
+    // 2569 ของพัสดุที่ถูกลบปี 2570 ยังเป็นเงินที่จ่ายไปจริงในปี 2569 และต้องอยู่ในรายงานปีนั้น
+    item: catWhere ?? {},
   };
 
   const maintWhere: Prisma.MaintenanceRecordWhereInput = {

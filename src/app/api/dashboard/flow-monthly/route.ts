@@ -82,9 +82,16 @@ export async function GET(request: NextRequest) {
   }
 
   // ค้าง is a level, not a flow: the running balance at each month end, which is the only
-  // form of it that can be plotted beside ออก/กลับ and still be true. The last point equals
-  // api/dashboard/tab-summary's `outstanding` — same number reached from the ledger instead
-  // of from the open rows, so the chart and the KPI card cannot disagree.
+  // form of it that can be plotted beside ออก/กลับ and still be true.
+  //
+  // It tracks api/dashboard/tab-summary's `outstanding` but is not guaranteed to equal it —
+  // this is a ledger (dispensed minus returned), that one counts what the open rows still owe.
+  // They agree only while every ReturnRecord is linked to a dispense and the returns of a
+  // closed row sum to its quantity. Two things can break that: `returnLink` above admits
+  // returns with no dispenseRecordId (lib/returns resolveSubItemReturn writes one when a
+  // piece is on loan with no open record), which subtract here with nothing on the out side;
+  // and closeOpenLoan's `Math.max(quantity - resolvedQty, 1)` floor can log a unit the KPI
+  // never counted. Both currently produce no rows. Read the KPI card for the exact ค้าง.
   let balance = (outBefore._sum.quantity ?? 0) - (backBefore._sum.quantity ?? 0);
   const rows = buckets.map(({ month, out, back }) => {
     balance += out - back;

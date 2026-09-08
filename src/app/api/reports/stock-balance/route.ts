@@ -39,9 +39,17 @@ export async function GET(request: NextRequest) {
   const categoryId = params.get("categoryId") || undefined;
   const profileId = params.get("profileId") || undefined;
 
-  const where: Prisma.ItemWhereInput = { isActive: true };
-  if (categoryId) where.categoryId = categoryId;
-  else if (profileId) where.category = { profileId };
+  // สองตัวกรอง เพราะตารางกับกราฟตอบคนละคำถาม.
+  //   pastWhere — หมวดหมู่อย่างเดียว. กราฟเล่าว่าปีก่อนๆ เกิดอะไรขึ้น และการลบรายการพัสดุ
+  //     คือการตัดจำหน่าย (api/settings/items/[id] เขียน StockAdjustment DISPOSAL แล้วปิด
+  //     isActive ใน transaction เดียว) — กรอง isActive ตรงนี้จะลบการตัดจำหน่ายทุกใบที่มาจาก
+  //     การลบรายการออกจากกราฟ ทั้งที่มันคือแท่งที่คนเปิดกราฟมาหา.
+  //   where — บวก isActive. ตารางบอกว่า "ตอนนี้คลังมีของมูลค่าเท่าไร" ของที่ลบไปแล้วไม่ได้อยู่
+  //     ในคลัง จึงไม่ควรมีมูลค่า.
+  const pastWhere: Prisma.ItemWhereInput = {};
+  if (categoryId) pastWhere.categoryId = categoryId;
+  else if (profileId) pastWhere.category = { profileId };
+  const where: Prisma.ItemWhereInput = { isActive: true, ...pastWhere };
 
   // ทั้งแถวและวิธีตีราคามาจาก lib/cost — ไฟล์ export ใช้ตัวเดียวกัน จึงไม่มีทางให้ตัวเลข
   // บนจอกับในไฟล์เถียงกัน. summary ที่นี่เป็นยอดรวมทั้งคลัง; หน้าจอแยกสิ้นเปลือง/คงทน
@@ -58,7 +66,7 @@ export async function GET(request: NextRequest) {
       // AND ไม่ใช่ spread: `where` ถือคีย์ category ของตัวเองอยู่เมื่อกรองด้วยประเภทพัสดุ
       // การเขียนทับจะลบตัวกรองนั้นทิ้งเงียบๆ
       where: {
-        item: { AND: [where, { category: { profile: { dispenseType: "CONSUMABLE" } } }] },
+        item: { AND: [pastWhere, { category: { profile: { dispenseType: "CONSUMABLE" } } }] },
       },
       select: {
         dispensedAt: true, quantity: true, resolvedQty: true,
@@ -70,7 +78,7 @@ export async function GET(request: NextRequest) {
     // เป็น null ซึ่ง `not` จะตัดทิ้ง แต่ตารางฝั่งคงทนนับมันอยู่ (stockValueRows อ่าน
     // `profile?.dispenseType === "CONSUMABLE"` แล้วตกเป็นคงทน) — กราฟกับตารางต้องนับชุดเดียวกัน
     lossEvents(prisma, undefined, {
-      AND: [where, { NOT: { category: { profile: { dispenseType: "CONSUMABLE" } } } }],
+      AND: [pastWhere, { NOT: { category: { profile: { dispenseType: "CONSUMABLE" } } } }],
     }),
   ]);
 

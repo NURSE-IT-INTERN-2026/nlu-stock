@@ -578,7 +578,8 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
         where: {
           receivedAt: { gte: startOfYear, lte: endOfYear },
           unitCost: { not: null },
-          item: { AND: [{ isActive: true, ...catWhere }, sideItem] },
+          // ไม่มี isActive ด้วยเหตุผลเดียวกับหน้าจอ — ดู api/reports/annual-cost receiveWhere
+          item: { AND: [catWhere, sideItem] },
         },
         select: {
           quantity: true, unitCost: true, receivedAt: true,
