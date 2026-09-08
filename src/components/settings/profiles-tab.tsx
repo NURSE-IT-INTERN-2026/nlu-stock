@@ -48,8 +48,8 @@ function dispenseLabel(d: string) {
 
 const DISPENSE_HELP: Record<string, string> = {
   CONSUMABLE: "ใช้แล้วหมดไป ต้องระบุเลขล็อตตอนรับเข้า",
-  COUNT: "ยืม-คืนได้ นับเป็นจำนวนรวม ไม่แยกรายชิ้น",
-  ITEM: "ยืม-คืนได้ ระบบสร้างรหัสย่อยติดตามแต่ละชิ้น",
+  COUNT: "นับเป็นจำนวนรวม ไม่แยกรายชิ้น",
+  ITEM: "ระบบสร้างรหัสย่อยติดตามแต่ละชิ้น",
 };
 
 interface FormState {
@@ -117,7 +117,7 @@ export function ProfilesTab() {
     setDialogOpen(true);
   }
 
-  // A profile with items in it: code/ประเภทการเบิกจ่าย/ติดตามทรัพย์สิน are frozen (the API enforces
+  // A profile with items in it: code/ประเภทการเบิกจ่าย/ทะเบียนทรัพย์สิน are frozen (the API enforces
   // it too). ให้เบิก-ยืมเอง is NOT in that set — it changes who may take stock out, not how
   // the stock is modelled, so it stays editable and its fields sit outside the frozen block.
   const locked = (editing?._count?.items ?? 0) > 0;
@@ -232,7 +232,7 @@ export function ProfilesTab() {
         <div className="space-y-2">
           <Label htmlFor="p-code" required>รหัสย่อ</Label>
           <Input id="p-code" disabled={locked} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="MED" maxLength={6} className="bg-card font-mono uppercase" />
-          <p className="text-xs text-muted-foreground mt-1">ตัวอักษรภาษาอังกฤษพิมพ์ใหญ่ 2-6 ตัว — ใช้ในรหัสพัสดุ NLU-รหัส-001</p>
+          <p className="text-xs text-muted-foreground mt-1">รหัสพัสดุจะเป็น <span className="font-mono">NLU-{form.code || "รหัส"}-001</span></p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="p-dispense" required>ประเภทการเบิกจ่าย</Label>
@@ -244,18 +244,18 @@ export function ProfilesTab() {
           </Select>
           <p className="text-xs text-muted-foreground mt-1">{DISPENSE_HELP[form.dispenseType]}</p>
         </div>
-        {/* หมายเหตุตัวเดียวคุมทั้งสามช่องที่แช่ไว้ (รหัสย่อ, ประเภทการเบิกจ่าย, ติดตามทรัพย์สิน) —
+        {/* หมายเหตุตัวเดียวคุมทั้งสามช่องที่แช่ไว้ (รหัสย่อ, ประเภทการเบิกจ่าย, ทะเบียนทรัพย์สิน) —
             handleSave ไม่ส่งสามช่องนี้ตอน locked ปล่อยให้พิมพ์ได้คือให้แก้แล้วเงียบหาย
             ต้องอยู่เหนือกล่องยืมเอง ไม่งั้นอ่านเป็นคำเตือนของช่องนั้นซึ่งตรงข้ามกับความจริง */}
-        {locked && <p className="text-xs text-amber-600">⚠ รหัสย่อ ประเภทการเบิกจ่าย และติดตามทรัพย์สิน ล็อกไว้เพราะประเภทนี้มีพัสดุอยู่แล้ว</p>}
+        {locked && <p className="text-xs text-amber-600">⚠ รหัสย่อ ประเภทการเบิกจ่าย และทะเบียนทรัพย์สิน ล็อกไว้เพราะประเภทนี้มีพัสดุอยู่แล้ว</p>}
         <div className="space-y-2 rounded-lg border bg-card p-3">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
-              <Label htmlFor="p-asset" className="text-sm">ติดตามทรัพย์สิน (จัดซื้อ)</Label>
+              <Label htmlFor="p-asset" className="text-sm">ทะเบียนทรัพย์สิน (จัดซื้อ)</Label>
               {/* Not "และรอบซ่อมบำรุง": the maintenance cycle is open to every non-CONSUMABLE
                   profile regardless of this switch (see lib/category-profile MAINTENANCE_FIELDS),
                   so naming it here talked people into turning this on for the wrong reason. */}
-              <p className="text-xs text-muted-foreground">เปิดถ้าต้องขึ้นทะเบียนครุภัณฑ์ กรอกข้อมูลผู้ขาย ราคา และรับประกัน — เลือกได้อิสระ ไม่ผูกกับประเภทการเบิกจ่ายด้านบน</p>
+              <p className="text-xs text-muted-foreground">เปิดเมื่อต้องเก็บผู้ขาย ราคา วันที่ซื้อ และประกัน</p>
             </div>
             <Switch id="p-asset" disabled={locked} checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
           </div>
@@ -264,12 +264,12 @@ export function ProfilesTab() {
         <div className="space-y-2 rounded-lg border bg-card p-3">
           <div>
             <p className="text-sm font-medium">การเบิก-ยืมเอง</p>
-            <p className="text-xs text-muted-foreground">แก้ได้ตลอด แม้ประเภทนี้จะมีพัสดุอยู่แล้ว</p>
+            {locked && <p className="text-xs text-muted-foreground">ส่วนนี้แก้ได้ ไม่ถูกล็อก</p>}
           </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
               <Label htmlFor="p-selfborrow" className="text-sm">ให้เบิก-ยืมเองผ่าน QR</Label>
-              <p className="text-xs text-muted-foreground">ปิดถ้าของประเภทนี้ต้องผ่านเจ้าหน้าที่เสมอ เช่น ชุดสอนที่ต้องตรวจของในชุดก่อนจ่าย</p>
+              <p className="text-xs text-muted-foreground">ปิดถ้าของประเภทนี้ต้องผ่านเจ้าหน้าที่เสมอ</p>
             </div>
             <Switch id="p-selfborrow" checked={form.selfBorrowable} onCheckedChange={(v) => setForm({ ...form, selfBorrowable: v })} />
           </div>
@@ -285,7 +285,7 @@ export function ProfilesTab() {
               />
               {/* Set here, not on the item: 918 rows is not a form anyone fills in. An item
                   that needs a different number overrides it in แก้ไขข้อมูล. */}
-              <p className="text-xs text-muted-foreground">ใช้กับทุกพัสดุในประเภทนี้ ยกเว้นชิ้นที่ตั้งค่าเฉพาะไว้เอง</p>
+              <p className="text-xs text-muted-foreground">ใช้ทุกชิ้น ยกเว้นชิ้นที่ตั้งค่าเฉพาะไว้</p>
             </div>
           )}
         </div>
