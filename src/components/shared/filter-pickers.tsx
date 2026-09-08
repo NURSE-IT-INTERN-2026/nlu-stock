@@ -75,6 +75,10 @@ export function CategoryPicker({ profiles, categories, value, onChange, classNam
   const profile = profiles.find((p) => p.id === draftProfile) ?? null;
   const subsOf = (profileId: string) => categories.filter((c) => c.profile?.id === profileId);
   const scoped = draftProfile ? subsOf(draftProfile) : categories;
+  // ฟอร์มต้องจบที่หมวดหมู่ย่อยเสมอ ประเภทที่ไม่มีหมวดย่อยเลยจึงเลือกไม่ได้ — ปล่อยให้กดคือพาเข้า
+  // คอลัมน์ว่างที่ไม่มีปุ่มยืนยันให้กดออก (footer ซ่อนทั้งล้างและใช้ตัวกรองในโหมดนี้). ตัวกรองยัง
+  // โชว์ครบเหมือนเดิม: หยุดแค่ประเภทเป็นคำตอบที่ใช้ได้ของมัน
+  const shownProfiles = requireCategory ? profiles.filter((p) => subsOf(p.id).length > 0) : profiles;
 
   const selProfile = profiles.find((p) => p.id === value.profileId);
   // ประเภทที่มีหมวดย่อยตัวเดียวคือตัวตั้งต้นที่ระบบสร้างให้ (ดู POST /api/settings/profiles) —
@@ -110,14 +114,17 @@ export function CategoryPicker({ profiles, categories, value, onChange, classNam
         {/* cascade columns */}
         <div className="grid grid-cols-2 divide-x divide-border flex-1 min-h-0">
           <CascadeColumn title="ประเภท">
-            {profiles.map((p) => {
+            {shownProfiles.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">ยังไม่มีประเภทที่มีหมวดหมู่ย่อย</div>
+            ) : shownProfiles.map((p) => {
               const PIcon = PROFILE_ICONS[p.icon] ?? Boxes;
               return (
                 <button key={p.id} onClick={() => {
                   // ชั้นสองมีอะไรให้เลือกจริงก็ต่อเมื่อมีหมวดย่อยตั้งแต่สองตัวขึ้นไป: ตัวเดียว = ตัวตั้งต้น
-                  // ที่ระบบสร้างให้ตอนสร้างประเภท, ศูนย์ตัว = ประเภทเก่าก่อนกติกานั้น. ทั้งสองกรณีจบที่นี่
+                  // ที่ระบบสร้างให้ตอนสร้างประเภท, ศูนย์ตัว = ประเภทเก่าก่อนกติกานั้น (โหมดฟอร์มกรอง
+                  // ทิ้งไปแล้วที่ shownProfiles). ทั้งสองกรณีจบที่นี่
                   const subs = subsOf(p.id);
-                  if (subs.length <= 1 && (subs.length === 1 || !requireCategory)) {
+                  if (subs.length <= 1) {
                     apply(p.id, subs[0]?.id ?? null);
                     return;
                   }

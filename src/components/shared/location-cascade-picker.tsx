@@ -58,6 +58,9 @@ export function LocationCascadePicker({ initialLocationId, onChange, className, 
   const [d, setD] = useState("");
   const [noRoom, setNoRoom] = useState(false);
   const [pos, setPos] = useState("");
+  // "โหลดเสร็จแล้ว" ไม่ใช่ "มีข้อมูล" — สองอย่างนี้ต่างกันตอนทะเบียนยังว่างหรือ fetch ล้ม และ
+  // ทุกช่องในนี้พิมพ์ค่าใหม่ได้อยู่แล้ว (findOrCreate ตอน submit) คลังเปล่าจึงยังกรอกได้ปกติ
+  const [seeded, setSeeded] = useState(false);
 
   // Fetch + seed once on mount.
   useEffect(() => {
@@ -72,8 +75,9 @@ export function LocationCascadePicker({ initialLocationId, onChange, className, 
         setF(cur?.floor ?? "");
         setR(cur?.room ?? "");
         setD(cur?.detail ?? "");
+        setSeeded(true);
       })
-      .catch(() => setLocs([]));
+      .catch(() => { if (alive) { setLocs([]); setSeeded(true); } });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -90,14 +94,14 @@ export function LocationCascadePicker({ initialLocationId, onChange, className, 
   const isExisting = !!(bt && ft && rt && locs.some((l) => l.building === bt && l.floor === ft && l.room === rt && (l.detail ?? null) === detail));
 
   useEffect(() => {
-    if (locs.length === 0) return; // wait for seed before emitting
+    if (!seeded) return; // wait for the seed to land before emitting — not for it to be non-empty
     if (bt && ft && rt && (!restrictToExisting || isExisting)) {
       onChange({ kind: "ok", building: bt, floor: ft, room: rt, detail, name: [bt, ft, rt, detail].filter(Boolean).join(" / ") });
     } else {
       onChange({ kind: "none" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, locs.length, restrictToExisting]);
+  }, [key, seeded, restrictToExisting]);
 
   const toggleNoRoom = (v: boolean) => {
     setNoRoom(v);
