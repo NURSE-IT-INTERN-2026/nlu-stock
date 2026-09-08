@@ -31,6 +31,7 @@ import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialo
 import { FileUploadList } from "@/components/shared/file-upload";
 import { AttachmentList } from "@/components/shared/attachment-list";
 import { Pagination } from "@/components/shared/pagination";
+import { useSession } from "@/components/layout/auth-guard";
 import { useClientPage } from "@/hooks/use-client-page";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 
@@ -209,11 +210,18 @@ export function SubItemStatusPanel({
   status,
   emptyText,
   onCount,
+  onChanged,
+  reloadKey,
 }: {
   /** One stage, or "ALL" for the combined งานซ่อมที่ค้าง worklist. */
   status: RepairStage | "ALL";
   emptyText: string;
   onCount?: (n: number) => void;
+  /** Fired after this panel writes. A sibling panel showing an overlapping slice of the same
+   *  queue is stale from that moment on, and it has no way to know unless told. */
+  onChanged?: () => void;
+  /** Bump to refetch. For the panel that stays mounted while a sibling does the writing. */
+  reloadKey?: number;
 }) {
   const [rows, setRows] = useState<WorkRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,7 +256,8 @@ export function SubItemStatusPanel({
 
   useEffect(() => {
     load();
-  }, [load]);
+    // reloadKey เป็นสัญญาณ "ข้อมูลข้างนอกเปลี่ยนแล้ว" ไม่ใช่ค่าที่ load อ่าน จึงอยู่ตรงนี้ ไม่ใช่ใน load
+  }, [load, reloadKey]);
 
   // The tab badge upstream counts open jobs, so it reports the whole list, not the search hit
   // count — a filter typed into the box must not make the badge say the backlog shrank.
@@ -510,31 +519,41 @@ export function SubItemStatusPanel({
       {/* One set of dialogs for the whole list, not one per row: they were duplicated across the
           tracked and qty renderers, which is what made a table impossible — a <tr> cannot hold
           an <AlertDialog>'s trigger tree the way a <Card> could. */}
-      <RepairDialogs action={action} onClose={() => setAction(null)} onDone={load} />
+      <RepairDialogs
+        action={action}
+        onClose={() => setAction(null)}
+        onDone={() => { load(); onChanged?.(); }}
+      />
     </Card>
   );
 }
 
-/** ยกเลิกชำรุด / ส่งซ่อม on a รอส่งซ่อม row; แก้ข้อมูลส่งซ่อม / รับคืน once it is out. Two either way. */
+/** ยกเลิกชำรุด / ส่งซ่อม on a รอส่งซ่อม row; แก้ข้อมูลส่งซ่อม / รับคืน once it is out. */
 function RowActions({ row, onAct, iconOnly }: { row: WorkRow; onAct: (a: Action) => void; iconOnly?: boolean }) {
+  const { user } = useSession();
   const isDamaged = row.stage === "DAMAGED";
-  const [secondary, primary] = isDamaged
-    ? ([
-        { type: "cancel", label: "ยกเลิกชำรุด", Icon: Undo2 },
+  // ยกเลิกชำรุด withdraws a report and puts the stock straight back on the shelf — the one step
+  // in this flow that undoes another person's write, so it stays SUPERADMIN-only. /api/repairs
+  // and updateItemStatus both accept ADMIN, so this button is the whole gate.
+  const actions: { type: Exclude<Action, null>["type"]; label: string; Icon: typeof Undo2 }[] = isDamaged
+    ? [
+        ...(user?.role === "SUPERADMIN"
+          ? [{ type: "cancel" as const, label: "ยกเลิกชำรุด", Icon: Undo2 }]
+          : []),
         { type: "send", label: "ส่งซ่อม", Icon: Send },
-      ] as const)
-    : ([
+      ]
+    : [
         { type: "edit", label: "แก้ข้อมูลส่งซ่อม", Icon: Pencil },
         { type: "receive", label: "รับคืนจากส่งซ่อม", Icon: Wrench },
-      ] as const);
+      ];
 
   return (
     <>
-      {[secondary, primary].map(({ type, label, Icon }, i) => (
+      {actions.map(({ type, label, Icon }, i) => (
         <Button
           key={type}
           size={iconOnly ? "icon" : "sm"}
-          variant={i === 0 ? "outline" : "default"}
+          variant={i === 0 && actions.length > 1 ? "outline" : "default"}
           className={iconOnly ? "size-8" : "h-9 flex-1"}
           title={label}
           aria-label={label}
@@ -608,9 +627,11 @@ function RepairDialogs({ action, onClose, onDone }: { action: Action; onClose: (
 
   const send = () =>
     apply((r) => {
-      // A row that already carries its own symptom keeps it — the shared box is a fill-in for
-      // the ones that never got one, not an overwrite of what the reporter wrote.
-      const sym = r.damageNote?.trim() || damage.trim();
+      // One row: the box IS that row's symptom, prefilled and editable, so what it says wins —
+      // the ส่งซ่อม step is usually the first time anyone has actually looked at the piece.
+      // Bulk: no single row to edit, so the box only fills the gaps left by rows that never got
+      // a symptom, and a row carrying its own reporter's words keeps them.
+      const sym = one ? damage.trim() : r.damageNote?.trim() || damage.trim();
       return r.kind === "sub"
         ? updateItemStatus(r.itemId, {
             newStatus: "UNDER_REPAIR",

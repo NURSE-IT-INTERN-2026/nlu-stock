@@ -85,12 +85,10 @@ export function ReturnLoanDetail({
   group,
   onBack,
   onResolved,
-  readOnly,
 }: {
   group: LoanGroup;
   onBack: () => void;
   onResolved: () => void;
-  readOnly?: boolean;
 }) {
   const head = group.records[0];
   // เหตุผล = ยืมไปทำอะไร (รายวิชา/กิจกรรม/ที่ระบุไว้) — ไม่มีช่อง ผู้รับ/ผู้ยืม แยกแล้ว
@@ -256,75 +254,6 @@ export function ReturnLoanDetail({
     }
   };
 
-  // Read-only detail (from /alerts overdue tab): just show what's outstanding, no return actions.
-  if (readOnly) {
-    return (
-      <div className="flex flex-col h-full min-h-0">
-        <div className="flex-1 overflow-y-auto min-h-0 px-1 pb-8">
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={onBack}
-              className="mb-3 -ml-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors group"
-            >
-              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-              กลับ
-            </button>
-            <h2 className="text-lg font-semibold leading-tight">{recipient ?? "—"}</h2>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5" /> ยืม {borrowed}{borrowed ? ` · ${daysSince(head.dispensedAt)} วันที่แล้ว` : ""}
-              </span>
-              {due && <span>กำหนดคืน {due}</span>}
-              {dueAlert(head.dueAt) && (
-                <Badge className={`text-xs ${dueAlert(head.dueAt)!.cls}`}>{dueAlert(head.dueAt)!.text}</Badge>
-              )}
-            </div>
-          </div>
-
-          <Separator className="my-4" />
-
-          <div className="space-y-3">
-            {items.map((rs) => {
-              const item = rs[0].item;
-              const tracked = rs.filter((r) => r.subItem);
-              const countRec = rs.find((r) => !r.subItem);
-              const outstanding = rs.reduce((s, r) => s + outstandingOf(r), 0);
-              if (outstanding === 0) return null;
-              return (
-                <Card key={item.id} className="border shadow-none">
-                  <CardContent className="space-y-2">
-                    <div className="flex items-start gap-3">
-                      <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
-                        <ItemThumb src={item.imageUrl} alt={item.name} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-medium leading-tight truncate">{item.name}</h3>
-                        <p className="text-xs text-muted-foreground font-mono">{item.code}</p>
-                      </div>
-                      <ItemBadge records={rs} />
-                    </div>
-                    {tracked.length > 0 ? (
-                      <div className="space-y-1 pt-1">
-                        {tracked.filter((r) => !r.returnedAt).map((r) => (
-                          <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
-                            <span className="min-w-0 truncate">{r.subItem!.name || "—"}</span>
-                            <span className="font-mono text-xs text-muted-foreground shrink-0">{effectiveCode(item.code, r.subItem!.subCode, r.item._count.subItems)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : countRec ? (
-                      <p className="text-sm text-muted-foreground">ยังค้าง {outstandingOf(countRec)} {countRec.item.issueUnit.name}</p>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full min-h-0">

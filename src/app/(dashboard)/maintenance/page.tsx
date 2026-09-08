@@ -85,7 +85,7 @@ function fmtThaiDate(dateStr: string): string {
 const STATUS_META = {
   overdue: { label: "เกินกำหนดซ่อมบำรุง", variant: "destructive", tone: "text-destructive dark:text-danger-400", pill: "bg-destructive/10 text-destructive dark:text-danger-400" },
   "due-soon": { label: "ใกล้ถึงกำหนดซ่อมบำรุง", variant: "secondary", tone: "text-amber-600 dark:text-amber-400", pill: "bg-warning/10 text-warning-700 dark:text-warning-200" },
-  "in-maintenance": { label: "กำลังบำรุงรักษา", variant: "secondary", tone: "text-sky-600 dark:text-sky-400", pill: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
+  "in-maintenance": { label: "บำรุงรักษา", variant: "secondary", tone: "text-sky-600 dark:text-sky-400", pill: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
   normal: { label: "ปกติ", variant: "outline", tone: "text-muted-foreground", pill: "bg-muted text-muted-foreground" },
 } as const satisfies Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; tone: string; pill: string }>;
 
@@ -189,6 +189,9 @@ function MaintenanceShell() {
 
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, inMaintenance: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
+  // ของที่ส่งออกไปแล้วยังไม่ได้คืน — worklist ของแท็บรับคืน. โหลดแยกจาก scheduleItems เพราะเป็น
+  // คิวงานที่ต้องครบเสมอ ไม่ใช่มุมมองหนึ่งของตารางกำหนดการ (ดู fetchData).
+  const [outRows, setOutRows] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [schedulePage, setSchedulePage] = useState(1);
   const [filter, setFilter] = useState<"all" | "overdue" | "due-soon" | "in-maintenance">("all");
@@ -215,8 +218,9 @@ function MaintenanceShell() {
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
-    // ponytail: perPage 200 — covers the whole schedule; bump if a tenant exceeds it.
-    const params: Record<string, string> = { perPage: "200" };
+    // ponytail: api-utils paginate() clamps perPage at 100, so this is the whole schedule only
+    // up to 100 rows. Move the overview table to real paging if a tenant outgrows it.
+    const params: Record<string, string> = { perPage: "100" };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.location?.building) params.building = filters.location.building;
@@ -224,13 +228,21 @@ function MaintenanceShell() {
     if (filters.location?.room) params.room = filters.location.room;
     if (filters.location?.detail) params.detail = filters.location.detail;
     try {
-      const [sum, sched] = await Promise.all([
+      const [sum, sched, out] = await Promise.all([
         getMaintenanceSummary(),
         getReport("maintenance-schedule", params) as Promise<{ items: ScheduleRow[] }>,
+        // แท็บรับคืนเป็นคิวงาน ไม่ใช่มุมมองของตารางภาพรวม — จึงยิงแยกและไม่รับตัวกรองวันที่/สถานที่
+        // ของแท็บนั้นมา: ตัวกรองอยู่คนละแท็บ คนที่มาปิดงานมองไม่เห็นมัน แล้วของที่ส่งออกไปจริงจะ
+        // หายจากคิวโดยไม่มีอะไรบอก. maintenanceStatus กรองฝั่ง server เพื่อไม่ให้แถวหลุดขอบหน้า.
+        getReport("maintenance-schedule", {
+          perPage: "100",
+          maintenanceStatus: "in-maintenance",
+        }) as Promise<{ items: ScheduleRow[] }>,
       ]);
       setSummary(sum);
       // ทั้งตาราง เรียงตามกำหนดบำรุงเก่า→ใหม่ (API sort ให้แล้ว)
       setScheduleItems(sched.items ?? []);
+      setOutRows(out.items ?? []);
       setSchedulePage(1);
     } catch {
       if (!silent) toast.error("โหลดข้อมูลบำรุงรักษาไม่สำเร็จ");
@@ -245,10 +257,6 @@ function MaintenanceShell() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // ของที่ส่งออกไปแล้วยังไม่ได้คืน — worklist ของแท็บรับคืน. มาจาก scheduleItems ชุดเดียวกับ
-  // ตารางภาพรวม ไม่ยิง API เพิ่ม: แถวยังอยู่ในกำหนดการอยู่แล้ว (nextMaintenanceDate ไม่ถูกแตะ
-  // จนกว่าจะบันทึกผล) และ /maintenance คือประตูเดียวที่ส่งของออกไปได้.
-  const outRows = scheduleItems.filter((i) => i.maintenanceStatus === "in-maintenance");
   const {
     page: outPage, setPage: setOutPage, paged: pagedOutRows,
   } = useClientPage(outRows, PAGE_SIZE.COMPACT);
@@ -405,7 +413,7 @@ function MaintenanceShell() {
             active={filter === "due-soon"}
           />
           <DashboardMetricCard
-            title="กำลังบำรุงรักษา"
+            title="บำรุงรักษา"
             value={summary.inMaintenance}
             subtitle={filter === "in-maintenance" ? "กดเพื่อยกเลิก" : summary.inMaintenance > 0 ? "ส่งออกไปแล้วยังไม่ได้คืน" : undefined}
             iconName="Truck"
@@ -664,7 +672,7 @@ function MaintenanceShell() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium leading-tight">{row.name}</span>
                       <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">
-                        กำลังบำรุงรักษา
+                        บำรุงรักษา
                       </Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -732,7 +740,7 @@ function MaintenanceShell() {
             <AlertDialogTitle>ส่งบำรุงรักษาภายนอก</AlertDialogTitle>
             <AlertDialogDescription>
               ส่ง <span className="font-medium text-foreground">{picked.length} รายการ</span> ออกไปบำรุงรักษาภายนอก —
-              ทุกชิ้นจะขึ้นสถานะ &ldquo;กำลังบำรุงรักษา&rdquo; เมื่อของกลับมา กรุณากด &ldquo;บันทึกรับคืน&rdquo; ที่แท็บรับคืนจากบำรุงรักษา
+              ทุกชิ้นจะขึ้นสถานะ &ldquo;บำรุงรักษา&rdquo; เมื่อของกลับมา กรุณากด &ldquo;บันทึกรับคืน&rdquo; ที่แท็บรับคืนจากบำรุงรักษา
             </AlertDialogDescription>
           </AlertDialogHeader>
           {/* Direct child of AlertDialogContent (not Header) so the separator's -mx-4 reaches

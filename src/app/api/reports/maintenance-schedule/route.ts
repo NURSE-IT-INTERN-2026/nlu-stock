@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
 
   const dateFrom = params.get("dateFrom") || undefined;
   const dateTo = params.get("dateTo") || undefined;
+  // overdue | due-soon | in-maintenance | normal — the same verdict statusOf() writes below.
+  // Filtering here rather than on the client is what lets a caller ask for one bucket and get
+  // ALL of it: the client only ever sees one page, so it cannot filter what it was not sent.
+  const wantStatus = params.get("maintenanceStatus") || undefined;
   // cascade อาคาร/ชั้น/ห้อง/จุด — ชุดเดียวกับ /api/items เพราะปุ่มที่ส่งมาคือปุ่มตัวเดียวกัน
   const building = params.get("building") || undefined;
   const floor = params.get("floor") || undefined;
@@ -180,9 +184,10 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const merged = [...trackedRows, ...flatRows].sort(
+  const all = [...trackedRows, ...flatRows].sort(
     (a, b) => new Date(a.nextMaintenanceDate).getTime() - new Date(b.nextMaintenanceDate).getTime(),
   );
+  const merged = wantStatus ? all.filter((r) => r.maintenanceStatus === wantStatus) : all;
 
   // ของที่อยู่ข้างนอก: หาแถว log ของเที่ยวที่ส่งไป (ล่าสุดของชิ้นนั้น) มาแปะวันที่ส่ง + หมายเหตุ.
   // Only for rows already known to be PENDING_MAINTENANCE, so this is one small query on a

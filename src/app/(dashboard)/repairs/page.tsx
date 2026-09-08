@@ -44,6 +44,8 @@ function RepairsShell() {
   };
 
   const [openJobs, setOpenJobs] = useState(0);
+  // ปิดงานที่แท็บรับคืนแล้วคิวค้างซ่อมต้องโหลดใหม่ — มัน mount ค้างอยู่ ไม่มีจังหวะ remount ให้เอง
+  const [rev, setRev] = useState(0);
 
   const { setDetail } = usePageHeader();
   const activeLabel = REPAIR_TABS.find((t) => t.value === tab)?.label;
@@ -89,16 +91,28 @@ function RepairsShell() {
         </nav>
       </div>
 
-      {/* Mounted on every tab, not just its own, so the tab badge is right before anyone clicks it. */}
+      {/* Mounted on every tab, not just its own, so the tab badge is right before anyone clicks it.
+          Staying mounted also means it never remounts to refetch, so a รับคืน done on the tab below
+          has to say so — otherwise this list and the badge keep the closed job. The other direction
+          needs nothing: ส่งซ่อม from here remounts the receive panel, which is tab-conditional. */}
       <div className={cn("pb-4", tab !== "worklist" && "hidden")}>
-        <SubItemStatusPanel status="ALL" onCount={setOpenJobs} emptyText="ไม่มีรายการค้างซ่อม" />
+        <SubItemStatusPanel
+          status="ALL"
+          reloadKey={rev}
+          onCount={setOpenJobs}
+          emptyText="ไม่มีรายการค้างซ่อม"
+        />
       </div>
 
       {/* ค้างซ่อม (ALL) รวมของที่ยังไม่ได้ส่งด้วย; แท็บนี้เหลือเฉพาะเที่ยวที่ส่งไปแล้ว ซึ่งเป็น
           รายการเดียวที่ "รับคืน" ได้จริง — คนที่มาปิดงานไม่ต้องอ่านผ่านคิวที่ยังไม่ถึงคิวตัวเอง. */}
       <div className={cn("pb-4", tab !== "receive" && "hidden")}>
         {tab === "receive" && (
-          <SubItemStatusPanel status="UNDER_REPAIR" emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม" />
+          <SubItemStatusPanel
+            status="UNDER_REPAIR"
+            onChanged={() => setRev((v) => v + 1)}
+            emptyText="ไม่มีรายการที่อยู่ระหว่างซ่อมแซม"
+          />
         )}
       </div>
 

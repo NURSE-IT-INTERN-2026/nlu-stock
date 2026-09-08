@@ -58,6 +58,30 @@ interface ReceiveRow {
   existingLots: { lotNumber: string; expiryDate: string | null }[];
 }
 
+// เลขล็อตอยู่รายบรรทัดคู่กับวันหมดอายุ ไม่ใช่ระดับใบ: สองอย่างนี้ประกอบกันเป็นล็อตหนึ่งล็อต
+// (api/receive เทียบเป็นคู่) และ ReceiveRecord ก็ถือ lotId/batchRef รายแถวอยู่แล้ว — หน้าที่ใช้แก้
+// ทีหลัง (รายงาน › เข้าคลัง) จึงแก้ทีละแถวเช่นกัน.
+
+/** ล็อตเลขเดียวกันของพัสดุเดียวกันแต่วันหมดอายุคนละวัน. api/receive ไม่ยอมให้รวม (จะทำ FEFO เพี้ยน)
+ *  และเลขที่พิมพ์เองไม่มีทางแยกอัตโนมัติแบบเลข RCV ได้ — มันจึง throw ทั้ง transaction. */
+function lotClash(row: ReceiveRow): { lotNumber: string; expiryDate: string } | null {
+  if (row.item.category.profile.dispenseType !== "CONSUMABLE") return null;
+  const typed = row.lotNumber.trim();
+  if (!typed || !row.expiryDate) return null;
+  const hit = row.existingLots.find((l) => l.lotNumber === typed);
+  if (!hit?.expiryDate || hit.expiryDate === row.expiryDate) return null;
+  return { lotNumber: typed, expiryDate: hit.expiryDate };
+}
+
+/** เว้นเลขล็อตว่างแล้วได้ล็อตเลข RCV-YYYYMMDD หรือไม่ได้ล็อตเลย — ขึ้นกับว่าแถวนี้ "อยากมีล็อต"
+ *  ไหม (api/receive `wantsLot`). ของสิ้นเปลืองส่วนใหญ่ไม่มีล็อต และไม่ควรถูกทำให้มีโดยไม่ตั้งใจ. */
+function willAutoLot(row: ReceiveRow): boolean {
+  return (
+    row.item.category.profile.dispenseType === "CONSUMABLE" &&
+    (row.existingLots.length > 0 || !!row.expiryDate)
+  );
+}
+
 // Sub-codes are always "C" + padded number (C = copy). Continue numbering past existing copies.
 function detectNextStart(subs: { subCode: string }[]): { start: number; width: number } {
   const parsed = subs
@@ -169,7 +193,6 @@ function ReceiveContent() {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState<ReceiveRow[]>([]);
   const [notes, setNotes] = useState("");
-  const [lotNumber, setLotNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [mobileTab, setMobileTab] = useState<"search" | "cart">("search");
 
@@ -300,6 +323,13 @@ function ReceiveContent() {
     if (rows.length === 0) { toast.error("เพิ่มพัสดุอย่างน้อย 1 รายการ"); return; }
     for (const row of rows) {
       if (row.quantity < 1) { toast.error(`จำนวนไม่ถูกต้อง: ${row.item.name}`); return; }
+      // A typed lot number takes api/receive's non-auto path, which throws on an expiry clash
+      // and rolls back the WHOLE receipt — one bad row costs every other row on the form.
+      const clash = lotClash(row);
+      if (clash) {
+        toast.error(`ล็อต "${clash.lotNumber}" ของ ${row.item.name} มีอยู่แล้ว วันหมดอายุ ${clash.expiryDate} — แก้เลขล็อตหรือวันหมดอายุให้ตรงกัน`);
+        return;
+      }
     }
     setSubmitting(true);
     try {
@@ -307,9 +337,7 @@ function ReceiveContent() {
         items: rows.map((r) => ({
           itemId: r.item.id,
           quantity: r.quantity,
-          // เลขล็อตของงวดนี้ — ช่องเดียวครอบทุกบรรทัดของใบ. เว้นว่าง = ให้ระบบตั้งเลขจากวันที่
-          // รับเข้า (RCV-YYYYMMDD) เอง
-          lotNumber: lotNumber.trim() || null,
+          lotNumber: r.lotNumber.trim() || null,
           expiryDate: r.expiryDate || null,
           unitCost: r.unitCost ? Number(r.unitCost) : null,
           subCodes: r.item.trackIndividually ? genCodes(r.subStart, r.quantity, r.subWidth) : null,
@@ -320,7 +348,6 @@ function ReceiveContent() {
       toast.success(`รับเข้าสำเร็จ ${data.count} รายการ`);
       setRows([]);
       setNotes("");
-      setLotNumber("");
       setMobileTab("search");
     } catch (e) {
       toast.error(e instanceof Error && e.message ? e.message : "เกิดข้อผิดพลาด กรุณาลองใหม่");
@@ -441,26 +468,12 @@ function ReceiveContent() {
   // ── Cart panel ────────────────────────────────────────────────
   const CartPanel = (
     <div className="flex flex-col h-full">
-      {/* Header summary — ยอดรวมขึ้นไปอยู่บรรทัดหัวการ์ดบนจอใหญ่ (ที่นั่นว่างอยู่แล้ว) เหลือแค่
-          ช่องงวดตรงนี้. จอเล็กไม่มีหัวการ์ด ยอดรวมจึงยังอยู่ที่เดิม */}
-      <div className={cn("pb-3 mb-1 shrink-0 border-b", rows.length === 0 && "md:hidden")}>
-        <p className="text-xs text-muted-foreground md:hidden">
+      {/* Header summary — ยอดรวมขึ้นไปอยู่บรรทัดหัวการ์ดบนจอใหญ่ (ที่นั่นว่างอยู่แล้ว)
+          จอเล็กไม่มีหัวการ์ด ยอดรวมจึงยังอยู่ที่เดิม */}
+      <div className="pb-3 mb-1 shrink-0 border-b md:hidden">
+        <p className="text-xs text-muted-foreground">
           {rows.length} รายการ · รวม {totalUnits} หน่วย
         </p>
-        {/* ชื่องวดใบเดียวครอบทุกบรรทัด — เป็นของทั้งใบเหมือนหมายเหตุ ไม่ได้ถามรายรายการ จึงอยู่
-            เหนือรายการ ไม่ใช่ท้ายกอง. ของสิ้นเปลืองเก็บเป็นเลขล็อต ของที่ไม่มีล็อตเก็บเป็น
-            ชื่องวดของใบตัวเอง */}
-        {rows.length > 0 && (
-          <div className="space-y-1 pt-2 md:pt-0">
-            <Label className="text-xs text-muted-foreground">เลขล็อต / ชื่องวด</Label>
-            <Input
-              placeholder="เว้นว่าง = ให้ระบบตั้งเลขจากวันที่รับเข้า"
-              value={lotNumber}
-              onChange={(e) => setLotNumber(e.target.value)}
-              className="text-gray-900 h-8 text-sm"
-            />
-          </div>
-        )}
       </div>
 
       {/* Items or empty state */}
@@ -478,6 +491,7 @@ function ReceiveContent() {
           <div className="space-y-2 pb-2">
             {rows.map((row) => {
               const isConsumable = row.item.category.profile.dispenseType === "CONSUMABLE";
+              const clash = lotClash(row);
               return (
                 <Card key={row.id} className="border shadow-none">
                   <CardContent className="pt-3 pb-3 space-y-3">
@@ -516,6 +530,24 @@ function ReceiveContent() {
                       {row.item.trackIndividually && (
                         <p className="text-[11px] text-muted-foreground font-mono break-all">
                           จะสร้าง: {genCodes(row.subStart, Math.max(1, row.quantity), row.subWidth).join(", ")}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* เลขล็อต/ชื่องวดอยู่เหนือคู่ล่าง เพราะมันจับคู่กับวันหมดอายุ: สองช่องนี้ตัดสิน
+                        ร่วมกันว่าแถวนี้ลงล็อตไหน (ของสิ้นเปลือง) หรือได้แค่ป้ายงวด (ของอื่น) */}
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">เลขล็อต / ชื่องวด</Label>
+                      <Input
+                        placeholder={willAutoLot(row) ? "เว้นว่าง = ตั้งเลขจากวันที่รับเข้า" : "เว้นว่าง = ไม่แยกล็อต"}
+                        value={row.lotNumber}
+                        onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
+                        aria-invalid={!!clash}
+                        className="text-gray-900 h-8 text-sm"
+                      />
+                      {clash && (
+                        <p role="alert" className="text-[11px] text-destructive">
+                          ล็อตนี้มีอยู่แล้ว วันหมดอายุ {clash.expiryDate} — แก้เลขล็อตหรือวันหมดอายุให้ตรงกัน
                         </p>
                       )}
                     </div>

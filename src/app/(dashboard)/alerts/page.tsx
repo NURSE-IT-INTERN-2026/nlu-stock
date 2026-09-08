@@ -545,9 +545,12 @@ function lostStat(t: CaseTotalsJson): SummaryStat[] {
     : {
         label: "ของที่ยังหาไม่พบ",
         value: `${t.lostUnits.toLocaleString()} หน่วย`,
+        // "บาท" ตรงนี้ไม่ใช่ของประดับ: การ์ดใบนี้พาดหัวเป็นจำนวนหน่วย ป้ายจึงไม่ได้บอกว่าเป็นเงิน
+        // และ hint บรรทัดนี้มีเลขสามตัวปนกัน (เคสที่ตีราคาได้ / เคสทั้งหมด / มูลค่า) — ใบที่พาดหัว
+        // เป็นเงินอยู่แล้วไม่ต้องมี เพราะป้ายของมันขึ้นต้นว่า "มูลค่า"
         hint: t.lostPriced === 0
           ? `${t.lostCases.toLocaleString()} เคส · ยังไม่มีเคสไหนตีราคาได้`
-          : `ตีราคาได้ ${t.lostPriced.toLocaleString()} จาก ${t.lostCases.toLocaleString()} เคส · ${baht(t.lostValue)} (ประมาณการ)`,
+          : `ตีราคาได้ ${t.lostPriced.toLocaleString()} จาก ${t.lostCases.toLocaleString()} เคส · ประมาณ ${baht(t.lostValue)} บาท`,
         token: "lost",
       }];
 }
