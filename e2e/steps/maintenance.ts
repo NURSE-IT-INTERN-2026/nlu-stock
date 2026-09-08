@@ -78,3 +78,35 @@ Then(
     await expect(page.getByText(badge, { exact: true }).filter({ visible: true }).first()).toBeVisible();
   }
 );
+
+// ── regression: กล่องเดียวใช้ซ้ำทุกแถว ต้องล้างทุกช่องตอนเปิด ──
+// Escape/คลิกนอกกล่องยิงเข้า onOpenChange ตรง ๆ ไม่ผ่าน resetAndClose — ค่าที่ค้างจึงเคย
+// ถูกบันทึกทับแถวถัดไปเงียบ ๆ
+const maintDesc = (page: import("@playwright/test").Page) =>
+  page.getByRole("dialog").getByPlaceholder("งานที่ดำเนินการ...");
+// ช่องเดียวในกล่องที่เป็น input[type=number] — เจาะจงกว่าการอิง placeholder "0"
+const maintCost = (page: import("@playwright/test").Page) =>
+  page.getByRole("dialog").locator('input[type="number"]');
+
+When(
+  "ฉันเปิดกล่องบันทึกบำรุงรักษาของ X กรอกรายละเอียดกับค่าใช้จ่าย แล้วกด Escape",
+  async ({ page, bdd }) => {
+    await openRecordDialog(page, bdd.item.code);
+    await maintDesc(page).fill("E2E ค่าที่ต้องไม่ค้างข้ามแถว");
+    await maintCost(page).fill("1234");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden({ timeout: 10_000 });
+  },
+);
+
+When("ฉันเปิดกล่องบันทึกบำรุงรักษาของ X อีกครั้ง", async ({ page, bdd }) => {
+  // กดซ้ำบนหน้าเดิม ห้าม goto — reload ล้าง state ให้เองอยู่แล้ว แล้วเทสจะเขียวทั้งที่บั๊กยังอยู่
+  const row = page.getByRole("row").filter({ hasText: bdd.item.code }).first();
+  await row.getByRole("button", { name: new RegExp(`บันทึกบำรุงรักษา ${bdd.item.code}`) }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+Then("ช่องรายละเอียดกับค่าใช้จ่ายต้องว่าง", async ({ page }) => {
+  await expect(maintDesc(page), "รายละเอียดของรอบก่อนยังค้างอยู่").toHaveValue("");
+  await expect(maintCost(page), "ค่าใช้จ่ายของรอบก่อนยังค้างอยู่").toHaveValue("");
+});
