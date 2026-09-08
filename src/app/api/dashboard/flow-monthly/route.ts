@@ -82,16 +82,19 @@ export async function GET(request: NextRequest) {
   }
 
   // ค้าง is a level, not a flow: the running balance at each month end, which is the only
-  // form of it that can be plotted beside ออก/กลับ and still be true.
+  // form of it that can be plotted beside ออก/กลับ and still be true. The last point equals
+  // api/dashboard/tab-summary's `outstanding` — same number reached from the ledger instead
+  // of from the open rows, so the chart and the KPI card cannot disagree.
   //
-  // It tracks api/dashboard/tab-summary's `outstanding` but is not guaranteed to equal it —
-  // this is a ledger (dispensed minus returned), that one counts what the open rows still owe.
-  // They agree only while every ReturnRecord is linked to a dispense and the returns of a
-  // closed row sum to its quantity. Two things can break that: `returnLink` above admits
-  // returns with no dispenseRecordId (lib/returns resolveSubItemReturn writes one when a
-  // piece is on loan with no open record), which subtract here with nothing on the out side;
-  // and closeOpenLoan's `Math.max(quantity - resolvedQty, 1)` floor can log a unit the KPI
-  // never counted. Both currently produce no rows. Read the KPI card for the exact ค้าง.
+  // That equality rests on two invariants, both worth keeping if this area is touched:
+  //   Every ReturnRecord is linked to a dispense. An unlinked one would subtract here with
+  //   nothing on the out side, and could drive the line negative. lib/returns writes a null
+  //   dispenseRecordId only for a piece that is ON_LOAN with no open record, which the
+  //   dispense routes make impossible by creating both in one transaction.
+  //
+  //   returnedAt is stamped in the same write that pushes resolvedQty to quantity, on every
+  //   path (both return routes, resolveSubItemReturn, kits, closeOpenLoan). That is what
+  //   keeps a closed row's ReturnRecords summing to exactly its quantity.
   let balance = (outBefore._sum.quantity ?? 0) - (backBefore._sum.quantity ?? 0);
   const rows = buckets.map(({ month, out, back }) => {
     balance += out - back;
