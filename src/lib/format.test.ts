@@ -2,7 +2,7 @@
 // Guards the split the whole app rests on: display tokens are Thai + พ.ศ., machine tokens
 // stay ISO/CE. Getting them crossed silently ships "2569-07-31" into a CSV or an <input>.
 import assert from "node:assert";
-import { fmtDate, monthKey, monthLabel, monthLabelShort, monthRange, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
+import { ageFromReceipt, fmtDate, monthKey, monthLabel, monthLabelShort, monthRange, NO_RECEIPT_AGE, TH_DATE, TH_DATETIME, TH_DAY } from "@/lib/format";
 
 const d = new Date(2026, 6, 31, 14, 5); // 31 Jul 2026 14:05 local
 
@@ -39,5 +39,24 @@ assert.deepEqual(monthRange("2025-11", "2026-02"), ["2025-11", "2025-12", "2026-
 assert.equal(monthRange("2025-08", "2026-08").length, 13);
 // Reversed ends yield nothing rather than looping forever.
 assert.deepEqual(monthRange("2026-05", "2026-01"), []);
+
+// ── อายุของ ──
+
+const at = (y: number, m: number, d: number) => new Date(y, m - 1, d);
+const now = at(2026, 9, 8);
+
+assert.equal(ageFromReceipt(at(2024, 6, 3), now), "2 ปี 3 เดือน 5 วัน");
+// Borrowing a month: 31 ส.ค. → 8 ก.ย. is 8 วัน, not "-23".
+assert.equal(ageFromReceipt(at(2026, 8, 31), now), "8 วัน");
+// The borrow takes the length of the month it came from — ก.พ. here, not a flat 30.
+assert.equal(ageFromReceipt(at(2026, 2, 20), at(2026, 3, 5)), "13 วัน");
+// Leading zeros drop, an inner zero stays so it cannot read as 1 ปี 5 เดือน.
+assert.equal(ageFromReceipt(at(2025, 9, 3), now), "1 ปี 0 เดือน 5 วัน");
+assert.equal(ageFromReceipt(at(2026, 9, 8), now), "0 วัน");
+// No receipt on file, or a date that has not happened yet.
+assert.equal(ageFromReceipt(null, now), NO_RECEIPT_AGE);
+assert.equal(ageFromReceipt(at(2026, 12, 1), now), NO_RECEIPT_AGE);
+// ISO string from the API, not just a Date.
+assert.equal(ageFromReceipt("2024-06-03T00:00:00.000Z", now), "2 ปี 3 เดือน 5 วัน");
 
 console.log("format.test.ts OK");

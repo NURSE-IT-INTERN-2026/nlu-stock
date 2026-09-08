@@ -25,6 +25,9 @@ export async function GET(
     where: { OR: [{ id: subId }, { subCode: subId }], itemId: parent.id },
     include: {
       location: true,
+      // วันรับเข้าของชิ้นนี้ — อายุของ (lib/format ageFromReceipt) นับจากตรงนี้ ไม่ใช่ createdAt
+      // ซึ่งเป็นวันที่มีคนพิมพ์มันเข้าระบบ. A date, not a person, so borrowers see it too.
+      receiveRecord: { select: { receivedAt: true } },
       item: {
         select: {
           id: true,

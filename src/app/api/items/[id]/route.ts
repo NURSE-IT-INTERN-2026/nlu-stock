@@ -39,6 +39,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         orderBy: { subCode: "asc" },
         include: {
           location: true,
+          // วันรับเข้าของชิ้นนี้ — อายุของบนหน้ารายละเอียดนับจากตรงนี้ (lib/format ageFromReceipt).
+          // A date, not a person, so borrowers see it too.
+          receiveRecord: { select: { receivedAt: true } },
           ...(borrower
             ? {}
             : {

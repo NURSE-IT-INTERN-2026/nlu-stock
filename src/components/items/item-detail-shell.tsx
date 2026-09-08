@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
+import { ageFromReceipt, fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,7 +53,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 interface CategoryType { id: string; name: string; profile: { code?: string; name: string; dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null }
 interface LocationType { id: string; building: string; floor: string; room: string; detail: string | null }
 
-interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null; location: LocationType | null; dispenseRecords: DispenseRecord[] }
+interface SubItemRecord { id: string; subCode: string; name: string | null; status: ItemStatus; condition: string | null; serialNumber: string | null; notes: string | null; location: LocationType | null; receiveRecord: { receivedAt: string } | null; dispenseRecords: DispenseRecord[] }
 interface LotType { id: string; lotNumber: string; expiryDate: string | null; receivedQty: number; remainingQty: number }
 
 interface ItemData {
@@ -97,7 +97,7 @@ interface SubItemData {
   id: string; subCode: string; name: string | null; status: ItemStatus;
   condition: string | null; serialNumber: string | null; notes: string | null;
   imageUrl: string | null; images: string[]; createdAt: string; updatedAt: string;
-  location: LocationType | null;
+  location: LocationType | null; receiveRecord: { receivedAt: string } | null;
   // Per-copy maintenance schedule (source of truth for tracked items).
   lastMaintenanceDate: string | null; nextMaintenanceDate: string | null;
   item: ParentItem; dispenseRecords: DispenseRecord[]; statusLogs: StatusLog[]; maintenanceRecords: MaintenanceRecord[];
@@ -675,6 +675,8 @@ function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onRet
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-4">
             {sub.condition && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">สภาพ <span className="text-foreground font-medium">{CONDITION_LABELS[sub.condition] ?? sub.condition}</span></span>}
+            {/* อายุของ อยู่คู่สภาพเสมอ: "ชำรุด" ของที่ใช้มา 3 เดือน กับ 9 ปี คนละเรื่องกัน */}
+            <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">อายุ <span className="text-foreground font-medium">{ageFromReceipt(sub.receiveRecord?.receivedAt ?? null)}</span></span>
             {sub.serialNumber && <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground font-mono">S/N <span className="text-foreground font-medium">{sub.serialNumber}</span></span>}
             <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">หน่วย <span className="text-foreground font-medium">{sub.item.issueUnit.name}</span></span>
             <span className="text-xs px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">{loc ? locationLabel(loc) : "ไม่ระบุสถานที่จัดเก็บ"}</span>
@@ -973,6 +975,7 @@ function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, borrowNote, onSelf
     { icon: Layers, label: "หมวดหมู่", value: sub.item.category.name },
     { icon: Hash, label: "สถานะ", value: STATUS_LABELS[sub.status] ?? sub.status.replace(/_/g, " ") },
     ...(sub.condition ? [{ icon: ClipboardList, label: "สภาพ", value: CONDITION_LABELS[sub.condition] ?? sub.condition }] : []),
+    { icon: Clock, label: "อายุของ", value: ageFromReceipt(sub.receiveRecord?.receivedAt ?? null) },
     ...(sub.serialNumber ? [{ icon: Hash, label: "หมายเลขซีเรียล", value: sub.serialNumber, mono: true }] : []),
     { icon: Layers, label: "หน่วยเบิก", value: sub.item.issueUnit.name },
     { icon: MapPin, label: sub.status === "IN_USE" ? "สถานที่ที่นำไปใช้งาน" : "สถานที่จัดเก็บ", value: loc ? locationLabel(loc) : "-" },

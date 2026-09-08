@@ -1,14 +1,14 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { fmtDate, TH_DATE } from "@/lib/format";
+import { ageFromReceipt, fmtDate, TH_DATE } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
 import {
   Package, QrCode, ArrowDownToLine, Home,
   Flag, Undo2, Pencil,
   Hash, Tag, Layers, ClipboardList, FolderTree,
-  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2, Wrench, HandCoins,
+  Printer, SearchX, Trash2, ClipboardCheck, CalendarClock, CheckCircle2, Wrench, HandCoins, Clock,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ interface SubItemRecord {
   status: ItemStatus;
   condition: string | null;
   serialNumber: string | null;
+  receiveRecord: { receivedAt: string } | null;
 }
 
 interface CategoryType { id: string; name: string; profile: { dispenseType: "CONSUMABLE" | "COUNT" | "ITEM"; name: string; assetTracking: boolean; selfBorrowable: boolean; selfBorrowLimit: number } | null }
@@ -185,6 +186,10 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
       : []),
     ...(item.trackIndividually && item.subItems.length === 1 && item.subItems[0].condition
       ? [{ icon: ClipboardList, label: "สภาพ", value: CONDITION_LABELS[item.subItems[0].condition] ?? item.subItems[0].condition }]
+      : []),
+    // อายุของ คู่กับสภาพ — ชิ้นเดียวเท่านั้น: หลายชิ้นมาคนละใบรับเข้า ตัวเลขเดียวจะโกหก
+    ...(item.trackIndividually && item.subItems.length === 1
+      ? [{ icon: Clock, label: "อายุของ", value: ageFromReceipt(item.subItems[0].receiveRecord?.receivedAt ?? null) }]
       : []),
   ];
 

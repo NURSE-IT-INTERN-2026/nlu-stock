@@ -35,6 +35,47 @@ export function fmtDate(input: Date | string | number, token: string): string {
   return token.replace(/yyyy|bbbb|MMMt|MMM|MM|dd|d|HH|mm/g, (t) => map[t]);
 }
 
+/** อายุของ — "ไม่มีข้อมูลวันนำเข้า" is a real answer, not an empty cell. */
+export const NO_RECEIPT_AGE = "ไม่มีข้อมูลวันนำเข้า";
+
+/**
+ * อายุของ นับจากวันรับเข้า — "2 ปี 3 เดือน 5 วัน".
+ *
+ * Calendar arithmetic, not days/365: a piece received on 29 ก.พ. is one year old on 28 ก.พ.,
+ * and a month is however long that month was. Borrowing from the PREVIOUS month is what makes
+ * that true — day 1 minus day 31 is not "-30 days", it is "0 เดือน, and the days that month had".
+ *
+ * `from` is ReceiveRecord.receivedAt, the only date that says when this piece entered the
+ * building. null (no receipt on file — every row registered before /receive existed) returns
+ * NO_RECEIPT_AGE rather than counting from createdAt, which is when somebody typed it in.
+ */
+export function ageFromReceipt(from: Date | string | null | undefined, now: Date = new Date()): string {
+  if (!from) return NO_RECEIPT_AGE;
+  const d = from instanceof Date ? from : new Date(from);
+  if (Number.isNaN(d.getTime()) || d > now) return NO_RECEIPT_AGE;
+
+  let years = now.getFullYear() - d.getFullYear();
+  let months = now.getMonth() - d.getMonth();
+  let days = now.getDate() - d.getDate();
+  if (days < 0) {
+    months -= 1;
+    // Day 0 of month M is the last day of M-1, i.e. the length of the month we borrowed from.
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  // Leading zero units are dropped (no "0 ปี 0 เดือน 3 วัน"), but an inner zero stays so
+  // "1 ปี 0 เดือน 5 วัน" cannot be misread as 1 ปี 5 เดือน.
+  const parts: string[] = [];
+  if (years) parts.push(`${years} ปี`);
+  if (years || months) parts.push(`${months} เดือน`);
+  parts.push(`${days} วัน`);
+  return parts.join(" ");
+}
+
 /**
  * "2026-08" — the local calendar month a record belongs to.
  *

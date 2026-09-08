@@ -18,6 +18,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     orderBy: { subCode: "asc" },
     include: {
       location: true,
+      // อายุของ ในตารางชิ้นย่อย — นับจากใบรับเข้าของชิ้นนั้น (lib/format ageFromReceipt)
+      receiveRecord: { select: { receivedAt: true } },
       dispenseRecords: {
         where: { returnedAt: null },
         orderBy: { dispensedAt: "desc" },

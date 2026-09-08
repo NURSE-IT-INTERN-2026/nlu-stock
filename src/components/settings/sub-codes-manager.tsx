@@ -21,6 +21,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
 import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
+import { ageFromReceipt } from "@/lib/format";
 
 // Sentinel for the "no condition" Select option. Base UI Select needs a concrete
 // value (not "") to match a SelectItem, so null condition ↔ "__NONE__".
@@ -34,6 +35,7 @@ interface SubItemRecord {
   condition: string | null;
   serialNumber: string | null;
   notes: string | null;
+  receiveRecord: { receivedAt: string } | null;
 }
 
 interface SubCodesManagerProps {
@@ -149,6 +151,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
               <TableHead className="px-2">ชื่อ</TableHead>
               <TableHead className="w-28 px-2">สถานะ</TableHead>
               <TableHead className="w-32 px-2">สภาพ</TableHead>
+              <TableHead className="w-36 px-2">อายุของ</TableHead>
               <TableHead className="w-40 px-2">หมายเลขซีเรียล</TableHead>
               <TableHead className="w-40 px-2">หมายเหตุ</TableHead>
               <TableHead className="w-[80px] px-2">การจัดการ</TableHead>
@@ -156,7 +159,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           </TableHeader>
           <TableBody>
             {subItems.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4 text-sm">ยังไม่มีรหัสย่อย</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4 text-sm">ยังไม่มีรหัสย่อย</TableCell></TableRow>
             ) : subItems.map((sub) => (
               <TableRow key={sub.id}>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{formatSubCode(itemCode, sub.subCode)}</span></TableCell>
@@ -167,6 +170,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs px-2">{sub.condition ? labelFor(CONDITION_LABELS, sub.condition) : "-"}</TableCell>
+                <TableCell className="text-xs px-2 text-muted-foreground"><span className="block truncate">{ageFromReceipt(sub.receiveRecord?.receivedAt ?? null)}</span></TableCell>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{sub.serialNumber || "-"}</span></TableCell>
                 <TableCell className="text-xs px-2"><span className="block truncate">{sub.notes || "-"}</span></TableCell>
                 <TableCell className="px-2">
