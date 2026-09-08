@@ -126,3 +126,19 @@ Then("ทั้งสองชิ้นต้องถูกยืมในใ�
   expect(new Set(rows.map((r) => r.loanGroupId)).size).toBe(1);
   expect(rows.every((r) => r.status === "ON_LOAN")).toBe(true);
 });
+
+// ── กระดิ่งแจ้งเตือนบนหัวหน้าจอ ────────────────────────────────────────────────
+When("นักศึกษาเปิดหน้าพัสดุ X บนจอกว้าง", async ({ borrowerPage, bdd }) => {
+  // ปุ่มนี้เป็น hidden lg:flex — จอแคบซ่อนมันให้ทุก role อยู่แล้ว เทสจึงต้องกว้างพอ
+  // ที่จะเห็นมัน ไม่งั้นผ่านด้วยเหตุผลที่ไม่เกี่ยวกับสิทธิ์เลย
+  await borrowerPage.setViewportSize({ width: 1440, height: 900 });
+  await borrowerPage.goto(`/items/${bdd.item.code}`);
+  await expect(borrowerPage.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
+});
+
+Then("หัวหน้าจอต้องไม่มีปุ่มรายการที่ต้องจัดการ", async ({ borrowerPage }) => {
+  await expect(borrowerPage.getByRole("button", { name: "รายการที่ต้องจัดการ" })).toHaveCount(0);
+  // ยันว่าจอกว้างจริง: ตะกร้าเป็นปุ่มข้างกันที่ทุก role เห็น ถ้ามันหายไปด้วยแปลว่า
+  // เทสกำลังยืนยันเรื่องความกว้าง ไม่ใช่เรื่องสิทธิ์
+  await expect(borrowerPage.getByRole("button", { name: "ดูตะกร้า" })).toBeVisible();
+});

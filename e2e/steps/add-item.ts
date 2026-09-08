@@ -126,3 +126,46 @@ Then(
     await expect(row).toContainText(`${from} → ${to}`);
   }
 );
+
+// ── ทะเบียนสถานที่ว่าง ────────────────────────────────────────────────────────
+Given("ฉันเปิดหน้ารับเข้า-คืนพัสดุ โดยที่ทะเบียนสถานที่ตอบกลับว่าว่างเปล่า", async ({ page }) => {
+  // GET เท่านั้น — POST /api/locations คือ findOrCreate ตอนกดสร้าง ซึ่ง scenario นี้ไม่ไปถึง
+  await page.route("**/api/locations", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({ json: [] });
+  });
+  await page.goto("/receive");
+});
+
+When("ฉันกรอก wizard ถึงขั้นหมวดหมู่ แล้วพิมพ์ที่จัดเก็บที่ยังไม่มีในทะเบียน", async ({ page, bdd, uniqueCode }) => {
+  const name = `E2E ${uniqueCode} ทะเบียนว่าง`;
+  await page.getByRole("button", { name: /เพิ่มใหม่/ }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("ชื่อพัสดุ")).toBeVisible();
+
+  await dialog.getByLabel("ชื่อพัสดุ").fill(name);
+  await dialog.getByRole("button", { name: /ยืม-คืน ตาม Code/ }).click();
+  await dialog.getByRole("button", { name: /^ถัดไป/ }).click();
+
+  await dialog.getByRole("button", { name: "หมวดหมู่", exact: true }).click();
+  await page.getByRole("group", { name: "ประเภท" }).getByRole("button", { name: "ครุภัณฑ์", exact: true }).click();
+  await page.getByRole("group", { name: "หมวดหมู่ย่อย" }).getByRole("button", { name: "ครุภัณฑ์ทางการแพทย์", exact: true }).click();
+
+  await dialog.getByRole("combobox").first().click();
+  await page.getByRole("option").first().click();
+
+  // ไม่มีตัวเลือกให้กดสักตัว — ทุกช่องเป็นค่าใหม่ล้วน ซึ่งเป็นสภาพของคลังที่เพิ่งติดตั้ง
+  await dialog.getByPlaceholder("เช่น อาคาร 2").fill(LOCATION.building);
+  await dialog.getByPlaceholder("เช่น 4", { exact: true }).fill(LOCATION.floor);
+  await dialog.getByPlaceholder("เช่น 402", { exact: true }).fill(LOCATION.room);
+
+  bdd.newItem = { name, qty: 1 };
+});
+
+Then("ปุ่มถัดไปต้องกดได้ และพาไปหน้าสรุปที่มีที่จัดเก็บที่พิมพ์ไว้", async ({ page }) => {
+  const dialog = page.getByRole("dialog");
+  const next = dialog.getByRole("button", { name: /^ถัดไป/ });
+  await expect(next, "ปุ่มถัดไปยังเทาอยู่ทั้งที่กรอกที่จัดเก็บครบแล้ว").toBeEnabled({ timeout: 10_000 });
+  await next.click();
+  await expect(dialog.getByText(`${LOCATION.building} / ${LOCATION.floor} / ${LOCATION.room}`)).toBeVisible({ timeout: 10_000 });
+});
