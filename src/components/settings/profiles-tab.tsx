@@ -349,6 +349,9 @@ export function ProfilesTab() {
               </TableCell></TableRow>
             ) : profiles.map((p) => {
               const Icon = profileIcon(p.icon);
+              // The API refuses to delete a stocked profile; disable the button instead of
+              // explaining the rule in the confirm dialog after the click.
+              const hasItems = (p._count?.items ?? 0) > 0;
               return (
                 <TableRow key={p.id} className={`${!p.isActive ? "opacity-50" : ""}`}>
                   <TableCell className="px-2">
@@ -379,10 +382,10 @@ export function ProfilesTab() {
                           <TooltipContent>แก้ไข</TooltipContent>
                         </Tooltip>
                         <Tooltip>
-                          <TooltipTrigger render={<Button variant="ghost" size="icon" onClick={() => setDeleteTarget(p)} aria-label="ลบ" />}>
+                          <TooltipTrigger render={<Button variant="ghost" size="icon" disabled={hasItems} onClick={() => setDeleteTarget(p)} aria-label="ลบ" />}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </TooltipTrigger>
-                          <TooltipContent>ลบ</TooltipContent>
+                          <TooltipContent>{hasItems ? "ลบไม่ได้ — ประเภทนี้มีพัสดุอยู่" : "ลบ"}</TooltipContent>
                         </Tooltip>
                       </div>
                     </TooltipProvider>
@@ -425,7 +428,7 @@ export function ProfilesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>ลบประเภท</AlertDialogTitle>
             <AlertDialogDescription>
-              ต้องการลบประเภท &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? ลบได้เฉพาะประเภทที่ยังไม่มีพัสดุ — หมวดหมู่ย่อยในประเภทจะถูกลบไปด้วย
+              ลบ &ldquo;{deleteTarget?.name}&rdquo; และหมวดหมู่ย่อยทั้งหมดในประเภทนี้
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

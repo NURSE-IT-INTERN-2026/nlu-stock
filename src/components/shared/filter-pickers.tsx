@@ -41,7 +41,9 @@ export function FilterButton({ active, icon: Icon, children, count, ...rest }: {
       {...rest}
       className={cn(
         "inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 disabled:pointer-events-none",
-        active ? "bg-primary/10 border-primary/40 text-foreground" : "bg-background border-border text-foreground/80 hover:bg-muted",
+        // พื้นขาว (bg-card) ไม่ใช่ bg-background: ปุ่มนี้วางบนพื้นหน้า (settings/reports) ด้วย
+        // ซึ่ง bg-background จะกลืนหายไปกับพื้นข้างใต้ — bg-card เท่ากับ Input ที่วางข้างกัน
+        active ? "bg-primary/10 border-primary/40 text-foreground" : "bg-card border-border text-foreground/80 hover:bg-muted",
         rest.className,
       )}
     >

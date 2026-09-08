@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, MapPin, ChevronRight, Eye, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, MapPin, ChevronRight, Eye, Check, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DIALOG_SHELL,
@@ -18,6 +19,7 @@ import {
 import { getLocations, createLocation, updateLocation, deleteLocation, getItems } from "@/lib/api";
 import { refreshLookups } from "@/hooks/use-async";
 import { Combobox } from "@/components/shared/combobox";
+import { LocationPicker, type LocationFilter } from "@/components/shared/filter-pickers";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,10 +96,12 @@ function LocationTree({
   rows,
   onEdit,
   onDelete,
+  forceOpen = false,
 }: {
   rows: TreeRow[];
   onEdit: (loc: Location) => void;
   onDelete: (loc: Location) => void;
+  forceOpen?: boolean;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
@@ -110,7 +114,8 @@ function LocationTree({
 
   const renderRow = (row: TreeRow): ReactNode => {
     const isLeaf = !!row.loc;
-    const isOpen = expanded.has(row.key);
+    // ระหว่างกรอง กางทุกกลุ่มไว้ ไม่งั้นผลที่ตรงจะซ่อนอยู่ใต้กลุ่มที่ยังหุบ
+    const isOpen = forceOpen || expanded.has(row.key);
     return (
       <div key={row.key}>
         <div
@@ -247,6 +252,8 @@ export function LocationsTab() {
   const [form, setForm] = useState({ building: "", floor: "", room: "", detail: "" });
   const [noRoom, setNoRoom] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Location | null>(null);
+  const [query, setQuery] = useState("");
+  const [locFilter, setLocFilter] = useState<LocationFilter>({});
 
   const fetchLocations = useCallback(async () => {
     setLoading(true);
@@ -269,6 +276,19 @@ export function LocationsTab() {
     const cmpR = a.room.localeCompare(b.room);
     if (cmpR !== 0) return cmpR;
     return (a.detail || "").localeCompare(b.detail || "");
+  });
+
+  // ponytail: filter client-side — the whole list is already loaded
+  const q = query.trim().toLowerCase();
+  const hasLocFilter = !!locFilter.building;
+  const visibleLocations = sortedLocations.filter((l) => {
+    if (q && ![l.building, l.floor, l.room, l.detail].filter(Boolean).join(" ").toLowerCase().includes(q)) return false;
+    // เทียบเฉพาะระดับที่ผู้ใช้เลือกจริง — undefined = ไม่ได้เจาะระดับนั้น ไม่ใช่ "ต้องว่าง"
+    if (locFilter.building !== undefined && l.building !== locFilter.building) return false;
+    if (locFilter.floor !== undefined && l.floor !== locFilter.floor) return false;
+    if (locFilter.room !== undefined && l.room !== locFilter.room) return false;
+    if (locFilter.detail !== undefined && (l.detail ?? null) !== locFilter.detail) return false;
+    return true;
   });
 
   // suggestion lists for the form comboboxes (creatable — typing a new value still works).
@@ -368,8 +388,23 @@ export function LocationsTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => openCreate()}><Plus className="h-4 w-4 mr-1" />เพิ่มสถานที่</Button>
+      <div className="flex items-center gap-2">
+        {sortedLocations.length > 0 && (
+          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ค้นหาอาคาร ชั้น ห้อง"
+              className="h-8 bg-card pl-9"
+              aria-label="ค้นหาสถานที่"
+            />
+          </div>
+        )}
+        {sortedLocations.length > 0 && (
+          <LocationPicker value={locFilter} locations={sortedLocations} onChange={setLocFilter} className="h-8 shrink-0" />
+        )}
+        <Button size="sm" className="ml-auto shrink-0" onClick={() => openCreate()}><Plus className="h-4 w-4 mr-1" />เพิ่มสถานที่</Button>
       </div>
 
       <div className="rounded-2xl border bg-card shadow-sm">
@@ -382,8 +417,10 @@ export function LocationsTab() {
               </div>
               <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มสถานที่</Button>
             </div>
+        ) : visibleLocations.length === 0 ? (
+          <p className="px-4 py-12 text-center text-sm text-muted-foreground">ไม่พบสถานที่ที่ตรงกับตัวกรอง</p>
         ) : (
-          <LocationTree rows={buildLocationTree(sortedLocations)} onEdit={openEdit} onDelete={handleDelete} />
+          <LocationTree rows={buildLocationTree(visibleLocations)} onEdit={openEdit} onDelete={handleDelete} forceOpen={!!q || hasLocFilter} />
         )}
       </div>
 
