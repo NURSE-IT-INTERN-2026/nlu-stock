@@ -72,79 +72,78 @@ export function ReportDataTable<T extends Record<string, any>>({
     ? "cursor-pointer select-none hover:bg-muted/50 has-focus-visible:bg-muted/50"
     : "";
 
-  if (loading) {
-    return (
-      <Card className={cn("py-0", className)}>
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          กำลังโหลด…
-        </div>
-      </Card>
-    );
-  }
-
-  if (data.length === 0) {
-    return (
-      <Card className={cn("py-0", className)}>
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          {emptyMessage}
-        </div>
-      </Card>
-    );
-  }
+  // One Card, three bodies — never three returns. A server-paged caller hands its own pager in
+  // `footer`, and an early return for loading/empty takes that pager off the screen with it:
+  // every page change unmounts and remounts it (the `loading` prop it accepts to stay put and
+  // grey out can then never do anything), and a page that comes back empty leaves the reader
+  // with no control at all to get back to page 1.
+  const body = loading ? (
+    <div className="p-8 text-center text-sm text-muted-foreground">
+      กำลังโหลด…
+    </div>
+  ) : data.length === 0 ? (
+    <div className="p-8 text-center text-sm text-muted-foreground">
+      {emptyMessage}
+    </div>
+  ) : (
+    // One table at every width. The stacked label→value cards this replaced turned a
+    // six-column row into six lines, so a phone screen held one row and a half; a table
+    // that scrolls sideways shows the shape of the data even when it does not all fit.
+    // `Table` brings its own overflow-x-auto, min-w keeps the columns from crushing.
+    <div>
+      <Table grid zebra className="min-w-[640px]">
+        <TableHeader>
+          {/* The header wash is what tells you at a glance which section's table you scrolled
+              into once several of them look alike. */}
+          <TableRow style={token ? { backgroundColor: tokenTint(token, 14) } : undefined}>
+            {columns.map((col) => (
+              <TableHead key={col.key} className={cn("px-2", col.className)}>
+                {col.header}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {paged.map((row, i) => (
+            // Zebra rows come from Table's `grid` skin: tracking one row across seven columns
+            // is where the eye slips a line.
+            <TableRow key={i} className={rowCls} {...rowProps(row)}>
+              {columns.map((col, ci) => {
+                const content = col.render
+                  ? col.render(row)
+                  : (row[col.key] as React.ReactNode) ?? "—";
+                return (
+                  <TableCell key={col.key} className={cn("px-2", col.className)}>
+                    {/* หนึ่งแถวมีตัวควบคุมตัวเดียว อยู่ที่ช่องแรก — ปุ่มเปล่าโดยตั้งใจ: click ที่
+                        เกิดจากการกด Enter/Space วิ่งขึ้นไปหา onClick ของแถวเอง */}
+                    {onRowClick && ci === 0 ? (
+                      <button type="button" className="w-full text-left focus-visible:outline-none">
+                        {content}
+                      </button>
+                    ) : (
+                      content
+                    )}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     // py-0: Card's own pt-4 showed as a bare white band above the tinted header.
     // border: Card ships only a faint shadow, which disappears on the muted page background —
     // every other table in the app (/items, /maintenance, /alerts) draws a real edge.
     <Card className={cn("py-0 border", className)}>
-      {/* One table at every width. The stacked label→value cards this replaced turned a
-          six-column row into six lines, so a phone screen held one row and a half; a table
-          that scrolls sideways shows the shape of the data even when it does not all fit.
-          `Table` brings its own overflow-x-auto, min-w keeps the columns from crushing. */}
-      <div>
-        <Table grid zebra className="min-w-[640px]">
-          <TableHeader>
-            {/* The header wash is what tells you at a glance which section's table you scrolled
-                into once several of them look alike. */}
-            <TableRow style={token ? { backgroundColor: tokenTint(token, 14) } : undefined}>
-              {columns.map((col) => (
-                <TableHead key={col.key} className={cn("px-2", col.className)}>
-                  {col.header}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paged.map((row, i) => (
-              // Zebra rows come from Table's `grid` skin: tracking one row across seven columns
-              // is where the eye slips a line.
-              <TableRow key={i} className={rowCls} {...rowProps(row)}>
-                {columns.map((col, ci) => {
-                  const content = col.render
-                    ? col.render(row)
-                    : (row[col.key] as React.ReactNode) ?? "—";
-                  return (
-                    <TableCell key={col.key} className={cn("px-2", col.className)}>
-                      {/* หนึ่งแถวมีตัวควบคุมตัวเดียว อยู่ที่ช่องแรก — ปุ่มเปล่าโดยตั้งใจ: click ที่
-                          เกิดจากการกด Enter/Space วิ่งขึ้นไปหา onClick ของแถวเอง */}
-                      {onRowClick && ci === 0 ? (
-                        <button type="button" className="w-full text-left focus-visible:outline-none">
-                          {content}
-                        </button>
-                      ) : (
-                        content
-                      )}
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
+      {body}
+      {/* The caller's own pager stays put through loading and empty alike. The built-in one
+          does not: it pages `data` in the browser, so with nothing to slice there is nothing
+          for it to do. */}
       {footer ??
-        (totalPages > 1 && (
+        (!loading && data.length > 0 && totalPages > 1 && (
           <Pagination
             page={currentPage}
             total={data.length}

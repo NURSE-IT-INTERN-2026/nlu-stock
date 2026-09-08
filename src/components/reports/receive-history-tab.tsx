@@ -194,8 +194,10 @@ function ReportTable<T extends { id: string }>({
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
         emptyMessage={emptyMessage}
         token={token}
+        // total > 0 ครอบทั้งก้อน — ดู stock-out-tab: แถบแบ่งหน้าค้างผ่านสถานะกำลังโหลดและหน้าที่
+        // คืนศูนย์แถวโดยตั้งใจ แต่ชุดผลลัพธ์ที่ว่างทั้งชุดไม่มีหน้าให้กลับไป
         footer={
-          isMobile ? (
+          total === 0 ? undefined : isMobile ? (
             data.length > 0 && (
               <Pagination
                 mode="loadMore"

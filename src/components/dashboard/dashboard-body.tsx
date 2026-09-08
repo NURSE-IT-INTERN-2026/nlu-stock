@@ -184,8 +184,11 @@ export function DashboardBody() {
           {/* w-full, not w-fit: the three tabs split the bar evenly so each is a wide target
               and the strip reads as the page's own segmented control.
               shrink-0 คู่กับ flex-1 ของ base: จอกว้างแบ่งเท่าๆ กัน จอแคบดันรางให้เลื่อน แทนที่จะบีบ
-              จนป้ายล้น — "สถิติการนำไปใช้งาน" ต้องการ 120px แต่ได้ช่อง 112px ที่จอ 375 */}
-          <TabsList className="w-full min-w-0 overflow-x-auto">
+              จนป้ายล้น — "สถิติการนำไปใช้งาน" ต้องการ 120px แต่ได้ช่อง 112px ที่จอ 375
+              justify-start ทับ justify-center ของ base เหมือนที่ variant segment ทำ: flex ที่
+              justify-center แล้วเนื้อในล้น จะดันส่วนเกินออกทั้งสองข้างเท่าๆ กัน ฝั่งซ้ายที่ล้นออกไป
+              เลื่อนกลับมาไม่ได้ (scrollLeft ติดลบไม่ได้) — แท็บแรกหายจากจอถาวรทั้งที่ scrollLeft = 0 */}
+          <TabsList className="w-full min-w-0 justify-start overflow-x-auto">
             {TABS.map((t) => (
               <TabsTrigger key={t.kind} value={t.kind} className="shrink-0 px-3.5">
                 {t.label}

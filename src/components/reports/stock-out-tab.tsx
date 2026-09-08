@@ -331,8 +331,12 @@ export function StockOutTab() {
         emptyMessage={filters.status ? "ไม่มีรายการค้างอยู่ในช่วงนี้" : spec.emptyMessage}
         onRowClick={setOpenEvent}
         token={spec.token}
+        // total > 0 ครอบทั้งก้อน ไม่ใช่แค่ฝั่ง mobile: แถบแบ่งหน้าอยู่ค้างผ่านสถานะกำลังโหลดและ
+        // หน้าที่คืนศูนย์แถว (นั่นคือเหตุผลที่มันเป็น footer) แต่ตัวกรองที่ไม่เจออะไรเลยทั้งชุดไม่มี
+        // หน้าให้กลับไป — "รายการทั้งหมด 0 ครั้ง" กับปุ่มที่กดไม่ได้สองปุ่มไม่ได้บอกอะไรที่ข้อความ
+        // ว่างเปล่าเหนือมันยังไม่ได้บอก
         footer={
-          isMobile ? (
+          total === 0 ? undefined : isMobile ? (
             events.length > 0 && (
               <Pagination
                 mode="loadMore"

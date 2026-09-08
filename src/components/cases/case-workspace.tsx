@@ -201,7 +201,11 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
             pageSize={PAGE_SIZE.DEFAULT}
             emptyMessage="ไม่มีเคสตามตัวกรองนี้"
             onRowClick={(c) => setSelected(c.id)}
-            footer={<Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="เคส" />}
+            // total > 0: แถบนี้ค้างอยู่ตอนกำลังโหลดและตอนหน้าที่เปิดอยู่คืนศูนย์แถว — นั่นคือทางกลับ
+            // หน้า 1 ที่ตารางว่างไม่มีให้ แต่ตัวกรองที่ไม่เจอเคสสักใบทั้งชุดไม่มีหน้าให้กลับไป
+            footer={total > 0
+              ? <Pagination page={page} total={total} pageSize={PAGE_SIZE.DEFAULT} onChange={setPage} loading={loading} unit="เคส" />
+              : undefined}
             className="rounded-xl border shadow-none"
           />
         </div>
