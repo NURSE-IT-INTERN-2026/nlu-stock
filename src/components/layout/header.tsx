@@ -113,20 +113,24 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
 
       {/* Right: actions */}
       <div className="flex items-center gap-2 shrink-0">
-        {/* Alerts */}
-        <button
-          type="button"
-          aria-label="รายการที่ต้องจัดการ"
-          onClick={() => router.push("/alerts")}
-          className="relative hidden lg:flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
-        >
-          <Bell className="size-5" />
-          {alerts.total > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
-              {alerts.total}
-            </span>
-          )}
-        </button>
+        {/* Alerts — ซ่อนจาก BORROWER เหมือนที่ sidebar กับ bottom-tab ซ่อน: /alerts ไม่อยู่ใน
+            BORROWER_PAGES (src/middleware.ts) คนกดจึงถูกเด้งไป /scan และป้ายตัวเลขก็เป็น 0
+            ตลอดอยู่แล้วเพราะ AlertProvider ถูกสร้างด้วย enabled={false} ให้ role นี้ */}
+        {!isSelfBorrower(user.role) && (
+          <button
+            type="button"
+            aria-label="รายการที่ต้องจัดการ"
+            onClick={() => router.push("/alerts")}
+            className="relative hidden lg:flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            <Bell className="size-5" />
+            {alerts.total > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+                {alerts.total}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Cart */}
         <button

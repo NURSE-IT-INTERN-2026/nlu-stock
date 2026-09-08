@@ -64,7 +64,11 @@ export function FlowMonthlyChart({
   const backColor = useThemeColor("--chart-2");
   const gapColor = useThemeColor("--warning");
   const rows = data?.rows ?? [];
-  const empty = rows.every((r) => r.out === 0 && r.back === 0);
+  // outstanding อยู่ในเงื่อนไขด้วย เพราะมันไม่ได้เกิดจากสองตัวข้างหน้า: route ตั้งต้นยอดยกมาจาก
+  // ก่อนหน้าต่าง 12 เดือน แล้วค่อยบวกลบรายเดือน ของที่ยืมออกไปเมื่อ 14 เดือนก่อนและยังไม่คืนจึงมี
+  // out = back = 0 ครบทั้งปีทั้งที่ยังค้างอยู่จริง. ตัดสินจากสองตัวแรกอย่างเดียวแปลว่าหน้าจอขึ้นว่า
+  // "ยังไม่มีความเคลื่อนไหว" ทับยอดค้างที่ KPI การ์ดบนแท็บเดียวกันยังนับให้เห็นอยู่
+  const empty = rows.every((r) => r.out === 0 && r.back === 0 && r.outstanding === 0);
 
   return (
     <Panel
