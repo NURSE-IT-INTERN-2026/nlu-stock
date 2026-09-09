@@ -796,14 +796,16 @@ export async function resyncKitSet(
   }
 
   // The audit line for the box itself: one row naming every change, so its ประวัติ explains
-  // why the contents are no longer the ones it was assembled with.
+  // why the contents are no longer the ones it was assembled with. Header line, then one line
+  // per item — six components on a single line is a paragraph nobody reads to the end, and the
+  // reading views print it with whitespace-pre-line.
   await tx.itemStatusLog.create({
     data: {
       itemId: set.itemId,
       subItemId: set.id,
       previousStatus: set.status,
       newStatus: set.status,
-      reason: `${reason}: ${drift.map((d) => `${d.name} ${d.held}→${d.want} ${d.unitName}`).join(", ")}`,
+      reason: [reason, ...drift.map((d) => `• ${d.name} ${d.held}→${d.want} ${d.unitName}`)].join("\n"),
       changedBy: userId,
     },
   });

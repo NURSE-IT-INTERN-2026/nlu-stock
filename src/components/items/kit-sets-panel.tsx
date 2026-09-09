@@ -597,8 +597,8 @@ function ResyncSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
                 </div>
               )}
               <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
-                ระบบขยับแค่ตัวเลขในคลัง — ของในกล่องต้องไปหยิบเข้าออกเอง
-                {contents.consumables.length > 0 && ` · ของสิ้นเปลือง (${contents.consumables.map((c) => c.name).join(", ")}) ระบบไม่เคยตัดให้ ต้องเติมเอง`}
+                ระบบขยับตัวเลขในคลังให้ ของในกล่องหยิบเข้าออกเอง
+                {contents.consumables.length > 0 && " · ของสิ้นเปลืองเบิกเอง"}
               </p>
               <div>
                 <Label htmlFor="resync-note" className="text-xs">หมายเหตุ</Label>

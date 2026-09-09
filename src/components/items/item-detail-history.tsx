@@ -669,7 +669,10 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
             <Icon className="size-3" />
             {EVENT_TYPE_LABELS[event.type] ?? event.type}
           </span>
-          <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight">{event.note}</h2>
+          {/* whitespace-pre-line: a note written as a header plus one line per change (ปรับชุด
+              ตามสูตร) is a list, and a list run together on one line is read as far as the
+              first comma. The compact row keeps truncate, so it stays a single line there. */}
+          <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight whitespace-pre-line">{event.note}</h2>
           {event.subtitle && <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{event.subtitle}</p>}
           <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground tabular-nums">
             {fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.
@@ -707,7 +710,7 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
         {tab === "timeline" && (
           <ol>
             <Rail last dot={<span aria-hidden className={cn("mt-1.5 size-3 shrink-0 rounded-full", meta.rail)} />}>
-              <p className="text-sm font-semibold leading-tight">{event.note}</p>
+              <p className="text-sm font-semibold leading-tight whitespace-pre-line">{event.note}</p>
               {event.subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{event.subtitle}</p>}
               {event.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">{event.notes}</p>}
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
