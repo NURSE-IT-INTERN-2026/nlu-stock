@@ -428,15 +428,20 @@ export async function loadSetHoldings(tx: TxClient, setSubItemId: string): Promi
     select: {
       itemId: true,
       quantity: true,
+      // ปรับชุดตามสูตร hands part of a holding back rather than all of it, so what the box
+      // still holds is what has not been resolved yet — never the row's original quantity.
+      resolvedQty: true,
       item: { select: { code: true, name: true, issueUnit: { select: { name: true } } } },
     },
   });
 
   const byItem = new Map<string, SetHolding>();
   for (const r of rows) {
+    const open = r.quantity - r.resolvedQty;
+    if (open <= 0) continue;
     const held = byItem.get(r.itemId);
-    if (held) held.quantity += r.quantity;
-    else byItem.set(r.itemId, { itemId: r.itemId, code: r.item.code, name: r.item.name, unitName: r.item.issueUnit.name, quantity: r.quantity });
+    if (held) held.quantity += open;
+    else byItem.set(r.itemId, { itemId: r.itemId, code: r.item.code, name: r.item.name, unitName: r.item.issueUnit.name, quantity: open });
   }
   return [...byItem.values()];
 }
@@ -554,3 +559,257 @@ export async function cancelKitSet(
   return { kitItemId: set.itemId, setLabel, consumables };
 }
 
+
+// ── ปรับชุดตามสูตร ──────────────────────────────────────────────────────────────
+
+export interface SetDrift {
+  itemId: string;
+  code: string;
+  name: string;
+  unitName: string;
+  kind: ComponentKind;
+  /** What the box is recorded as holding. */
+  held: number;
+  /** What the recipe asks for now. 0 = the recipe dropped it. */
+  want: number;
+}
+
+/**
+ * Where an assembled set disagrees with the recipe as it stands today — one row per item, and
+ * only the ones that differ. Consumables never appear: the system does not cut them, so it has
+ * no count to disagree with.
+ *
+ * A set is built once and the recipe stays editable forever (sets are permanent, so locking it
+ * would lock it for good), which means a box on the shelf can legitimately be an older spec.
+ * This is the list ปรับชุดตามสูตร works from, and an empty one is why the button is not there.
+ */
+export async function kitSetDrift(tx: TxClient, setSubItemId: string): Promise<SetDrift[]> {
+  const set = await tx.subItem.findUnique({
+    where: { id: setSubItemId },
+    select: { itemId: true, kitContents: { select: { itemId: true } } },
+  });
+  if (!set) return [];
+
+  const components = await loadKitComponents(tx, set.itemId);
+  const holdings = await loadSetHoldings(tx, setSubItemId);
+
+  const heldByItem = new Map<string, number>();
+  for (const h of holdings) heldByItem.set(h.itemId, h.quantity);
+  for (const p of set.kitContents) heldByItem.set(p.itemId, (heldByItem.get(p.itemId) ?? 0) + 1);
+
+  const drift: SetDrift[] = [];
+  for (const c of components) {
+    if (c.kind === "CONSUMABLE") continue;
+    const held = heldByItem.get(c.itemId) ?? 0;
+    if (held !== c.perSet) {
+      drift.push({ itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName, kind: c.kind, held, want: c.perSet });
+    }
+    heldByItem.delete(c.itemId);
+  }
+  // Whatever is left is in the box but no longer in the recipe.
+  for (const [itemId, held] of heldByItem) {
+    const h = holdings.find((x) => x.itemId === itemId);
+    const item = h
+      ? null
+      : await tx.item.findUnique({ where: { id: itemId }, select: { code: true, name: true, issueUnit: { select: { name: true } } } });
+    drift.push({
+      itemId,
+      code: item?.code ?? h?.code ?? "",
+      name: item?.name ?? h?.name ?? "",
+      unitName: item?.issueUnit.name ?? h?.unitName ?? "",
+      kind: h ? "COUNT" : "TRACKED",
+      held,
+      want: 0,
+    });
+  }
+  return drift;
+}
+
+/** Hand `qty` of a คงทน component back out of one set, marking its open holdings newest first. */
+async function releaseQtyFromSet(
+  tx: TxClient,
+  opts: { itemId: string; kitSubItemId: string; qty: number; userId: string; note: string },
+): Promise<void> {
+  // The stock comes back once, here. The rows below only record which holding gave it up —
+  // logReturn writes history, it does not move a number.
+  await allocateAcrossLots(tx, opts.itemId, opts.qty);
+  await tx.item.update({ where: { id: opts.itemId }, data: { availableQty: { increment: opts.qty } } });
+
+  let left = opts.qty;
+  const open = await tx.dispenseRecord.findMany({
+    where: { itemId: opts.itemId, kitSubItemId: opts.kitSubItemId, subItemId: null, loanType: LoanType.INUSE, returnedAt: null },
+    orderBy: { dispensedAt: "desc" },
+    select: { id: true, quantity: true, resolvedQty: true },
+  });
+
+  for (const row of open) {
+    if (left <= 0) break;
+    const openQty = row.quantity - row.resolvedQty;
+    if (openQty <= 0) continue;
+    const take = Math.min(openQty, left);
+    const resolved = row.resolvedQty + take;
+    await tx.dispenseRecord.update({
+      where: { id: row.id },
+      data: {
+        resolvedQty: resolved,
+        // Only a fully emptied holding is closed — a box that gave back 1 of its 3 trays is
+        // still holding 2, and a returnedAt here would drop them off every outstanding view.
+        ...(resolved >= row.quantity ? { returnedAt: new Date(), returnCondition: "AVAILABLE" as const } : {}),
+      },
+    });
+    await logReturn(tx, {
+      itemId: opts.itemId,
+      subItemId: null,
+      dispenseRecordId: row.id,
+      quantity: take,
+      condition: "AVAILABLE",
+      notes: opts.note,
+      userId: opts.userId,
+    });
+    left -= take;
+  }
+  // `left > 0` means the ledger held fewer open units than the box was carrying — possible for
+  // sets assembled before holdings were recorded. The stock is already back; there is simply no
+  // row left to mark, which is the most those sets ever had.
+}
+
+export interface ResyncSetResult {
+  kitItemId: string;
+  setLabel: string;
+  applied: SetDrift[];
+  consumables: { name: string; quantity: number; unitName: string }[];
+}
+
+/**
+ * ปรับชุดตามสูตร — bring one assembled box up to the recipe as it stands now, keeping the box.
+ *
+ * ยกเลิกชุด + ประกอบใหม่ reaches the same stock position, but it retires the set code: the
+ * sticker on a physical box would have to be reprinted every time a recipe is edited, and the
+ * box's borrow history would split in two across what is plainly the same box. This is the
+ * same movements against the same SubItem row.
+ *
+ * Only what differs moves. A component whose count did not change is not handed back and taken
+ * out again — nobody touched it, and a history that says otherwise is a history staff learn to
+ * distrust. Consumables are listed, never moved: the recipe counts ชิ้น while the item is
+ * stocked in กล่อง, so the box's gauze is refilled by hand like it always was.
+ */
+export async function resyncKitSet(
+  tx: TxClient,
+  { setSubItemId, userId, note }: CancelSetInput,
+): Promise<ResyncSetResult> {
+  const set = await tx.subItem.findUnique({
+    where: { id: setSubItemId },
+    select: {
+      id: true,
+      subCode: true,
+      status: true,
+      itemId: true,
+      item: { select: { code: true, name: true, locationId: true, category: { select: { profile: { select: { code: true } } } } } },
+      kitContents: { select: { id: true, itemId: true, subCode: true, status: true } },
+    },
+  });
+  if (!set) throw new Error("ไม่พบชุดอุปกรณ์");
+  if (set.item.category.profile.code !== "KIT") throw new Error("รายการนี้ไม่ใช่ชุดอุปกรณ์");
+  if (set.status === ItemStatus.DISPOSED) throw new Error("ชุดนี้ถูกยกเลิกไปแล้ว");
+  // The box is not on the shelf to be repacked, and the borrower is holding the old spec.
+  if (set.status === ItemStatus.ON_LOAN) throw new Error("ชุดนี้ถูกยืมออกอยู่ — ต้องรับคืนก่อน");
+
+  const setLabel = `${set.item.code}-${set.subCode}`;
+  const drift = await kitSetDrift(tx, set.id);
+  if (drift.length === 0) throw new Error("ชุดนี้ตรงกับสูตรอยู่แล้ว");
+
+  const components = await loadKitComponents(tx, set.itemId);
+  await lockItems(tx, [set.itemId, ...drift.map((d) => d.itemId), ...set.kitContents.map((p) => p.itemId)]);
+
+  const reason = `ปรับชุดตามสูตร ${setLabel}${note ? ` (${note})` : ""}`;
+  const loanGroupId = crypto.randomUUID();
+  const affected = new Set<string>();
+
+  for (const d of drift) {
+    affected.add(d.itemId);
+    const delta = d.want - d.held;
+
+    if (d.kind === "TRACKED") {
+      if (delta > 0) {
+        const copies = await tx.subItem.findMany({
+          where: { itemId: d.itemId, status: ItemStatus.AVAILABLE, inKitSubItemId: null },
+          orderBy: { subCode: "asc" },
+          take: delta,
+          select: { id: true, status: true },
+        });
+        if (copies.length < delta) {
+          throw new Error(`${d.name} พร้อมใช้งานไม่พอ (ต้องการเพิ่ม ${delta} ${d.unitName}, มี ${copies.length})`);
+        }
+        for (const piece of copies) {
+          await tx.subItem.update({ where: { id: piece.id }, data: { status: ItemStatus.IN_USE, inKitSubItemId: set.id } });
+          await tx.itemStatusLog.create({
+            data: {
+              itemId: d.itemId, subItemId: piece.id, kitSubItemId: set.id,
+              previousStatus: piece.status, newStatus: ItemStatus.IN_USE,
+              reason: `${reason} — ใส่เข้าชุด`, changedBy: userId,
+            },
+          });
+          await logIntoSet(tx, {
+            itemId: d.itemId, subItemId: piece.id, kitSubItemId: set.id, quantity: 1,
+            setLabel, locationId: set.item.locationId, userId, loanGroupId,
+          });
+        }
+      } else {
+        const spare = set.kitContents.filter((p) => p.itemId === d.itemId).slice(0, -delta);
+        for (const piece of spare) {
+          await tx.subItem.update({ where: { id: piece.id }, data: { status: ItemStatus.AVAILABLE, inKitSubItemId: null } });
+          await tx.itemStatusLog.create({
+            data: {
+              itemId: d.itemId, subItemId: piece.id, kitSubItemId: set.id,
+              previousStatus: piece.status, newStatus: ItemStatus.AVAILABLE,
+              reason: `${reason} — เอาออกจากชุด`, changedBy: userId,
+            },
+          });
+          await closeSetLoan(tx, { itemId: d.itemId, subItemId: piece.id, kitSubItemId: set.id, userId, note: reason });
+        }
+      }
+      continue;
+    }
+
+    // คงทน: move the difference only.
+    if (delta > 0) {
+      await allocateAcrossLots(tx, d.itemId, -delta);
+      const upd = await tx.item.updateMany({
+        where: { id: d.itemId, availableQty: { gte: delta } },
+        data: { availableQty: { decrement: delta } },
+      });
+      if (upd.count === 0) throw new Error(`${d.name} มีไม่พอ (ต้องการเพิ่ม ${delta} ${d.unitName})`);
+      await logIntoSet(tx, {
+        itemId: d.itemId, kitSubItemId: set.id, quantity: delta,
+        setLabel, locationId: set.item.locationId, userId, loanGroupId,
+      });
+    } else {
+      await releaseQtyFromSet(tx, { itemId: d.itemId, kitSubItemId: set.id, qty: -delta, userId, note: reason });
+    }
+  }
+
+  // The audit line for the box itself: one row naming every change, so its ประวัติ explains
+  // why the contents are no longer the ones it was assembled with.
+  await tx.itemStatusLog.create({
+    data: {
+      itemId: set.itemId,
+      subItemId: set.id,
+      previousStatus: set.status,
+      newStatus: set.status,
+      reason: `${reason}: ${drift.map((d) => `${d.name} ${d.held}→${d.want} ${d.unitName}`).join(", ")}`,
+      changedBy: userId,
+    },
+  });
+
+  for (const itemId of affected) await recomputeItemCounts(tx, itemId);
+  await recomputeItemCounts(tx, set.itemId);
+
+  return {
+    kitItemId: set.itemId,
+    setLabel,
+    applied: drift,
+    consumables: components
+      .filter((c) => c.kind === "CONSUMABLE")
+      .map((c) => ({ name: c.name, quantity: c.perSet, unitName: c.bomUnitName })),
+  };
+}

@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, notFound, parseBody } from "@/lib/api-utils";
-import { cancelKitSet, loadKitComponents, loadSetHoldings } from "@/lib/kits";
+import { cancelKitSet, kitSetDrift, loadKitComponents, loadSetHoldings, resyncKitSet } from "@/lib/kits";
 import { z } from "zod";
 
 /**
- * GET  /api/kits/sets/[subId] — สิ่งที่ควรอยู่ในชุดนี้ (ดูของในชุด / รับคืน)
- * POST /api/kits/sets/[subId] — ยกเลิกชุด: ชุดตาย ของคงทนกลับเข้าคลัง
+ * GET   /api/kits/sets/[subId] — สิ่งที่ควรอยู่ในชุดนี้ (ดูของในชุด / รับคืน)
+ * PATCH /api/kits/sets/[subId] — ปรับชุดตามสูตร: กล่องเดิม ของข้างในขยับเฉพาะส่วนที่ต่าง
+ * POST  /api/kits/sets/[subId] — ยกเลิกชุด: ชุดตาย ของคงทนกลับเข้าคลัง
  *
  * ยกเลิกชุด is the exit door, not part of the cycle. A set is persistent — it is borrowed and
  * returned over and over — so without this a mis-assembled set would hold its tracked pieces
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const components = await loadKitComponents(prisma, set.item.id);
   const holdings = await loadSetHoldings(prisma, set.id);
+  const drift = await kitSetDrift(prisma, set.id);
   const expectedTracked = components.filter((c) => c.kind === "TRACKED");
   const heldByItem = new Map<string, number>();
   for (const piece of set.kitContents) {
@@ -64,6 +66,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     consumables: components.filter((c) => c.kind === "CONSUMABLE"),
     // Tracked slots the recipe expects that no piece currently fills — a component reported
     // broken leaves the box, and this is what says so on the ดูของในชุด checklist.
+    // Where the box and the current recipe disagree — empty when they match. ปรับชุดตามสูตร
+    // works from exactly this list, and the button is hidden while it is empty.
+    drift,
     missingTracked: expectedTracked.flatMap((c) => {
       const short = c.perSet - (heldByItem.get(c.itemId) ?? 0);
       return short > 0 ? [{ itemId: c.itemId, code: c.code, name: c.name, missing: short }] : [];
@@ -95,5 +100,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return json(result);
   } catch (e) {
     return error(e instanceof Error ? e.message : "Cancel kit set failed", 400);
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ subId: string }> }) {
+  const auth = await requireAdmin(request);
+  if (auth.denied) return auth.denied;
+
+  const { subId } = await params;
+  const { data, error: parseError } = await parseBody(cancelSchema)(request);
+  if (parseError) return parseError;
+
+  try {
+    const result = await prisma.$transaction((tx) =>
+      resyncKitSet(tx, { setSubItemId: subId, userId: auth.user.userId, note: data?.note ?? null }),
+    );
+    return json(result);
+  } catch (e) {
+    return error(e instanceof Error ? e.message : "ปรับชุดตามสูตรไม่สำเร็จ", 400);
   }
 }

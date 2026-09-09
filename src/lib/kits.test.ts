@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "@/lib/prisma";
 import { ItemStatus, LoanType } from "@/generated/prisma/enums";
-import { assembleKitSets, cancelKitSet, maxAssemblableSets, unitMismatches } from "@/lib/kits";
+import { assembleKitSets, cancelKitSet, kitSetDrift, maxAssemblableSets, resyncKitSet, unitMismatches } from "@/lib/kits";
 
 /**
  * ประกอบ → ยกเลิก, end to end, against the dev database inside a transaction that always rolls
@@ -197,6 +197,106 @@ test("kit set: a recipe edited after assembly does not change what the box hands
       await cancelKitSet(tx, { setSubItemId: setSubItemIds[1], userId: user.id });
       assert.equal((await tx.item.findUniqueOrThrow({ where: { id: tray.id } })).availableQty, 10, "both boxes emptied, stock whole again");
       assert.equal((await tx.item.findUniqueOrThrow({ where: { id: bowl.id } })).availableQty, 10);
+
+      checked = true;
+      throw new Error(ROLLBACK);
+    })
+    .catch((e) => {
+      if (!(e instanceof Error) || e.message !== ROLLBACK) throw e;
+    });
+
+  assert.ok(checked, "the transaction body must have run");
+});
+
+test("kit set: ปรับชุดตามสูตร moves only what changed, and the box keeps its identity", { skip: !process.env.DATABASE_URL }, async () => {
+  const kitCategory = await prisma.categoryType.findFirst({ where: { profile: { code: "KIT" } }, select: { id: true } });
+  const durableCategory = await prisma.categoryType.findFirst({ where: { profile: { dispenseType: "COUNT" } }, select: { id: true } });
+  const trackedCategory = await prisma.categoryType.findFirst({ where: { profile: { dispenseType: "ITEM" } }, select: { id: true } });
+  const unit = await prisma.unit.findFirst({ select: { id: true } });
+  const user = await prisma.user.findFirst({ select: { id: true } });
+  assert.ok(kitCategory && durableCategory && trackedCategory && unit && user, "seed the database first");
+
+  const stamp = Date.now();
+  let checked = false;
+
+  await prisma
+    .$transaction(async (tx) => {
+      const durable = (suffix: string, qty: number) =>
+        tx.item.create({
+          data: { code: `TEST-${suffix}-${stamp}`, name: suffix, categoryId: durableCategory.id, issueUnitId: unit.id, totalQty: qty, availableQty: qty },
+        });
+      const kit = await tx.item.create({
+        data: { code: `TEST-KIT3-${stamp}`, name: "ชุดทดสอบปรับสูตร", categoryId: kitCategory.id, issueUnitId: unit.id, trackIndividually: true },
+      });
+      const tray = await durable("TRAY", 10);
+      const bowl = await durable("BOWL", 10);
+      const cloth = await durable("CLOTH", 10);
+      const doll = await tx.item.create({
+        data: { code: `TEST-DOLL-${stamp}`, name: "หุ่น", categoryId: trackedCategory.id, issueUnitId: unit.id, trackIndividually: true, totalQty: 1, availableQty: 1 },
+      });
+      const dollPiece = await tx.subItem.create({ data: { itemId: doll.id, subCode: "C01", status: ItemStatus.AVAILABLE } });
+
+      const bom = (rows: [string, number][]) =>
+        tx.kitBom.createMany({ data: rows.map(([id, quantity], i) => ({ kitItemId: kit.id, componentItemId: id, name: id, quantity, unitId: unit.id, sortOrder: i })) });
+      await bom([[tray.id, 1], [bowl.id, 1], [doll.id, 1]]);
+
+      const { setSubItemIds } = await assembleKitSets(tx, { kitItemId: kit.id, sets: 1, userId: user.id });
+      const setId = setSubItemIds[0];
+      assert.deepEqual(await kitSetDrift(tx, setId), [], "a box built from the recipe matches it");
+
+      const dollRecord = await tx.dispenseRecord.findFirstOrThrow({ where: { itemId: doll.id, loanType: LoanType.INUSE }, select: { id: true } });
+
+      // แก้ส่วนประกอบ: more trays, the bowl dropped, a cloth added, หุ่น untouched.
+      await tx.kitBom.deleteMany({ where: { kitItemId: kit.id } });
+      await bom([[tray.id, 3], [cloth.id, 2], [doll.id, 1]]);
+
+      const drift = await kitSetDrift(tx, setId);
+      assert.deepEqual(
+        drift.map((d) => [d.itemId, d.held, d.want]).sort(),
+        [[bowl.id, 1, 0], [cloth.id, 0, 2], [tray.id, 1, 3]].sort(),
+        "หุ่น is not in the list — its count did not change",
+      );
+
+      const res = await resyncKitSet(tx, { setSubItemId: setId, userId: user.id, note: "ทดสอบ" });
+      assert.equal(res.applied.length, 3);
+
+      const qty = async (id: string) => (await tx.item.findUniqueOrThrow({ where: { id } })).availableQty;
+      assert.equal(await qty(tray.id), 7, "only the 2 extra trays are cut, not 3 on top of the one already in the box");
+      assert.equal(await qty(bowl.id), 10, "the dropped bowl comes home");
+      assert.equal(await qty(cloth.id), 8, "the new cloth is cut");
+
+      // The unchanged tracked piece must not have been handed back and taken out again.
+      const dollPieceNow = await tx.subItem.findUniqueOrThrow({ where: { id: dollPiece.id } });
+      assert.equal(dollPieceNow.inKitSubItemId, setId, "หุ่น never left the box");
+      assert.equal(
+        await tx.dispenseRecord.count({ where: { itemId: doll.id, loanType: LoanType.INUSE } }),
+        1,
+        "and no second นำไปใช้งาน row was written for it",
+      );
+      assert.equal(
+        (await tx.dispenseRecord.findUniqueOrThrow({ where: { id: dollRecord.id } })).returnedAt,
+        null,
+        "its original record is still the open one",
+      );
+      assert.equal(await tx.returnRecord.count({ where: { itemId: doll.id } }), 0, "nothing was returned for it either");
+
+      // The box itself: same row, same code, and a log line explaining the change.
+      const box = await tx.subItem.findUniqueOrThrow({ where: { id: setId } });
+      assert.equal(box.status, ItemStatus.AVAILABLE, "the box stays on the shelf, lendable");
+      const audit = await tx.itemStatusLog.findFirst({
+        where: { subItemId: setId, reason: { startsWith: "ปรับชุดตามสูตร" } },
+        orderBy: { changedAt: "desc" },
+      });
+      assert.ok(audit, "the set's ประวัติ says why its contents changed");
+      assert.ok(audit.reason?.includes("1→3"), `the log names the change, got: ${audit.reason}`);
+
+      assert.deepEqual(await kitSetDrift(tx, setId), [], "and the box now matches the recipe");
+
+      // Cancelling afterwards hands back the NEW contents, read off the records, not the recipe.
+      await cancelKitSet(tx, { setSubItemId: setId, userId: user.id });
+      assert.equal(await qty(tray.id), 10, "3 trays back");
+      assert.equal(await qty(cloth.id), 10, "2 cloths back");
+      assert.equal((await tx.subItem.findUniqueOrThrow({ where: { id: dollPiece.id } })).status, ItemStatus.AVAILABLE);
 
       checked = true;
       throw new Error(ROLLBACK);

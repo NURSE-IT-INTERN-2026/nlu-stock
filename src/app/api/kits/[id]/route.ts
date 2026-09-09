@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, notFound, parseBody } from "@/lib/api-utils";
-import { loadKitComponents, maxAssemblableSets, unitMismatches } from "@/lib/kits";
+import { kitSetDrift, loadKitComponents, maxAssemblableSets, unitMismatches } from "@/lib/kits";
 import { ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
 
@@ -51,10 +51,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }),
   ]);
 
+  // ponytail: drift per set, two queries each. A kit holds a handful of boxes; batch the
+  // holdings into one query if a kit ever holds dozens.
+  const setsWithDrift = await Promise.all(
+    sets.map(async (s) => ({ ...s, drift: await kitSetDrift(prisma, s.id) })),
+  );
+
   return json({
     kit: { id: kit.id, code: kit.code, name: kit.name, issueUnit: kit.issueUnit },
     components,
-    sets,
+    sets: setsWithDrift,
     maxSets: maxAssemblableSets(components),
     // Recipe rows whose unit disagrees with the item's issue unit. Assemble refuses to run on
     // these — surfaced here so the ชุดประกอบ tab can say which line to fix instead of failing

@@ -621,6 +621,17 @@ export interface KitComponent {
   availableQty: number;
 }
 
+/** One item where an assembled box and the current recipe disagree. `want` 0 = recipe dropped it. */
+export interface SetDrift {
+  itemId: string;
+  code: string;
+  name: string;
+  unitName: string;
+  kind: "TRACKED" | "COUNT" | "CONSUMABLE";
+  held: number;
+  want: number;
+}
+
 export interface KitDetail {
   kit: { id: string; code: string; name: string; issueUnit: { id: string; name: string } };
   components: KitComponent[];
@@ -629,6 +640,8 @@ export interface KitDetail {
     subCode: string;
     status: string;
     kitContents: { id: string; subCode: string; item: { id: string; code: string; name: string } }[];
+    /** Empty when the box matches the recipe — ปรับชุดตามสูตร is offered only when it is not. */
+    drift: SetDrift[];
   }[];
   maxSets: number;
   unitMismatches: { itemId: string; name: string; bomUnitName: string; unitName: string }[];
@@ -668,12 +681,21 @@ export interface KitSetContents {
   /** คงทน the set was recorded as holding (falls back to the recipe for pre-2026-09 sets). */
   durables: { itemId: string; code: string; name: string; unitName: string; quantity: number }[];
   consumables: KitComponent[];
+  drift: SetDrift[];
   /** Tracked slots the recipe expects but nothing fills — a piece reported broken left the box. */
   missingTracked: { itemId: string; code: string; name: string; missing: number }[];
 }
 
 export function fetchKitSet(subItemId: string) {
   return request<KitSetContents>(`/api/kits/sets/${subItemId}`);
+}
+
+/** ปรับชุดตามสูตร — same box, contents moved to match the recipe. Only what differs moves. */
+export function resyncKitSet(subItemId: string, data: { note?: string }) {
+  return request<{ kitItemId: string; setLabel: string; applied: SetDrift[]; consumables: { name: string; quantity: number; unitName: string }[] }>(
+    `/api/kits/sets/${subItemId}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
 }
 
 /** ยกเลิกชุด — the exit door. Only for a set that is not out on loan. */

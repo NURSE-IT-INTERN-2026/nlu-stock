@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Boxes, Check, ClipboardList, Plus, ShoppingCart, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Boxes, Check, ClipboardList, Plus, RefreshCw, ShoppingCart, Trash2, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +19,8 @@ import { withBase } from "@/lib/base-path";
 import { STATUS_LABELS, type ItemStatus } from "@/lib/constants";
 import { useCart, buildCartItem, toDispenseableItem, type DispenseSearchItem } from "@/components/dispense/cart-context";
 import {
-  assembleKit, cancelKitSet, fetchKit, fetchKitSet, updateKitBom,
-  type KitComponent, type KitDetail, type KitSetContents,
+  assembleKit, cancelKitSet, fetchKit, fetchKitSet, resyncKitSet, updateKitBom,
+  type KitComponent, type KitDetail, type KitSetContents, type SetDrift,
 } from "@/lib/api";
 
 /**
@@ -47,6 +47,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
   const [bomOpen, setBomOpen] = useState(false);
   const [viewSetId, setViewSetId] = useState<string | null>(null);
   const [cancelSetId, setCancelSetId] = useState<string | null>(null);
+  const [resyncSetId, setResyncSetId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setData(await fetchKit(itemId)); } catch { setData(null); }
@@ -193,6 +194,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
                       <SetActions
                         set={s} canAct={canAct}
                         onView={() => setViewSetId(s.id)}
+                        onResync={() => setResyncSetId(s.id)}
                         onCancel={() => setCancelSetId(s.id)}
                       />
                     </TableCell>
@@ -210,6 +212,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
                       <SetActions
                         set={s} canAct={canAct}
                         onView={() => setViewSetId(s.id)}
+                        onResync={() => setResyncSetId(s.id)}
                         onCancel={() => setCancelSetId(s.id)}
                       />
                     </div>
@@ -227,6 +230,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
       <AssembleDialog open={assembleOpen} onOpenChange={setAssembleOpen} kit={data} onDone={refresh} />
       {bomOpen && <EditBomDialog onClose={() => setBomOpen(false)} kit={data} onDone={refresh} />}
       {viewSetId && <SetContentsDialog setId={viewSetId} onClose={() => setViewSetId(null)} />}
+      {resyncSetId && <ResyncSetDialog setId={resyncSetId} onClose={() => setResyncSetId(null)} onDone={refresh} />}
       {cancelSetId && <CancelSetDialog setId={cancelSetId} onClose={() => setCancelSetId(null)} onDone={refresh} />}
     </div>
   );
@@ -234,10 +238,16 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
 
 type SetRow = KitDetail["sets"][number];
 
-function SetActions({ set, canAct, onView, onCancel }: { set: SetRow; canAct: boolean; onView: () => void; onCancel: () => void }) {
+function SetActions({ set, canAct, onView, onResync, onCancel }: { set: SetRow; canAct: boolean; onView: () => void; onResync: () => void; onCancel: () => void }) {
   if (!canAct || set.status === "ON_LOAN") return null;
   return (
     <div className="flex items-center justify-end gap-1">
+      {/* Only for a box the recipe has moved away from — a matching box has nothing to press. */}
+      {set.drift.length > 0 && (
+        <Button variant="outline" size="sm" className="text-xs border-warning/40 text-warning-700 dark:text-warning-200" onClick={onResync}>
+          <RefreshCw className="size-3.5" />ปรับตามสูตร
+        </Button>
+      )}
       <Button variant="outline" size="sm" className="text-xs" onClick={onView}>
         <ClipboardList className="size-3.5" />ดูของในชุด
       </Button>
@@ -510,6 +520,93 @@ function PrefillCartButton({
       <ShoppingCart className="size-3.5" />
       {loading ? "กำลังใส่ตะกร้า..." : "ใส่ของสิ้นเปลืองลงตะกร้าเบิก"}
     </Button>
+  );
+}
+
+// ── ปรับชุดตามสูตร ──
+/**
+ * The box keeps its code and its history; only the items the recipe moved away from are
+ * touched. Everything else stays exactly where it is — a line that reads "ถาด 1 → 1" would be
+ * a lie about someone opening the box, so it never appears.
+ */
+function ResyncSetDialog({ setId, onClose, onDone }: { setId: string; onClose: () => void; onDone: () => void }) {
+  const [contents, setContents] = useState<KitSetContents | null>(null);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchKitSet(setId).then((c) => { if (!cancelled) setContents(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [setId]);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const res = await resyncKitSet(setId, { note: note.trim() || undefined });
+      toast.success(`ปรับชุด ${res.setLabel} ตามสูตรแล้ว — ${res.applied.length} รายการ`);
+      onClose();
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ปรับชุดตามสูตรไม่สำเร็จ");
+    }
+    setSaving(false);
+  };
+
+  const label = contents ? `${contents.set.item.code}-${contents.set.subCode}` : "";
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className={DIALOG_SHELL}>
+        <DialogTitle>ปรับชุด {label} ตามสูตร</DialogTitle>
+        <DialogDescription>
+          กล่องเดิม รหัสเดิม ประวัติเดิม — ระบบขยับสต๊อกเฉพาะรายการที่ต่างจากสูตร ที่เหลือไม่แตะ
+        </DialogDescription>
+        <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
+          {!contents ? (
+            <Skeleton className="h-32 w-full" />
+          ) : (
+            <>
+              <DriftRows drift={contents.drift} />
+              <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
+                ระบบขยับแค่ตัวเลขในคลัง — ของในกล่องต้องไปหยิบเข้าออกเอง
+                {contents.consumables.length > 0 && ` · ของสิ้นเปลือง (${contents.consumables.map((c) => c.name).join(", ")}) ระบบไม่เคยตัดให้ ต้องเติมเอง`}
+              </p>
+              <div>
+                <Label htmlFor="resync-note" className="text-xs">หมายเหตุ</Label>
+                <Textarea id="resync-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="mt-1 bg-card" />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>ปิด</Button>
+          <Button disabled={saving || !contents || contents.drift.length === 0} onClick={submit}>
+            {saving ? "กำลังปรับ..." : "ปรับตามสูตร"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DriftRows({ drift }: { drift: SetDrift[] }) {
+  if (drift.length === 0) return <p className="text-sm text-muted-foreground">ชุดนี้ตรงกับสูตรอยู่แล้ว</p>;
+  return (
+    <div className="divide-y rounded-lg border">
+      {drift.map((d) => {
+        const delta = d.want - d.held;
+        return (
+          <div key={d.itemId} className="flex items-center gap-3 px-3 py-2 text-xs">
+            <span className="min-w-0 flex-1 truncate">{d.name}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{d.held} → {d.want} {d.unitName}</span>
+            <span className={cn("w-16 shrink-0 text-right font-medium tabular-nums", delta > 0 ? "text-warning-700 dark:text-warning-200" : "text-success-700 dark:text-success-200")}>
+              {delta > 0 ? `ใส่ +${delta}` : `เอาออก ${-delta}`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
