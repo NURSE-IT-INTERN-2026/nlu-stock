@@ -292,6 +292,19 @@ test("kit set: ปรับชุดตามสูตร moves only what change
 
       assert.deepEqual(await kitSetDrift(tx, setId), [], "and the box now matches the recipe");
 
+      // A recipe the shelf cannot supply is refused outright — the UI hides the button on the
+      // same rule (drift.want - drift.held > drift.availableQty), this is the server half.
+      await tx.kitBom.deleteMany({ where: { kitItemId: kit.id } });
+      await bom([[tray.id, 999], [cloth.id, 2], [doll.id, 1]]);
+      await assert.rejects(
+        () => resyncKitSet(tx, { setSubItemId: setId, userId: user.id }),
+        /มีไม่พอ/,
+        "ปรับชุดตามสูตร cannot conjure stock that is not there",
+      );
+      assert.equal(await qty(tray.id), 7, "and a refused adjustment moves nothing");
+      await tx.kitBom.deleteMany({ where: { kitItemId: kit.id } });
+      await bom([[tray.id, 3], [cloth.id, 2], [doll.id, 1]]);
+
       // Cancelling afterwards hands back the NEW contents, read off the records, not the recipe.
       await cancelKitSet(tx, { setSubItemId: setId, userId: user.id });
       assert.equal(await qty(tray.id), 10, "3 trays back");

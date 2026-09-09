@@ -16,7 +16,7 @@ import { NumericInput } from "@/components/shared/numeric-input";
 import { StepComponents } from "@/components/shared/create-kit-modal/step-components";
 import type { ComponentRow } from "@/components/shared/create-kit-modal/types";
 import { withBase } from "@/lib/base-path";
-import { STATUS_LABELS, type ItemStatus } from "@/lib/constants";
+import { STATUS_LABELS, effectiveCode, type ItemStatus } from "@/lib/constants";
 import { useCart, buildCartItem, toDispenseableItem, type DispenseSearchItem } from "@/components/dispense/cart-context";
 import {
   assembleKit, cancelKitSet, fetchKit, fetchKitSet, resyncKitSet, updateKitBom,
@@ -238,15 +238,32 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
 
 type SetRow = KitDetail["sets"][number];
 
+/**
+ * Items the box needs more of than the shelf can supply. ปรับชุดตามสูตร cuts the difference
+ * straight out of stock, so a shortfall here is not a warning — the adjustment cannot run.
+ */
+function shortOf(drift: SetDrift[]): SetDrift[] {
+  return drift.filter((d) => d.want - d.held > d.availableQty);
+}
+
 function SetActions({ set, canAct, onView, onResync, onCancel }: { set: SetRow; canAct: boolean; onView: () => void; onResync: () => void; onCancel: () => void }) {
   if (!canAct || set.status === "ON_LOAN") return null;
+  const short = shortOf(set.drift);
   return (
     <div className="flex items-center justify-end gap-1">
       {/* Only for a box the recipe has moved away from — a matching box has nothing to press. */}
       {set.drift.length > 0 && (
-        <Button variant="outline" size="sm" className="text-xs border-warning/40 text-warning-700 dark:text-warning-200" onClick={onResync}>
-          <RefreshCw className="size-3.5" />ปรับตามสูตร
-        </Button>
+        short.length > 0 ? (
+          // Nothing to press: the shelf cannot supply the change. The label says why here so
+          // staff are not sent into a dialog to find a disabled button.
+          <span className="flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive">
+            <AlertTriangle className="size-3.5" />ของมีไม่พอปรับตามสูตร
+          </span>
+        ) : (
+          <Button variant="outline" size="sm" className="text-xs border-warning/40 text-warning-700 dark:text-warning-200" onClick={onResync}>
+            <RefreshCw className="size-3.5" />ปรับตามสูตร
+          </Button>
+        )
       )}
       <Button variant="outline" size="sm" className="text-xs" onClick={onView}>
         <ClipboardList className="size-3.5" />ดูของในชุด
@@ -554,6 +571,7 @@ function ResyncSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
   };
 
   const label = contents ? `${contents.set.item.code}-${contents.set.subCode}` : "";
+  const short = contents ? shortOf(contents.drift) : [];
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -568,6 +586,16 @@ function ResyncSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
           ) : (
             <>
               <DriftRows drift={contents.drift} />
+              {short.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                  <span className="text-muted-foreground">
+                    <span className="font-medium text-destructive">ของมีไม่พอปรับตามสูตร</span> —{" "}
+                    {short.map((d) => `${d.name} ต้องการเพิ่ม ${d.want - d.held} ${d.unitName} เหลือ ${d.availableQty}`).join(" · ")}
+                    {" "}รับของเข้าคลังก่อน หรือแก้สูตรให้พอดีกับของที่มี
+                  </span>
+                </div>
+              )}
               <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
                 ระบบขยับแค่ตัวเลขในคลัง — ของในกล่องต้องไปหยิบเข้าออกเอง
                 {contents.consumables.length > 0 && ` · ของสิ้นเปลือง (${contents.consumables.map((c) => c.name).join(", ")}) ระบบไม่เคยตัดให้ ต้องเติมเอง`}
@@ -581,8 +609,8 @@ function ResyncSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>ปิด</Button>
-          <Button disabled={saving || !contents || contents.drift.length === 0} onClick={submit}>
-            {saving ? "กำลังปรับ..." : "ปรับตามสูตร"}
+          <Button disabled={saving || !contents || contents.drift.length === 0 || short.length > 0} onClick={submit}>
+            {saving ? "กำลังปรับ..." : short.length > 0 ? "ของมีไม่พอ" : "ปรับตามสูตร"}
           </Button>
         </div>
       </DialogContent>
@@ -596,11 +624,21 @@ function DriftRows({ drift }: { drift: SetDrift[] }) {
     <div className="divide-y rounded-lg border">
       {drift.map((d) => {
         const delta = d.want - d.held;
+        const short = delta > d.availableQty;
         return (
           <div key={d.itemId} className="flex items-center gap-3 px-3 py-2 text-xs">
-            <span className="min-w-0 flex-1 truncate">{d.name}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate">{d.name}</p>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {d.code}
+                {delta > 0 && <span className={cn("ml-2 font-sans", short && "font-medium text-destructive")}>คลังเหลือ {d.availableQty}</span>}
+              </p>
+            </div>
             <span className="shrink-0 tabular-nums text-muted-foreground">{d.held} → {d.want} {d.unitName}</span>
-            <span className={cn("w-16 shrink-0 text-right font-medium tabular-nums", delta > 0 ? "text-warning-700 dark:text-warning-200" : "text-success-700 dark:text-success-200")}>
+            <span className={cn(
+              "w-20 shrink-0 text-right font-medium tabular-nums",
+              short ? "text-destructive" : delta > 0 ? "text-warning-700 dark:text-warning-200" : "text-success-700 dark:text-success-200",
+            )}>
               {delta > 0 ? `ใส่ +${delta}` : `เอาออก ${-delta}`}
             </span>
           </div>
@@ -653,8 +691,10 @@ function CancelSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
             <>
               <ContentRows
                 rows={[
-                  ...contents.tracked.map((t) => ({ key: t.id, label: `${t.item.name} ${t.subCode}`, sub: t.item.code })),
-                  ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
+                  ...contents.tracked.map((t) => ({
+                    key: t.id, code: effectiveCode(t.item.code, t.subCode, t.item._count.subItems), label: t.item.name, sub: "รายชิ้น",
+                  })),
+                  ...contents.durables.map((d) => ({ key: d.itemId, code: d.code, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
                 ]}
               />
               {contents.consumables.length > 0 && (
@@ -687,9 +727,11 @@ function ExpectedContents({ contents }: { contents: KitSetContents }) {
     <div className="space-y-2">
       <ContentRows
         rows={[
-          ...contents.tracked.map((t) => ({ key: t.id, label: `${t.item.name} ${t.subCode}`, sub: t.item.code })),
-          ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
-          ...contents.consumables.map((c) => ({ key: c.itemId, label: c.name, sub: `${c.perSet} ${c.bomUnitName}` })),
+          ...contents.tracked.map((t) => ({
+            key: t.id, code: effectiveCode(t.item.code, t.subCode, t.item._count.subItems), label: t.item.name, sub: "รายชิ้น",
+          })),
+          ...contents.durables.map((d) => ({ key: d.itemId, code: d.code, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
+          ...contents.consumables.map((c) => ({ key: c.itemId, code: c.code, label: c.name, sub: `${c.perSet} ${c.bomUnitName} · เติมเอง` })),
         ]}
       />
       {contents.missingTracked.length > 0 && (
@@ -728,8 +770,10 @@ export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
       </p>
       <ContentRows
         rows={[
-          ...contents.tracked.map((t) => ({ key: t.id, label: `${t.item.name} ${t.subCode}`, sub: t.item.code })),
-          ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
+          ...contents.tracked.map((t) => ({
+            key: t.id, code: effectiveCode(t.item.code, t.subCode, t.item._count.subItems), label: t.item.name, sub: "รายชิ้น",
+          })),
+          ...contents.durables.map((d) => ({ key: d.itemId, code: d.code, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
         ]}
       />
       {contents.consumables.length > 0 && (
@@ -741,7 +785,11 @@ export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
   );
 }
 
-function ContentRows({ rows }: { rows: { key: string; label: string; sub: string }[] }) {
+/**
+ * Every line of a set's contents carries the code staff read off the sticker, not just the
+ * name — two ถ้วย of different codes are two different things at the shelf.
+ */
+function ContentRows({ rows }: { rows: { key: string; code: string; label: string; sub: string }[] }) {
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">ไม่มีรายการ</p>;
   return (
     <div className="divide-y rounded-lg border bg-card">
@@ -750,7 +798,10 @@ function ContentRows({ rows }: { rows: { key: string; label: string; sub: string
           <Check className="size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-foreground">{r.label}</p>
-            <p className="text-xs text-muted-foreground">{r.sub}</p>
+            <p className="text-xs text-muted-foreground">
+              <span className="font-mono">{r.code}</span>
+              {r.sub && <> · {r.sub}</>}
+            </p>
           </div>
         </div>
       ))}

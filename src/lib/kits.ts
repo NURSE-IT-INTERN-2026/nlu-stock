@@ -572,6 +572,8 @@ export interface SetDrift {
   held: number;
   /** What the recipe asks for now. 0 = the recipe dropped it. */
   want: number;
+  /** Stock on the shelf right now — a shortfall here is what blocks ปรับชุดตามสูตร. */
+  availableQty: number;
 }
 
 /**
@@ -602,16 +604,20 @@ export async function kitSetDrift(tx: TxClient, setSubItemId: string): Promise<S
     if (c.kind === "CONSUMABLE") continue;
     const held = heldByItem.get(c.itemId) ?? 0;
     if (held !== c.perSet) {
-      drift.push({ itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName, kind: c.kind, held, want: c.perSet });
+      drift.push({
+        itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName,
+        kind: c.kind, held, want: c.perSet, availableQty: c.availableQty,
+      });
     }
     heldByItem.delete(c.itemId);
   }
   // Whatever is left is in the box but no longer in the recipe.
   for (const [itemId, held] of heldByItem) {
     const h = holdings.find((x) => x.itemId === itemId);
-    const item = h
-      ? null
-      : await tx.item.findUnique({ where: { id: itemId }, select: { code: true, name: true, issueUnit: { select: { name: true } } } });
+    const item = await tx.item.findUnique({
+      where: { id: itemId },
+      select: { code: true, name: true, availableQty: true, issueUnit: { select: { name: true } } },
+    });
     drift.push({
       itemId,
       code: item?.code ?? h?.code ?? "",
@@ -620,6 +626,7 @@ export async function kitSetDrift(tx: TxClient, setSubItemId: string): Promise<S
       kind: h ? "COUNT" : "TRACKED",
       held,
       want: 0,
+      availableQty: item?.availableQty ?? 0,
     });
   }
   return drift;

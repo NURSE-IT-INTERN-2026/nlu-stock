@@ -32,7 +32,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           id: true,
           subCode: true,
           serialNumber: true,
-          item: { select: { id: true, code: true, name: true, issueUnit: { select: { name: true } } } },
+          // _count.subItems feeds effectiveCode: a one-copy item IS its base code, and a
+          // phantom "-C01" on it reads as a second piece that does not exist.
+          item: { select: { id: true, code: true, name: true, issueUnit: { select: { name: true } }, _count: { select: { subItems: true } } } },
         },
       },
     },

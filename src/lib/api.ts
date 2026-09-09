@@ -630,6 +630,8 @@ export interface SetDrift {
   kind: "TRACKED" | "COUNT" | "CONSUMABLE";
   held: number;
   want: number;
+  /** Stock on the shelf — ปรับชุดตามสูตร is blocked when a shortfall makes the change impossible. */
+  availableQty: number;
 }
 
 export interface KitDetail {
@@ -677,7 +679,10 @@ export function assembleKit(
 
 export interface KitSetContents {
   set: { id: string; subCode: string; status: string; item: { id: string; code: string; name: string } };
-  tracked: { id: string; subCode: string; serialNumber: string | null; item: { id: string; code: string; name: string; issueUnit: { name: string } } }[];
+  tracked: {
+    id: string; subCode: string; serialNumber: string | null;
+    item: { id: string; code: string; name: string; issueUnit: { name: string }; _count: { subItems: number } };
+  }[];
   /** คงทน the set was recorded as holding (falls back to the recipe for pre-2026-09 sets). */
   durables: { itemId: string; code: string; name: string; unitName: string; quantity: number }[];
   consumables: KitComponent[];
