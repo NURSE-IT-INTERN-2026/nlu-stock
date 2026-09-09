@@ -36,6 +36,10 @@ export type CodeRequest = { sourceKey: string; openedAt: Date; prefix: string };
  * การตีความแถวที่มีอยู่แล้ว จุดที่รู้ว่ามีเคสเกิดขึ้นจึงเป็นตอนที่มีคนถามหามันนี่แหละ.
  *
  * เรียงตาม openedAt ก่อนจ่าย เพื่อให้ชุดที่มาพร้อมกันได้เลขตามลำดับเวลา ไม่ใช่ตามลำดับที่บังเอิญวนถึง.
+ *
+ * จ่ายเป็นชุด ไม่ใช่ทีละใบ: ครั้งแรกที่หน้าเคสเปิดบนฐานข้อมูลที่ใช้งานมาแล้ว ทุกแถวยังไม่มีเลข
+ * สักใบ และ "ทีละใบ" คือ aggregate + create ต่อหนึ่งเลข เรียงกันไปหลักพันรอบในคำขอเดียว.
+ * หนึ่งชุดต่อหนึ่งปีพอ เพราะ seq นับแยกตามปีอยู่แล้ว.
  */
 export async function codesFor(requests: CodeRequest[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
@@ -47,11 +51,36 @@ export async function codesFor(requests: CodeRequest[]): Promise<Map<string, str
 
   const missing = requests
     .filter((r) => !known.has(r.sourceKey))
-    .sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime() || a.sourceKey.localeCompare(b.sourceKey));
+    .sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime() || a.sourceKey.localeCompare(b.sourceKey))
+    // คำขอเดียวกันมาซ้ำในชุดได้ (เคสหลายใบชี้แถวต้นทางเดียวกัน) — ปล่อยไว้จะจองเลขให้คีย์เดิมสองครั้ง
+    .filter((r, i, all) => all.findIndex((o) => o.sourceKey === r.sourceKey) === i);
 
-  for (const r of missing) {
-    if (known.has(r.sourceKey)) continue; // duplicate request in the same batch
-    known.set(r.sourceKey, await assign(r.sourceKey, beYear(r.openedAt)));
+  if (missing.length) {
+    const byYear = new Map<number, CodeRequest[]>();
+    for (const r of missing) {
+      const be = beYear(r.openedAt);
+      const rows = byYear.get(be) ?? [];
+      rows.push(r);
+      byYear.set(be, rows);
+    }
+    for (const [be, rows] of byYear) {
+      const top = await prisma.caseCode.aggregate({ where: { be }, _max: { seq: true } });
+      let seq = top._max.seq ?? 0;
+      // skipDuplicates กลืนทั้งสองแบบของการชนกับคนอื่นที่เขียนพร้อมกัน: คีย์นี้เพิ่งได้เลขไปแล้ว
+      // (PK) และเลขนี้เพิ่งถูกคนอื่นหยิบไป (@@unique be,seq). อันไหนถูกข้าม ตกไปให้ assign เก็บ
+      await prisma.caseCode.createMany({
+        data: rows.map((r) => ({ sourceKey: r.sourceKey, be, seq: ++seq })),
+        skipDuplicates: true,
+      });
+    }
+    const written = await prisma.caseCode.findMany({
+      where: { sourceKey: { in: missing.map((r) => r.sourceKey) } },
+    });
+    for (const c of written) known.set(c.sourceKey, c);
+    // เหลือเท่าไหร่คือที่ชนจริง ซึ่งมีได้เฉพาะตอนมีคนอ่านพร้อมกัน — ทีละใบตรงนี้ไม่เป็นไร
+    for (const r of missing) {
+      if (!known.has(r.sourceKey)) known.set(r.sourceKey, await assign(r.sourceKey, beYear(r.openedAt)));
+    }
   }
 
   for (const r of requests) {
