@@ -588,9 +588,13 @@ export type Trip = { opener: TripLog; edits: TripLog[] };
  *   - มีใบบันทึกผลผูกกลับมาที่แถวส่ง (ทางปกติ)
  *   - ของกลับมาเป็นสถานะอื่นแล้ว (แถวเก่าก่อนมีคอลัมน์ผูก และที่ backfill เดาไม่ได้) — ไม่งั้น
  *     ของที่กลับมานานแล้วจะค้างอยู่ในกอง "ต้องทำ" ตลอดกาล
+ *
+ * ทางที่สองอ่าน "สถานะตอนนี้" ซึ่งเป็นของชิ้น ไม่ใช่ของเที่ยว — จึงตัดสินได้แค่เที่ยวล่าสุดของชิ้นนั้น
+ * เท่านั้น. เที่ยวเก่าที่ไม่มีใบผูก (backfill เดาไม่ได้) จะอ่านสถานะปัจจุบันแล้วนึกว่าตัวเองยังเปิดอยู่
+ * ทั้งที่คนที่ออกไปข้างนอกตอนนี้คือเที่ยวใหม่ — ชิ้นเดียวได้การ์ดสองใบ และ badge นับสองรอบ.
+ * เก็บ opener ให้ครบก่อน แล้วค่อยตัดสินจากตัวสุดท้ายของแต่ละชิ้น.
  */
 export function walkTrips(logs: TripLog[]): Trip[] {
-  const open: Trip[] = [];
   const byPiece = new Map<string, Trip>();
   for (const l of logs) {
     const key = `${l.item.id}:${l.subItemId ?? ""}`;
@@ -598,15 +602,15 @@ export function walkTrips(logs: TripLog[]): Trip[] {
       byPiece.get(key)?.edits.push(l);
       continue;
     }
-    const trip: Trip = { opener: l, edits: [] };
-    byPiece.set(key, trip);
-    if (l.closedByMaint.length) continue;
+    byPiece.set(key, { opener: l, edits: [] });
+  }
+  return [...byPiece.values()].filter(({ opener }) => {
+    if (opener.closedByMaint.length) return false;
     // ของชิ้นที่ติดตามรายชิ้นอ่านสถานะของชิ้นนั้น ไม่ใช่ของทั้งรายการ — รายการที่มีสำเนาอื่นว่างอยู่
     // ยังเป็น พร้อมใช้งาน ทั้งที่สำเนานี้ออกไปข้างนอกแล้ว
-    const status = l.subItem?.status ?? l.item.status;
-    if (status === ItemStatus.PENDING_MAINTENANCE) open.push(trip);
-  }
-  return open;
+    const status = opener.subItem?.status ?? opener.item.status;
+    return status === ItemStatus.PENDING_MAINTENANCE;
+  });
 }
 
 async function loadTripCases(itemId?: string, subItemId?: string): Promise<Trip[]> {

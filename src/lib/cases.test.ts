@@ -132,6 +132,16 @@ test("ส่งซ้ำหลังรับคืน = คนละเที�
   assert.deepEqual(trips[0].edits, [], "แถวแก้ของเที่ยวเก่าไม่ตกมาที่เที่ยวใหม่");
 });
 
+test("เที่ยวเก่าที่ backfill ผูกไม่ได้ ไม่โผล่ซ้ำกับเที่ยวที่เปิดอยู่จริง", () => {
+  // s1 กลับมานานแล้วแต่ไม่มีใบผูก (แถวก่อนมีคอลัมน์ sentLogId) — ตัวที่ออกไปข้างนอกตอนนี้คือ s2.
+  // สถานะที่อ่านได้เป็นของชิ้น ไม่ใช่ของเที่ยว จึงตัดสินได้แค่เที่ยวล่าสุดเท่านั้น
+  const trips = walkTrips([
+    trip("s1", "AVAILABLE", 1),
+    trip("s2", "AVAILABLE", 10),
+  ]);
+  assert.deepEqual(trips.map((t) => t.opener.id), ["s2"], "ชิ้นเดียวมีเที่ยวเปิดได้ทีละใบ");
+});
+
 test("case code pads to four digits", () => {
   assert.equal(formatCode("RC", 2569, 142), "RC-2569-0142");
   assert.equal(formatCode("BR", 2569, 7), "BR-2569-0007");

@@ -41,16 +41,27 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     // (schedule on Item). Pieces + items looks like mixed units but is not: the
     // maintenance-schedule table this feeds (/maintenance, filter "overdue") emits exactly
     // one row per live copy and one per flat item. Keep the two shapes in step.
+    //
+    // ส่งออกไปบำรุงข้างนอกแล้วยังไม่กลับ = ไม่ใช่ "เกินกำหนด": รอบนั้นทำอยู่แล้ว. วันบนชิ้นยังเป็น
+    // วันเก่าตลอดเที่ยว เพราะ nextMaintenanceDate ขยับตอนเขียนใบบันทึกผลตอนรับคืนเท่านั้น — ไม่ตัด
+    // ออกตรงนี้ ตัวเลขจะไม่ตรงกับตารางที่ป้ายนี้พาไป (maintenance-schedule statusOf ให้
+    // "กำลังบำรุงรักษา" ชนะวันที่) และไม่ตรงกับการ์ด overdue ของ api/maintenance/summary.
+    // ซ้ำร้าย เที่ยวที่เปิดค้างถูกนับเป็นเคสใน openCases อยู่แล้ว บวกอีกทางคือนับสองรอบ.
     Promise.all([
       prisma.subItem.count({
         where: {
           nextMaintenanceDate: { lt: now },
-          status: { notIn: ["DISPOSED", "LOST"] },
+          status: { notIn: ["DISPOSED", "LOST", "PENDING_MAINTENANCE"] },
           item: { isActive: true, trackIndividually: true },
         },
       }),
       prisma.item.count({
-        where: { nextMaintenanceDate: { lt: now }, isActive: true, trackIndividually: false },
+        where: {
+          nextMaintenanceDate: { lt: now },
+          status: { not: "PENDING_MAINTENANCE" },
+          isActive: true,
+          trackIndividually: false,
+        },
       }),
     ]).then(([a, b]) => a + b),
     prisma.item.count({
