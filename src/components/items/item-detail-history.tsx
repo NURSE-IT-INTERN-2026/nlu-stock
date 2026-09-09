@@ -532,8 +532,8 @@ function rowOf(u: Unit): Row {
     tone: m.chip,
     name: EVENT_TYPE_LABELS[u.type] ?? u.type,
     status: null,
-    title: u.note,
-    sub: u.subtitle || null,
+    title: splitNote(u.note).head,
+    sub: u.subtitle || splitNote(u.note).body || null,
     meta: <>{u.user} · <span className="tabular-nums">{fmtDate(u.date, TH_DATE)} {timeOf(u.date)} น.</span></>,
     value: u.delta ?? u.qty,
     neutral: u.delta === null,
@@ -622,6 +622,16 @@ const FOLDED_LABEL: Record<AttachRecordType, string> = {
  * แท็บ "เกี่ยวข้อง" ไม่มีที่นี่: เคสอ้างถึงเคสอื่นได้ (การคืนที่เปิดงานซ่อม) กิจกรรมเดี่ยวไม่มีเส้น
  * แบบนั้นเลยสักเส้น และแท็บที่ว่างเปล่าทุกครั้งคือแท็บที่สอนคนอ่านให้เลิกกดแท็บ.
  */
+/**
+ * A note written as a headline plus detail lines (ปรับชุดตามสูตร lists one bullet per item).
+ * The headline is what the row and the card title are for; the rest is description and must
+ * not be set in the same bold type, or a three-item adjustment shouts four lines of heading.
+ */
+function splitNote(note: string): { head: string; body: string | null } {
+  const nl = note.indexOf("\n");
+  return nl === -1 ? { head: note, body: null } : { head: note.slice(0, nl), body: note.slice(nl + 1) };
+}
+
 const EVENT_TABS = [
   { value: "timeline", label: "ไทม์ไลน์" },
   { value: "info", label: "รายละเอียด" },
@@ -669,10 +679,12 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
             <Icon className="size-3" />
             {EVENT_TYPE_LABELS[event.type] ?? event.type}
           </span>
-          {/* whitespace-pre-line: a note written as a header plus one line per change (ปรับชุด
-              ตามสูตร) is a list, and a list run together on one line is read as far as the
-              first comma. The compact row keeps truncate, so it stays a single line there. */}
-          <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight whitespace-pre-line">{event.note}</h2>
+          <h2 className="mt-1 text-lg font-semibold leading-tight tracking-tight">{splitNote(event.note).head}</h2>
+          {/* The detail lines under the headline, in body type — whitespace-pre-line because
+              they are a list and a list on one line is read as far as the first comma. */}
+          {splitNote(event.note).body && (
+            <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{splitNote(event.note).body}</p>
+          )}
           {event.subtitle && <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{event.subtitle}</p>}
           <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground tabular-nums">
             {fmtDate(event.date, TH_DATE)} · {timeOf(event.date)} น.
@@ -710,7 +722,10 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
         {tab === "timeline" && (
           <ol>
             <Rail last dot={<span aria-hidden className={cn("mt-1.5 size-3 shrink-0 rounded-full", meta.rail)} />}>
-              <p className="text-sm font-semibold leading-tight whitespace-pre-line">{event.note}</p>
+              <p className="text-sm font-semibold leading-tight">{splitNote(event.note).head}</p>
+              {splitNote(event.note).body && (
+                <p className="mt-0.5 whitespace-pre-line text-sm text-muted-foreground">{splitNote(event.note).body}</p>
+              )}
               {event.subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{event.subtitle}</p>}
               {event.notes && <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">{event.notes}</p>}
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
@@ -724,7 +739,7 @@ function EventDetailPane({ event, unit, canEdit, attachOverride, onAttachChange 
 
         {tab === "info" && (
           <dl className="divide-y divide-border">
-            <DetailRow label="รายการ" value={<span className="font-medium text-foreground">{event.note}</span>} />
+            <DetailRow label="รายการ" value={<span className="whitespace-pre-line font-medium text-foreground">{event.note}</span>} />
             {event.subtitle && <DetailRow label="รายละเอียด" value={event.subtitle} />}
             {event.change && (
               <DetailRow
