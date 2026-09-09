@@ -44,10 +44,10 @@ export interface KitComponent {
   bomUnitName: string;
 }
 
-/** Read a kit's BOM, classified and priced against current stock. Free-text rows are dropped. */
+/** Read a kit's BOM, classified and priced against current stock. */
 export async function loadKitComponents(tx: TxClient, kitItemId: string): Promise<KitComponent[]> {
   const rows = await tx.kitBom.findMany({
-    where: { kitItemId, componentItemId: { not: null } },
+    where: { kitItemId },
     orderBy: { sortOrder: "asc" },
     select: {
       quantity: true,
@@ -66,16 +66,15 @@ export async function loadKitComponents(tx: TxClient, kitItemId: string): Promis
     },
   });
 
-  return rows.flatMap((r) => {
+  return rows.map((r) => {
     const c = r.componentItem;
-    if (!c) return [];
     const dispenseType = c.category.profile.dispenseType;
     const kind: ComponentKind = c.trackIndividually
       ? "TRACKED"
       : dispenseType === "CONSUMABLE"
         ? "CONSUMABLE"
         : "COUNT";
-    return [{
+    return {
       itemId: c.id,
       code: c.code,
       name: c.name,
@@ -84,7 +83,7 @@ export async function loadKitComponents(tx: TxClient, kitItemId: string): Promis
       kind,
       perSet: r.quantity,
       availableQty: c.availableQty,
-    }];
+    };
   });
 }
 
@@ -208,6 +207,7 @@ async function logIntoSet(
   row: {
     itemId: string;
     subItemId?: string | null;
+    kitSubItemId: string;
     quantity: number;
     setLabel: string;
     locationId: string | null;
@@ -219,6 +219,7 @@ async function logIntoSet(
     data: {
       itemId: row.itemId,
       subItemId: row.subItemId ?? undefined,
+      kitSubItemId: row.kitSubItemId,
       quantity: row.quantity,
       usageType: "OTHER",
       notes: `ประกอบอยู่ในชุด ${row.setLabel}`,
@@ -286,6 +287,7 @@ async function cutTracked(
     await logIntoSet(tx, {
       itemId: component.itemId,
       subItemId: piece.id,
+      kitSubItemId: setSubItemId,
       quantity: 1,
       setLabel,
       locationId: kit.locationId,
@@ -308,7 +310,7 @@ async function cutQty(
     loanGroupId: string;
   },
 ): Promise<void> {
-  const { component, sets, kit, codes, userId, loanGroupId } = opts;
+  const { component, sets, setSubItemIds, kit, codes, userId, loanGroupId } = opts;
   const needed = component.perSet * sets;
 
   await allocateAcrossLots(tx, component.itemId, -needed);
@@ -322,9 +324,10 @@ async function cutQty(
     throw new Error(`${component.name} มีไม่พอ (ต้องการ ${needed} ${component.unitName})`);
   }
 
-  for (const code of codes) {
+  for (const [i, code] of codes.entries()) {
     await logIntoSet(tx, {
       itemId: component.itemId,
+      kitSubItemId: setSubItemIds[i],
       quantity: component.perSet,
       setLabel: `${kit.code}-${code}`,
       locationId: kit.locationId,
@@ -336,18 +339,20 @@ async function cutQty(
 
 /**
  * Close the นำไปใช้งาน record that put `quantity` of an item into a set, so the piece or the
- * qty stops showing as out. Matched on the open INUSE row for that item (and sub-item), which
- * is what assemble wrote. Missing rows are tolerated: sets assembled under the old one-shot
+ * qty stops showing as out. `kitSubItemId` pins it to the set being emptied — two sets of the
+ * same kit hold identical rows for the same item, and matching on the item alone closed
+ * whichever was newest. Missing rows are tolerated: sets assembled under the old one-shot
  * model have StockAdjustment rows instead and there is nothing to close.
  */
 async function closeSetLoan(
   tx: TxClient,
-  opts: { itemId: string; subItemId?: string | null; userId: string; note: string },
+  opts: { itemId: string; subItemId?: string | null; kitSubItemId?: string; userId: string; note: string },
 ): Promise<void> {
   const open = await tx.dispenseRecord.findFirst({
     where: {
       itemId: opts.itemId,
       subItemId: opts.subItemId ?? null,
+      ...(opts.kitSubItemId ? { kitSubItemId: opts.kitSubItemId } : {}),
       loanType: LoanType.INUSE,
       returnedAt: null,
     },
@@ -400,6 +405,42 @@ export interface CancelSetResult {
   consumables: { name: string; quantity: number; unitName: string }[];
 }
 
+export interface SetHolding {
+  itemId: string;
+  code: string;
+  name: string;
+  unitName: string;
+  quantity: number;
+}
+
+/**
+ * What a set is actually holding, read off the นำไปใช้งาน rows assemble wrote for it — the
+ * คงทน half of the box, summed per item. The recipe is not consulted: it is free to change
+ * while sets are alive (sets are permanent, so locking it would lock it forever), and a box
+ * must hand back what went into it, not what the current recipe would put in a new one.
+ *
+ * Empty for sets assembled before the rows carried a set id and whose notes did not backfill —
+ * callers fall back to the recipe there, which is all those sets ever had.
+ */
+export async function loadSetHoldings(tx: TxClient, setSubItemId: string): Promise<SetHolding[]> {
+  const rows = await tx.dispenseRecord.findMany({
+    where: { kitSubItemId: setSubItemId, subItemId: null, loanType: LoanType.INUSE, returnedAt: null },
+    select: {
+      itemId: true,
+      quantity: true,
+      item: { select: { code: true, name: true, issueUnit: { select: { name: true } } } },
+    },
+  });
+
+  const byItem = new Map<string, SetHolding>();
+  for (const r of rows) {
+    const held = byItem.get(r.itemId);
+    if (held) held.quantity += r.quantity;
+    else byItem.set(r.itemId, { itemId: r.itemId, code: r.item.code, name: r.item.name, unitName: r.item.issueUnit.name, quantity: r.quantity });
+  }
+  return [...byItem.values()];
+}
+
 /**
  * ยกเลิกชุด — the exit door, not part of the normal cycle. The set dies and the durables it
  * was holding go home. Without it a mis-assembled set would trap its tracked pieces forever:
@@ -432,9 +473,17 @@ export async function cancelKitSet(
   const setLabel = `${set.item.code}-${set.subCode}`;
   const affected = new Set<string>();
 
-  // ของที่คืนโดยจำนวนไม่ได้อยู่ใน kitContents (นั่นมีแต่ชิ้นที่นับรายชิ้น) ต้องอ่านสูตรมาก่อน
+  // ของคงทนที่คืนโดยจำนวนไม่ได้อยู่ใน kitContents (นั่นมีแต่ชิ้นที่นับรายชิ้น) — อ่านจากใบ
+  // นำไปใช้งานของชุดนี้ ถ้าไม่มี (ชุดเก่าก่อนมีคอลัมน์) ค่อยตกกลับไปใช้สูตร. อ่านทั้งคู่มาก่อน
   // เพื่อจะได้ล็อกทุกอย่างในคราวเดียว
   const components = await loadKitComponents(tx, set.itemId);
+  const holdings = await loadSetHoldings(tx, set.id);
+  // สูตรเป็นทางถอยเฉยๆ — คืนของคงทนตามที่ตัดไปจริง ไม่ใช่ตามสูตรวันนี้
+  const durables: SetHolding[] = holdings.length > 0
+    ? holdings
+    : components.filter((c) => c.kind === "COUNT").map((c) => ({
+        itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName, quantity: c.perSet,
+      }));
   // ล็อกครั้งเดียว ก่อนเขียนอะไรทั้งสิ้น — ทางกลับของ assembleKitSets และต้องเป็นชุด id ชุด
   // เดียวกับที่ assemble ล็อก. แยกล็อกสองรอบไม่ได้: lockItems เรียงให้แค่ภายในรอบของมันเอง
   // ยกเลิกชุดที่ถือ id สูงไว้แล้วไปขอ id ต่ำ สวนกับประกอบชุดที่ไล่จากต่ำไปสูง = deadlock.
@@ -442,6 +491,7 @@ export async function cancelKitSet(
     set.itemId,
     ...set.kitContents.map((p) => p.itemId),
     ...components.map((c) => c.itemId),
+    ...durables.map((d) => d.itemId),
   ]);
 
   // 1. Tracked pieces: back on the shelf, INUSE record closed.
@@ -464,29 +514,28 @@ export async function cancelKitSet(
     await closeSetLoan(tx, {
       itemId: piece.itemId,
       subItemId: piece.id,
+      kitSubItemId: set.id,
       userId,
       note: note ?? `ยกเลิกชุด ${setLabel}`,
     });
     affected.add(piece.itemId);
   }
 
-  // 2. Non-tracked components. Durables go back by qty; consumables were never cut and are
-  //    only listed so staff know what is still physically in the box.
-  const consumables: CancelSetResult["consumables"] = [];
-  for (const c of components) {
-    if (c.kind === "CONSUMABLE") {
-      consumables.push({ name: c.name, quantity: c.perSet, unitName: c.bomUnitName });
-      continue;
-    }
-    if (c.kind === "TRACKED") continue;
-
-    await allocateAcrossLots(tx, c.itemId, c.perSet);
-    await tx.item.update({ where: { id: c.itemId }, data: { availableQty: { increment: c.perSet } } });
-    await closeSetLoan(tx, { itemId: c.itemId, userId, note: note ?? `ยกเลิกชุด ${setLabel}` });
-    affected.add(c.itemId);
+  // 2. คงทน: hand back exactly what the box was recorded as holding.
+  for (const d of durables) {
+    await allocateAcrossLots(tx, d.itemId, d.quantity);
+    await tx.item.update({ where: { id: d.itemId }, data: { availableQty: { increment: d.quantity } } });
+    await closeSetLoan(tx, { itemId: d.itemId, kitSubItemId: set.id, userId, note: note ?? `ยกเลิกชุด ${setLabel}` });
+    affected.add(d.itemId);
   }
 
-  // 3. The set itself is gone.
+  // 3. สิ้นเปลือง were never cut, so there is nothing to hand back — the recipe is the only
+  //    thing that can say what should still be in the box, and it is advice, not a movement.
+  const consumables: CancelSetResult["consumables"] = components
+    .filter((c) => c.kind === "CONSUMABLE")
+    .map((c) => ({ name: c.name, quantity: c.perSet, unitName: c.bomUnitName }));
+
+  // 4. The set itself is gone.
   await tx.subItem.update({ where: { id: set.id }, data: { status: ItemStatus.DISPOSED } });
   await tx.itemStatusLog.create({
     data: {

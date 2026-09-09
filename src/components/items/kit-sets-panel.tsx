@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Boxes, Check, ClipboardList, Plus, ShoppingCart, Trash2, Wrench, FileText } from "lucide-react";
+import { AlertTriangle, Boxes, Check, ClipboardList, Plus, ShoppingCart, Trash2, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -101,16 +101,6 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
             <span className="text-muted-foreground">
               <span className="font-medium text-destructive">หน่วยในสูตรไม่ตรงกับหน่วยจ่าย</span> — ประกอบชุดไม่ได้จนกว่าจะแก้:{" "}
               {data.unitMismatches.map((m) => `${m.name} (สูตร ${m.bomUnitName}, คลัง ${m.unitName})`).join(" · ")}
-            </span>
-          </div>
-        )}
-
-        {data.unlinked.length > 0 && (
-          <div className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs">
-            <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-            <span className="text-muted-foreground">
-              <span className="font-medium text-foreground">รายการจากเอกสาร ({data.unlinked.length})</span> — ชื่อที่ import มาจาก Excel
-              ไว้ดูว่าชุดนี้ควรมีอะไรบ้าง ระบบไม่ตัดสต๊อกให้: {data.unlinked.map((u) => `${u.name} ${u.quantity} ${u.unit.name}`).join(" · ")}
             </span>
           </div>
         )}
@@ -262,10 +252,15 @@ function SetActions({ set, canAct, onView, onCancel }: { set: SetRow; canAct: bo
 function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; kit: KitDetail; onDone: () => void }) {
   const [sets, setSets] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [assembled, setAssembled] = useState(0);
+  const { addItem } = useCart();
+  const router = useRouter();
   const tooMany = sets > kit.maxSets;
 
   const cut = kit.components.filter((c) => c.kind !== "CONSUMABLE");
   const consumables = kit.components.filter((c) => c.kind === "CONSUMABLE");
+
+  const close = () => { onOpenChange(false); setSets(1); setAssembled(0); };
 
   const submit = async () => {
     setSaving(true);
@@ -274,14 +269,45 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
       // in sub-code order and accepts explicit picks — a swap UI lands when staff ask for it.
       const res = await assembleKit(kit.kit.id, { sets });
       toast.success(`ประกอบ ${res.assembledQty} ชุดแล้ว`);
-      onOpenChange(false);
-      setSets(1);
       onDone();
+      // The cut is done and saved either way. With consumables in the recipe the dialog stays
+      // open on a second step, so เบิก is one button away instead of a trip to the item list.
+      if (consumables.length > 0) setAssembled(res.assembledQty);
+      else close();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ประกอบชุดไม่สำเร็จ");
     }
     setSaving(false);
   };
+
+  if (assembled > 0) {
+    return (
+      <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
+        <DialogContent className={DIALOG_SHELL_FIT}>
+          <DialogTitle>ประกอบ {assembled} ชุดแล้ว</DialogTitle>
+          <DialogDescription>เหลือของสิ้นเปลืองที่ต้องใส่เอง — เบิกต่อได้เลย หรือข้ามไปเบิกทีหลัง</DialogDescription>
+          <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
+            <div className="space-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+              {consumables.map((c) => (
+                <div key={c.itemId} className="flex justify-between gap-3">
+                  <span className="min-w-0 truncate text-muted-foreground">{c.name}</span>
+                  <span className="shrink-0 tabular-nums text-foreground">{c.perSet * assembled} {c.bomUnitName}</span>
+                </div>
+              ))}
+            </div>
+            <PrefillCartButton
+              consumables={consumables}
+              onFilled={() => { close(); router.push("/cart"); }}
+              addItem={addItem}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={close}>ไว้ทีหลัง</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -335,7 +361,7 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
           )}
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
+          <Button variant="ghost" onClick={close}>ยกเลิก</Button>
           <Button disabled={saving || sets < 1 || tooMany} onClick={submit}>
             {saving ? "กำลังประกอบ..." : `ประกอบ ${sets} ชุด`}
           </Button>
@@ -531,7 +557,7 @@ function CancelSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
               <ContentRows
                 rows={[
                   ...contents.tracked.map((t) => ({ key: t.id, label: `${t.item.name} ${t.subCode}`, sub: t.item.code })),
-                  ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.perSet} ${d.bomUnitName}` })),
+                  ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
                 ]}
               />
               {contents.consumables.length > 0 && (
@@ -565,7 +591,7 @@ function ExpectedContents({ contents }: { contents: KitSetContents }) {
       <ContentRows
         rows={[
           ...contents.tracked.map((t) => ({ key: t.id, label: `${t.item.name} ${t.subCode}`, sub: t.item.code })),
-          ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.perSet} ${d.bomUnitName}` })),
+          ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
           ...contents.consumables.map((c) => ({ key: c.itemId, label: c.name, sub: `${c.perSet} ${c.bomUnitName}` })),
         ]}
       />
@@ -606,7 +632,7 @@ export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
       <ContentRows
         rows={[
           ...contents.tracked.map((t) => ({ key: t.id, label: `${t.item.name} ${t.subCode}`, sub: t.item.code })),
-          ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.perSet} ${d.bomUnitName}` })),
+          ...contents.durables.map((d) => ({ key: d.itemId, label: d.name, sub: `${d.quantity} ${d.unitName}` })),
         ]}
       />
       {contents.consumables.length > 0 && (

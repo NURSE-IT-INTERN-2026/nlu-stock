@@ -35,16 +35,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!kit) return notFound("ไม่พบชุดอุปกรณ์");
   if (kit.category.profile.code !== "KIT") return error("รายการนี้ไม่ใช่ชุดอุปกรณ์", 400);
 
-  const [components, unlinked, sets] = await Promise.all([
+  const [components, sets] = await Promise.all([
     loadKitComponents(prisma, id),
-    // Free-text BOM rows from the Excel import. Read-only reference, never assembled from:
-    // they are the checklist staff work off while adding the real components above, so they
-    // survive every BOM edit and are shown apart from the recipe proper.
-    prisma.kitBom.findMany({
-      where: { kitItemId: id, componentItemId: null },
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true, quantity: true, unit: { select: { name: true } } },
-    }),
     prisma.subItem.findMany({
       where: { itemId: id, status: { not: ItemStatus.DISPOSED } },
       orderBy: { subCode: "asc" },
@@ -62,7 +54,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return json({
     kit: { id: kit.id, code: kit.code, name: kit.name, issueUnit: kit.issueUnit },
     components,
-    unlinked,
     sets,
     maxSets: maxAssemblableSets(components),
     // Recipe rows whose unit disagrees with the item's issue unit. Assemble refuses to run on
@@ -110,10 +101,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (nested) throw new Error(`${nested.name} เป็นชุดอุปกรณ์ ใส่ในชุดอื่นไม่ได้`);
 
       const byId = new Map(compItems.map((c) => [c.id, c]));
-      // Linked rows only. The free-text lines from the Excel import are the staff's checklist
-      // of what the kit is supposed to contain — they are read-only reference, and wiping them
-      // because the editor does not show them would delete data nobody asked to delete.
-      await tx.kitBom.deleteMany({ where: { kitItemId: id, componentItemId: { not: null } } });
+      await tx.kitBom.deleteMany({ where: { kitItemId: id } });
       await tx.kitBom.createMany({
         data: data.components.map((c, i) => {
           const item = byId.get(c.componentItemId)!;

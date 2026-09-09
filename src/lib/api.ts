@@ -624,7 +624,6 @@ export interface KitComponent {
 export interface KitDetail {
   kit: { id: string; code: string; name: string; issueUnit: { id: string; name: string } };
   components: KitComponent[];
-  unlinked: { id: string; name: string; quantity: number; unit: { name: string } }[];
   sets: {
     id: string;
     subCode: string;
@@ -666,7 +665,8 @@ export function assembleKit(
 export interface KitSetContents {
   set: { id: string; subCode: string; status: string; item: { id: string; code: string; name: string } };
   tracked: { id: string; subCode: string; serialNumber: string | null; item: { id: string; code: string; name: string; issueUnit: { name: string } } }[];
-  durables: KitComponent[];
+  /** คงทน the set was recorded as holding (falls back to the recipe for pre-2026-09 sets). */
+  durables: { itemId: string; code: string; name: string; unitName: string; quantity: number }[];
   consumables: KitComponent[];
   /** Tracked slots the recipe expects but nothing fills — a piece reported broken left the box. */
   missingTracked: { itemId: string; code: string; name: string; missing: number }[];

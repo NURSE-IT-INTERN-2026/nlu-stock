@@ -657,8 +657,6 @@ async function main() {
   // Sub:    0="", 1="", 2="", 3="", 4=ลำดับ, 5=ชื่อ, 6=จำนวน, 7=หน่วย, 8=หมายเหตุ
 
   let kitCount = 0;
-  let bomCount = 0;
-  let currentKitItemId: string | null = null;
 
   for (let i = 2; i < kitRows.length; i++) {
     const row = kitRows[i];
@@ -675,7 +673,7 @@ async function main() {
       const unitName = parseUnit(unitRaw);
       const code = nextCode("KIT");
 
-      const created = await prisma.item.create({
+      await prisma.item.create({
         data: {
           code, name: nameRaw,
           categoryId: catKit.id,
@@ -686,31 +684,15 @@ async function main() {
           description: notes || null,
         },
       });
-      currentKitItemId = created.id;
       kitCount++;
       continue;
     }
 
-    // Sub-row → KitBom component (free-text: componentItemId null — schema รองรับ)
-    if (!currentKitItemId) continue;
-    const compName = (row[5] || "").trim();
-    if (!compName) continue;
-    const compQty = parseInt((row[6] || "").trim()) || 1;
-    const compUnitName = parseUnit((row[7] || "").trim());
-    const compSeq = parseInt((row[4] || "").trim());
-    await prisma.kitBom.create({
-      data: {
-        kitItemId: currentKitItemId,
-        componentItemId: null,
-        name: compName,
-        quantity: compQty,
-        unitId: unitId(compUnitName),
-        sortOrder: isNaN(compSeq) ? bomCount : compSeq,
-      },
-    });
-    bomCount++;
+    // Sub-rows are skipped. They are component names typed in a spreadsheet, and matching one
+    // to a real Item needs a human — the imported row could only ever be a caption, so it was
+    // dropped along with the nullable componentItemId. Recipes are built in แก้ส่วนประกอบ.
   }
-  console.log(`  ${kitCount} kit items, ${bomCount} BOM components`);
+  console.log(`  ${kitCount} kit items (recipes are linked by hand)`);
 
   // ============================================================
   // Demo data for dashboard

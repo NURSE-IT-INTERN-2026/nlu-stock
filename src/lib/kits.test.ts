@@ -140,3 +140,70 @@ test("kit set: assemble parks the durables and leaves the consumable alone", { s
 
   assert.ok(checked, "the transaction body must have run");
 });
+
+test("kit set: a recipe edited after assembly does not change what the box hands back", { skip: !process.env.DATABASE_URL }, async () => {
+  const kitCategory = await prisma.categoryType.findFirst({ where: { profile: { code: "KIT" } }, select: { id: true } });
+  const durableCategory = await prisma.categoryType.findFirst({ where: { profile: { dispenseType: "COUNT" } }, select: { id: true } });
+  const unit = await prisma.unit.findFirst({ select: { id: true } });
+  const user = await prisma.user.findFirst({ select: { id: true } });
+  assert.ok(kitCategory && durableCategory && unit && user, "seed the database first");
+
+  const stamp = Date.now();
+  let checked = false;
+
+  await prisma
+    .$transaction(async (tx) => {
+      const mk = (suffix: string, qty: number) =>
+        tx.item.create({
+          data: { code: `TEST-${suffix}-${stamp}`, name: suffix, categoryId: durableCategory.id, issueUnitId: unit.id, totalQty: qty, availableQty: qty },
+        });
+      const kit = await tx.item.create({
+        data: { code: `TEST-KIT2-${stamp}`, name: "ชุดทดสอบสูตรเปลี่ยน", categoryId: kitCategory.id, issueUnitId: unit.id, trackIndividually: true },
+      });
+      const tray = await mk("TRAY", 10);
+      const bowl = await mk("BOWL", 10);
+      const cloth = await mk("CLOTH", 10);
+      await tx.kitBom.createMany({
+        data: [
+          { kitItemId: kit.id, componentItemId: tray.id, name: tray.name, quantity: 1, unitId: unit.id, sortOrder: 0 },
+          { kitItemId: kit.id, componentItemId: bowl.id, name: bowl.name, quantity: 1, unitId: unit.id, sortOrder: 1 },
+        ],
+      });
+
+      const { setSubItemIds } = await assembleKitSets(tx, { kitItemId: kit.id, sets: 2, userId: user.id });
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: tray.id } })).availableQty, 8, "2 sets × 1 tray");
+
+      // แก้ส่วนประกอบ after the boxes exist: more trays, the bowl dropped, a cloth added. The
+      // recipe is deliberately never locked (sets are permanent, so a lock would be forever).
+      await tx.kitBom.deleteMany({ where: { kitItemId: kit.id } });
+      await tx.kitBom.createMany({
+        data: [
+          { kitItemId: kit.id, componentItemId: tray.id, name: tray.name, quantity: 2, unitId: unit.id, sortOrder: 0 },
+          { kitItemId: kit.id, componentItemId: cloth.id, name: cloth.name, quantity: 1, unitId: unit.id, sortOrder: 1 },
+        ],
+      });
+
+      await cancelKitSet(tx, { setSubItemId: setSubItemIds[0], userId: user.id });
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: tray.id } })).availableQty, 9, "one tray back — what went in, not the 2 the new recipe asks for");
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: bowl.id } })).availableQty, 9, "the bowl comes back even though the recipe forgot it");
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: cloth.id } })).availableQty, 10, "and the cloth is not conjured out of a box that never held it");
+
+      // The second box is untouched by the first cancel — its own records, not the item's newest.
+      assert.equal(
+        await tx.dispenseRecord.count({ where: { kitSubItemId: setSubItemIds[1], loanType: LoanType.INUSE, returnedAt: null } }),
+        2,
+        "cancelling one set must not close the other set's records",
+      );
+      await cancelKitSet(tx, { setSubItemId: setSubItemIds[1], userId: user.id });
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: tray.id } })).availableQty, 10, "both boxes emptied, stock whole again");
+      assert.equal((await tx.item.findUniqueOrThrow({ where: { id: bowl.id } })).availableQty, 10);
+
+      checked = true;
+      throw new Error(ROLLBACK);
+    })
+    .catch((e) => {
+      if (!(e instanceof Error) || e.message !== ROLLBACK) throw e;
+    });
+
+  assert.ok(checked, "the transaction body must have run");
+});

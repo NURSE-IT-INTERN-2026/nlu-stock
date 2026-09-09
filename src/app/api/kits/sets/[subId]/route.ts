@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, json, error, notFound, parseBody } from "@/lib/api-utils";
-import { cancelKitSet, loadKitComponents } from "@/lib/kits";
+import { cancelKitSet, loadKitComponents, loadSetHoldings } from "@/lib/kits";
 import { z } from "zod";
 
 /**
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (set.item.category.profile.code !== "KIT") return error("รายการนี้ไม่ใช่ชุดอุปกรณ์", 400);
 
   const components = await loadKitComponents(prisma, set.item.id);
+  const holdings = await loadSetHoldings(prisma, set.id);
   const expectedTracked = components.filter((c) => c.kind === "TRACKED");
   const heldByItem = new Map<string, number>();
   for (const piece of set.kitContents) {
@@ -50,11 +51,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     set: {
       id: set.id, subCode: set.subCode, status: set.status, item: set.item,
     },
-    // What is physically in the box, as far as anything can be known. Tracked pieces are known
-    // exactly; the rest is what the recipe says should be there. Nothing here is a count of
-    // consumables — nobody counts gauze, and the system never pretended to.
+    // What is physically in the box, as far as anything can be known. Tracked pieces and
+    // คงทน are known from what assemble recorded, so an edited recipe does not rewrite what an
+    // old box says it holds. Consumables have no record — nobody counts gauze, and the system
+    // never pretended to — so there the recipe is the only thing left to print.
     tracked: set.kitContents,
-    durables: components.filter((c) => c.kind === "COUNT"),
+    durables: holdings.length > 0
+      ? holdings
+      : components.filter((c) => c.kind === "COUNT").map((c) => ({
+          itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName, quantity: c.perSet,
+        })),
     consumables: components.filter((c) => c.kind === "CONSUMABLE"),
     // Tracked slots the recipe expects that no piece currently fills — a component reported
     // broken leaves the box, and this is what says so on the ดูของในชุด checklist.

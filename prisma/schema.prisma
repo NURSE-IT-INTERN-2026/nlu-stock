@@ -368,6 +368,7 @@ model SubItem {
   updatedAt           DateTime       @updatedAt
 
   dispenseRecords    DispenseRecord[]
+  kitSetHoldings     DispenseRecord[]    @relation("KitSetHoldings")
   statusLogs         ItemStatusLog[]
   maintenanceRecords MaintenanceRecord[]
   returnRecords      ReturnRecord[]
@@ -405,14 +406,17 @@ model Lot {
 }
 
 // --- Kit BOM (KIT "ภายในชุดประกอบด้วย") ---
-// componentItemId = link ไป tracked Item จริง (สำหรับ assemble: ตัด stock). nullable เพื่อรองรับ
-// free-text rows เดิม (name+qty+unit) ที่ import มาจาก Excel ก่อนมี feature assemble.
+// One row = one real Item the set is built from. The column was nullable until 2026-09-09 to
+// carry free-text rows imported from Excel — names with nothing behind them, which assemble
+// skipped and the UI could only print as a footnote. Staff link the real components by hand
+// (แก้ส่วนประกอบ, with autocomplete and unit validation), so a row with no item is not a
+// half-finished recipe line, it is noise. The recipe is now items or nothing.
 model KitBom {
   id              String  @id @default(cuid())
   kitItemId       String
   kitItem         Item    @relation("KitBomItems", fields: [kitItemId], references: [id], onDelete: Cascade)
-  componentItemId String?
-  componentItem   Item?   @relation("KitComponents", fields: [componentItemId], references: [id])
+  componentItemId String
+  componentItem   Item    @relation("KitComponents", fields: [componentItemId], references: [id])
   name            String
   quantity        Int     @default(1)
   unitId          String
@@ -431,6 +435,13 @@ model DispenseRecord {
   item            Item             @relation(fields: [itemId], references: [id])
   subItemId       String?
   subItem         SubItem?         @relation(fields: [subItemId], references: [id])
+  // INUSE only: the assembled KIT set this row put stock into. Tracked pieces remember their
+  // box on SubItem.inKitSubItemId, but a คงทน component has no per-piece identity — nothing
+  // said which two of 195 trays went into C01. ยกเลิกชุด used to answer that from the recipe,
+  // so editing the recipe changed what an already-built box handed back. This is the record of
+  // what was actually cut, per set.
+  kitSubItemId    String?
+  kitSubItem      SubItem?         @relation("KitSetHoldings", fields: [kitSubItemId], references: [id])
   lotId           String?
   lot             Lot?             @relation(fields: [lotId], references: [id])
   // Where this specific batch/piece was placed (นำไปใช้งาน / INUSE only). Must be an
@@ -468,6 +479,7 @@ model DispenseRecord {
   @@index([usageType, dispensedAt])
   @@index([courseCode, dispensedAt])
   @@index([loanGroupId])
+  @@index([kitSubItemId])
   @@map("dispense_records")
 }
 
