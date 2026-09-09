@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // นศ./บุคลากรที่สแกน QR เข้ามาเห็นได้ว่าชิ้นไหน "ถูกยืม" แต่ไม่เห็นว่าใครยืม. ทุก relation
   // ข้างล่างพ่วงชื่อคนมาด้วย (staff/receiver/performer/changer/adjuster) และแถวเบิกยังพก
-  // recipient/courseCode/usageNote มาอีก — ซึ่งเป็นข้อมูลชุดเดียวกับที่ middleware ปิด
+  // recipient/courseCode/usageNote มาอีก — ซึ่งเป็นข้อมูลชุดเดียวกับที่ proxy ปิด
   // /api/reports ไว้เพื่อกัน. สถานะของชิ้นพอบอกว่าถูกยืมอยู่แล้ว จึงตัดเฉพาะตัวคน ไม่ใช่ตัดทั้งหน้า.
   const borrower = isSelfBorrower(auth.user.role);
 
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // Every field here (media + location move) is admin-only in the UI — gate at the door
-  // like the sibling routes instead of relying on middleware's EXECUTIVE write-deny.
+  // like the sibling routes instead of relying on proxy's EXECUTIVE write-deny.
   const auth = await requireAdmin(request);
   if (auth.denied) return auth.denied;
 

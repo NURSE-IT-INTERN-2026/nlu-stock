@@ -114,7 +114,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
       {/* Right: actions */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Alerts — ซ่อนจาก BORROWER เหมือนที่ sidebar กับ bottom-tab ซ่อน: /alerts ไม่อยู่ใน
-            BORROWER_PAGES (src/middleware.ts) คนกดจึงถูกเด้งไป /scan และป้ายตัวเลขก็เป็น 0
+            BORROWER_PAGES (src/proxy.ts) คนกดจึงถูกเด้งไป /scan และป้ายตัวเลขก็เป็น 0
             ตลอดอยู่แล้วเพราะ AlertProvider ถูกสร้างด้วย enabled={false} ให้ role นี้ */}
         {!isSelfBorrower(user.role) && (
           <button
@@ -137,7 +137,7 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
           type="button"
           aria-label="ดูตะกร้า"
           // Same basket, two confirm screens: /cart is the staff form (ผู้รับ, ชุดเบิก,
-          // ตั้งใช้ในห้อง) and middleware bounces a borrower off it.
+          // ตั้งใช้ในห้อง) and proxy bounces a borrower off it.
           onClick={() => router.push(isSelfBorrower(user.role) ? "/borrow" : "/cart")}
           className="relative flex items-center justify-center size-12 rounded-full border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
         >

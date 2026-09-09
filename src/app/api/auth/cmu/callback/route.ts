@@ -10,7 +10,7 @@ import { OAUTH_STATE_COOKIE, callbackUri, exchangeCode, fetchProfile, readState,
  *  leg sent — see callbackUri() for how that is derived and allowlisted. */
 export async function GET(request: NextRequest) {
   // Route handlers get a nextUrl whose basePath has already been stripped and is NOT put
-  // back by clone() — unlike middleware, where it is. Spell the prefix out or every bounce
+  // back by clone() — unlike proxy, where it is. Spell the prefix out or every bounce
   // below lands on a bare /login that does not exist, and the user sees a 404 instead of
   // the reason they were turned away.
   const appUrl = (pathAndSearch: string) =>

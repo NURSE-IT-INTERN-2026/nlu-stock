@@ -42,7 +42,7 @@ export async function requireAuth(_request?: NextRequest): Promise<AuthResult> {
   const user = await getSessionUser();
   if (!user) return { user: null, denied: unauthorized() };
   // The JWT can outlive its user row (account removed, or a DB reseed in dev). A stale
-  // userId passes the signature + middleware checks but then violates a FK on any write
+  // userId passes the signature + proxy checks but then violates a FK on any write
   // (e.g. performedBy) — a confusing 500. Verify the row still exists/active and reject
   // with 401 so the client bounces to re-login instead.
   // ponytail: one indexed PK lookup per authed request; fine for an internal tool.
@@ -60,7 +60,7 @@ export async function requireSuperAdmin(request?: NextRequest): Promise<AuthResu
 }
 
 /** Anything that touches stock. Keeps EXECUTIVE out at the route level too, so the
- *  middleware guard isn't the only thing standing between them and a write. */
+ *  proxy guard isn't the only thing standing between them and a write. */
 export async function requireAdmin(request?: NextRequest): Promise<AuthResult> {
   const result = await requireAuth(request);
   if (result.denied) return result;

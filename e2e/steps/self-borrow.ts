@@ -68,7 +68,7 @@ When("นักศึกษาเปิดหน้าตั้งค่า", as
 });
 
 Then("นักศึกษาต้องไม่ได้เห็นหน้าตั้งค่า", async ({ borrowerPage }) => {
-  // middleware.ts BORROWER_PAGES ปล่อยแค่ /items/[code] กับ /scan — ที่เหลือต้องถูกพาออก
+  // proxy.ts BORROWER_PAGES ปล่อยแค่ /items/[code] กับ /scan — ที่เหลือต้องถูกพาออก
   await expect(borrowerPage).not.toHaveURL(/\/settings/, { timeout: 15_000 });
 });
 

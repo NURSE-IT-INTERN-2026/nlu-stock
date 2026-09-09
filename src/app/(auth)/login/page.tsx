@@ -9,7 +9,7 @@ import { Loader2 } from "lucide-react";
 import { login, ApiError } from "@/lib/api";
 import { withBase } from "@/lib/base-path";
 
-// ?next= is set by middleware — send QR scanners back to the item they scanned.
+// ?next= is set by proxy — send QR scanners back to the item they scanned.
 // Same-origin paths only ("//host" is protocol-relative, i.e. off-site).
 function safeNext(): string {
   const next = new URLSearchParams(window.location.search).get("next");

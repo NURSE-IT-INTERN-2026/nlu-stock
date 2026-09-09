@@ -26,7 +26,7 @@ assert.equal(canManageStock("SUPERADMIN"), true);
 assert.equal(canManageStock("ADMIN"), true);
 assert.equal(canManageStock("EXECUTIVE"), false, "executives must not touch stock");
 
-// ─── Executive write allowlist (mirrors EXEC_WRITE in src/middleware.ts) ───
+// ─── Executive write allowlist (mirrors EXEC_WRITE in src/proxy.ts) ───
 const EXEC_WRITE = [/^\/api\/dispense$/, /^\/api\/dispense-templates(\/|$)/];
 const execMayWrite = (p: string) => EXEC_WRITE.some((re) => re.test(p));
 

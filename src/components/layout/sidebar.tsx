@@ -21,7 +21,7 @@ import type { SessionUser } from "@/types";
 import { canManageStock, isSelfBorrower } from "@/lib/roles";
 import { withBase } from "@/lib/base-path";
 
-// stockOnly / superOnly mirror the route rules in src/middleware.ts — the server is
+// stockOnly / superOnly mirror the route rules in src/proxy.ts — the server is
 // what actually enforces them; these just keep dead links out of the menu.
 const navItems = [
   { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard },

@@ -20,7 +20,7 @@ import { fmtDate, TH_DATETIME } from "@/lib/format";
 import { selfBorrowDueAt } from "@/lib/self-borrow";
 
 // ยืนยันการเบิก-ยืมของ BORROWER — the counterpart to /cart, which is the staff form and is
-// blocked for this role by middleware. Same shape as /cart on purpose (grouped list, sticky
+// blocked for this role by proxy. Same shape as /cart on purpose (grouped list, sticky
 // footer, form-in-a-dialog) so anyone who has seen one screen can use the other; the rows
 // themselves come from components/dispense/cart-line so the two cannot drift.
 //
