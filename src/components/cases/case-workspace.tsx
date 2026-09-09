@@ -108,7 +108,12 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
 }) {
   const [type, setType] = useState<string>(lockType ?? "all");
   const [state, setState] = useState("all");
-  const [range, setRange] = useState("all");
+  // เปิดมาที่ "ปีนี้" ไม่ใช่ "ทั้งหมด": listCases สร้างเคสของทั้งชุดที่กรองได้เข้าหน่วยความจำก่อน
+  // แล้วค่อยตัดเอาหน้าเดียว "ทั้งหมด" จึงลากตาราง dispense ทั้งใบมาทุกคำขอ ไม่ใช่แค่ครั้งแรก.
+  // ยกเว้นสองแบบที่เปลี่ยนไม่ได้: งานค้าง (todo) เพราะใบที่เปิดค้างข้ามปีคือใบที่ต้องเห็นที่สุด
+  // และ compact ที่ไม่มีแถบตัวกรองให้กดขยายช่วงกลับ.
+  const defaultRange = todo || compact ? "all" : "year";
+  const [range, setRange] = useState(defaultRange);
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [cases, setCases] = useState<CaseSummaryJson[]>([]);
@@ -130,7 +135,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
     return () => clearTimeout(t);
   }, [q]);
 
-  const dirty = (!lockType && type !== "all") || (!todo && state !== "all") || range !== "all" || !!search;
+  const dirty = (!lockType && type !== "all") || (!todo && state !== "all") || range !== defaultRange || !!search;
 
   useEffect(() => {
     let live = true;
@@ -172,7 +177,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
     return null;
   }, [cases, selected, initialCaseId]);
 
-  const clear = () => { setType(lockType ?? "all"); setState("all"); setRange("all"); setQ(""); };
+  const clear = () => { setType(lockType ?? "all"); setState("all"); setRange(defaultRange); setQ(""); };
 
   return (
     <div className="space-y-4">
@@ -531,7 +536,7 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit, bare }: {
 
               ADMIN/SUPERADMIN เท่านั้น. `canEdit` คือ canManageStock(role) ที่ทุกที่ที่เรียก
               (item-detail-shell, alerts) — ไม่ใช่ flag ของตัวเอง — และปลายทางทั้งสองหน้าถูก
-              middleware กันไว้ด้วย STOCK_ROLES อยู่แล้ว (src/middleware.ts). ลิงก์ที่โผล่ให้
+              proxy กันไว้ด้วย STOCK_ROLES อยู่แล้ว (src/proxy.ts). ลิงก์ที่โผล่ให้
               role ที่เดินเข้าไปไม่ได้คือลิงก์ที่พาไปหน้า "ไม่มีสิทธิ์" — แย่กว่าไม่มีลิงก์. */}
           {!data.action && canEdit && data.state === "OPEN" && CASE_WORK_LINK[data.type] && (
             <Button
