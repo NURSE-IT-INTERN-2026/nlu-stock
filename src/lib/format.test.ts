@@ -50,6 +50,12 @@ assert.equal(ageFromReceipt(at(2024, 6, 3), now), "2 ปี 3 เดือน 5 
 assert.equal(ageFromReceipt(at(2026, 8, 31), now), "8 วัน");
 // The borrow takes the length of the month it came from — ก.พ. here, not a flat 30.
 assert.equal(ageFromReceipt(at(2026, 2, 20), at(2026, 3, 5)), "13 วัน");
+// ก.พ. is shorter than the day we owe, so one borrow leaves the count negative. Never print
+// a negative day: 31 ม.ค. read on 1 มี.ค. used to say "1 เดือน -2 วัน".
+assert.equal(ageFromReceipt(at(2026, 1, 31), at(2026, 3, 1)), "1 เดือน 0 วัน");
+assert.equal(ageFromReceipt(at(2026, 1, 30), at(2026, 3, 1)), "1 เดือน 0 วัน");
+assert.equal(ageFromReceipt(at(2025, 12, 31), at(2026, 3, 2)), "2 เดือน 0 วัน");
+assert.equal(ageFromReceipt(at(2025, 3, 31), at(2026, 3, 1)), "11 เดือน 0 วัน");
 // Leading zeros drop, an inner zero stays so it cannot read as 1 ปี 5 เดือน.
 assert.equal(ageFromReceipt(at(2025, 9, 3), now), "1 ปี 0 เดือน 5 วัน");
 assert.equal(ageFromReceipt(at(2026, 9, 8), now), "0 วัน");

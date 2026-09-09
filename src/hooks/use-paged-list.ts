@@ -61,16 +61,26 @@ export function usePagedList<T>({
       const id = ++reqId.current;
       setLoading(true);
       try {
-        const data = await fetchPage(target);
+        let p = target;
+        let data = await fetchPage(p);
         if (id !== reqId.current) return;
+        // `totalPages` ที่ถืออยู่เป็นของก่อนคำขอนี้ จึงกันหน้าที่เพิ่งหายไปไม่ได้: ลบแถวสุดท้าย
+        // ของหน้าสุดท้ายแล้ว refetch จะขอหน้าที่ไม่มีอยู่แล้ว และได้ตารางว่างทั้งที่ของยังอยู่
+        // หน้าก่อนหน้า. total ที่เพิ่งกลับมาคือตัวเดียวที่รู้ความจริง — ถอยไปหน้าสุดท้ายจริงแทน.
+        const last = Math.max(1, Math.ceil(data.total / pageSize));
+        if (p > last) {
+          p = last;
+          data = await fetchPage(p);
+          if (id !== reqId.current) return;
+        }
         setItems(data.items);
         setTotal(data.total);
-        setPage(target);
+        setPage(p);
       } finally {
         if (id === reqId.current) setLoading(false);
       }
     },
-    [mode, fetchPage],
+    [mode, fetchPage, pageSize],
   );
 
   const loadMore = useCallback(async () => {
@@ -106,7 +116,9 @@ export function usePagedList<T>({
     setPage: goToPage,
     // refetch = "reload what's on screen", not "start over". Filling in missing prices on
     // นำเข้าคลัง saves row after row deep in the ledger, and a page-1 reset per save loses the
-    // user's place. goToPage carries the same reqId guard, so a stale reply still can't win.
+    // user's place. goToPage carries the same reqId guard, so a stale reply still can't win,
+    // and it clamps to the last page that survived — a delete that empties the page you are
+    // standing on lands you on the new last one, not on an empty table.
     // append (mobile) holds pages 1..N stacked — re-fetching one of them would drop the rest,
     // so that mode keeps the page-1 reset.
     refetch: () => {

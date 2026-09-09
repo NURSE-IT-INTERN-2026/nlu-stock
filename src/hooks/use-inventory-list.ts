@@ -54,7 +54,7 @@ export function useInventoryList<T>({
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   /**
-   * ลำดับคำขอล่าสุด — ใช้ร่วมกันทั้ง effect และ goToPage.
+   * ลำดับคำขอล่าสุด — ใช้ร่วมกันทั้งสามเส้นทางที่ยิงได้: effect, goToPage และ loadMore.
    *
    * ธง `cancelled` ใน effect กันได้แค่ effect ชนตัวเอง: goToPage เป็นคนละเส้นทาง ถือ `filter`
    * จาก closure ของมันเอง และเคยเขียนทับผลที่กรองแล้วด้วยผลที่ยังไม่กรอง เพียงเพราะมันมาช้ากว่า
@@ -66,6 +66,9 @@ export function useInventoryList<T>({
   useEffect(() => {
     const seq = ++reqSeq.current;
     setLoading(true);
+    // เจ้าของธง isLoadingMore คือคำขอล่าสุดเสมอ: loadMore ที่ตกรุ่นจะกลับออกไปเงียบๆ โดยไม่แตะธง
+    // ถ้าไม่ล้างตรงนี้ สปินเนอร์จะค้าง และ guard ที่หัว loadMore ก็จะกันการโหลดเพิ่มไปตลอด
+    setIsLoadingMore(false);
     (async () => {
       const data = await getItems(buildParams(filter, null));
       if (seq !== reqSeq.current) return;
@@ -116,8 +119,12 @@ export function useInventoryList<T>({
 
   const loadMore = useCallback(async () => {
     if (mode !== "append" || !appendCursor || isLoadingMore) return;
+    // เส้นทางที่สามที่ต้องนับด้วย: append ต่อท้ายรายการที่มีอยู่ ผลที่ตกรุ่นจึงไม่ได้แค่มาช้า
+    // มันเอาแถวของตัวกรองเก่าไปต่อใต้ผลของตัวกรองใหม่ แล้ว appendCursor ก็ชี้กลับไป query เดิม
+    const seq = ++reqSeq.current;
     setIsLoadingMore(true);
     const data = await getItems(buildParams(filter, appendCursor));
+    if (seq !== reqSeq.current) return;
     setItems((prev) => [...prev, ...((data.items || []) as T[])]);
     setAppendCursor(data.nextCursor ?? null);
     if (data.total != null) setTotal(data.total);

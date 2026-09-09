@@ -61,6 +61,13 @@ export function ageFromReceipt(from: Date | string | null | undefined, now: Date
     months -= 1;
     // Day 0 of month M is the last day of M-1, i.e. the length of the month we borrowed from.
     days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    // One borrow is not always enough: the month we borrowed from can be SHORTER than the
+    // receipt's day of month. Received 31 ม.ค., read on 1 มี.ค. — ก.พ. lends 28 against a
+    // debt of 30 and days lands at -2, which printed as "1 เดือน -2 วัน". There is no second
+    // month to borrow from that makes this exact: the anniversary of the 31st does not exist
+    // in ก.พ. at all. 0 is the honest answer — the month is complete and no new day has
+    // started — and it never reads backwards as the calendar moves on.
+    if (days < 0) days = 0;
   }
   if (months < 0) {
     years -= 1;
