@@ -8,7 +8,8 @@
 ## Environment
 
 ### App
-- **Base URL**: `http://localhost:3000` (รัน `npm run dev` แล้วดู port จริงจาก output)
+- **Base URL**: `http://localhost:3000/nlu-stock` (รัน `npm run dev` แล้วดู port จริงจาก output) —
+  แอปเสิร์ฟใต้ basePath `/nlu-stock` ทั้งหน้าและ `/api` ยิงที่ origin เปล่าได้ 404 ทุกเส้น
 - Next.js App Router, route group `(dashboard)` ไม่ปรากฏใน URL (เช่น `src/app/(dashboard)/dispense/page.tsx` → `/dispense`)
 
 ### Seed data (ต้องทำก่อนเทส)
@@ -396,7 +397,7 @@ SQL
 **ส่วน B — ตรวจ API block ตรงๆ (reproduce ด้วยการเรียกตรง)**
 3. รันใน console ของ browser (DevTools) หรือ curl:
 ```bash
-curl -s -X POST http://localhost:3000/api/dispense \
+curl -s -X POST http://localhost:3000/nlu-stock/api/dispense \
   -H "Content-Type: application/json" \
   -H "Cookie: session_token=<cookie จาก login>" \
   -d '{"items":[{"itemId":"<itemId>","subItemId":"<subA.id>","quantity":1}],"usageType":"OTHER","recipient":"พยายามยืมซ้ำ"}'
