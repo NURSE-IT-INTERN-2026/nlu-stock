@@ -96,3 +96,51 @@ Then("แท็บแรกต้องอยู่ในกรอบราง �
     `แท็บแรกเริ่มที่ ${firstBox!.x} ซึ่งอยู่ซ้ายของรางที่ ${listBox!.x} — ส่วนที่ล้นถูกดันออกไปทางที่เลื่อนกลับไม่ได้`,
   ).toBeGreaterThanOrEqual(listBox!.x - 1);
 });
+
+// ── ปุ่มโหลดเพิ่มเติมของรายการพัสดุบนมือถือ ──────────────────────────────────
+// useInventoryList รีเซ็ตรายการเมื่อ filter เปลี่ยน แต่เคยปล่อย appendCursor ของตัวกรองเก่า
+// ค้างไว้ตลอดคำขอ — hasNext อ่านจาก cursor ตัวนั้นตรง ๆ ปุ่มจึงกดได้ทั้งที่รายการใต้ปุ่มกำลัง
+// ถูกแทนที่. หน่วงเฉพาะคำขอ "โหลดใหม่ทั้งชุด" (ไม่มี cursor) เพราะช่องที่พังคือช่วงที่มันยังไม่
+// กลับ — เงื่อนไขที่เพาะด้วยข้อมูลจริงไม่ได้ ต้องคุมจาก route
+const RESET_DELAY_MS = 4000;
+// โหลดครั้งแรกก็ไม่มี cursor เหมือนกัน แต่ต้องมาเร็วเพื่อให้มีปุ่มให้ดู — หน่วงเฉพาะคำขอที่เกิด
+// หลังหน้าพร้อมแล้ว ซึ่งคือคำขอที่ตัวกรองเปลี่ยน
+let delayReset = false;
+
+Given("ฉันเปิดรายการพัสดุบนจอกว้าง 375 และคำขอตอนเปลี่ยนตัวกรองตอบช้า", async ({ page }) => {
+  delayReset = false;
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.route("**/api/items?**", async (route) => {
+    const isReset = !new URL(route.request().url()).searchParams.get("cursor");
+    if (isReset && delayReset) await new Promise((r) => setTimeout(r, RESET_DELAY_MS));
+    await route.continue();
+  });
+  await page.goto("/items");
+
+  const more = page.getByRole("button", { name: "โหลดเพิ่มเติม" });
+  await expect(more).toBeVisible({ timeout: 20_000 });
+  await expect(more).toBeEnabled();
+  delayReset = true;
+});
+
+When("ฉันพิมพ์คำค้นขณะที่ปุ่มโหลดเพิ่มเติมยังกดได้อยู่", async ({ page }) => {
+  await page.getByPlaceholder("ค้นหารหัส / ชื่อพัสดุ…").fill("NLU");
+  // แถวโครงขึ้นแล้ว = คำขอที่ถูกหน่วงกำลังวิ่ง และรายการเดิมกำลังถูกแทนที่จริง
+  await expect(page.locator('tbody [data-slot="skeleton"]').first()).toBeVisible({ timeout: 10_000 });
+});
+
+Then("ปุ่มโหลดเพิ่มเติมต้องกดไม่ได้ทันที และรายการต้องมาถึงโดยสปินเนอร์ไม่ค้าง", async ({ page }) => {
+  const more = page.getByRole("button", { name: /โหลดเพิ่มเติม|ไม่มีรายการเพิ่มเติม/ });
+
+  // isDisabled() ไม่ใช่ expect().toBeDisabled(): ตัวหลัง retry จนคำขอที่หน่วงไว้กลับมา แล้วปุ่ม
+  // ก็เข้าสถานะที่ถูกต้องเองโดยไม่ได้พิสูจน์อะไรเลยเกี่ยวกับช่วงที่รายการกำลังถูกแทนที่
+  expect(
+    await more.isDisabled(),
+    "ปุ่มโหลดเพิ่มเติมยังกดได้ระหว่างรายการถูกแทนที่ — cursor ของตัวกรองเก่ายังค้างอยู่ กดตอนนี้จะไล่คำขอของตัวกรองใหม่ตกรุ่น แล้วแถวโครงค้างถาวร",
+  ).toBe(true);
+
+  // แล้วคำขอของตัวกรองใหม่ต้องมาถึงและปิดแถวโครงเองได้
+  delayReset = false;
+  await expect(page.locator('tbody [data-slot="skeleton"]')).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByRole("button", { name: /โหลดเพิ่มเติม|ไม่มีรายการเพิ่มเติม/ })).toBeVisible();
+});
