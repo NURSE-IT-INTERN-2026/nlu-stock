@@ -214,6 +214,14 @@ export type CaseDetail = CaseSummary & {
 // Mutable on purpose: an `as const` array here is readonly, which Prisma's `in` filter rejects.
 const LOAN_KINDS: LoanType[] = [LoanType.BORROW, LoanType.INUSE, LoanType.CONSUME];
 
+/** ประเภทเคส → แถวชนิดไหนในตาราง dispense. buildCases แคบ `in` ด้วยตัวนี้ ไม่ได้โหลดมาแล้วค่อยกรอง. */
+const LOAN_CASE_TYPES = ["BORROW", "INUSE", "DISPENSE"] as const;
+const LOAN_KIND_OF: Record<(typeof LOAN_CASE_TYPES)[number], LoanType> = {
+  BORROW: LoanType.BORROW,
+  INUSE: LoanType.INUSE,
+  DISPENSE: LoanType.CONSUME,
+};
+
 // ── Case codes ────────────────────────────────────────────────────────────────
 // เลขมาจากตาราง case_codes จ่ายครั้งเดียวไม่เปลี่ยนอีก — ดูเหตุผลใน src/lib/case-codes.ts.
 // ไฟล์นี้รู้แค่ว่าเคสหนึ่งมาจากแถวไหน (`caseSource`) ที่เหลือเป็นเรื่องของตัวจ่ายเลข.
@@ -818,7 +826,12 @@ export type CaseFilter = {
 async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceIds: Set<string> }> {
   // ยืม กับ ตั้งใช้ในห้อง อ่านจากตารางเดียวกัน แยกกันตอนสรุป — โหลดทั้งคู่เมื่อถามหาอย่างใดอย่างหนึ่ง
   const want = (t: CaseType) => !f.type || f.type === t;
-  const wantLoans = want("BORROW") || want("INUSE") || want("DISPENSE");
+  // เบิกใช้เป็นครึ่งที่ใหญ่ที่สุดของตาราง dispense และ `todo` ทิ้งมันทั้งกองอยู่แล้ว (ดู TODO_TYPES)
+  // — badge ที่เด้งทุก 5 นาทีจึงไม่ควรลากมันมาทั้งหมดเพื่อโยนทิ้งที่ isTodo. คัดที่ `in` แทน.
+  const loanKinds = LOAN_CASE_TYPES
+    .filter((t) => want(t) && (!f.todo || TODO_TYPES.includes(t)))
+    .map((t) => LOAN_KIND_OF[t]);
+  const wantLoans = loanKinds.length > 0;
   const itemWhere = f.itemId ? { itemId: f.itemId } : {};
   const subWhere = f.subItemId ? { subItemId: f.subItemId } : {};
 
@@ -839,7 +852,7 @@ async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceI
       ? prisma.dispenseRecord.findMany({
           ...loanArgs,
           where: {
-            ...loanArgs.where,
+            loanType: { in: loanKinds },
             ...itemWhere,
             ...subWhere,
             ...(f.from || f.to ? { dispensedAt: { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lt: f.to } : {}) } } : {}),
