@@ -847,7 +847,10 @@ async function buildCases(f: CaseFilter): Promise<{ cases: CaseSummary[]; pieceI
       ? prisma.stockAdjustment.findMany({ ...qtyBookingArgs, where: { ...qtyBookingArgs.where, ...itemWhere } })
       : [],
     want("REPAIR") ? loadPieceCases(f.itemId) : [],
-    want("MAINTENANCE")
+    // `!f.todo` ด้วยเหตุผลเดียวกับ loanKinds ข้างบน: ใบบันทึกผลเกิดมา DONE ทุกใบ (maintSummary)
+    // กอง "ต้องทำ" จึงทิ้งมันทั้งตารางที่ isTodo เสมอ — badge ที่เด้งทุก 5 นาทีไม่ควรลากมันมาพร้อม
+    // join สี่ตารางเพื่อโยนทิ้ง. งานบำรุงที่ค้างจริงคือเที่ยวที่ยังไม่กลับ ซึ่งมาจาก loadTripCases.
+    want("MAINTENANCE") && !f.todo
       ? prisma.maintenanceRecord.findMany({ ...maintArgs, where: { ...maintArgs.where, ...itemWhere, ...subWhere } })
       : [],
     want("MAINTENANCE") ? loadTripCases(f.itemId, f.subItemId) : [],

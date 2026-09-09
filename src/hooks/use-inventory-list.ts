@@ -69,18 +69,27 @@ export function useInventoryList<T>({
     // เจ้าของธง isLoadingMore คือคำขอล่าสุดเสมอ: loadMore ที่ตกรุ่นจะกลับออกไปเงียบๆ โดยไม่แตะธง
     // ถ้าไม่ล้างตรงนี้ สปินเนอร์จะค้าง และ guard ที่หัว loadMore ก็จะกันการโหลดเพิ่มไปตลอด
     setIsLoadingMore(false);
+    // ปิดประตู loadMore ตลอดช่วงที่คำขอนี้ยังไม่กลับ. cursor ที่ค้างอยู่เป็นของตัวกรองเก่า และ
+    // hasNext อ่านจากมันตรงๆ — ไม่ล้าง ปุ่ม "โหลดเพิ่มเติม" จะกดได้ทั้งที่รายการกำลังถูกแทนที่
+    // แล้วคำขอนั้นจะกลายเป็นคำขอล่าสุด ไล่คำขอของตัวกรองใหม่ตกรุ่นไปทั้งที่มันเป็นเจ้าของ
+    // `loading` — ไม่มีใครเหลือให้ปิดสปินเนอร์ และแถวของตัวกรองเก่าก็ไปต่อท้ายรายการเดิม
+    setAppendCursor(null);
     (async () => {
-      const data = await getItems(buildParams(filter, null));
-      if (seq !== reqSeq.current) return;
-      setItems((data.items || []) as T[]);
-      if (data.total != null) setTotal(data.total);
-      if (mode === "pages") {
-        setPage(1);
-        setPageCursors([null, ...(data.nextCursor ? [data.nextCursor] : [])]);
-      } else {
-        setAppendCursor(data.nextCursor ?? null);
+      try {
+        const data = await getItems(buildParams(filter, null));
+        if (seq !== reqSeq.current) return;
+        setItems((data.items || []) as T[]);
+        if (data.total != null) setTotal(data.total);
+        if (mode === "pages") {
+          setPage(1);
+          setPageCursors([null, ...(data.nextCursor ? [data.nextCursor] : [])]);
+        } else {
+          setAppendCursor(data.nextCursor ?? null);
+        }
+      } finally {
+        // เจ้าของธงเท่านั้นที่ปิด — คำขอที่ตกรุ่นปล่อยให้คำขอล่าสุดจัดการ
+        if (seq === reqSeq.current) setLoading(false);
       }
-      setLoading(false);
     })();
   }, [mode, filter, reloadKey]);
 
@@ -90,29 +99,32 @@ export function useInventoryList<T>({
       const P = Math.max(1, Math.min(totalPages, target));
       const seq = ++reqSeq.current;
       setLoading(true);
-      // ponytail: cursor can't jump — walk forward from the highest known page, caching each
-      // cursor. prev / next / already-visited = 1 fetch; a far forward jump = N sequential fetches
-      // (cursor's inherent cost). Switch desktop to offset if far jumps hurt UX.
-      const cursors = [...pageCursorsRef.current];
-      let eof = false;
-      while (cursors.length < P) {
-        const enter = cursors[cursors.length - 1]!;
-        const step = await getItems(buildParams(filter, enter));
-        if (seq !== reqSeq.current) return; // ตัวกรองเปลี่ยนระหว่างเดิน cursor — เส้นทางนี้ตกรุ่นแล้ว
-        if (!step.nextCursor) {
-          eof = true; // ran out before reaching P — land on the last page
-          break;
+      try {
+        // ponytail: cursor can't jump — walk forward from the highest known page, caching each
+        // cursor. prev / next / already-visited = 1 fetch; a far forward jump = N sequential fetches
+        // (cursor's inherent cost). Switch desktop to offset if far jumps hurt UX.
+        const cursors = [...pageCursorsRef.current];
+        let eof = false;
+        while (cursors.length < P) {
+          const enter = cursors[cursors.length - 1]!;
+          const step = await getItems(buildParams(filter, enter));
+          if (seq !== reqSeq.current) return; // ตัวกรองเปลี่ยนระหว่างเดิน cursor — เส้นทางนี้ตกรุ่นแล้ว
+          if (!step.nextCursor) {
+            eof = true; // ran out before reaching P — land on the last page
+            break;
+          }
+          cursors.push(step.nextCursor);
         }
-        cursors.push(step.nextCursor);
+        const finalPage = eof ? cursors.length : P;
+        const data = await getItems(buildParams(filter, cursors[finalPage - 1] ?? null));
+        if (seq !== reqSeq.current) return;
+        setPageCursors(cursors);
+        setItems((data.items || []) as T[]);
+        setPage(finalPage);
+        if (data.total != null) setTotal(data.total);
+      } finally {
+        if (seq === reqSeq.current) setLoading(false);
       }
-      const finalPage = eof ? cursors.length : P;
-      const data = await getItems(buildParams(filter, cursors[finalPage - 1] ?? null));
-      if (seq !== reqSeq.current) return;
-      setPageCursors(cursors);
-      setItems((data.items || []) as T[]);
-      setPage(finalPage);
-      if (data.total != null) setTotal(data.total);
-      setLoading(false);
     },
     [mode, totalPages, filter]
   );
@@ -123,12 +135,15 @@ export function useInventoryList<T>({
     // มันเอาแถวของตัวกรองเก่าไปต่อใต้ผลของตัวกรองใหม่ แล้ว appendCursor ก็ชี้กลับไป query เดิม
     const seq = ++reqSeq.current;
     setIsLoadingMore(true);
-    const data = await getItems(buildParams(filter, appendCursor));
-    if (seq !== reqSeq.current) return;
-    setItems((prev) => [...prev, ...((data.items || []) as T[])]);
-    setAppendCursor(data.nextCursor ?? null);
-    if (data.total != null) setTotal(data.total);
-    setIsLoadingMore(false);
+    try {
+      const data = await getItems(buildParams(filter, appendCursor));
+      if (seq !== reqSeq.current) return;
+      setItems((prev) => [...prev, ...((data.items || []) as T[])]);
+      setAppendCursor(data.nextCursor ?? null);
+      if (data.total != null) setTotal(data.total);
+    } finally {
+      if (seq === reqSeq.current) setIsLoadingMore(false);
+    }
   }, [mode, appendCursor, isLoadingMore, filter]);
 
   const refetch = useCallback(() => setReloadKey((k) => k + 1), []);
