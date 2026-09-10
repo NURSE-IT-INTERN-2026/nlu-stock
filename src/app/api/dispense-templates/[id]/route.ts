@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 const patchSchema = z.object({
-  name: z.string().trim().min(1).optional(),
+  name: z.string().trim().min(1).max(255, "ชื่อเทมเพลตยาวเกิน 255 ตัวอักษร").optional(),
   lines: z
     .array(z.object({ itemId: z.string().min(1), quantity: z.number().int().positive() }))
     .min(1)

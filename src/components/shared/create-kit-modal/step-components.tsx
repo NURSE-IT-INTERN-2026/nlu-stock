@@ -94,7 +94,6 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
     <div className="space-y-5">
       <div className="pr-6">
         <Label htmlFor="comp-search">ค้นหาส่วนประกอบ</Label>
-        <p className="mt-0.5 text-xs text-muted-foreground">พิมพ์ชื่อหรือรหัสพัสดุที่จะประกอบเป็นชุด</p>
       </div>
 
       {/* กรอง: หมวดหมู่ + สถานที่ (picker เดียวกับ filter bar หน้า items/dispense) */}

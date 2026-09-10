@@ -44,7 +44,7 @@ import { MaintenanceFormDialog } from "@/components/items/maintenance-form-dialo
 import { EditItemDialog } from "@/components/shared/edit-item-dialog";
 import { StationInRoomDialog } from "@/components/dispense/station-in-room-dialog";
 import { ActionTile } from "@/components/items/action-tile";
-import { KitSetsPanel } from "@/components/items/kit-sets-panel";
+import { KitSetContentsCard, KitSetsPanel } from "@/components/items/kit-sets-panel";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -191,8 +191,8 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
         const it = (await getItem(itemId)) as ItemData;
         if (cancelled) return;
         setItem(it);
-        // A KIT recipe always renders in item-mode, even though it is tracked: its copies are
-        // assembled sets managed as a group in the ชุดประกอบ tab, not spec pages of their own.
+        // A KIT with no ?copy= lands on the recipe: the ชุดประกอบ tab is the page. With one,
+        // it is a copy like any other — see the effect below, which is what switches it.
         if (!it.trackIndividually || it.category.profile?.code === "KIT") setMode("item");
         else if (it.subItems.length === 0) setMode("empty");
         else setMode("piece");
@@ -201,6 +201,15 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     })();
     return () => { cancelled = true; };
   }, [itemId]);
+
+  // A KIT set has its own page — that is the whole of ยืม-คืน ตาม Code, and the profile has
+  // said ITEM since the seed. Kept out of the fetch effect above on purpose: adding `copy` to
+  // its deps would refetch the item every time ANY tracked item switched copy, and that switch
+  // is deliberately shallow (see selectCopy).
+  useEffect(() => {
+    if (item?.category.profile?.code !== "KIT") return;
+    setMode(copy && item.subItems.length > 0 ? "piece" : "item");
+  }, [item, copy]);
 
   // Resolve the selected copy (?copy= validated against sub-items, else first).
   const selectedSubCode = item?.trackIndividually && item.subItems.length > 0
@@ -359,13 +368,17 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     // Counts รอบ only now — the CORRECTIVE rows are shown in ประวัติ, so counting them on this
     // tab would promise a list that is no longer here.
     { key: "maintenance", label: `ตรวจบำรุงตามรอบ${preventiveCount ? ` (${preventiveCount})` : ""}`, icon: Wrench, show: sub.item.category.profile?.dispenseType !== "CONSUMABLE" || sub.maintenanceRecords.length > 0 },
+    // The one thing a set's page has that no other copy does: what is in the box. Staff only:
+    // both endpoints behind it (/api/kits/sets/:id and /api/kits/:id) are requireAdmin, so for
+    // anyone else this tab is two 403s and a spinner that never resolves.
+    { key: "kitset", label: "ของในชุด", icon: Boxes, show: isKit && !!canAct },
   ].filter((t) => t.show !== false) : [];
   const tabs = mode === "item" ? itemTabs : pieceTabs;
 
   // The open tab lives in the URL, so a reload or a shared link lands where it left off.
   // A KIT recipe still opens on ชุดประกอบ — the sets are the page, ข้อมูลทั่วไป is the footnote.
   // An unknown or now-hidden key falls back to that default instead of showing nothing.
-  const defaultTab = item?.category.profile?.code === "KIT" ? "kit" : "overview";
+  const defaultTab = mode === "item" && item?.category.profile?.code === "KIT" ? "kit" : "overview";
   const tabParam = searchParams.get("tab");
   const tab = tabs.some((t) => t.key === tabParam) ? tabParam! : defaultTab;
   const setTab = (key: string) => {
@@ -482,6 +495,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
                   borrowNote={pieceBorrow.note}
                   onSelfBorrow={() => setPieceBorrowOpen(true)}
                   qrDataUrl={qrDataUrl}
+                  isKitSet={isKit}
                   onStation={() => setStationOpen(true)}
                   onReportDamage={() => setStatusAction("DAMAGED")}
                   onStatus={(s) => { setStatusAction(s); setStatusTarget({ id: sub.id, subCode: sub.subCode, status: sub.status }); }}
@@ -503,6 +517,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
               {tab === "maintenance" && (
                 <PieceMaintenance sub={sub} canAct={canAct} onRecord={() => setMaintOpen(true)} />
               )}
+              {tab === "kitset" && <KitSetContentsCard subItemId={sub.id} kitItemId={sub.item.id} canAct={!!canAct} onChanged={() => { fetchSub(); fetchItem(); }} />}
             </>
           )}
         </div>
@@ -956,11 +971,12 @@ function StatusSummary({ status, siblings, itemCode, itemLocation, currentId, on
 }
 
 // ── Piece overview tab (detail rows + manage tiles + QR) ──
-function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, borrowNote, onSelfBorrow, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
+function PieceOverview({ sub, isMulti, canAct, isKitSet, canSelfBorrow, borrowNote, onSelfBorrow, qrDataUrl, onStation, onReportDamage, onStatus, onEdit, onReceive }: {
   sub: SubItemData; isMulti: boolean; canAct: boolean; canSelfBorrow: boolean; qrDataUrl: string;
   /** ทำไมชิ้นนี้ยืมไม่ได้ — null เมื่อยืมได้ หรือเมื่อคนดูไม่ใช่ นศ./บุคลากร */
   borrowNote: string | null;
   onSelfBorrow: () => void;
+  isKitSet?: boolean;
   onStation: () => void; onReportDamage: () => void; onStatus: (s: "AVAILABLE" | "LOST" | "DISPOSED") => void; onEdit: () => void; onReceive: () => void;
 }) {
   const [printOpen, setPrintOpen] = useState(false);
@@ -1019,8 +1035,11 @@ function PieceOverview({ sub, isMulti, canAct, canSelfBorrow, borrowNote, onSelf
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <SectionHeader eyebrow="การจัดการ" title="จัดการสต็อก" />
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={onStation} disabled={!canTransition(sub.status, "IN_USE")} />
-              <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={onReceive} />
+              {/* A ชุดประกอบ is borrowed whole, never stationed in a room, and it arrives by
+                  ประกอบชุด rather than by a receipt — both tiles would open a dialog that
+                  cannot describe a box. */}
+              {!isKitSet && <ActionTile icon={Home} label="นำไปใช้งาน" tone="default" onClick={onStation} disabled={!canTransition(sub.status, "IN_USE")} />}
+              {!isKitSet && <ActionTile icon={ArrowDownToLine} label="รับเข้าใหม่" tone="default" onClick={onReceive} />}
               <DropdownMenu>
                 <DropdownMenuTrigger render={<ActionTile icon={Package} label="ปรับสต็อก" tone="default" />} />
                 <DropdownMenuContent align="start">

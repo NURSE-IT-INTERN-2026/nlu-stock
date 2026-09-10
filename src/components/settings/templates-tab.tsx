@@ -5,12 +5,13 @@ import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, Minus, X, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   DIALOG_SHELL, DIALOG_BODY,
-  Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, DialogHeader,
+  Dialog, DialogContent, DialogTitle, DialogFooter, DialogHeader,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
@@ -158,7 +159,7 @@ export function TemplatesTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">ชุดรายการเบิกที่บันทึกไว้ใช้ซ้ำ — ใช้งานได้ทั้งทีม</p>
+        <p className="text-sm text-muted-foreground">ชุดรายการเบิกใช้ซ้ำ · ใช้ได้ทั้งทีม</p>
         <Button onClick={openCreate}>
           <Plus className="mr-1 h-4 w-4" />
           สร้างเทมเพลต
@@ -172,7 +173,7 @@ export function TemplatesTab() {
       ) : templates.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-16 text-center">
           <ClipboardList className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">ยังไม่มีเทมเพลต — สร้างจากที่นี่ หรือกด &ldquo;บันทึกเทมเพลต&rdquo; ในตะกร้า</p>
+          <p className="text-sm text-muted-foreground">ยังไม่มีเทมเพลต — สร้างที่นี่ หรือบันทึกจากตะกร้า</p>
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card overflow-x-auto">
@@ -217,18 +218,20 @@ export function TemplatesTab() {
         <DialogContent className={cn(DIALOG_SHELL, "max-w-[calc(100%-2rem)] sm:max-w-lg")}>
           <DialogHeader className="shrink-0">
             <DialogTitle>{editingId ? "แก้ไขเทมเพลต" : "สร้างเทมเพลต"}</DialogTitle>
-            <DialogDescription>เก็บเฉพาะพัสดุ + จำนวน — lot/ชิ้นจะเลือกจากสต็อกตอนโหลดเข้าตะกร้า</DialogDescription>
           </DialogHeader>
 
           {/* Name + search sit above the scroll area, not inside it: the hits panel is
               absolutely positioned, and a scrolling parent would clip it — scrolling to
               reach the last result would drag the search box along with it. */}
           <div className="shrink-0 space-y-4">
-            <Input
+            {/* Textarea, not Input: a long name wraps instead of scrolling out of
+                sight. Capped at max-h so growth can't eat the lines area below. */}
+            <Textarea
               placeholder="ชื่อเทมเพลต เช่น ชุดเบิกประจำห้องแล็บ"
               value={name}
+              maxLength={255}
               onChange={(e) => setName(e.target.value)}
-              className="text-sm"
+              className="min-h-9 max-h-24 resize-none text-sm"
             />
 
             {/* item search */}

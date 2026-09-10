@@ -687,8 +687,6 @@ export interface KitSetContents {
   durables: { itemId: string; code: string; name: string; unitName: string; quantity: number }[];
   consumables: KitComponent[];
   drift: SetDrift[];
-  /** Tracked slots the recipe expects but nothing fills — a piece reported broken left the box. */
-  missingTracked: { itemId: string; code: string; name: string; missing: number }[];
 }
 
 export function fetchKitSet(subItemId: string) {

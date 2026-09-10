@@ -171,12 +171,7 @@ export function StepItemDetails({
 
       {/* Usage type picker */}
       <div className="space-y-3">
-        <div>
-          <Label id="usage-group-label" required>ของชิ้นนี้ใช้งานยังไง?</Label>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            เลือกรูปแบบการใช้งานเพื่อกำหนดวิธีติดตามสต็อก
-          </p>
-        </div>
+        <Label id="usage-group-label" required>ของชิ้นนี้ใช้งานยังไง?</Label>
         <div role="radiogroup" aria-labelledby="usage-group-label" className="grid gap-2">
           {USAGE_OPTIONS.map((opt) => {
             const Icon = opt.icon;

@@ -201,7 +201,7 @@ export function AttachmentList({
           <AlertDialogHeader>
             <AlertDialogTitle>ลบไฟล์แนบ?</AlertDialogTitle>
             <AlertDialogDescription>
-              ไฟล์จะหายจากรายการนี้ และระบบจะบันทึกไว้ว่าใครลบเมื่อไหร่
+              ลบแล้วระบบจะบันทึกว่าใครลบเมื่อไหร่
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

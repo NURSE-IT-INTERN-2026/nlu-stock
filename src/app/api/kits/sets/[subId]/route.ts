@@ -45,11 +45,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const components = await loadKitComponents(prisma, set.item.id);
   const holdings = await loadSetHoldings(prisma, set.id);
   const drift = await kitSetDrift(prisma, set.id);
-  const expectedTracked = components.filter((c) => c.kind === "TRACKED");
-  const heldByItem = new Map<string, number>();
-  for (const piece of set.kitContents) {
-    heldByItem.set(piece.item.id, (heldByItem.get(piece.item.id) ?? 0) + 1);
-  }
 
   return json({
     set: {
@@ -66,15 +61,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName, quantity: c.perSet,
         })),
     consumables: components.filter((c) => c.kind === "CONSUMABLE"),
-    // Tracked slots the recipe expects that no piece currently fills — a component reported
-    // broken leaves the box, and this is what says so on the ดูของในชุด checklist.
     // Where the box and the current recipe disagree — empty when they match. ปรับชุดตามสูตร
     // works from exactly this list, and the button is hidden while it is empty.
+    //
+    // `missingTracked` used to ride alongside this: the tracked slots the recipe expects that
+    // no piece fills. It was a strict subset — a tracked component's held count comes from
+    // `kitContents` in both, and loadSetHoldings excludes tracked — so every row it produced
+    // was already a drift row, printed with one number instead of two and captioned
+    // "ถูกแจ้งชำรุดหรือย้ายออกไป" even when the recipe had simply been raised.
     drift,
-    missingTracked: expectedTracked.flatMap((c) => {
-      const short = c.perSet - (heldByItem.get(c.itemId) ?? 0);
-      return short > 0 ? [{ itemId: c.itemId, code: c.code, name: c.name, missing: short }] : [];
-    }),
   });
 }
 

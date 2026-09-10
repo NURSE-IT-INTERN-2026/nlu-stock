@@ -71,9 +71,9 @@ function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
       {trail.map((crumb, i) => (
         <span key={crumb.href} className="flex items-center gap-1">
           {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/50" />}
-          <a href={crumb.href} className="text-muted-foreground hover:text-foreground transition-colors truncate">
+          <Link href={crumb.href} className="text-muted-foreground hover:text-foreground transition-colors truncate">
             {crumb.label}
-          </a>
+          </Link>
         </span>
       ))}
       <ChevronRight className="size-3.5 text-muted-foreground/50" />

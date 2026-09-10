@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, Boxes, Check, ClipboardList, Plus, RefreshCw, ShoppingCart, Trash2, Wrench } from "lucide-react";
@@ -78,7 +79,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
           <div>
             <h3 className="text-sm font-semibold text-foreground">ส่วนประกอบต่อ 1 ชุด ({data.components.length})</h3>
             <p className="text-xs text-muted-foreground">
-              สต๊อกตอนนี้ประกอบได้อีก {data.maxSets} ชุด · ของสิ้นเปลืองไม่นับ ต้องเบิกใส่เอง
+              ประกอบได้อีก {data.maxSets} ชุด · ของสิ้นเปลืองไม่นับ
             </p>
           </div>
           {canAct && (
@@ -163,7 +164,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
         <div>
           <h3 className="text-sm font-semibold text-foreground">ชุดที่ประกอบไว้ ({liveSets.length})</h3>
           <p className="text-xs text-muted-foreground">
-            ชุดอยู่ถาวร — ยืมแล้วคืนแล้วยืมใหม่ได้ทันที ของสิ้นเปลืองในกล่องเติมเองนอกระบบ
+            ชุดอยู่ถาวร ยืม-คืน-ยืมใหม่ได้ · ของสิ้นเปลืองเติมเอง
           </p>
         </div>
         {liveSets.length === 0 ? (
@@ -185,7 +186,9 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
               <TableBody>
                 {liveSets.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="px-2 font-mono text-xs">{s.subCode}</TableCell>
+                    <TableCell className="px-2 font-mono text-xs">
+                      <Link href={`/items/${itemId}?copy=${s.subCode}`} className="text-primary hover:underline">{s.subCode}</Link>
+                    </TableCell>
                     <TableCell className="px-2 text-xs text-muted-foreground">{STATUS_LABELS[s.status as ItemStatus] ?? s.status}</TableCell>
                     <TableCell className="px-2 text-xs text-muted-foreground">
                       {s.kitContents.length === 0 ? "—" : s.kitContents.map((k) => `${k.item.name} ${k.subCode}`).join(", ")}
@@ -206,7 +209,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
               {liveSets.map((s) => (
                 <div key={s.id} className="space-y-1.5 px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs">{s.subCode}</span>
+                    <Link href={`/items/${itemId}?copy=${s.subCode}`} className="font-mono text-xs text-primary hover:underline">{s.subCode}</Link>
                     <span className="text-xs text-muted-foreground">{STATUS_LABELS[s.status as ItemStatus] ?? s.status}</span>
                     <div className="ml-auto">
                       <SetActions
@@ -312,7 +315,7 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
       <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
         <DialogContent className={DIALOG_SHELL_FIT}>
           <DialogTitle>ประกอบ {assembled} ชุดแล้ว</DialogTitle>
-          <DialogDescription>เหลือของสิ้นเปลืองที่ต้องใส่เอง — เบิกต่อได้เลย หรือข้ามไปเบิกทีหลัง</DialogDescription>
+          <DialogDescription>เหลือของสิ้นเปลืองที่ต้องใส่เอง เบิกต่อเลยหรือไว้ทีหลัง</DialogDescription>
           <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
             <div className="space-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-xs">
               {consumables.map((c) => (
@@ -340,7 +343,7 @@ function AssembleDialog({ open, onOpenChange, kit, onDone }: { open: boolean; on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={DIALOG_SHELL}>
         <DialogTitle>ประกอบชุด {kit.kit.name}</DialogTitle>
-        <DialogDescription>ตัดสต๊อกของคงทนทันที — ของสิ้นเปลืองต้องใส่เอง ระบบไม่ตัดให้</DialogDescription>
+        <DialogDescription>ตัดสต๊อกของคงทนทันที · ของสิ้นเปลืองใส่เอง</DialogDescription>
         <div className={cn(DIALOG_BODY, "space-y-4 py-2")}>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Label htmlFor="assemble-sets">จำนวนชุด</Label>
@@ -426,8 +429,20 @@ function EditBomDialog({ onClose, kit, onDone }: { onClose: () => void; kit: Kit
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className={cn(DIALOG_SHELL_FIT, "sm:max-w-2xl")}>
         <DialogTitle>แก้ส่วนประกอบ {kit.kit.name}</DialogTitle>
-        <DialogDescription>ผูกรายการในสูตรกับพัสดุจริง แก้ได้ตลอด — ชุดที่ประกอบไปแล้วเทียบกับสูตรล่าสุดเสมอ</DialogDescription>
         <div className={cn(DIALOG_BODY, "py-2")}>
+          {/* One recipe, every box. Saving here does not open a single box — it moves the line
+              each box is measured against, so every live set drifts at once and each one has to
+              be repacked on its own page. Said before the edit, because after it the dialog is
+              closed and the only clue is a banner on whichever set you happen to open next. */}
+          {kit.sets.length > 0 && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive dark:text-danger-400" />
+              <span className="text-muted-foreground">
+                <span className="font-medium text-destructive dark:text-danger-400">สูตรนี้ใช้ร่วมกันทุกชุด</span> —{" "}
+                บันทึกแล้ว {kit.sets.length} ชุดที่ประกอบไว้จะไม่ตรงสูตร ต้องกด ปรับตามสูตร ทีละชุด
+              </span>
+            </div>
+          )}
           <StepComponents
             components={rows}
             onAdd={(row) => setRows((s) => (s.some((c) => c.componentItemId === row.componentItemId) ? s : [...s, row]))}
@@ -470,7 +485,7 @@ function SetContentsDialog({ setId, onClose }: { setId: string; onClose: () => v
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className={DIALOG_SHELL}>
         <DialogTitle>ของในชุด {label}</DialogTitle>
-        <DialogDescription>รายการอ้างอิงว่ากล่องนี้ควรมีอะไร — ไว้ดูตอนเติมของ ไม่ต้องกดยืนยันอะไร</DialogDescription>
+        <DialogDescription>กล่องนี้ควรมีอะไร — ไว้ดูตอนเติมของ</DialogDescription>
         <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
           {!contents ? (
             <Skeleton className="h-40 w-full" />
@@ -532,8 +547,9 @@ function PrefillCartButton({
     setLoading(false);
   };
 
+  // bg-card: outline defaults to bg-background, which reads grey sitting on a white card.
   return (
-    <Button variant="outline" size="sm" className="w-full" disabled={loading} onClick={run}>
+    <Button variant="outline" size="sm" className="w-full bg-card" disabled={loading} onClick={run}>
       <ShoppingCart className="size-3.5" />
       {loading ? "กำลังใส่ตะกร้า..." : "ใส่ของสิ้นเปลืองลงตะกร้าเบิก"}
     </Button>
@@ -578,7 +594,7 @@ function ResyncSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
       <DialogContent className={DIALOG_SHELL}>
         <DialogTitle>ปรับชุด {label} ตามสูตร</DialogTitle>
         <DialogDescription>
-          กล่องเดิม รหัสเดิม ประวัติเดิม — ระบบขยับสต๊อกเฉพาะรายการที่ต่างจากสูตร ที่เหลือไม่แตะ
+          กล่องเดิม รหัสเดิม — ขยับเฉพาะรายการที่ต่างจากสูตร
         </DialogDescription>
         <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
           {!contents ? (
@@ -682,7 +698,7 @@ function CancelSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
       <DialogContent className={DIALOG_SHELL}>
         <DialogTitle>ยกเลิกชุด{contents ? ` ${contents.set.item.code}-${contents.set.subCode}` : ""}</DialogTitle>
         <DialogDescription>
-          ชุดนี้จะหายไปถาวร ของคงทนกลับเข้าคลัง — ใช้เมื่อเลิกใช้ชุดนี้แล้วเท่านั้น ไม่ใช่ขั้นตอนปกติของการคืน
+          ชุดนี้จะหายไปถาวร ของคงทนกลับเข้าคลัง — ไม่ใช่ขั้นตอนของการคืน
         </DialogDescription>
         <div className={cn(DIALOG_BODY, "space-y-3 py-2")}>
           {!contents ? (
@@ -699,7 +715,7 @@ function CancelSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
               />
               {contents.consumables.length > 0 && (
                 <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
-                  ของสิ้นเปลือง ({contents.consumables.map((c) => c.name).join(", ")}) ระบบไม่เคยตัดให้ จึงไม่คืนกลับ — ที่ยังอยู่ในกล่องให้นำเข้าคลังเอง
+                  ของสิ้นเปลือง ({contents.consumables.map((c) => c.name).join(", ")}) ไม่คืนกลับ — ที่เหลือในกล่องนำเข้าคลังเอง
                 </p>
               )}
               <div>
@@ -720,11 +736,30 @@ function CancelSetDialog({ setId, onClose, onDone }: { setId: string; onClose: (
   );
 }
 
-/** What the box should hold: the tracked pieces it actually has, the slots it is short of, and
- *  the qty lines from the recipe. Consumables carry no "remaining" — nobody counted them. */
+/** What the box should hold: the tracked pieces it actually has and the qty lines from the
+ *  recipe. Consumables carry no "remaining" — nobody counted them.
+ *
+ *  The mismatch banner lives here rather than at each call site so ดูของในชุด and the set's own
+ *  page say the same thing. It reads `drift`, which is the only honest source: it states both
+ *  numbers and does not guess at a cause. The old `missingTracked` line was dropped — it fired
+ *  on exactly the same rows (a tracked component's held count comes from `kitContents` in both,
+ *  and loadSetHoldings excludes tracked), printed one number instead of two, and blamed
+ *  "ถูกแจ้งชำรุดหรือย้ายออกไป" even when all that happened was somebody raising the recipe. */
 function ExpectedContents({ contents }: { contents: KitSetContents }) {
+  const short = shortOf(contents.drift);
   return (
     <div className="space-y-2">
+      {contents.drift.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning-700 dark:text-warning-200" />
+          <span className="text-muted-foreground">
+            <span className="font-medium text-warning-700 dark:text-warning-200">กล่องนี้ไม่ตรงสูตรปัจจุบัน</span> —{" "}
+            {contents.drift.map((d) => `${d.name} มี ${d.held} ควรมี ${d.want} ${d.unitName}`).join(" · ")}
+            {short.length > 0 && " · ของในคลังไม่พอ ปรับตามสูตรไม่ได้"}
+            {contents.set.status === "ON_LOAN" && " · ชุดถูกยืมอยู่ ปรับได้เมื่อคืน"}
+          </span>
+        </div>
+      )}
       <ContentRows
         rows={[
           ...contents.tracked.map((t) => ({
@@ -734,15 +769,6 @@ function ExpectedContents({ contents }: { contents: KitSetContents }) {
           ...contents.consumables.map((c) => ({ key: c.itemId, code: c.code, label: c.name, sub: `${c.perSet} ${c.bomUnitName} · เติมเอง` })),
         ]}
       />
-      {contents.missingTracked.length > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-          <span className="text-muted-foreground">
-            <span className="font-medium text-destructive">ขาดของรายชิ้น</span> — {contents.missingTracked.map((m) => `${m.name} ${m.missing}`).join(" · ")}
-            {" "}(ถูกแจ้งชำรุดหรือย้ายออกไป) ใส่ชิ้นใหม่โดยประกอบชุดใหม่ หรือยืนยันไปก่อนถ้ายอมรับได้
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -766,7 +792,7 @@ export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        ของในชุด — รับคืนทั้งกล่อง ไม่ต้องแกะ ชุดกลับเข้าคลังพร้อมให้ยืมต่อทันที
+        ของในชุด — รับคืนทั้งกล่อง ไม่ต้องแกะ
       </p>
       <ContentRows
         rows={[
@@ -781,6 +807,106 @@ export function KitSetContentsPicker({ subItemId }: { subItemId: string }) {
           ของสิ้นเปลือง ({contents.consumables.map((c) => c.name).join(", ")}) ไม่ต้องคืน — ที่เหลือให้นำเข้าคลังเอง
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * ของในชุด for the set's OWN page (the ?copy= route), where the box is the subject rather than
+ * one row of its recipe. Everything the recipe's table offers is here too, so somebody who
+ * scanned the sticker on a box never has to walk back to the recipe to act on what they found.
+ *
+ * Two of the three buttons act on the RECIPE, not on this box — แก้ส่วนประกอบ rewrites it and
+ * ประกอบชุดเพิ่ม builds new boxes from it. They live here anyway because the box is where the
+ * mismatch is discovered, and both dialogs already state what they are about in their titles.
+ *
+ * ponytail: ยกเลิกชุด is deliberately NOT here. It is the one irreversible action of the four,
+ * and a page reached by scanning a sticker is the wrong place to put it a click away.
+ */
+export function KitSetContentsCard({
+  subItemId, kitItemId, canAct, onChanged,
+}: {
+  subItemId: string; kitItemId: string; canAct: boolean; onChanged: () => void;
+}) {
+  const [contents, setContents] = useState<KitSetContents | null>(null);
+  const [kit, setKit] = useState<KitDetail | null>(null);
+  const [resyncOpen, setResyncOpen] = useState(false);
+  const [bomOpen, setBomOpen] = useState(false);
+  const [assembleOpen, setAssembleOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const { addItem } = useCart();
+  const router = useRouter();
+
+  // Both, always: แก้ส่วนประกอบ moves the recipe, which moves this box's drift. Reloading one
+  // without the other leaves the banner arguing with the buttons under it.
+  const load = useCallback(async () => {
+    const [c, k] = await Promise.all([
+      fetchKitSet(subItemId).catch(() => null),
+      fetchKit(kitItemId).catch(() => null),
+    ]);
+    setContents(c);
+    setKit(k);
+    setLoading(false);
+  }, [subItemId, kitItemId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = () => { load(); onChanged(); };
+
+  if (loading) return <Skeleton className="h-40 w-full" />;
+  // A swallowed failure used to leave the skeleton up forever — say so instead.
+  if (!contents) return <p className="text-sm text-muted-foreground">โหลดข้อมูลชุดไม่สำเร็จ</p>;
+
+  const short = shortOf(contents.drift);
+  // Same gate the recipe's table uses: a box that is out on loan is not on the shelf to repack.
+  const canResync = canAct && contents.drift.length > 0 && short.length === 0 && contents.set.status !== "ON_LOAN";
+
+  return (
+    <div className="space-y-3">
+      {/* No link back to the recipe: every action it was there for is on this page now, ชุดอื่น
+          is the panel of sibling codes in the header, and the recipe itself is the list below. */}
+      <p className="text-xs text-muted-foreground">
+        กล่องนี้ควรมีอะไร — ไว้ดูตอนเติมของ
+      </p>
+
+      {canAct && (
+        <div className="flex flex-wrap gap-2">
+          {canResync && (
+            <Button
+              variant="outline" size="sm"
+              className="bg-card border-warning/40 text-warning-700 dark:text-warning-200"
+              onClick={() => setResyncOpen(true)}
+            >
+              <RefreshCw className="size-3.5" />ปรับตามสูตร
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="bg-card" disabled={!kit} onClick={() => setBomOpen(true)}>
+            <Wrench className="size-3.5" />แก้ส่วนประกอบ
+          </Button>
+          <Button
+            variant="outline" size="sm" className="bg-card"
+            disabled={!kit || kit.maxSets < 1 || kit.components.length === 0}
+            onClick={() => setAssembleOpen(true)}
+          >
+            <Plus className="size-3.5" />ประกอบชุดเพิ่ม
+          </Button>
+        </div>
+      )}
+
+      {/* The mismatch banner is inside ExpectedContents — ปรับตามสูตร in the row above is what
+          answers it, and the banner says why there is no button when there is none. */}
+      <ExpectedContents contents={contents} />
+      {contents.consumables.length > 0 && (
+        <PrefillCartButton
+          consumables={contents.consumables}
+          onFilled={() => router.push("/cart")}
+          addItem={addItem}
+        />
+      )}
+
+      {resyncOpen && <ResyncSetDialog setId={subItemId} onClose={() => setResyncOpen(false)} onDone={refresh} />}
+      {bomOpen && kit && <EditBomDialog onClose={() => setBomOpen(false)} kit={kit} onDone={refresh} />}
+      {kit && <AssembleDialog open={assembleOpen} onOpenChange={setAssembleOpen} kit={kit} onDone={refresh} />}
     </div>
   );
 }

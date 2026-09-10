@@ -263,7 +263,7 @@ export default function BorrowConfirmPage() {
         <DialogContent showCloseButton={false} className={cn(DIALOG_SHELL, "max-w-[calc(100%-2rem)] sm:max-w-lg")}>
           <DialogHeader className="shrink-0">
             <DialogTitle>ข้อมูลการ{verb}</DialogTitle>
-            <DialogDescription>กรอกข้อมูลก่อนยืนยัน — กดยืนยันแล้วจะตัดสต็อกทันที</DialogDescription>
+            <DialogDescription>กรอกข้อมูลก่อนยืนยัน</DialogDescription>
             <p className="text-xs text-muted-foreground">
               <span className="text-success font-medium">เบิกใช้ {consumables.length}</span>
               {" · "}

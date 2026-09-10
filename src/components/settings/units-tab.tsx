@@ -308,7 +308,7 @@ export function UnitsTab() {
                   {(deleteTarget._count?.kitBomItems ?? 0) > 0 && `, รายการในชุด ${deleteTarget._count?.kitBomItems}`}
                 </>
               ) : (
-                <>ต้องการลบหน่วยนับ &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้</>
+                <>ลบหน่วยนับ &ldquo;{deleteTarget?.name}&rdquo; — ย้อนกลับไม่ได้</>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

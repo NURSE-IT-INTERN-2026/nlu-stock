@@ -657,7 +657,7 @@ function CountStepper({ record, bucket, onChange }: { record: OpenBorrow; bucket
             </button>
           </div>
           {bucket.damaged === 0 && bucket.lost === 0 && (
-            <p className="text-[11px] text-muted-foreground">แตะป้ายด้านบนถ้าของที่คืนมีชำรุดหรือสูญหายปะปนอยู่</p>
+            <p className="text-[11px] text-muted-foreground">แตะป้ายด้านบนถ้ามีของชำรุดหรือสูญหาย</p>
           )}
 
           {bucket.damaged > 0 && (

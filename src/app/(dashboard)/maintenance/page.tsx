@@ -740,7 +740,7 @@ function MaintenanceShell() {
             <AlertDialogTitle>ส่งบำรุงรักษาภายนอก</AlertDialogTitle>
             <AlertDialogDescription>
               ส่ง <span className="font-medium text-foreground">{picked.length} รายการ</span> ออกไปบำรุงรักษาภายนอก —
-              ทุกชิ้นจะขึ้นสถานะ &ldquo;บำรุงรักษา&rdquo; เมื่อของกลับมา กรุณากด &ldquo;บันทึกรับคืน&rdquo; ที่แท็บรับคืนจากบำรุงรักษา
+              ของกลับมาแล้วบันทึกที่แท็บรับคืนจากบำรุงรักษา
             </AlertDialogDescription>
           </AlertDialogHeader>
           {/* Direct child of AlertDialogContent (not Header) so the separator's -mx-4 reaches
@@ -759,7 +759,7 @@ function MaintenanceShell() {
             </div>
             {/* หลักฐานแนบเป็นของรายชิ้น ไม่มีกองกลางให้แปะ — แนบทีหลังที่ปุ่มแก้ข้อมูลของแต่ละแถว */}
             <p className="text-xs text-muted-foreground">
-              แนบหลักฐานได้ทีหลังที่ปุ่ม &ldquo;แก้ข้อมูลส่งบำรุงรักษา&rdquo; ของแต่ละรายการ
+              แนบหลักฐานทีหลังได้ที่ปุ่มแก้ข้อมูลของแต่ละรายการ
             </p>
           </div>
           <AlertDialogFooter>

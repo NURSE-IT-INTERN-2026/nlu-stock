@@ -220,17 +220,23 @@ export default function ConfirmDispensePage() {
         <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>บันทึกเป็นเทมเพลต</DialogTitle>
-            <DialogDescription>บันทึกรายการในตะกร้าไว้ใช้เบิกซ้ำ (เก็บเฉพาะพัสดุ + จำนวน)</DialogDescription>
+            <DialogDescription>เก็บเฉพาะพัสดุ + จำนวน ไว้ใช้เบิกซ้ำ</DialogDescription>
           </DialogHeader>
-          <Input
+          {/* Textarea so a long name wraps rather than scrolling out of sight.
+              Enter still saves — a name has no use for newlines. */}
+          <Textarea
             autoFocus
             placeholder="ชื่อเทมเพลต เช่น ชุดเบิกประจำห้องแล็บ"
             value={templateName}
+            maxLength={255}
             onChange={(e) => setTemplateName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void handleSaveTemplate();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleSaveTemplate();
+              }
             }}
-            className="text-sm"
+            className="min-h-9 max-h-24 resize-none text-sm"
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>ยกเลิก</Button>
@@ -247,7 +253,7 @@ export default function ConfirmDispensePage() {
         <DialogContent className={cn(DIALOG_SHELL_FIT, "max-w-[calc(100%-2rem)] sm:max-w-sm")}>
           <DialogHeader className="shrink-0">
             <DialogTitle>โหลดเทมเพลต</DialogTitle>
-            <DialogDescription>เลือกเทมเพลตเพื่อเติมพัสดุลงตะกร้า (lot/ชิ้นจะเลือกจากสต็อกปัจจุบัน)</DialogDescription>
+            <DialogDescription>เติมพัสดุลงตะกร้า · lot/ชิ้นเลือกจากสต็อกปัจจุบัน</DialogDescription>
           </DialogHeader>
           {templates.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีเทมเพลต</p>
@@ -559,7 +565,7 @@ export default function ConfirmDispensePage() {
         <DialogContent showCloseButton={false} className={cn(DIALOG_SHELL, "max-w-[calc(100%-2rem)] sm:max-w-lg")}>
           <DialogHeader className="shrink-0">
             <DialogTitle>ข้อมูลการเบิก-ยืม</DialogTitle>
-            <DialogDescription>กรอกข้อมูลก่อนยืนยัน — กดยืนยันแล้วจะตัดสต็อกทันที</DialogDescription>
+            <DialogDescription>กรอกข้อมูลก่อนยืนยัน</DialogDescription>
             <p className="text-xs text-muted-foreground">
               <span className="text-success font-medium">สิ้นเปลือง {consumables.length}</span>
               {" · "}
@@ -689,7 +695,7 @@ export default function ConfirmDispensePage() {
             </fieldset>
 
             <p className="mt-4 mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              กดยืนยันแล้วจะตัดสต็อกทันที ไม่สามารถย้อนกลับได้ (หากเบิกผิด ใช้การคืนพัสดุ)
+              กดยืนยันแล้วตัดสต็อกทันที ย้อนกลับไม่ได้ — เบิกผิดให้ใช้การคืนพัสดุ
             </p>
             </div>
             <DialogFooter className="shrink-0">

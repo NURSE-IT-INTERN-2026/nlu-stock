@@ -330,7 +330,7 @@ export function EditItemDialog({ open, itemId, onOpenChange, onSaved, subItem }:
                       <div className="col-span-2 flex items-center justify-between gap-3 rounded-lg border border-input bg-muted/50 px-3 py-2.5">
                         <div className="min-w-0">
                           <Label className="text-[11px] font-medium text-foreground">ให้ยืมเองผ่าน QR</Label>
-                          <p className="text-[11px] text-muted-foreground">นศ./บุคลากรสแกนแล้วกดยืมได้เอง ไม่ผ่านเจ้าหน้าที่</p>
+                          <p className="text-[11px] text-muted-foreground">สแกนแล้วยืมเองได้ ไม่ผ่านเจ้าหน้าที่</p>
                         </div>
                         <Switch
                           checked={form.selfBorrowable}

@@ -484,7 +484,7 @@ function ReceiveContent() {
               <ArrowDownToLine className="h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              เลือกพัสดุจากฝั่งซ้าย<br />เพื่อเริ่มบันทึกรับเข้า
+              เลือกพัสดุจากฝั่งซ้ายเพื่อเริ่ม
             </p>
           </div>
         ) : (

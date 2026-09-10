@@ -255,7 +255,7 @@ export function ProfilesTab() {
               {/* Not "และรอบซ่อมบำรุง": the maintenance cycle is open to every non-CONSUMABLE
                   profile regardless of this switch (see lib/category-profile MAINTENANCE_FIELDS),
                   so naming it here talked people into turning this on for the wrong reason. */}
-              <p className="text-xs text-muted-foreground">เปิดเมื่อต้องเก็บผู้ขาย ราคา วันที่ซื้อ และประกัน</p>
+              <p className="text-xs text-muted-foreground">เก็บผู้ขาย ราคา วันที่ซื้อ ประกัน</p>
             </div>
             <Switch id="p-asset" disabled={locked} checked={form.assetTracking} onCheckedChange={(v) => setForm({ ...form, assetTracking: v })} />
           </div>

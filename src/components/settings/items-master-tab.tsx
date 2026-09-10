@@ -439,7 +439,7 @@ export function ItemsMasterTab() {
           <div className="flex gap-2 border-l-2 border-destructive/50 pl-3 text-xs leading-relaxed text-destructive">
             <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
             <span>
-              คำเตือน: หากลบแล้ว จะไม่สามารถนำ Code นี้กลับมาใช้งานได้อีก และจำนวนพัสดุคงเหลือในคลังของรายการนี้ จะถูกแทงจำหน่ายออกทั้งหมดโดยอัตโนมัติ
+              ลบแล้วใช้ Code นี้ซ้ำไม่ได้ และของคงเหลือทั้งหมดจะถูกตัดจำหน่ายอัตโนมัติ
             </span>
           </div>
 

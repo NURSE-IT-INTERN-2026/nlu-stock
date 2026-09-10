@@ -24,7 +24,7 @@ export default function ScanPage() {
       <div className="space-y-1">
         <h1 className="text-lg font-semibold">สแกน QR บนพัสดุ</h1>
         <p className="text-sm text-muted-foreground">
-          สแกนป้ายที่ติดอยู่บนพัสดุเพื่อเปิดหน้ารายละเอียดและกดยืม
+          สแกนป้ายบนพัสดุเพื่อดูรายละเอียดและกดยืม
         </p>
       </div>
 

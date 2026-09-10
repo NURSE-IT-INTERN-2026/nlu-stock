@@ -255,7 +255,7 @@ export function UsersTab() {
               "ชื่อ",
               preview?.name ?? (
                 <span className="font-normal text-muted-foreground">
-                  — ยังไม่เคยเข้าสู่ระบบ ชื่อจริงจะมาเองครั้งแรกที่เข้า
+                  — ชื่อจริงจะมาเองตอนเข้าสู่ระบบครั้งแรก
                 </span>
               ),
             )}
@@ -275,7 +275,7 @@ export function UsersTab() {
           </div>
           {preview && !preview.isActive && (
             <p className="text-xs text-warning-700 dark:text-warning-200">
-              บัญชีนี้ถูกปิดใช้งานอยู่ — ยืนยันแล้วจะถูกเปิดใช้งานกลับ
+              บัญชีนี้ปิดใช้งานอยู่ — ยืนยันแล้วจะเปิดกลับ
             </p>
           )}
         </div>

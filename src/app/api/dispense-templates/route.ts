@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 }
 
 const bodySchema = z.object({
-  name: z.string().trim().min(1, "ต้องมีชื่อเทมเพลต"),
+  name: z.string().trim().min(1, "ต้องมีชื่อเทมเพลต").max(255, "ชื่อเทมเพลตยาวเกิน 255 ตัวอักษร"),
   lines: z
     .array(z.object({ itemId: z.string().min(1), quantity: z.number().int().positive() }))
     .min(1, "ต้องมีอย่างน้อย 1 รายการ"),

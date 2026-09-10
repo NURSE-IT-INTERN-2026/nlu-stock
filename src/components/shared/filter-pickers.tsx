@@ -246,7 +246,7 @@ export function LocationPicker({ value, locations, onChange, className }: { valu
           </CascadeColumn>
           <CascadeColumn title="รายละเอียด" empty={!draft.room}>
             {details.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">คลิก &quot;ใช้ตัวกรอง&quot; เพื่อกรองทั้งห้อง</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">กด ใช้ตัวกรอง เพื่อกรองทั้งห้อง</div>
             ) : details.map((d) => (
               <CascadeRow key={d} label={d} selected={draft.detail === d} onClick={() => apply({ building: draft.building, floor: draft.floor, room: draft.room, detail: d })} />
             ))}

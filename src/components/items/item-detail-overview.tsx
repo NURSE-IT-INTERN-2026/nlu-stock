@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { ageFromReceipt, fmtDate, TH_DATE } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -307,22 +308,22 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
                   has to hold pieces and qty side by side, so they live on their own screens.
                   This just says which screen the damaged units are sitting on right now. */}
               {damagePending > 0 && (
-                <a
+                <Link
                   href="/repairs"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10 dark:text-danger-400"
                 >
                   <Flag className="size-4 shrink-0" />
                   <span>ชำรุด รอส่งซ่อม {damagePending} {item.issueUnit.name} — ส่งซ่อมที่หน้าซ่อมแซม</span>
-                </a>
+                </Link>
               )}
               {damageAtShop > 0 && (
-                <a
+                <Link
                   href="/repairs?tab=receive"
                   className="sm:col-span-2 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning-700 transition-colors hover:bg-warning/10 dark:text-warning-200"
                 >
                   <Wrench className="size-4 shrink-0" />
                   <span>อยู่ระหว่างซ่อม {damageAtShop} {item.issueUnit.name} — รับคืนที่หน้าซ่อมแซม</span>
-                </a>
+                </Link>
               )}
               {isCountDurable && item.status !== "AVAILABLE" && item.status !== "ON_LOAN" && (
                 <ActionTile icon={CheckCircle2} label="กลับพร้อมใช้งาน" tone="default" onClick={() => onReportStatus("AVAILABLE")} />

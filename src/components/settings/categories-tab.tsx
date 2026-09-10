@@ -353,7 +353,7 @@ export function CategoriesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>ลบหมวดหมู่</AlertDialogTitle>
             <AlertDialogDescription>
-              ต้องการลบหมวดหมู่ &ldquo;{deleteTarget?.name}&rdquo; ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+              ลบหมวดหมู่ &ldquo;{deleteTarget?.name}&rdquo; — ย้อนกลับไม่ได้
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
