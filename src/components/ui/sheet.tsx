@@ -37,7 +37,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
 }
 
 // Top/bottom sheets carried a `data-[side=…]:h-auto` default. An attribute
-// selector outranks a plain utility class, so it beat every `h-[90vh]` a caller
+// selector outranks a plain utility class, so it beat every `h-[90dvh]` a caller
 // passed and the sheet grew past the viewport instead of scrolling inside.
 // Dropping it costs nothing — with no height set, a sheet is auto anyway.
 function SheetContent({

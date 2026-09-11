@@ -411,7 +411,7 @@ export function ProfilesTab() {
         </Dialog>
       ) : (
         <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
-          <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl gap-0 p-0 overflow-hidden" showCloseButton={false}>
+          <SheetContent side="bottom" className="h-[90dvh] rounded-t-2xl gap-0 p-0 overflow-hidden" showCloseButton={false}>
             <SheetTitle className="sr-only">{title}</SheetTitle>
             <SheetDescription className="sr-only">{subtitle}</SheetDescription>
             <div className="flex h-full flex-col overflow-hidden">

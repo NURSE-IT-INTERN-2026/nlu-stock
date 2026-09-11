@@ -54,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (loading) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex min-h-dvh">
         <Skeleton className="hidden md:block w-72 h-full" />
         <div className="flex-1 space-y-4 p-6">
           <Skeleton className="h-8 w-48" />

@@ -304,7 +304,7 @@ export function CategorySelectModal({
     <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <SheetContent
         side="bottom"
-        className="h-[90vh] rounded-t-2xl gap-0 p-0 overflow-hidden"
+        className="h-[90dvh] rounded-t-2xl gap-0 p-0 overflow-hidden"
         showCloseButton={false}
       >
         <SheetTitle className="sr-only">{title}</SheetTitle>
