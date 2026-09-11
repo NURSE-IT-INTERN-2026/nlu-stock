@@ -743,25 +743,6 @@ async function main() {
   }
 
   // ============================================================
-  // Demo cover images (picsum, keyed by item code) — remove for prod
-  // ============================================================
-  const imgItems = await prisma.item.findMany({ select: { id: true, code: true } });
-  for (const it of imgItems) {
-    const seed = encodeURIComponent(it.code);
-    await prisma.item.update({
-      where: { id: it.id },
-      data: {
-        imageUrl: `https://picsum.photos/seed/${seed}/600/600`,
-        images: [
-          `https://picsum.photos/seed/${seed}-a/800/600`,
-          `https://picsum.photos/seed/${seed}-b/800/600`,
-        ],
-      },
-    });
-  }
-  console.log(`  ${imgItems.length} cover + gallery images (picsum)`);
-
-  // ============================================================
   // Rich mock dispense data for this month (dashboard charts)
   // ============================================================
   console.log("Creating rich mock dispense data for dashboard charts...");
