@@ -459,7 +459,7 @@ export async function cancelKitSet(
   tx: TxClient,
   { setSubItemId, userId, note }: CancelSetInput,
 ): Promise<CancelSetResult> {
-  const set = await tx.subItem.findUnique({
+  const readSet = () => tx.subItem.findUnique({
     where: { id: setSubItemId },
     select: {
       id: true,
@@ -470,6 +470,7 @@ export async function cancelKitSet(
       kitContents: { select: { id: true, itemId: true, subCode: true, status: true, item: { select: { name: true } } } },
     },
   });
+  let set = await readSet();
   if (!set) throw new Error("ไม่พบชุดอุปกรณ์");
   if (set.item.category.profile.code !== "KIT") throw new Error("รายการนี้ไม่ใช่ชุดอุปกรณ์");
   if (set.status === ItemStatus.DISPOSED) throw new Error("ชุดนี้ถูกยกเลิกไปแล้ว");
@@ -482,13 +483,13 @@ export async function cancelKitSet(
   // นำไปใช้งานของชุดนี้ ถ้าไม่มี (ชุดเก่าก่อนมีคอลัมน์) ค่อยตกกลับไปใช้สูตร. อ่านทั้งคู่มาก่อน
   // เพื่อจะได้ล็อกทุกอย่างในคราวเดียว
   const components = await loadKitComponents(tx, set.itemId);
-  const holdings = await loadSetHoldings(tx, set.id);
   // สูตรเป็นทางถอยเฉยๆ — คืนของคงทนตามที่ตัดไปจริง ไม่ใช่ตามสูตรวันนี้
-  const durables: SetHolding[] = holdings.length > 0
+  const toDurables = (holdings: SetHolding[]): SetHolding[] => holdings.length > 0
     ? holdings
     : components.filter((c) => c.kind === "COUNT").map((c) => ({
         itemId: c.itemId, code: c.code, name: c.name, unitName: c.unitName, quantity: c.perSet,
       }));
+  let durables = toDurables(await loadSetHoldings(tx, set.id));
   // ล็อกครั้งเดียว ก่อนเขียนอะไรทั้งสิ้น — ทางกลับของ assembleKitSets และต้องเป็นชุด id ชุด
   // เดียวกับที่ assemble ล็อก. แยกล็อกสองรอบไม่ได้: lockItems เรียงให้แค่ภายในรอบของมันเอง
   // ยกเลิกชุดที่ถือ id สูงไว้แล้วไปขอ id ต่ำ สวนกับประกอบชุดที่ไล่จากต่ำไปสูง = deadlock.
@@ -498,6 +499,15 @@ export async function cancelKitSet(
     ...components.map((c) => c.itemId),
     ...durables.map((d) => d.itemId),
   ]);
+
+  // ที่ตรวจไปข้างบนคือข้อมูลก่อนล็อก — ใบที่ commit ไประหว่างเรารอคิวทำให้มันเก่าไปแล้ว และ
+  // increment ที่ข้อ 2 ไม่มีเงื่อนไขคอยกัน ยกเลิกซ้อนกันสองใบจึงคืนของคงทนสองเท่า อ่านใหม่
+  // ตอนถือล็อกแล้ว ชุด id ที่ล็อกไว้ยังครอบคลุม เพราะทุกทางที่แก้ชุดล็อก set.itemId ก่อนเสมอ
+  set = await readSet();
+  if (!set) throw new Error("ไม่พบชุดอุปกรณ์");
+  if (set.status === ItemStatus.DISPOSED) throw new Error("ชุดนี้ถูกยกเลิกไปแล้ว");
+  if (set.status === ItemStatus.ON_LOAN) throw new Error("ชุดนี้ถูกยืมออกอยู่ — ต้องรับคืนก่อน");
+  durables = toDurables(await loadSetHoldings(tx, set.id));
 
   // 1. Tracked pieces: back on the shelf, INUSE record closed.
   for (const piece of set.kitContents) {
