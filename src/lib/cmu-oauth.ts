@@ -88,8 +88,9 @@ export async function signState(next: string) {
 
 export async function readState(state: string, nonceCookie: string | undefined) {
   if (!nonceCookie) return null;
+  const secret = getJwtSecret(); // นอก try ด้วยเหตุผลเดียวกับ verifyToken
   try {
-    const { payload } = await jwtVerify(state, getJwtSecret(), { audience: OAUTH_STATE_AUD });
+    const { payload } = await jwtVerify(state, secret, { audience: OAUTH_STATE_AUD });
     if (payload.nonce !== nonceCookie) return null;
     const next = typeof payload.next === "string" ? payload.next : "/";
     return { next };

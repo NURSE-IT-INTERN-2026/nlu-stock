@@ -24,8 +24,12 @@ export async function signToken(payload: { userId: string; email: string; name: 
  * "user", which /api/auth/session answers 200 to and requireAuth walks into a Prisma 500 with.
  */
 export async function verifyToken(token: string) {
+  // นอก try — คีย์ที่ตั้งไม่ผ่านด่านคนละเรื่องกับ token ที่ปลอมมา ถ้าปล่อยให้ throw ตกลงไปใน
+  // catch ข้างล่าง deploy ที่ JWT_SECRET สั้นไปจะกลายเป็น "ทุกคนถูกเด้งไปหน้าล็อกอิน" เงียบๆ
+  // แทนที่จะร้องว่าตั้งค่าผิด
+  const secret = getJwtSecret();
   try {
-    const { payload } = await jwtVerify(token, getJwtSecret(), { audience: SESSION_AUD });
+    const { payload } = await jwtVerify(token, secret, { audience: SESSION_AUD });
     const { userId, email, name, role } = payload as Record<string, unknown>;
     if (typeof userId !== "string" || !userId) return null;
     if (typeof email !== "string" || !email) return null;

@@ -89,8 +89,42 @@ function loginUrl(request: NextRequest) {
   return url;
 }
 
+/**
+ * CSRF — Origin ต้องเป็นของเราเอง ไม่งั้นไม่ให้เขียน
+ *
+ * คุกกี้ session เป็น SameSite=Lax ซึ่งฟังดูเหมือนพอแล้ว แต่ Lax นับที่ "site" = eTLD+1
+ * ไม่ใช่ origin. พออยู่ใต้ cmu.ac.th ทุกซับโดเมนของมหาลัยคือ same-site ทั้งหมด —
+ * หน้าเว็บไหนก็ตามในนั้นที่โดน XSS หรือที่ใครฝากไฟล์ HTML ไว้ได้ ยิง POST /api/dispense
+ * มาพร้อมคุกกี้ของเจ้าหน้าที่ที่เปิดหน้านั้นค้างไว้ได้เลย ระบบไม่มีอะไรแยกออกว่าคำขอนั้น
+ * มาจากหน้าจอของเราหรือของคนอื่น
+ *
+ * ไม่มี Origin = ปล่อยผ่าน และไม่ใช่ช่องโหว่: เบราว์เซอร์ส่ง Origin ทุกครั้งที่ยิง non-GET
+ * ข้าม origin — ผู้โจมตีสั่งให้เบราว์เซอร์เหยื่อ "ไม่ส่ง" ไม่ได้. คำขอที่ไม่มี Origin จึงมา
+ * จาก curl/สคริปต์/APIRequestContext ซึ่งไม่มีคุกกี้ของเหยื่อให้พกอยู่แล้ว
+ *
+ * เทียบที่ host ไม่ใช่ origin เต็ม: TLS ถูก terminate ข้างหน้า socket ที่นี่จึงเป็น http
+ * ทั้งที่เบราว์เซอร์อยู่บน https — เทียบ scheme ด้วยจะตกทุกใบใน production
+ * (เหตุผลเดียวกับที่ callbackUri() ต้องอ่าน x-forwarded-proto)
+ */
+export function crossSiteWrite(method: string, origin: string | null, host: string | null): boolean {
+  if (method === "GET" || method === "HEAD") return false;
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== (host ?? "").split(",")[0].trim();
+  } catch {
+    // "null" — sandboxed iframe หรือหน้าที่มาจาก data: URL. ไม่ใช่หน้าจอของเราแน่นอน
+    return true;
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ก่อน publicPaths: /api/auth/logout เป็น POST ที่ไม่ต้องล็อกอินก็จริง แต่ก็ยังไม่ใช่สิ่งที่
+  // เว็บอื่นควรสั่งแทนผู้ใช้ได้
+  if (crossSiteWrite(request.method, request.headers.get("origin"), request.headers.get("x-forwarded-host") ?? request.headers.get("host"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Public paths — no auth needed
   if (publicPaths.some((p) => pathname.startsWith(p))) {

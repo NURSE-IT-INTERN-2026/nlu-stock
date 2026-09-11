@@ -6,6 +6,9 @@ import { join } from "node:path";
 import { signToken, validateSessionToken } from "./auth";
 import { prisma } from "./prisma";
 import { uploadFilename, readStoredUpload } from "./upload-files";
+import { getJwtSecret } from "./auth-config";
+import { verifyToken } from "./auth";
+import { crossSiteWrite } from "@/proxy";
 
 process.env.JWT_SECRET = "security-regression-secret-at-least-32-bytes";
 process.env.SUPERADMIN_EMAILS = "root@security.test";
@@ -64,4 +67,58 @@ test("upload reader rejects traversal, sibling-prefix escape and symlinks but re
     await assert.rejects(readStoredUpload(directory, link));
     await assert.rejects(readStoredUpload(directory, `../uploads-backup/${name}`));
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("a JWT secret short enough to be the one from .env.example is refused, not used", async () => {
+  const real = process.env.JWT_SECRET;
+  try {
+    // ค่าที่เคยอยู่จริงทั้งใน .env และ .env.example — ไฟล์หลังอยู่ใน git
+    for (const weak of ["", "dev-secret-change-in-prod", "x".repeat(31)]) {
+      process.env.JWT_SECRET = weak;
+      assert.throws(() => getJwtSecret(), /JWT_SECRET/);
+    }
+    process.env.JWT_SECRET = "x".repeat(32);
+    assert.equal(getJwtSecret().length, 32);
+  } finally {
+    process.env.JWT_SECRET = real;
+  }
+});
+
+test("secret ที่ตั้งผิดร้องออกมา ไม่ถูกกลืนเป็น 'token ไม่ผ่าน'", async () => {
+  // ถ้า getJwtSecret() อยู่ใน try ของ verifyToken ด่านความยาวจะกลายเป็น null เงียบๆ —
+  // deploy ที่ตั้งค่าผิดจะแสดงตัวเป็น "ทุกคนถูกเด้งไปหน้าล็อกอิน" ไม่ใช่ "ตั้งค่าผิด"
+  const real = process.env.JWT_SECRET;
+  try {
+    process.env.JWT_SECRET = "dev-secret-change-in-prod";
+    await assert.rejects(() => verifyToken("ไม่ต้องเป็น token จริง"), /JWT_SECRET/);
+  } finally {
+    process.env.JWT_SECRET = real;
+  }
+});
+
+test("การเขียนที่มาจากเว็บอื่นถูกปฏิเสธ แม้จะเป็นซับโดเมนพี่น้องที่ SameSite=Lax ปล่อยผ่าน", () => {
+  const HOST = "nlu-stock.cmu.ac.th";
+  const ours = `https://${HOST}`;
+
+  // เคสที่ฟีเจอร์นี้มีอยู่เพื่อกัน: Lax นับที่ cmu.ac.th ซับโดเมนอื่นจึงส่งคุกกี้มาด้วยได้
+  assert.equal(crossSiteWrite("POST", "https://someone-else.cmu.ac.th", HOST), true);
+  assert.equal(crossSiteWrite("POST", "https://evil.example", HOST), true);
+  // iframe แบบ sandbox / หน้าที่มาจาก data: URL ส่ง Origin: null
+  assert.equal(crossSiteWrite("POST", "null", HOST), true);
+  // host เดียวกันแต่คนละพอร์ตคือคนละ origin — URL.host พกพอร์ตมาด้วยอยู่แล้ว
+  assert.equal(crossSiteWrite("POST", "http://localhost:3001", "localhost:3000"), true);
+
+  // หน้าจอของเราเอง — ต้องผ่านทุก method ที่เขียนได้
+  for (const method of ["POST", "PATCH", "PUT", "DELETE"]) {
+    assert.equal(crossSiteWrite(method, ours, HOST), false);
+  }
+  // TLS ถูก terminate ข้างหน้า: เบราว์เซอร์อยู่ https แต่ host header ยังเป็นชื่อเดิม
+  assert.equal(crossSiteWrite("POST", ours, HOST), false);
+  // x-forwarded-host แบบต่อกันหลายชั้น — เอาตัวแรก
+  assert.equal(crossSiteWrite("POST", ours, `${HOST}, internal.lb`), false);
+
+  // อ่านอย่างเดียวไม่ต้องกัน และคำขอที่ไม่มี Origin ก็ไม่ใช่เบราว์เซอร์ของเหยื่อ
+  assert.equal(crossSiteWrite("GET", "https://evil.example", HOST), false);
+  assert.equal(crossSiteWrite("HEAD", "https://evil.example", HOST), false);
+  assert.equal(crossSiteWrite("POST", null, HOST), false);
 });

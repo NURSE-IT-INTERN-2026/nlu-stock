@@ -6,7 +6,7 @@ import assert from "node:assert";
 // Safe to set after import: the secret is read inside getJwtSecret() on every call.
 import { signState, readState, pickEmail, pickName, callbackUri } from "@/lib/cmu-oauth";
 
-process.env.JWT_SECRET ||= "test-secret-for-oauth-state";
+process.env.JWT_SECRET ||= "test-secret-for-oauth-state-at-least-32-bytes";
 process.env.CMU_REDIRECT_URI = "http://localhost:3000/nlu-stock/api/auth/cmu/callback";
 process.env.CMU_OAUTH_ORIGINS = "https://tunnel.example.dev, https://lan.example.net/";
 
