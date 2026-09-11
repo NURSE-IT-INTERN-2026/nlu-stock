@@ -5,7 +5,7 @@ import { holdsTotalQty, lockItems, recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn, logReturn, type ReturnStatus } from "@/lib/returns";
 import { AdjustmentReason } from "@/generated/prisma/enums";
 
-import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
+import { evidenceUrls } from "@/lib/attachments";
 const RETURN_STATUSES = ["AVAILABLE", "DAMAGED", "LOST"] as const;
 
 export async function POST(
@@ -26,7 +26,8 @@ export async function POST(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
   const status = rawStatus as ReturnStatus;
-  const proofUrls = Array.isArray(body.proofUrls) ? (body.proofUrls as string[]).filter(Boolean).slice(0, MAX_EVIDENCE_FILES) : undefined;
+  const proofUrls = evidenceUrls(body.proofUrls);
+  if (!proofUrls) return NextResponse.json({ error: "ไฟล์แนบต้องมาจากการอัปโหลดในระบบ" }, { status: 400 });
 
   try {
     await prisma.$transaction(async (tx) => {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isUploadUrl, isSafeImageSrc, resolveChange, isNoop, isAttachRecordType } from "@/lib/attachments";
+import { isUploadUrl, isSafeImageSrc, evidenceUrls, resolveChange, isNoop, isAttachRecordType } from "@/lib/attachments";
 import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 
 const u = (n: number) => `/uploads/00000000-0000-4000-8000-${String(n).padStart(12, "0")}.jpg`;
@@ -79,4 +79,25 @@ test("garbage in the payload is dropped, not thrown", () => {
 test("an untouched edit dialog is a no-op, so nothing is logged", () => {
   assert.equal(isNoop(resolveChange([u(1)], {})), true);
   assert.equal(isNoop(resolveChange([u(1)], { add: [], remove: [] })), true);
+});
+
+test("หลักฐานที่ไม่ได้อัปโหลดในระบบถูกปฏิเสธทั้งใบ ไม่ใช่ดรอปทิ้งเงียบ ๆ", () => {
+  // ไม่ได้แนบมา ≠ แนบของแปลกมา — อย่างแรกต้องผ่าน
+  assert.deepEqual(evidenceUrls(undefined), []);
+  assert.deepEqual(evidenceUrls(null), []);
+  assert.deepEqual(evidenceUrls([]), []);
+  assert.deepEqual(evidenceUrls([u(1), u(2)]), [u(1), u(2)]);
+
+  // null = ให้ route ตอบ 400. ถ้าเป็น [] หรือ [u(1)] แปลว่าใบนั้นถูกปิดไปโดยคนแนบไม่รู้ว่าหายไป
+  assert.equal(evidenceUrls([u(1), "https://evil.example/receipt.pdf"]), null);
+  assert.equal(evidenceUrls(["javascript:alert(1)"]), null);
+  assert.equal(evidenceUrls(["/uploads/../../etc/passwd"]), null);
+  assert.equal(evidenceUrls("/uploads/x.jpg"), null);
+  assert.equal(evidenceUrls([""]), null);
+
+  // เพดานจำนวนไฟล์เป็นกติกาของฟอร์ม ไม่ใช่เรื่องความถูกต้อง — ตัดส่วนเกิน ไม่ปฏิเสธทั้งใบ
+  const many = Array.from({ length: MAX_EVIDENCE_FILES + 2 }, (_, i) => u(i + 1));
+  assert.equal(evidenceUrls(many)?.length, MAX_EVIDENCE_FILES);
+  // แต่ของแปลกที่อยู่ในช่วงที่ถูกเก็บจริง ต้องยังทำให้ทั้งใบตก
+  assert.equal(evidenceUrls([u(1), "https://evil.example/x.jpg", ...many]), null);
 });

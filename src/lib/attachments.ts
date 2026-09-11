@@ -41,6 +41,26 @@ export const isUploadUrl = (url: unknown): url is string =>
   typeof url === "string" && UPLOAD_URL.test(url);
 
 /**
+ * หลักฐานที่มากับ body ของ route ที่ยังไม่ได้ผูก zod — คืน [] เมื่อไม่มีไฟล์แนบมา และคืน null
+ * เมื่อมี url ที่ไม่ได้มาจากการอัปโหลดในระบบ ให้ผู้เรียกตอบ 400 แทนการดรอปเงียบ ๆ
+ *
+ * ดรอปเงียบไม่ได้เพราะคำว่า "หลักฐาน" คือทั้งหมดของฟีเจอร์นี้: เจ้าหน้าที่ที่แนบไฟล์แล้วระบบ
+ * เก็บไม่ครบโดยไม่บอก จะปิดใบไปทั้งที่เชื่อว่ามีหลักฐานติดอยู่
+ *
+ * และปล่อยผ่านก็ไม่ได้: url ที่ไม่ใช่ /uploads/ จะถูก withBase() ส่งผ่านดิบ ๆ แล้ว
+ * AttachmentList วาดเป็น <a href> ป้าย "เอกสาร 1" — ลิงก์นอกที่หน้าตาเหมือนไฟล์ของระบบเอง
+ * (รวมถึง javascript: ซึ่งไม่เคยเป็น src ของ <img> จึงไม่มีอะไรกันมันไว้)
+ */
+export function evidenceUrls(raw: unknown): string[] | null {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) return null;
+  // slice ก่อน every: เพดาน 5 ไฟล์เป็นกติกาของฟอร์ม ส่วน url แปลกปลอมเป็นเรื่องความถูกต้อง
+  // ของหลักฐาน — ใบที่แนบมา 6 ไฟล์ถูกต้องทุกไฟล์ ไม่ควรถูกปฏิเสธทั้งใบ
+  const urls: unknown[] = raw.slice(0, MAX_EVIDENCE_FILES);
+  return urls.every(isUploadUrl) ? (urls as string[]) : null;
+}
+
+/**
  * รูปพัสดุ — ผ่อนกว่า isUploadUrl หนึ่งขั้น และตั้งใจให้ผ่อน.
  *
  * ค่าพวกนี้ลงไปอยู่ใน <img src> เท่านั้น (ItemThumb, แกลเลอรีในหน้าพัสดุ) ไม่เคยเป็น href —

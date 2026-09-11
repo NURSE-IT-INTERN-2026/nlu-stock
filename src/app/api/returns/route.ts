@@ -5,7 +5,7 @@ import { requireAuth, requireAdmin, handleError } from "@/lib/api-utils";
 import { lockItems, recomputeItemCounts } from "@/lib/stock";
 import { resolveSubItemReturn } from "@/lib/returns";
 
-import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
+import { evidenceUrls } from "@/lib/attachments";
 // Per-row return condition chosen in the return detail view.
 const CONDITIONS = ["AVAILABLE", "DAMAGED", "LOST"] as const;
 type ReturnCondition = (typeof CONDITIONS)[number];
@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const rawEntries = Array.isArray(body?.entries) ? body.entries : [];
   const overallNote = (body?.note as string | undefined)?.trim() || null;
-  const proofUrls = Array.isArray(body?.proofUrls) ? (body.proofUrls as string[]).filter(Boolean).slice(0, MAX_EVIDENCE_FILES) : undefined;
+  const proofUrls = evidenceUrls(body?.proofUrls);
+  if (!proofUrls) return NextResponse.json({ error: "ไฟล์แนบต้องมาจากการอัปโหลดในระบบ" }, { status: 400 });
 
   if (rawEntries.length === 0) {
     return NextResponse.json({ error: "No entries" }, { status: 400 });
@@ -97,12 +98,14 @@ export async function POST(req: NextRequest) {
     if (!CONDITIONS.includes(e.status)) {
       return NextResponse.json({ error: `Invalid status: ${e.status}` }, { status: 400 });
     }
+    const photos = evidenceUrls(e.photos);
+    if (!photos) return NextResponse.json({ error: "ไฟล์แนบต้องมาจากการอัปโหลดในระบบ" }, { status: 400 });
     entries.push({
       dispenseRecordId: e.dispenseRecordId,
       subItemId: e.subItemId,
       status: e.status,
       note: typeof e.note === "string" ? e.note.trim() : undefined,
-      photos: Array.isArray(e.photos) ? (e.photos as string[]).filter(Boolean) : undefined,
+      photos,
     });
   }
 
