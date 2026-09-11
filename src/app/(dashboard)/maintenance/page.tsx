@@ -69,6 +69,22 @@ interface ScheduleRow {
   sentNote: string | null;
 }
 
+interface PagedSchedule {
+  items: ScheduleRow[];
+  /** จำนวนก่อนตัดหน้า — น้อยกว่า items.length ไม่ได้ ใช้บอกว่าหน้านี้เห็นไม่ครบ */
+  total?: number;
+}
+
+/** แถวที่ server มีแต่ไม่ได้ส่งมา — บอกไปตรงๆ ดีกว่าปล่อยให้ตารางโกหกว่านี่คือทั้งหมด */
+function TruncatedNote({ shown, total }: { shown: number; total: number }) {
+  if (total <= shown) return null;
+  return (
+    <p className="px-4 pb-3 text-xs text-warning-700 dark:text-warning-200 tabular-nums">
+      แสดง {shown.toLocaleString()} จาก {total.toLocaleString()} รายการ — กรองให้แคบลงเพื่อดูที่เหลือ
+    </p>
+  );
+}
+
 // ── Helpers ──
 
 function daysUntil(dateStr: string): number {
@@ -188,9 +204,13 @@ function MaintenanceShell() {
 
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, inMaintenance: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
+  // เพดาน perPage=100 ของ paginate() ตัดแถวเงียบๆ — เก็บ total ของฝั่ง server ไว้เทียบ ไม่งั้น
+  // การ์ด KPI (นับไม่ตัน) จะบอกเลขมากกว่าที่ตารางลิสต์ได้ โดยไม่มีอะไรบอกว่าถูกตัด
+  const [scheduleTotal, setScheduleTotal] = useState(0);
   // ของที่ส่งออกไปแล้วยังไม่ได้คืน — worklist ของแท็บรับคืน. โหลดแยกจาก scheduleItems เพราะเป็น
   // คิวงานที่ต้องครบเสมอ ไม่ใช่มุมมองหนึ่งของตารางกำหนดการ (ดู fetchData).
   const [outRows, setOutRows] = useState<ScheduleRow[]>([]);
+  const [outTotal, setOutTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [schedulePage, setSchedulePage] = useState(1);
   const [filter, setFilter] = useState<"all" | "overdue" | "due-soon" | "in-maintenance">("all");
@@ -219,8 +239,8 @@ function MaintenanceShell() {
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
-    // ponytail: api-utils paginate() clamps perPage at 100, so this is the whole schedule only
-    // up to 100 rows. Move the overview table to real paging if a tenant outgrows it.
+    // ponytail: api-utils paginate() clamps perPage at 100 — เกินนั้นไม่ได้โหลดมา แต่ TruncatedNote
+    // บอกด้วย total ของ server ว่าเห็นไม่ครบ. ทำ paging จริงเมื่อการกรองให้แคบลงยังไม่พอ
     const params: Record<string, string> = { perPage: "100" };
     if (filters.dateFrom) params.dateFrom = filters.dateFrom;
     if (filters.dateTo) params.dateTo = filters.dateTo;
@@ -231,19 +251,21 @@ function MaintenanceShell() {
     try {
       const [sum, sched, out] = await Promise.all([
         getMaintenanceSummary(),
-        getReport("maintenance-schedule", params) as Promise<{ items: ScheduleRow[] }>,
+        getReport("maintenance-schedule", params) as Promise<PagedSchedule>,
         // แท็บรับคืนเป็นคิวงาน ไม่ใช่มุมมองของตารางภาพรวม — จึงยิงแยกและไม่รับตัวกรองวันที่/สถานที่
         // ของแท็บนั้นมา: ตัวกรองอยู่คนละแท็บ คนที่มาปิดงานมองไม่เห็นมัน แล้วของที่ส่งออกไปจริงจะ
         // หายจากคิวโดยไม่มีอะไรบอก. maintenanceStatus กรองฝั่ง server เพื่อไม่ให้แถวหลุดขอบหน้า.
         getReport("maintenance-schedule", {
           perPage: "100",
           maintenanceStatus: "in-maintenance",
-        }) as Promise<{ items: ScheduleRow[] }>,
+        }) as Promise<PagedSchedule>,
       ]);
       setSummary(sum);
       // ทั้งตาราง เรียงตามกำหนดบำรุงเก่า→ใหม่ (API sort ให้แล้ว)
       setScheduleItems(sched.items ?? []);
+      setScheduleTotal(sched.total ?? sched.items?.length ?? 0);
       setOutRows(out.items ?? []);
+      setOutTotal(out.total ?? out.items?.length ?? 0);
       setSchedulePage(1);
     } catch {
       if (!silent) toast.error("โหลดข้อมูลบำรุงรักษาไม่สำเร็จ");
@@ -642,6 +664,7 @@ function MaintenanceShell() {
               })}
             </div>
             {/* นับรวม + แบ่งหน้าอยู่ในกล่องเดียวกับตาราง ไม่ลอยอยู่บนพื้นหลังหน้า */}
+            {!loading && <TruncatedNote shown={scheduleItems.length} total={scheduleTotal} />}
             {!loading && filteredSchedule.length > 0 && (
               <Pagination
                 page={schedulePage}
@@ -799,6 +822,7 @@ function MaintenanceShell() {
                 </div>
               </div>
 
+              <TruncatedNote shown={outRows.length} total={outTotal} />
               <Pagination page={outPage} total={outRows.length} pageSize={PAGE_SIZE.COMPACT} onChange={setOutPage} />
             </>
           )}
