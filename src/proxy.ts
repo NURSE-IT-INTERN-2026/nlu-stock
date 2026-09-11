@@ -140,7 +140,10 @@ export async function proxy(request: NextRequest) {
   // ก่อน publicPaths: /api/auth/logout เป็น POST ที่ไม่ต้องล็อกอินก็จริง แต่ก็ยังไม่ใช่สิ่งที่
   // เว็บอื่นควรสั่งแทนผู้ใช้ได้
   if (crossSiteWrite(request.method, request.headers.get("origin"))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // บอกว่าตกที่ด่านไหน ไม่ใช่ Forbidden เปล่าๆ เหมือนด่านสิทธิ์อีกสองอันข้างล่าง: อาการของ
+    // NEXT_PUBLIC_APP_URL ที่ตั้งผิดคือ "ทุกคนเขียนอะไรไม่ได้เลย" ซึ่งหน้าตาเหมือนบั๊กเรื่อง
+    // สิทธิ์ ไม่เหมือนตั้งค่าผิด. ผู้โจมตีรู้อยู่แล้วว่าโดนอะไร คนไล่ปัญหาสิที่ไม่รู้
+    return NextResponse.json({ error: "คำขอนี้ไม่ได้มาจากหน้าเว็บของระบบ (ตรวจ NEXT_PUBLIC_APP_URL)" }, { status: 403 });
   }
 
   // Public paths — no auth needed
