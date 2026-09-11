@@ -86,5 +86,12 @@ export async function GET(req: NextRequest) {
     prisma.item.count({ where }),
   ]);
 
-  return json({ items, total, page, perPage });
+  // include คืน scalar ของ Item มาทั้งแถว — ราคาทุนกับผู้ขายจึงติดมาด้วยทั้งที่กริดไม่วาดมัน
+  // และตะแกรงนี้คือแคตตาล็อกของ BORROWER. ตัดที่ payload เหมือน /api/items/:id: null ไม่ใช่
+  // ลบคีย์ทิ้ง ทุกฟิลด์ nullable อยู่แล้ว ฝั่ง UI จึงไม่ต้องแก้อะไร
+  const scrubbed = borrowerOnly
+    ? items.map((i) => ({ ...i, purchasePrice: null, vendorCompany: null, vendorContact: null, vendorPhone: null }))
+    : items;
+
+  return json({ items: scrubbed, total, page, perPage });
 }

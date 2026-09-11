@@ -1,5 +1,5 @@
 import { createBdd } from "playwright-bdd";
-import { test, expect, pool, makeTracked } from "../fixtures";
+import { test, expect, pool, makeTracked, dbHomeLocation } from "../fixtures";
 import { expectHistory } from "./helpers";
 
 const { Given, When, Then } = createBdd(test);
@@ -141,4 +141,78 @@ Then("หัวหน้าจอต้องไม่มีปุ่มรา�
   // ยันว่าจอกว้างจริง: ตะกร้าเป็นปุ่มข้างกันที่ทุก role เห็น ถ้ามันหายไปด้วยแปลว่า
   // เทสกำลังยืนยันเรื่องความกว้าง ไม่ใช่เรื่องสิทธิ์
   await expect(borrowerPage.getByRole("button", { name: "ดูตะกร้า" })).toBeVisible();
+});
+
+// ── ราคาทุน/ผู้ขาย ต้องไม่ติดไปกับ payload ────────────────────────────────────
+// แท็บ "ตรวจบำรุงตามรอบ" เปิดให้ทุก role และ /api/items/:id ตัดแต่ relation ที่มีชื่อคน —
+// scalar ราคากับผู้ขายเคยไหลออกไปทั้งแถว. ยันที่ response ไม่ใช่ที่หน้าจอ เพราะ devtools
+// อ่าน payload ได้อยู่ดี แม้ UI จะไม่วาดมัน
+const MONEY_KEY = /price|cost|vendor/i;
+const moneyLeaks = (row: Record<string, unknown>) =>
+  Object.entries(row).filter(([k, v]) => MONEY_KEY.test(k) && v != null);
+
+Given("มีของสิ้นเปลือง X ที่บันทึกราคาทุนและข้อมูลผู้ขายไว้", async ({ request, bdd, uniqueCode }) => {
+  const cat = (
+    await pool.query(
+      `SELECT c.id FROM categories c JOIN category_profiles p ON c."profileId" = p.id WHERE p.code = 'CON' LIMIT 1`,
+    )
+  ).rows[0];
+  const unit = (await pool.query(`SELECT id FROM units LIMIT 1`)).rows[0];
+  const created = await request.post("/api/items/quick-create", {
+    data: {
+      code: uniqueCode,
+      name: `E2E ${uniqueCode}`,
+      categoryId: cat.id,
+      issueUnitId: unit.id,
+      initialQty: 0,
+      locationId: await dbHomeLocation(),
+    },
+  });
+  if (!created.ok()) throw new Error(`quick-create failed: ${created.status()}`);
+  bdd.item = await created.json();
+
+  // ใบรับเข้าที่มีราคาคือทางเดียวที่ตั้ง Lot.unitCost กับ Item.purchasePrice ได้จริง —
+  // UPDATE ตรง ๆ จะเป็นการเทสสถานะที่ระบบสร้างเองไม่ได้
+  const received = await request.post("/api/receive", {
+    data: {
+      items: [{ itemId: bdd.item.id, quantity: 10, unitCost: 250, lotNumber: `${uniqueCode}-L1`, expiryDate: null }],
+      notes: null,
+    },
+  });
+  if (!received.ok()) throw new Error(`receive failed: ${received.status()}`);
+
+  // ผู้ขายไม่มีช่องในใบรับเข้า — มาจากกล่องแก้พัสดุ ซึ่งเป็นงานของ admin คนละเส้นกับเคสนี้
+  await pool.query(
+    `UPDATE items SET "vendorCompany" = 'E2E Supplier', "vendorContact" = 'สมชาย', "vendorPhone" = '0812345678' WHERE id = $1`,
+    [bdd.item.id],
+  );
+
+  // ยันว่ามีอะไรให้รั่วจริงก่อนไปยันว่าไม่รั่ว — ไม่งั้นเคสนี้ผ่านเพราะแถวว่าง
+  const { rows } = await pool.query(
+    `SELECT i."purchasePrice", i."vendorCompany", l."unitCost"
+       FROM items i JOIN lots l ON l."itemId" = i.id WHERE i.id = $1`,
+    [bdd.item.id],
+  );
+  expect(rows[0]?.purchasePrice).not.toBeNull();
+  expect(rows[0]?.vendorCompany).not.toBeNull();
+  expect(rows[0]?.unitCost).not.toBeNull();
+});
+
+Then("ข้อมูลพัสดุที่ส่งให้นักศึกษาต้องไม่มีราคาทุน ผู้ขาย หรือต้นทุนต่อล็อต", async ({ borrowerPage, bdd }) => {
+  const res = await borrowerPage.request.get(`/api/items/${bdd.item.id}`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+
+  // กวาดทุกคีย์ ไม่ใช่ไล่ชื่อทีละตัว: คอลัมน์ราคาที่เพิ่มเข้ามาทีหลังแล้วลืมกรอง ต้องทำให้แดง
+  expect(moneyLeaks(body)).toEqual([]);
+  expect((body.lots ?? []).flatMap(moneyLeaks)).toEqual([]);
+  // ล็อตยังต้องอยู่ — ตัดราคาออก ไม่ใช่ตัดล็อตทิ้ง (หน้าพัสดุนับของจากตรงนี้)
+  expect(body.lots).toHaveLength(1);
+
+  // ตะแกรง เบิก-ยืม เป็นแคตตาล็อกอีกทางที่ นศ. เปิดได้ และคืน scalar ของ Item มาทั้งแถวเหมือนกัน
+  const grid = await borrowerPage.request.get(`/api/dispense/items?ids=${bdd.item.id}`);
+  expect(grid.status()).toBe(200);
+  const rows: Record<string, unknown>[] = (await grid.json()).items ?? [];
+  expect(rows).toHaveLength(1);
+  expect(rows.flatMap(moneyLeaks)).toEqual([]);
 });

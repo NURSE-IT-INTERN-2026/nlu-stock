@@ -131,6 +131,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // than missing ones. "ถูกยืม" on a piece comes from its own status, which is still here.
   const shape = borrower
     ? {
+        // ราคาทุน ผู้ขาย เบอร์ตัวแทน และต้นทุนต่อล็อต ไม่ใช่เรื่องของคนที่สแกน QR มายืมของ —
+        // เป็นข้อมูลชุดเดียวกับที่ proxy ปิด /api/reports ไว้ไม่ให้ BORROWER อ่าน. ต้องตัดที่
+        // payload ไม่ใช่ที่หน้าจอ: แท็บ ตรวจบำรุงตามรอบ เปิดให้ทุก role และ devtools อ่าน
+        // response ได้อยู่ดี. ใส่ null แทนการตัดคีย์ทิ้ง เพราะทุกฟิลด์นี้ nullable อยู่แล้ว
+        // ItemDetailMaintenance จึงข้ามแถวให้เองโดยไม่ต้องแก้ฝั่ง UI.
+        purchasePrice: null,
+        vendorCompany: null,
+        vendorContact: null,
+        vendorPhone: null,
+        lots: item.lots.map((l) => ({ ...l, unitCost: null })),
         dispenseRecords: [],
         receiveRecords: [],
         maintenanceRecords: [],
