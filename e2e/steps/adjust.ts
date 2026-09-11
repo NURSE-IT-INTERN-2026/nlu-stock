@@ -32,6 +32,9 @@ When(
     await dialog.getByPlaceholder("จำนวนใหม่บนชั้นวางที่นับได้").fill(String(counted));
     await dialog.locator("textarea").first().fill("E2E ตรวจนับ");
     await dialog.getByRole("button", { name: "บันทึก", exact: true }).click();
+    // กล่องปิดหลัง POST สำเร็จเท่านั้น — ไม่รอแล้ว step ถัดไป goto ทันที จะ abort request
+    // ที่ยังค้าง ยอดไม่ขึ้น DB แล้วเทสฟ้องเป็นบัคของระบบทั้งที่ไม่ใช่
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
   }
 );
 
@@ -47,5 +50,6 @@ When(
     await dialog.getByPlaceholder("จำนวนชิ้นที่เอาออกจากสต็อก").fill(String(qty));
     await dialog.locator("textarea").first().fill("E2E ตัดจำหน่าย");
     await dialog.getByRole("button", { name: "บันทึก", exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
   }
 );

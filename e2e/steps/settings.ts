@@ -42,8 +42,10 @@ When("ฉันกด {string} ตั้งชื่อแล้วกดสร�
 });
 
 Then("ฉันจะเห็นหมวดหมู่ใหม่ในตารางหมวดหมู่", async ({ page, bdd }) => {
-  // 23 หมวดกับหน้าละ 20 — ตัวใหม่ตกไปหน้า 2 กรองด้วยเม็ดยาประเภทก่อนถึงจะอยู่หน้าเดียว
-  await page.getByRole("button", { name: "ครุภัณฑ์", exact: true }).first().click();
+  // 23 หมวดกับหน้าละ 20 — ตัวใหม่ตกไปหน้า 2 กรองด้วยประเภทก่อนถึงจะอยู่หน้าเดียว
+  // (แถบ pill กลายเป็น Select ตั้งแต่ eca9ec4 — ประเภทเพิ่มจาก UI ได้ แถวปุ่มเลยยาวไม่จบ)
+  await page.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: "ครุภัณฑ์", exact: true }).click();
   await expect(page.getByText(bdd.categoryName, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
   const { rows } = await pool.query(`SELECT id FROM categories WHERE name = $1`, [bdd.categoryName]);
   expect(rows.length, "หมวดหมู่ไม่ได้ลง DB").toBe(1);

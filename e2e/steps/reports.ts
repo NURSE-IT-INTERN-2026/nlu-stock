@@ -18,9 +18,15 @@ Then("แต่ละแท็บจะแสดงข้อมูลโดย�
 });
 
 Then("เมื่อฉันกดปุ่ม {string} ฉันจะเห็นหน้าต่างส่งออกรายงาน", async ({ page }, button: string) => {
-  await page.getByRole("button", { name: "ออกจากคลัง", exact: true }).click();
+  // ทุกแท็บ mount พร้อมกัน (ดู receive-history-tab.tsx) ปุ่มส่งออกจึงมีใบละแท็บซ้อนกันอยู่ และ
+  // ระหว่างสลับแท็บมีจังหวะที่ใบของแท็บเดิมยังมองเห็นได้ก่อนใบใหม่จะขึ้น — คลิกตอนนั้นจะไปจับใบ
+  // ที่กำลังจะถูกซ่อนแล้วรอมันกลับมาจนหมดเวลา (แดงเฉพาะตอนรันทั้งชุด). เปิดแท็บจาก URL ตรง ๆ
+  // เหมือน Given ของอีก scenario จึงไม่มีช่วงสลับให้พลาด
+  await page.goto("/reports?tab=dispense-history");
   // รูปแบบไฟล์อยู่ในเมนูของปุ่ม "ส่งออก" ไม่ได้กางเป็นปุ่มของตัวเองแล้ว
-  await page.getByRole("button", { name: "ส่งออก", exact: true }).filter({ visible: true }).click();
+  const exportBtn = page.getByRole("button", { name: "ส่งออก", exact: true }).filter({ visible: true });
+  await expect(exportBtn).toHaveCount(1, { timeout: 15_000 });
+  await exportBtn.click();
   // export is window.open on some tabs, a direct download on others — accept either
   const outcome = Promise.race([
     page.waitForEvent("popup", { timeout: 15_000 }).then((p) => p.url()),

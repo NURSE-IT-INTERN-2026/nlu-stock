@@ -104,19 +104,6 @@ export async function createCountItem(
   return res.json();
 }
 
-/** File an INUSE dispense for a COUNT item via API — setup for the คืนเข้าคลัง scenario. */
-export async function stationInUse(request: APIRequestContext, itemId: string) {
-  const res = await request.post("/api/dispense", {
-    data: {
-      items: [{ itemId, quantity: 1 }],
-      loanType: "INUSE",
-      locationId: await dbHomeLocation(),
-      notes: "E2E ตั้งใช้ในห้อง",
-    },
-  });
-  if (!res.ok()) throw new Error(`stationInUse failed: ${res.status()} ${await res.text()}`);
-}
-
 export { makeTracked };
 
 /** Item detail by code — the route accepts the code as [id]. */

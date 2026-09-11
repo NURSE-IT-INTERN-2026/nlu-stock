@@ -1,19 +1,7 @@
 import { createBdd } from "playwright-bdd";
 import { test, expect } from "../fixtures";
-import { freshTracked } from "./helpers";
 
 const { Given, When, Then } = createBdd(test);
-
-When(
-  "ฉันเปิดหน้ารายละเอียดของ X กด {string} เลือกชิ้น กรอกอาการ แล้วกดยืนยัน",
-  async ({ page, bdd }, label: string) => {
-    await page.goto(`/items/${bdd.item.code}`);
-    await page.getByRole("button", { name: label }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByPlaceholder(/อธิบายรายละเอียดการชำรุด/).fill("E2E จอแตก");
-    await dialog.getByRole("button", { name: label }).click();
-  }
-);
 
 Then("ฉันจะเห็นสถานะชิ้นเป็น {string} บนหน้ารายละเอียด", async ({ page }, status: string) => {
   await expect(page.getByText(status, { exact: true }).first()).toBeVisible();

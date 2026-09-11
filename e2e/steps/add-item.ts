@@ -45,7 +45,15 @@ When(
     // ระบุคอลัมน์ทุกครั้ง เพราะประเภทกับหมวดหมู่ย่อยชื่อซ้ำกันได้
     await dialog.getByRole("button", { name: "หมวดหมู่", exact: true }).click();
     await page.getByRole("group", { name: "ประเภท" }).getByRole("button", { name: profile, exact: true }).click();
-    await page.getByRole("group", { name: "หมวดหมู่ย่อย" }).getByRole("button", { name: category, exact: true }).click();
+    // ประเภทที่มีหมวดย่อยตัวเดียวจบในคลิกเดียว popover ปิดเอง (filter-pickers.tsx: subs.length <= 1)
+    // — ถามจำนวนจาก DB แทนการเดาจากจอ ไม่งั้นรอคอลัมน์ที่ปิดไปแล้วจนหมดเวลา
+    const { rows: subs } = await pool.query(
+      `SELECT count(*)::int AS n FROM categories c JOIN category_profiles p ON p.id = c."profileId" WHERE p.name = $1`,
+      [profile]
+    );
+    if (subs[0].n > 1) {
+      await page.getByRole("group", { name: "หมวดหมู่ย่อย" }).getByRole("button", { name: category, exact: true }).click();
+    }
 
     // ตาม Code ได้ตัวสร้างรหัส (จำนวน = ชิ้นย่อย) ส่วนอีกสองแบบได้ยอดตั้งต้นของกอง
     if (tracked) {
