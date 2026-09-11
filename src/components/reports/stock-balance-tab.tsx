@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsIndicator } from "@/components/ui/tabs";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
-import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportDataTable, wrapText, type Column } from "./report-data-table";
 import { ReportSummary } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { StockSummaryChart, type StockSummaryData } from "./charts/stock-summary-chart";
@@ -84,7 +84,7 @@ type ChartView = keyof typeof CHART_VIEWS;
 
 const buildColumns = (spec: (typeof SIDES)[Side]): Column<Row>[] => [
   { key: "code", header: "รหัสพัสดุ" },
-  { key: "name", header: "รายการพัสดุ" },
+  { key: "name", header: "รายการพัสดุ", className: wrapText },
   { key: "categoryName", header: "หมวดหมู่" },
   {
     key: "availableQty",
@@ -144,7 +144,7 @@ function categoryColumnsFor(usedHeader: string): Column<CategoryRow>[] {
 function usedColumnsFor(spec: (typeof SIDES)[Side]): Column<Row>[] {
   return [
     { key: "code", header: "รหัสพัสดุ" },
-    { key: "name", header: "รายการพัสดุ" },
+    { key: "name", header: "รายการพัสดุ", className: wrapText },
     // ไม่มีคอลัมน์หมวดหมู่: ห้าคอลัมน์ล้นความกว้างกล่องจนต้องเลื่อนแนวนอน และคำถามของกล่องนี้คือ
     // "อะไรออกไปกี่ชิ้น" ไม่ใช่ "ของหมวดไหน" ซึ่งตารางหลักข้างล่างตอบอยู่แล้ว
     {

@@ -15,6 +15,14 @@ import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { cn } from "@/lib/utils";
 import { tokenTint, type Token } from "./report-kit";
 
+// TableCell เป็น whitespace-nowrap ทั้งแอป ซึ่งถูกกับคอลัมน์ที่ขาดกลางคำไม่ได้ — วันที่, รหัส,
+// ตัวเลข — แต่ชื่อพัสดุจริงในคลังยาวถึง 65 ตัวอักษร ("อุปกรณ์ให้ออกซิเจนสำหรับผู้ใหญ่ชนิดมีชุดพ่นยา
+// oxygen nebulizer with mask adult") = เซลล์เดียวกว้าง ~450px แล้วตารางเก้าคอลัมน์ทะลุ 1400px
+// บนจอที่กว้าง 390px. ปล่อยคอลัมน์ที่เป็นประโยคให้ห่อบรรทัด แล้ว auto table layout จะหดมันลงหา
+// min-content เองเมื่อจอแคบ ส่วน min-w กันไม่ให้หดจนเหลือคำละบรรทัด. กติกาเดียวกับตารางเคสที่
+// src/components/cases/case-workspace.tsx
+export const wrapText = "min-w-[200px] whitespace-normal";
+
 export interface Column<T> {
   key: string;
   header: string;

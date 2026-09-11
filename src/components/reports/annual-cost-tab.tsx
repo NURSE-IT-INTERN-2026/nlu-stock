@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
-import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportDataTable, wrapText, type Column } from "./report-data-table";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { AnnualCostChart, type AnnualCostMonth } from "./charts/annual-cost-chart";
@@ -106,14 +106,14 @@ const baht = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits:
 const repairColumns: Column<RepairRow>[] = [
   { key: "performedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.performedAt), TH_DATE) },
   { key: "itemCode", header: "รหัสพัสดุ" },
-  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "itemName", header: "รายการพัสดุ", className: wrapText },
   { key: "type", header: "ประเภท", render: (r) => labelFor(MAINT_TYPE_LABELS, r.type as MaintenanceType) },
   { key: "cost", header: "ค่าใช้จ่าย", className: "text-right", render: (r) => baht(r.cost) },
   { key: "performer", header: "ผู้ดำเนินการ" },
 ];
 
 const subjectColumns: Column<SubjectRow>[] = [
-  { key: "label", header: "วิชา / กิจกรรม" },
+  { key: "label", header: "วิชา / กิจกรรม", className: wrapText },
   { key: "records", header: "จำนวนครั้ง", className: "text-right", render: (r) => r.records.toLocaleString() },
   { key: "qty", header: "จำนวนหน่วย", className: "text-right", render: (r) => r.qty.toLocaleString() },
   {

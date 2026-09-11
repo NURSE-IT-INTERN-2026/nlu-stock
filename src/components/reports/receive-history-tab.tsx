@@ -6,7 +6,7 @@ import {
   ReportFilters, defaultDateFilters, periodLabel,
   type FilterValues, type FilterConfig,
 } from "./report-filters";
-import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportDataTable, wrapText, type Column } from "./report-data-table";
 import { autoLotNumber } from "@/lib/lot-code";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
@@ -389,7 +389,7 @@ function receiveColumns(editable: boolean): Column<ReceiveRow>[] {
   return [
     { key: "receivedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.receivedAt), TH_DATETIME) },
     { key: "itemCode", header: "รหัสพัสดุ" },
-    { key: "itemName", header: "รายการพัสดุ" },
+    { key: "itemName", header: "รายการพัสดุ", className: wrapText },
     { key: "category", header: "หมวดหมู่" },
     // ใบที่ไม่มีล็อต (ครุภัณฑ์ ADR-0002) ยังต้องบอกได้ว่า "งวดไหน" — วันที่รับเข้าของใบนั้น
     // คือคำตอบ และเป็นรหัสตัวเดียวกับที่ระบบตั้งให้ล็อตอัตโนมัติอยู่แล้ว.
@@ -474,11 +474,11 @@ interface StatusRow {
 const statusColumns: Column<StatusRow>[] = [
   { key: "changedAt", header: "วันที่", render: (r) => fmtDate(new Date(r.changedAt), TH_DATETIME) },
   { key: "itemCode", header: "รหัสพัสดุ" },
-  { key: "itemName", header: "รายการพัสดุ" },
+  { key: "itemName", header: "รายการพัสดุ", className: wrapText },
   { key: "subCode", header: "รหัสชิ้น", render: (r) => r.subCode ?? "—" },
   { key: "previousStatus", header: "จากสถานะ", render: (r) => <StatusPill status={r.previousStatus} /> },
   { key: "newStatus", header: "เป็นสถานะ", render: (r) => <StatusPill status={r.newStatus} /> },
-  { key: "reason", header: "เหตุผล" },
+  { key: "reason", header: "เหตุผล", className: wrapText },
   { key: "changerName", header: "ผู้บันทึก" },
 ];
 

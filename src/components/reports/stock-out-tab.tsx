@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { ReportFilters, defaultDateFilters, periodLabel, type FilterValues, type FilterConfig } from "./report-filters";
-import { ReportDataTable, type Column } from "./report-data-table";
+import { ReportDataTable, wrapText, type Column } from "./report-data-table";
 import { ReportSummary, type SummaryStat } from "./report-summary";
 import { ExportButtons } from "./export-buttons";
 import { DispenseEventDialog } from "./dispense-event-dialog";
@@ -121,12 +121,12 @@ const COL = {
   reason: {
     key: "recipient", header: "เหตุผล",
     render: (e: DispenseEvent) => e.head.recipient ?? "—",
-    className: "font-medium",
+    className: `font-medium ${wrapText}`,
   },
   location: {
     key: "location", header: "สถานที่",
     render: (e: DispenseEvent) => e.head.location ?? "ไม่ระบุที่ตั้ง",
-    className: "font-medium",
+    className: `font-medium ${wrapText}`,
   },
   date: { key: "dispensedAt", header: "วันเวลา", render: (e: DispenseEvent) => fmtDate(new Date(e.head.dispensedAt), TH_DATETIME) },
   staff: { key: "staffName", header: "ดำเนินโดย", render: (e: DispenseEvent) => e.head.staffName },
