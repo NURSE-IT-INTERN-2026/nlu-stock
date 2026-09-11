@@ -6,6 +6,9 @@
 
 ## พัฒนา
 
+คัดลอก `.env.example` เป็น `.env` แล้วสร้างรหัสผ่านเฉพาะเครื่อง ใส่ใน `POSTGRES_PASSWORD`
+และ `DATABASE_URL` ให้ตรงกันก่อนเปิดฐานข้อมูล พอร์ต PostgreSQL เปิดเฉพาะ localhost
+
 ```bash
 docker compose up -d     # postgres :5433
 npm install
@@ -15,6 +18,28 @@ npm run dev              # http://localhost:3000/nlu-stock
 
 - config อยู่ใน `.env` (ดูรายการใน `.env.example`) — `SUPERADMIN_EMAILS` / `ADMIN_EMAILS` ควบคุมสิทธิ์
 - login ผ่าน CMU OAuth เป็นหลัก — ช่องกรอกอีเมล + ปุ่มลัดมีเฉพาะตอนรัน dev
+
+## Security update (2026-09-11)
+
+- `package.json` overrides แก้ transitive dependencies ที่ Prisma ยัง pin รุ่นเก่า:
+  `@prisma/config → deepmerge-ts 8.0.0`, `prisma → mysql2 3.24.4` โดยไม่ downgrade Prisma
+  โครงการนี้ใช้ PostgreSQL และ config เป็น plain objects; ทดสอบ generate/migrations หลังอัปเดต
+  ทบทวนและถอด overrides เมื่อ Prisma รองรับเวอร์ชันที่แก้แล้วโดยตรง
+- ก่อน deploy รัน `npx prisma migrate deploy` เพื่อเพิ่มตารางโควตา AI search
+- AI search ใช้โควตาร่วมทุก worker: 20 คำขอ/นาที และ 200/วันต่อผู้ใช้, รวมทั้งระบบ 2,000/วัน (UTC)
+  ถ้าตารางโควตายังไม่พร้อม จะปฏิเสธ AI search; การค้นหาปกติยังใช้งานได้
+- ลด/ถอนบทบาทหรือปิดบัญชีแล้ว session ที่ไม่ตรงกับสิทธิ์ปัจจุบันจะถูกปฏิเสธ ต้องล็อกอินใหม่
+- `/uploads/*` ต้องผ่านแอปเพื่อตรวจสิทธิ์ ห้าม nginx/CDN เสิร์ฟ directory นี้โดยตรง
+  ผู้ยืมอ่านได้เฉพาะรูปที่ผูกกับพัสดุและไม่ใช่หลักฐานภายใน; staff อ่านหลักฐานได้ตามสิทธิ์รายงาน
+- Purge cache ของ `/nlu-stock/uploads/*` ที่ CDN/reverse proxy หลัง deploy เพราะรุ่นเดิมตั้ง public cache
+  ไฟล์ที่ผู้อื่นดาวน์โหลดหรือ browser cache ไว้แล้วไม่สามารถเรียกคืนได้
+- ฐานข้อมูลที่มี volume เดิม: เปลี่ยน `POSTGRES_PASSWORD` ใน env อย่างเดียวไม่เปลี่ยนรหัสผ่านใน PostgreSQL
+  ต้องเปลี่ยน role password ด้วย DBA แล้วอัปเดต `DATABASE_URL` ให้ตรงกัน โดยไม่ลบ volume
+- การแก้ Compose นี้ยังไม่เปลี่ยน firewall หรือหมุนรหัสผ่านของฐานข้อมูลที่กำลังรันอยู่
+
+ทดสอบ security ผ่าน HTTP และ PostgreSQL ในฐานข้อมูลชั่วคราวแยกจากข้อมูลพัฒนา:
+`npm run build` แล้ว `node --import tsx scripts/security-regression.ts`
+ต้องมีสิทธิ์สร้างฐานข้อมูลบน PostgreSQL localhost; ตัวทดสอบลบเฉพาะฐานข้อมูลที่สร้างเองเมื่อเสร็จ
 
 ## E2E (playwright-bdd)
 
