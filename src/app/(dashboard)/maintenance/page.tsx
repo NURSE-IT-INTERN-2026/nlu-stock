@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,7 +16,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ItemThumb } from "@/components/shared/item-thumb";
-import { ArrowDownUp, ClipboardList, History, Loader2, PackageCheck, Pencil, Send, X } from "lucide-react";
+import { ArrowDownUp, ClipboardList, History, Loader2, MapPin, PackageCheck, Pencil, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -199,6 +198,8 @@ function MaintenanceShell() {
   // Soonest-due first is what the API already returns and what the queue is read in; the toggle
   // is for the other question — "อะไรยังอีกนาน" when planning a batch to send out together.
   const [latestFirst, setLatestFirst] = useState(false);
+  // คิวรับคืนเรียงตามวันที่ส่ง ไม่ใช่กำหนดบำรุงที่ API เรียงมา — คำถามของแท็บนี้คือ "อะไรออกไปนานสุด"
+  const [outOldestFirst, setOutOldestFirst] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkNote, setBulkNote] = useState("");
@@ -257,9 +258,17 @@ function MaintenanceShell() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  const sortedOutRows = outRows.slice().sort((a, b) => {
+    // ยังไม่มีวันที่ส่ง (ข้อมูลเก่า) ไปท้ายเสมอ ไม่ว่าเรียงทางไหน — ไม่ใช่ "ส่งเมื่อ 1970"
+    const ta = a.sentAt ? new Date(a.sentAt).getTime() : null;
+    const tb = b.sentAt ? new Date(b.sentAt).getTime() : null;
+    if (ta === null || tb === null) return ta === tb ? 0 : ta === null ? 1 : -1;
+    return outOldestFirst ? ta - tb : tb - ta;
+  });
+
   const {
     page: outPage, setPage: setOutPage, paged: pagedOutRows,
-  } = useClientPage(outRows, PAGE_SIZE.COMPACT);
+  } = useClientPage(sortedOutRows, PAGE_SIZE.COMPACT);
 
   const filteredSchedule = (filter === "all"
     ? scheduleItems
@@ -604,23 +613,26 @@ function MaintenanceShell() {
                     <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
                       <ItemThumb src={row.imageUrl} alt={row.name} />
                     </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="min-w-0 font-medium leading-tight break-words">{row.name}</p>
-                        <span className="shrink-0"><StatusPill status={row.maintenanceStatus} /></span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <Link href={`/items/${row.itemId}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
-                        <span className="flex items-center gap-1.5 tabular-nums">
-                          {fmtThaiDate(row.nextMaintenanceDate)}
-                          <span className={cn("text-xs", meta.tone)}>
-                            ({days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`})
+                    {/* หนึ่งข้อมูลหนึ่งบรรทัด เรียงบนลงล่าง — เหมือนคิวค้างซ่อม. เดิมชื่อกับป้ายสถานะ
+                        แชร์บรรทัดเดียวกัน ป้ายยาวบีบชื่อไทยที่ไม่มีช่องว่างให้เหลือบรรทัดละคำ */}
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <p className="text-sm font-semibold leading-snug break-words">{row.name}</p>
+                      <Link href={`/items/${row.itemId}`} className="block font-mono text-xs text-muted-foreground break-all hover:text-foreground hover:underline">{row.code}</Link>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <StatusPill status={row.maintenanceStatus} />
+                        {row.location && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            <MapPin className="size-3 shrink-0 text-primary/80" />
+                            {row.location}
                           </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="tabular-nums">{fmtThaiDate(row.nextMaintenanceDate)}</span>
+                        <span className={cn("tabular-nums", meta.tone)}>
+                          {days < 0 ? `เกิน ${Math.abs(days)} วัน` : `อีก ${days} วัน`}
                         </span>
                       </div>
-                      {row.location && (
-                        <div className="text-xs text-muted-foreground break-words">{row.location}</div>
-                      )}
                       <div className="flex gap-2 pt-1">
                         <RowActions row={row} onOpen={openRecordDialog} />
                       </div>
@@ -646,65 +658,149 @@ function MaintenanceShell() {
       </div>
 
       {/* ── รับคืนจากบำรุงรักษา ── */}
-      {/* การ์ดต่อแถว ไม่ใช่ตาราง: คิวนี้ตอบคำถามเดียว "ของอยู่ข้างนอกมากี่วันแล้ว และจะรับคืนมั้ย"
-          คอลัมน์ที่เหลือของตารางกำหนดการไม่ช่วยตอบ */}
+      {/* ตารางเดียวกับคิวค้างซ่อมของ /repairs: คิวนี้อ่านด้วยการเทียบแถว — ชิ้นไหนออกไปนานสุด
+          ส่งไปที่เดียวกันกี่ชิ้น — การ์ดต่อแถวทำให้ทุกการเทียบกลายเป็นการเลื่อนจอ. มือถือยังเป็น
+          การ์ด: เจ็ดคอลัมน์บนจอโทรศัพท์คือ scroll แนวนอนที่ไม่มีใครหาเจอ */}
       <div className={cn("pb-4", tab !== "receive" && "hidden")}>
         <section className="overflow-hidden rounded-2xl border bg-card">
           <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-3">
             <h2 className="text-lg font-semibold">รอรับคืนจากบำรุงรักษา</h2>
             <span className="text-xs text-muted-foreground tabular-nums">{outRows.length} รายการ</span>
           </div>
-          <div className="divide-y divide-border border-t">
-            {loading ? (
-              Array.from({ length: 3 }).map((_, i) => (
+
+          {loading ? (
+            <div className="divide-y divide-border border-t">
+              {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="px-4 py-3"><Skeleton className="h-10 w-full" /></div>
-              ))
-            ) : outRows.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                ไม่มีพัสดุที่ส่งบำรุงรักษาภายนอกค้างอยู่
-              </div>
-            ) : pagedOutRows.map((row) => {
-              // ส่งไปแล้วกี่วัน — บวกเสมอ ต่างจากตารางกำหนดการที่นับถอยหลังหาวันครบรอบ
-              const daysOut = row.sentAt ? Math.max(0, -daysUntil(row.sentAt)) : null;
-              return (
-                <div key={row.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium leading-tight">{row.name}</span>
-                      <Badge variant="secondary" className="px-1.5 py-0 leading-5 text-[11px]">
-                        บำรุงรักษา
-                      </Badge>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <Link href={`/items/${row.itemId}`} className="font-mono hover:text-foreground hover:underline">{row.code}</Link>
-                      {row.location && <span className="truncate">{row.location}</span>}
-                      {row.sentAt && (
-                        <span className="tabular-nums">
-                          ส่งเมื่อ {fmtThaiDate(row.sentAt)}
-                          {daysOut !== null && ` · ${daysOut} วัน`}
-                        </span>
-                      )}
-                    </div>
-                    {row.sentNote && (
-                      <p className="text-xs text-muted-foreground/90 line-clamp-2">{row.sentNote}</p>
-                    )}
-                  </div>
-                  {/* แก้ข้อมูล = เที่ยวเดิม (พิมพ์ชื่อร้านผิด, เพิ่มรายการที่ให้ทำ) — วันที่ส่งไม่ขยับ
-                      คู่ขนานกับ แก้ข้อมูลส่งซ่อม ของ flow ซ่อม */}
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => openRecordDialog(row, "edit")}>
-                      แก้ข้อมูล
-                    </Button>
-                    <Button size="sm" onClick={() => openRecordDialog(row)}>
-                      บันทึกรับคืน
-                    </Button>
-                  </div>
+              ))}
+            </div>
+          ) : outRows.length === 0 ? (
+            <div className="border-t px-4 py-10 text-center text-sm text-muted-foreground">
+              ไม่มีพัสดุที่ส่งบำรุงรักษาภายนอกค้างอยู่
+            </div>
+          ) : (
+            <>
+              <div className="m-4 overflow-hidden rounded-xl border">
+                <div className="hidden md:block overflow-auto max-h-[50dvh] lg:max-h-[calc(100vh-360px)]">
+                  <Table grid zebra className="table-fixed">
+                    <TableHeader sticky>
+                      <TableRow>
+                        <TableHead className="w-14 px-2">รูป</TableHead>
+                        <TableHead className="w-32 px-2">รหัสพัสดุ</TableHead>
+                        {/* คอลัมน์เดียวที่ไม่กำหนดความกว้าง — table-fixed ยกที่เหลือให้มัน
+                            คอลัมน์อื่นจึงต้องกว้างตามจริง ไม่งั้นชื่อจะยุบ */}
+                        <TableHead className="px-2">ชื่อพัสดุ</TableHead>
+                        <TableHead className="w-32 px-2">ตำแหน่งจัดเก็บ</TableHead>
+                        <TableHead className="w-44 px-2">หน่วยงาน / รายการที่ให้ดำเนินการ</TableHead>
+                        {/* วันที่ส่ง กับ ค้างกี่วัน คือเลขตัวเดียวกันคนละหน่วย — คอลัมน์เดียว
+                            สองบรรทัด เรียงได้จากปุ่มเดียว เหมือนตารางกำหนดการข้างบน */}
+                        <TableHead className="w-28 px-2">
+                          <button
+                            type="button"
+                            onClick={() => { setOutOldestFirst((v) => !v); setOutPage(1); }}
+                            className="inline-flex items-center gap-1 hover:text-foreground"
+                          >
+                            วันที่ส่ง
+                            <ArrowDownUp className="size-3 shrink-0" />
+                          </button>
+                        </TableHead>
+                        <TableHead className="w-44 px-2">จัดการ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pagedOutRows.map((row) => {
+                        // ส่งไปแล้วกี่วัน — บวกเสมอ ต่างจากตารางกำหนดการที่นับถอยหลังหาวันครบรอบ
+                        const daysOut = row.sentAt ? Math.max(0, -daysUntil(row.sentAt)) : null;
+                        return (
+                          <TableRow key={row.id}>
+                            <TableCell className="px-2">
+                              <div className="size-9 overflow-hidden rounded-md bg-muted">
+                                <ItemThumb src={row.imageUrl} alt={row.name} />
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-2 font-mono text-xs">
+                              <Link href={`/items/${row.itemId}`} className="block truncate text-muted-foreground hover:text-foreground hover:underline">{row.code}</Link>
+                            </TableCell>
+                            <TableCell className="px-2 font-medium">
+                              <p className="line-clamp-2 whitespace-normal break-words">{row.name}</p>
+                            </TableCell>
+                            <TableCell className="px-2 text-xs text-muted-foreground">
+                              <span className="block line-clamp-2 whitespace-normal break-words" title={row.location}>{row.location || "—"}</span>
+                            </TableCell>
+                            <TableCell className="px-2 text-xs">
+                              <p className="line-clamp-2 whitespace-normal break-words">{row.sentNote || <span className="text-muted-foreground">—</span>}</p>
+                            </TableCell>
+                            <TableCell className="px-2 text-xs tabular-nums">
+                              {row.sentAt ? (
+                                <>
+                                  <p>{fmtThaiDate(row.sentAt)}</p>
+                                  {daysOut !== null && <p className="text-muted-foreground">ค้าง {daysOut} วัน</p>}
+                                </>
+                              ) : "—"}
+                            </TableCell>
+                            {/* แก้ข้อมูล = เที่ยวเดิม (พิมพ์ชื่อร้านผิด, เพิ่มรายการที่ให้ทำ) — วันที่ส่งไม่ขยับ
+                                คู่ขนานกับ แก้ข้อมูลส่งซ่อม ของ flow ซ่อม */}
+                            <TableCell className="px-2">
+                              <div className="flex items-center gap-1">
+                                <Button size="sm" variant="outline" onClick={() => openRecordDialog(row, "edit")}>
+                                  แก้ข้อมูล
+                                </Button>
+                                <Button size="sm" onClick={() => openRecordDialog(row)}>
+                                  รับคืน
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
-              );
-            })}
-          </div>
-          {outRows.length > 0 && (
-            <Pagination page={outPage} total={outRows.length} pageSize={PAGE_SIZE.COMPACT} onChange={setOutPage} />
+
+                {/* Mobile: การ์ดต่อแถว (ไม่มี scroll แนวนอน) */}
+                <div className="divide-y divide-border md:hidden">
+                  {pagedOutRows.map((row) => {
+                    const daysOut = row.sentAt ? Math.max(0, -daysUntil(row.sentAt)) : null;
+                    return (
+                      <div key={row.id} className="flex gap-3 px-4 py-2.5">
+                        <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
+                          <ItemThumb src={row.imageUrl} alt={row.name} />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <p className="text-sm font-semibold leading-snug break-words">{row.name}</p>
+                          <Link href={`/items/${row.itemId}`} className="block font-mono text-xs text-muted-foreground break-all hover:text-foreground hover:underline">{row.code}</Link>
+                          {row.location && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                <MapPin className="size-3 shrink-0 text-primary/80" />
+                                {row.location}
+                              </span>
+                            </div>
+                          )}
+                          {row.sentNote && <p className="text-sm break-words">{row.sentNote}</p>}
+                          {row.sentAt && (
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                              <span className="tabular-nums">ส่งเมื่อ {fmtThaiDate(row.sentAt)}</span>
+                              {daysOut !== null && <span className="tabular-nums">ค้าง {daysOut} วัน</span>}
+                            </div>
+                          )}
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" variant="outline" className="h-9 flex-1" onClick={() => openRecordDialog(row, "edit")}>
+                              <Pencil className="size-3.5" />แก้ข้อมูล
+                            </Button>
+                            <Button size="sm" className="h-9 flex-1" onClick={() => openRecordDialog(row)}>
+                              <PackageCheck className="size-3.5" />บันทึกรับคืน
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Pagination page={outPage} total={outRows.length} pageSize={PAGE_SIZE.COMPACT} onChange={setOutPage} />
+            </>
           )}
         </section>
       </div>
