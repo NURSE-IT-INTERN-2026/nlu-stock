@@ -714,7 +714,7 @@ export async function resyncKitSet(
   tx: TxClient,
   { setSubItemId, userId, note }: CancelSetInput,
 ): Promise<ResyncSetResult> {
-  const set = await tx.subItem.findUnique({
+  const readSet = () => tx.subItem.findUnique({
     where: { id: setSubItemId },
     select: {
       id: true,
@@ -725,6 +725,7 @@ export async function resyncKitSet(
       kitContents: { select: { id: true, itemId: true, subCode: true, status: true } },
     },
   });
+  let set = await readSet();
   if (!set) throw new Error("ไม่พบชุดอุปกรณ์");
   if (set.item.category.profile.code !== "KIT") throw new Error("รายการนี้ไม่ใช่ชุดอุปกรณ์");
   if (set.status === ItemStatus.DISPOSED) throw new Error("ชุดนี้ถูกยกเลิกไปแล้ว");
@@ -732,11 +733,32 @@ export async function resyncKitSet(
   if (set.status === ItemStatus.ON_LOAN) throw new Error("ชุดนี้ถูกยืมออกอยู่ — ต้องรับคืนก่อน");
 
   const setLabel = `${set.item.code}-${set.subCode}`;
-  const drift = await kitSetDrift(tx, set.id);
+  let drift = await kitSetDrift(tx, set.id);
   if (drift.length === 0) throw new Error("ชุดนี้ตรงกับสูตรอยู่แล้ว");
 
   const components = await loadKitComponents(tx, set.itemId);
-  await lockItems(tx, [set.itemId, ...drift.map((d) => d.itemId), ...set.kitContents.map((p) => p.itemId)]);
+  // ล็อกทั้งสูตร ไม่ใช่แค่ส่วนต่างวันนี้ — ส่วนต่างที่อ่านใหม่หลังล็อกอาจโผล่ของที่รอบแรก
+  // ยังตรงสูตรอยู่ และต้องอยู่ในล็อกแล้ว. ล็อกครั้งเดียวเหมือน assembleKitSets ขอเพิ่มทีหลัง
+  // = สวนลำดับกัน = deadlock
+  const locked = new Set([
+    set.itemId,
+    ...components.map((c) => c.itemId),
+    ...drift.map((d) => d.itemId),
+    ...set.kitContents.map((p) => p.itemId),
+  ]);
+  await lockItems(tx, [...locked]);
+
+  // ที่ตรวจไปข้างบนคือข้อมูลก่อนล็อก — ปรับชุดสองใบซ้อนกันจะเอาส่วนต่างใบเก่ามาลงซ้ำทั้งชุด
+  // (ฝั่ง delta ติดลบคืนของสองเท่า ฝั่งบวกใส่ชิ้นเกินสูตร) อ่านสถานะกับส่วนต่างใหม่ตอนถือล็อก
+  set = await readSet();
+  if (!set) throw new Error("ไม่พบชุดอุปกรณ์");
+  if (set.status === ItemStatus.DISPOSED) throw new Error("ชุดนี้ถูกยกเลิกไปแล้ว");
+  if (set.status === ItemStatus.ON_LOAN) throw new Error("ชุดนี้ถูกยืมออกอยู่ — ต้องรับคืนก่อน");
+  drift = await kitSetDrift(tx, set.id);
+  if (drift.length === 0) throw new Error("ชุดนี้ตรงกับสูตรอยู่แล้ว");
+  // สูตรไม่ได้ถูกล็อกไปกับ items — ถ้ามันเพิ่งเพิ่มของที่อยู่นอกชุดที่ล็อกไว้ ให้ถอย ดีกว่าเขียนทั้งที่ไม่มีล็อก
+  const unlocked = drift.find((d) => !locked.has(d.itemId));
+  if (unlocked) throw new Error(`สูตรเพิ่งถูกแก้ (${unlocked.name}) — ลองใหม่อีกครั้ง`);
 
   const reason = `ปรับชุดตามสูตร ${setLabel}${note ? ` (${note})` : ""}`;
   const loanGroupId = crypto.randomUUID();
