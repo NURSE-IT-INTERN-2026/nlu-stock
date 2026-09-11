@@ -30,18 +30,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง");
   const { note } = parsed.data;
 
-  const record = await prisma.dispenseRecord.findUnique({ where: { id } });
-  if (!record) return notFound("ไม่พบรายการนำไปใช้งาน");
-  if (record.loanType !== "INUSE" || record.returnedAt) return error("รายการนี้ไม่ได้อยู่ระหว่างนำไปใช้งาน");
-
-  const outstanding = record.quantity - record.resolvedQty;
-  // A tracked piece is one physical thing — the whole record resolves or nothing does.
-  const qty = record.subItemId ? outstanding : Math.min(parsed.data.quantity ?? outstanding, outstanding);
-  if (qty < 1) return error("ไม่มีจำนวนคงค้างให้คืน");
+  // itemId is immutable, so reading it before the lock just to pick the lock target is safe.
+  // Everything mutable — the guards, outstanding, resolvedQty — is read inside, under the lock.
+  const target = await prisma.dispenseRecord.findUnique({ where: { id }, select: { itemId: true } });
+  if (!target) return notFound("ไม่พบรายการนำไปใช้งาน");
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await lockItems(tx, [record.itemId]);
+    const returned = await prisma.$transaction(async (tx) => {
+      // ก่อนอ่าน: guard ที่อ่านก่อน lock คือ guard บนข้อมูลเก่า — double-click สอง request
+      // เคยผ่าน returnedAt ทั้งคู่แล้ว increment สต๊อกเกินจริงสองรอบ
+      await lockItems(tx, [target.itemId]);
+      const record = await tx.dispenseRecord.findUnique({ where: { id } });
+      if (!record) throw new Error("ไม่พบรายการนำไปใช้งาน");
+      if (record.loanType !== "INUSE" || record.returnedAt) throw new Error("รายการนี้ไม่ได้อยู่ระหว่างนำไปใช้งาน");
+
+      const outstanding = record.quantity - record.resolvedQty;
+      // A tracked piece is one physical thing — the whole record resolves or nothing does.
+      const qty = record.subItemId ? outstanding : Math.min(parsed.data.quantity ?? outstanding, outstanding);
+      if (qty < 1) throw new Error("ไม่มีจำนวนคงค้างให้คืน");
+
       const resolved = record.resolvedQty + qty;
       await tx.dispenseRecord.update({
         where: { id: record.id },
@@ -101,9 +108,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
 
       await recomputeItemCounts(tx, record.itemId);
+      // qty ถูกคิดใต้ lock จึงอยู่ในนี้ ไม่ใช่ตัวแปรนอก tx — ต้องส่งออกมา ไม่งั้น response
+      // ที่ lib/api.ts ประกาศว่ามี quantity: number จะไม่มี field นั้นเลย
+      return qty;
     });
 
-    return NextResponse.json({ success: true, quantity: qty });
+    return NextResponse.json({ success: true, quantity: returned });
   } catch (err) {
     return handleError(err, "คืนเข้าคลังไม่สำเร็จ");
   }
