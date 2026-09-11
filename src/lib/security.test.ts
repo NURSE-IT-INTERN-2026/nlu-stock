@@ -97,28 +97,31 @@ test("secret ที่ตั้งผิดร้องออกมา ไม่
 });
 
 test("การเขียนที่มาจากเว็บอื่นถูกปฏิเสธ แม้จะเป็นซับโดเมนพี่น้องที่ SameSite=Lax ปล่อยผ่าน", () => {
-  const HOST = "nlu-stock.cmu.ac.th";
-  const ours = `https://${HOST}`;
+  const ours = "https://nlu-stock.cmu.ac.th";
+  const tunnel = "https://abc123.ngrok.app";
+  const allowed = [ours, tunnel];
 
   // เคสที่ฟีเจอร์นี้มีอยู่เพื่อกัน: Lax นับที่ cmu.ac.th ซับโดเมนอื่นจึงส่งคุกกี้มาด้วยได้
-  assert.equal(crossSiteWrite("POST", "https://someone-else.cmu.ac.th", HOST), true);
-  assert.equal(crossSiteWrite("POST", "https://evil.example", HOST), true);
+  assert.equal(crossSiteWrite("POST", "https://someone-else.cmu.ac.th", allowed), true);
+  assert.equal(crossSiteWrite("POST", "https://evil.example", allowed), true);
   // iframe แบบ sandbox / หน้าที่มาจาก data: URL ส่ง Origin: null
-  assert.equal(crossSiteWrite("POST", "null", HOST), true);
-  // host เดียวกันแต่คนละพอร์ตคือคนละ origin — URL.host พกพอร์ตมาด้วยอยู่แล้ว
-  assert.equal(crossSiteWrite("POST", "http://localhost:3001", "localhost:3000"), true);
+  assert.equal(crossSiteWrite("POST", "null", allowed), true);
+  // host เดียวกันแต่คนละพอร์ตหรือคนละ scheme คือคนละ origin
+  assert.equal(crossSiteWrite("POST", "http://localhost:3001", ["http://localhost:3000"]), true);
+  assert.equal(crossSiteWrite("POST", "http://nlu-stock.cmu.ac.th", allowed), true);
 
-  // หน้าจอของเราเอง — ต้องผ่านทุก method ที่เขียนได้
+  // เหตุผลที่ไม่เทียบกับ host header: มันมาจากลูกค้า ผู้โจมตีที่กรอกได้ทั้ง Origin และ
+  // X-Forwarded-Host จะผ่านด่านที่เทียบสองค่านั้นกันเองเสมอ. รายการนี้มาจาก env เท่านั้น
+  assert.equal(crossSiteWrite("POST", "https://evil.example", ["https://evil.example"]), false);
+
+  // หน้าจอของเราเอง — ต้องผ่านทุก method ที่เขียนได้ รวม tunnel ที่ตั้งไว้ใน CMU_OAUTH_ORIGINS
   for (const method of ["POST", "PATCH", "PUT", "DELETE"]) {
-    assert.equal(crossSiteWrite(method, ours, HOST), false);
+    assert.equal(crossSiteWrite(method, ours, allowed), false);
   }
-  // TLS ถูก terminate ข้างหน้า: เบราว์เซอร์อยู่ https แต่ host header ยังเป็นชื่อเดิม
-  assert.equal(crossSiteWrite("POST", ours, HOST), false);
-  // x-forwarded-host แบบต่อกันหลายชั้น — เอาตัวแรก
-  assert.equal(crossSiteWrite("POST", ours, `${HOST}, internal.lb`), false);
+  assert.equal(crossSiteWrite("POST", tunnel, allowed), false);
 
   // อ่านอย่างเดียวไม่ต้องกัน และคำขอที่ไม่มี Origin ก็ไม่ใช่เบราว์เซอร์ของเหยื่อ
-  assert.equal(crossSiteWrite("GET", "https://evil.example", HOST), false);
-  assert.equal(crossSiteWrite("HEAD", "https://evil.example", HOST), false);
-  assert.equal(crossSiteWrite("POST", null, HOST), false);
+  assert.equal(crossSiteWrite("GET", "https://evil.example", allowed), false);
+  assert.equal(crossSiteWrite("HEAD", "https://evil.example", allowed), false);
+  assert.equal(crossSiteWrite("POST", null, allowed), false);
 });

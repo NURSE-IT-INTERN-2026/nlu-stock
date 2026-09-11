@@ -102,19 +102,36 @@ function loginUrl(request: NextRequest) {
  * ข้าม origin — ผู้โจมตีสั่งให้เบราว์เซอร์เหยื่อ "ไม่ส่ง" ไม่ได้. คำขอที่ไม่มี Origin จึงมา
  * จาก curl/สคริปต์/APIRequestContext ซึ่งไม่มีคุกกี้ของเหยื่อให้พกอยู่แล้ว
  *
- * เทียบที่ host ไม่ใช่ origin เต็ม: TLS ถูก terminate ข้างหน้า socket ที่นี่จึงเป็น http
- * ทั้งที่เบราว์เซอร์อยู่บน https — เทียบ scheme ด้วยจะตกทุกใบใน production
- * (เหตุผลเดียวกับที่ callbackUri() ต้องอ่าน x-forwarded-proto)
+ * เทียบกับ config ไม่ใช่กับ host header ทั้งที่อย่างหลังดูตรงไปตรงมากว่า: x-forwarded-host
+ * มาจากลูกค้าเว้นแต่ proxy หน้าบ้านจะเขียนทับให้ ถ้ามันไหลผ่าน ผู้โจมตีส่ง Origin: evil.com
+ * คู่กับ X-Forwarded-Host: evil.com ก็ผ่านทั้งคู่ — ด่านที่ให้ผู้ถูกตรวจกรอกเฉลยเอง. และใน
+ * ทางกลับกัน proxy ที่เขียน Host เป็น localhost:3000 จะทำให้ทุกการเขียนของทุกคน 403
+ *
+ * NEXT_PUBLIC_APP_URL คือ origin ที่ผู้ใช้พิมพ์จริง (มี basePath ต่อท้าย URL.origin ตัดให้)
+ * ส่วน tunnel/LAN ใช้ CMU_OAUTH_ORIGINS ชุดเดียวกับที่ callbackUri() ใช้อยู่แล้ว — ที่ตั้งค่า
+ * สองที่ที่ต้องตรงกันเองคือที่ตั้งค่าที่วันหนึ่งจะไม่ตรงกัน
  */
-export function crossSiteWrite(method: string, origin: string | null, host: string | null): boolean {
+function ownOrigins(): string[] {
+  const out: string[] = [];
+  try {
+    out.push(new URL(process.env.NEXT_PUBLIC_APP_URL ?? "").origin);
+  } catch {
+    // ไม่ตั้งค่าไว้ = ด่านนี้ทำงานไม่ได้ ร้องออกมาดีกว่าปล่อยผ่านหรือ 403 ทุกใบแบบไม่บอกสาเหตุ
+    throw new Error("NEXT_PUBLIC_APP_URL ไม่ได้ตั้งค่า — ตรวจ Origin ไม่ได้");
+  }
+  for (const raw of (process.env.CMU_OAUTH_ORIGINS ?? "").split(",")) {
+    const v = raw.trim().replace(/\/$/, "");
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+export function crossSiteWrite(method: string, origin: string | null, allowed = ownOrigins()): boolean {
   if (method === "GET" || method === "HEAD") return false;
   if (!origin) return false;
-  try {
-    return new URL(origin).host !== (host ?? "").split(",")[0].trim();
-  } catch {
-    // "null" — sandboxed iframe หรือหน้าที่มาจาก data: URL. ไม่ใช่หน้าจอของเราแน่นอน
-    return true;
-  }
+  // includes ตรงๆ ไม่ต้อง parse: Origin ที่เบราว์เซอร์ส่งเป็น scheme://host[:port] เสมอ ไม่มี
+  // path ไม่มี slash ปิดท้าย ส่วน "null" ของ sandboxed iframe ก็ไม่มีวันอยู่ในรายการ
+  return !allowed.includes(origin);
 }
 
 export async function proxy(request: NextRequest) {
@@ -122,7 +139,7 @@ export async function proxy(request: NextRequest) {
 
   // ก่อน publicPaths: /api/auth/logout เป็น POST ที่ไม่ต้องล็อกอินก็จริง แต่ก็ยังไม่ใช่สิ่งที่
   // เว็บอื่นควรสั่งแทนผู้ใช้ได้
-  if (crossSiteWrite(request.method, request.headers.get("origin"), request.headers.get("x-forwarded-host") ?? request.headers.get("host"))) {
+  if (crossSiteWrite(request.method, request.headers.get("origin"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
