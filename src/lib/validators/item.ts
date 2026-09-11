@@ -15,7 +15,7 @@ const evidenceUrls = z
   .array(z.string().refine(isUploadUrl, "ไฟล์แนบต้องมาจากการอัปโหลดในระบบ"))
   .max(MAX_EVIDENCE_FILES);
 
-/** รูปพัสดุ — /uploads/ ของเรา หรือ https ภายนอก. ดู isSafeImageSrc ว่าทำไมถึงยอมอย่างหลัง */
+/** รูปพัสดุ — ต้องมาจากการอัปโหลดในระบบ. ดู isSafeImageSrc ว่าทำไมถึงเลิกรับลิงก์ภายนอก */
 const imageSrc = z.string().refine(isSafeImageSrc, "ลิงก์รูปไม่ถูกต้อง");
 const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),

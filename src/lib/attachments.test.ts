@@ -18,10 +18,11 @@ test("only urls this app stored are accepted", () => {
   assert.equal(isUploadUrl(null), false);
 });
 
-test("รูปพัสดุยอม https ภายนอก แต่ไม่ยอม scheme ที่ execute ได้", () => {
+test("รูปพัสดุรับเฉพาะไฟล์ที่อัปโหลดในระบบ", () => {
   assert.equal(isSafeImageSrc(u(1)), true);
-  // picsum/รูปภายนอกที่ seed ไว้ต้องผ่าน ไม่งั้นกดบันทึกพัสดุเดิมไม่ได้เลย
-  assert.equal(isSafeImageSrc("https://picsum.photos/seed/NLU-BAT-001/600/600"), true);
+  // https ภายนอกเคยผ่าน (สมัย seed ใส่ picsum) — ตอนนี้ไม่มีของจริงใช้ จึงปิด
+  assert.equal(isSafeImageSrc("https://picsum.photos/seed/NLU-BAT-001/600/600"), false);
+  assert.equal(isSafeImageSrc("https://evil.example/x.jpg"), false);
   assert.equal(isSafeImageSrc("javascript:alert(1)"), false);
   assert.equal(isSafeImageSrc("data:text/html,<script>alert(1)</script>"), false);
   // http ธรรมดาและช่องว่าง/อัญประกาศที่แทรก attribute อื่นได้

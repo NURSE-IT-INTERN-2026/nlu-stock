@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ItemStatus, ItemCondition } from "@/generated/prisma/enums";
 import { isSafeImageSrc } from "@/lib/attachments";
 
-/** เหมือน validators/item.ts — /uploads/ ของเรา หรือ https ภายนอก */
+/** เหมือน validators/item.ts — ต้องมาจากการอัปโหลดในระบบ */
 const imageSrc = z.string().refine(isSafeImageSrc, "ลิงก์รูปไม่ถูกต้อง");
 
 export const subItemCreateSchema = z.object({
