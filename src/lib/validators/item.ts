@@ -2,6 +2,21 @@ import { z } from "zod";
 import { AdjustmentReason, ItemStatus, RepairVenue } from "@/generated/prisma/enums";
 
 import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
+import { isSafeImageSrc, isUploadUrl } from "@/lib/attachments";
+
+/**
+ * หลักฐานแนบ — ต้องเป็นไฟล์ที่ POST /api/upload เขียนเองเท่านั้น.
+ *
+ * ค่าที่นี่ลงไปอยู่ทั้งใน <img src> และ <a href> (AttachmentList) — สตริงที่ไม่ได้ตรวจคือ
+ * origin ของคนอื่น หรือ `javascript:` ที่เรา render ให้เอง. /api/attachments ตรวจแบบนี้อยู่
+ * แล้วตั้งแต่แรก; เส้นทางที่ "สร้างรายการครั้งแรก" คือช่องที่ยังเหลือ
+ */
+const evidenceUrls = z
+  .array(z.string().refine(isUploadUrl, "ไฟล์แนบต้องมาจากการอัปโหลดในระบบ"))
+  .max(MAX_EVIDENCE_FILES);
+
+/** รูปพัสดุ — /uploads/ ของเรา หรือ https ภายนอก. ดู isSafeImageSrc ว่าทำไมถึงยอมอย่างหลัง */
+const imageSrc = z.string().refine(isSafeImageSrc, "ลิงก์รูปไม่ถูกต้อง");
 const itemBaseSchema = z.object({
   code: z.string().min(1, "Code is required").max(50),
   name: z.string().min(1, "Name is required").max(200),
@@ -11,7 +26,7 @@ const itemBaseSchema = z.object({
   issueUnitId: z.string().min(1, "Issue unit is required"),
   minThreshold: z.number().int().min(0).default(0),
   locationId: z.string().optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
+  imageUrl: imageSrc.optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
   isActive: z.boolean().default(true),
   // Fixed Asset fields
@@ -24,7 +39,9 @@ const itemBaseSchema = z.object({
   warrantyMonths: z.number().int().min(0).optional().default(0),
   maintenanceCycleMonths: z.number().int().min(1).default(12),
   lastMaintenanceDate: z.coerce.date().optional().nullable(),
-  manualUrl: z.string().optional().nullable(),
+  // คู่มือ — ไฟล์ที่อัปโหลด หรือลิงก์เว็บผู้ผลิต. ยังไม่มีหน้าไหน render มัน แต่กติกาเดียวกับรูป
+  // ไว้ก่อน ดีกว่าปล่อยสตริงดิบรอวันที่มีคนเอาไปใส่ <a href>
+  manualUrl: imageSrc.optional().nullable(),
   // Stock count cadence override; null/omitted = profile default (3 mo consumable, 12 mo rest).
   countCycleMonths: z.number().int().min(1).optional().nullable(),
   // Consumable fields
@@ -53,7 +70,7 @@ export const stockAdjustSchema = z.object({
   stockCount: z.boolean().optional(),
   reason: z.nativeEnum(AdjustmentReason).optional(),
   notes: z.string().max(500).optional().nullable(),
-  imageEvidenceUrls: z.array(z.string()).max(MAX_EVIDENCE_FILES).default([]),
+  imageEvidenceUrls: evidenceUrls.default([]),
 }).refine((d) => d.stockCount || d.shelfCount != null || (d.lotId != null && d.lotCount != null), {
   message: "Either shelfCount or (lotId + lotCount) is required",
 }).refine((d) => d.stockCount || d.reason != null, {
@@ -64,7 +81,7 @@ export const statusChangeSchema = z.object({
   newStatus: z.nativeEnum(ItemStatus),
   subItemId: z.string().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
-  imageUrls: z.array(z.string()).max(MAX_EVIDENCE_FILES).default([]),
+  imageUrls: evidenceUrls.default([]),
   repairVenue: z.nativeEnum(RepairVenue).optional().nullable(),
   repairNote: z.string().max(500).optional().nullable(),
   // อาการที่ชำรุด carried on the repair rows so it can be corrected mid-trip.
@@ -81,5 +98,5 @@ export const bulkSubItemStatusSchema = z.object({
   subItemIds: z.array(z.string().min(1)).min(1, "เลือกอย่างน้อย 1 ชิ้น"),
   newStatus: z.nativeEnum(ItemStatus),
   notes: z.string().max(500).optional().nullable(),
-  imageUrls: z.array(z.string()).max(MAX_EVIDENCE_FILES).default([]),
+  imageUrls: evidenceUrls.default([]),
 });

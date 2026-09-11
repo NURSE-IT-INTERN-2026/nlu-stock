@@ -1,37 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { MIME_BY_EXT } from "@/lib/uploads";
+import { requireAuth, forbidden, notFound } from "@/lib/api-utils";
+import { prisma } from "@/lib/prisma";
+import { uploadFilename, readStoredUpload } from "@/lib/upload-files";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const auth = await requireAuth(_request);
+  if (auth.denied) return auth.denied;
   const { path } = await params;
-  const filePath = join(process.cwd(), "uploads", ...path);
+  const filename = uploadFilename(path);
+  if (!filename) return notFound();
 
-  // Prevent path traversal
-  if (!filePath.startsWith(join(process.cwd(), "uploads"))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (auth.user.role === "BORROWER") {
+    const url = `/uploads/${filename}`;
+    const [item, piece, adjustment, maintenance, status] = await Promise.all([
+      prisma.item.findFirst({ where: { OR: [{ imageUrl: url }, { images: { has: url } }] }, select: { id: true } }),
+      prisma.subItem.findFirst({ where: { OR: [{ imageUrl: url }, { images: { has: url } }] }, select: { id: true } }),
+      prisma.stockAdjustment.findFirst({ where: { imageEvidenceUrls: { has: url } }, select: { id: true } }),
+      prisma.maintenanceRecord.findFirst({ where: { attachmentUrls: { has: url } }, select: { id: true } }),
+      prisma.itemStatusLog.findFirst({ where: { imageUrls: { has: url } }, select: { id: true } }),
+    ]);
+    // Evidence takes precedence even if the same URL was also added to an item gallery.
+    if ((!item && !piece) || adjustment || maintenance || status) return forbidden();
   }
 
+  let buffer: Buffer;
   try {
-    const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
+    buffer = await readStoredUpload(join(process.cwd(), "uploads"), filename);
   } catch {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return notFound();
   }
 
-  const ext = "." + (path[path.length - 1]?.split(".").pop() ?? "").toLowerCase();
+  const ext = "." + filename.split(".").pop()!.toLowerCase();
   const contentType = MIME_BY_EXT[ext] || "application/octet-stream";
-  const buffer = await readFile(filePath);
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": contentType,
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "sandbox",
+      "Vary": "Cookie",
     },
   });
 }

@@ -8,6 +8,8 @@ import { nextDateAfterJob } from "@/lib/maintenance";
 import { closeOpenLoan } from "@/lib/returns";
 import { AdjustmentReason, ItemStatus } from "@/generated/prisma/enums";
 import { z } from "zod";
+import { isUploadUrl } from "@/lib/attachments";
+import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 
 const maintenanceSchema = z.object({
   type: z.enum(["PREVENTIVE", "CORRECTIVE"]),
@@ -20,7 +22,7 @@ const maintenanceSchema = z.object({
   description: z.string().max(1000).optional().nullable(),
   cost: z.number().min(0).optional().nullable(),
   nextMaintenanceAt: z.coerce.date().optional().nullable(),
-  attachmentUrls: z.array(z.string()).default([]),
+  attachmentUrls: z.array(z.string().refine(isUploadUrl, "ไฟล์แนบต้องมาจากการอัปโหลดในระบบ")).max(MAX_EVIDENCE_FILES).default([]),
   // ภายใน/ภายนอก. A PREVENTIVE round carries it straight from the form: ภายใน is recorded on
   // the spot, ภายนอก arrives here only when the piece is being received back from the trip
   // that parked it in กำลังบำรุงรักษา. CORRECTIVE ignores it and reads the ส่งซ่อม log instead —
@@ -301,6 +303,6 @@ export async function POST(
   } catch (err) {
     // Lifecycle violations are thrown inside the transaction — surface their message so the
     // form can tell staff which step is missing instead of a blank 500.
-    return handleError(err, "Failed to create maintenance record");
+    return handleError(err, "บันทึกการบำรุงรักษาไม่สำเร็จ");
   }
 }

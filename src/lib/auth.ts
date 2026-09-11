@@ -1,7 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, getJwtSecret, SESSION_AUD } from "./auth-config";
-import { ROLES, type Role } from "./roles";
+import { ROLES, sessionRoleMatches, type Role } from "./roles";
+import { prisma } from "./prisma";
 
 export async function signToken(payload: { userId: string; email: string; name: string; role: Role }) {
   return new SignJWT(payload)
@@ -40,5 +41,17 @@ export async function getSessionUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifyToken(token);
+  return validateSessionToken(token);
+}
+
+/** Shared by proxy and handlers: signed claims must still match the current account. */
+export async function validateSessionToken(token: string) {
+  const user = await verifyToken(token);
+  if (!user) return null;
+  const row = await prisma.user.findUnique({
+    where: { id: user.userId },
+    select: { email: true, name: true, role: true, isActive: true, isBorrower: true },
+  });
+  if (!row || row.email !== user.email || !sessionRoleMatches(user.role, row)) return null;
+  return { ...user, name: row.name };
 }

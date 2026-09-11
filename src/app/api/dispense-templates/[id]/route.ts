@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, json, notFound, parseBody, handleError } from "@/lib/api-utils";
+import { requireAuth, requireSuperAdmin, json, notFound, parseBody, handleError } from "@/lib/api-utils";
 import { assertTemplateItemsExist } from "@/lib/dispense-template-items";
 
 // Current dispenseable item shape — mirrors /api/dispense/items so the client can feed each
@@ -63,7 +63,10 @@ const patchSchema = z.object({
 
 // PATCH → update name and/or replace all lines.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(req);
+  // แก้/ลบ เทมเพลตมีทางเข้าเดียวคือแท็บใน /settings ซึ่ง proxy เปิดให้ SUPERADMIN เท่านั้น —
+  // requireAuth ตรงนี้เคยแปลว่าใครก็ยิง API ตรงมาลบเทมเพลตของคนอื่นได้ทั้งกระดาน. GET ยังเปิด
+  // ให้ทุก role เพราะหน้าตะกร้าต้องโหลดเทมเพลตมาใช้จริง
+  const auth = await requireSuperAdmin(req);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;
@@ -98,7 +101,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 // DELETE → remove template (lines cascade).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth(req);
+  const auth = await requireSuperAdmin(req);
   if (auth.denied) return auth.denied;
 
   const { id } = await params;

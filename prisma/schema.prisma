@@ -238,6 +238,16 @@ model Unit {
 }
 
 // --- Items ---
+// Shared AI search quotas; keys are bounded to authenticated users and expire after two days.
+model AiSearchLimit {
+  key         String   @id
+  windowStart DateTime @db.Timestamptz(6)
+  count       Int
+
+  @@index([windowStart])
+  @@map("ai_search_limits")
+}
+
 model Item {
   id                String       @id @default(cuid())
   code              String       @unique

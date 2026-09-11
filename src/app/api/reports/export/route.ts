@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import PDFDocument from "pdfkit";
-import { requireAuth, json, getSearchParams } from "@/lib/api-utils";
+import { requireAuth, json, getSearchParams, quotaDenied } from "@/lib/api-utils";
+import { consumeExportQuota } from "@/lib/quota";
 import { prisma } from "@/lib/prisma";
 import { fmtDate, monthLabel } from "@/lib/format";
 import { stockValueRows, lossEvents } from "@/lib/cost";
@@ -787,6 +788,13 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
+
+  // นับก่อนเริ่มกวาดฐานข้อมูล — งานที่แพงคือตัวรายงานเอง ไม่ใช่การ parse พารามิเตอร์
+  const overQuota = await quotaDenied(
+    (tx) => consumeExportQuota(tx, auth.user.userId),
+    "ออกรายงานถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  );
+  if (overQuota) return overQuota;
 
   const params = getSearchParams(request);
   const type = params.get("type") as ReportType | null;

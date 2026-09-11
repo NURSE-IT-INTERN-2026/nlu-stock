@@ -206,6 +206,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, count: recordIds.length, ids: recordIds }, { status: 201 });
   } catch (err) {
-    return handleError(err, "Receive failed");
+    return handleError(err, "รับเข้าไม่สำเร็จ");
   }
 }

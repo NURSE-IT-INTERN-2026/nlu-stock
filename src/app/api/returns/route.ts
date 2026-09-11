@@ -155,6 +155,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, count: entries.length });
   } catch (err) {
-    return handleError(err, "Batch return failed");
+    return handleError(err, "รับคืนหลายรายการไม่สำเร็จ");
   }
 }

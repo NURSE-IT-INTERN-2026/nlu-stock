@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { ZodSchema, ZodError } from "zod";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { canManageStock, type Role } from "@/lib/roles";
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 
 type SessionUser = { userId: string; email: string; name: string; role: Role };
 type AuthResult = { user: SessionUser; denied: null } | { user: null; denied: NextResponse };
@@ -30,10 +31,18 @@ export function forbidden() {
 
 // ponytail: shared catch tail — the `err instanceof Error ? err.message : fallback`
 // → 400 block was copy-pasted across write routes. status overridable (500 for opaque ones).
+//
+// ข้อความที่ route โยนเองเป็นภาษาไทยที่เขียนให้ผู้ใช้อ่าน ("ล็อต L-2501 เหลือไม่พอ") — ต้องส่ง
+// ต่อ ไม่งั้นหน้าจอบอกไม่ได้ว่าอะไรผิด. ส่วน error ที่ Prisma โยนเองพกชื่อตาราง ชื่อคอลัมน์
+// และค่าที่ชนมาด้วย ("Unique constraint failed on the fields: (`email`)") ซึ่งเป็นรูปร่าง
+// ฐานข้อมูลที่ client ไม่ต้องรู้ — เก็บไว้ใน log ฝั่งเราพอ
+//
+// แยกสองอย่างนี้ด้วย clientVersion: error ทุกชนิดของ Prisma พกมันมา, Error ที่เราสร้างเองไม่มี
 export function handleError(err: unknown, fallback: string, status = 400) {
   const message = err instanceof Error ? err.message : fallback;
   console.error(`${fallback}:`, message);
-  return NextResponse.json({ error: message }, { status });
+  const safe = err instanceof Error && !("clientVersion" in err) ? message : fallback;
+  return NextResponse.json({ error: safe }, { status });
 }
 
 // request is unused (getSessionUser reads cookies via next/headers); optional so handlers
@@ -41,13 +50,6 @@ export function handleError(err: unknown, fallback: string, status = 400) {
 export async function requireAuth(_request?: NextRequest): Promise<AuthResult> {
   const user = await getSessionUser();
   if (!user) return { user: null, denied: unauthorized() };
-  // The JWT can outlive its user row (account removed, or a DB reseed in dev). A stale
-  // userId passes the signature + proxy checks but then violates a FK on any write
-  // (e.g. performedBy) — a confusing 500. Verify the row still exists/active and reject
-  // with 401 so the client bounces to re-login instead.
-  // ponytail: one indexed PK lookup per authed request; fine for an internal tool.
-  const row = await prisma.user.findUnique({ where: { id: user.userId }, select: { isActive: true } });
-  if (!row || !row.isActive) return { user: null, denied: unauthorized() };
   return { user, denied: null };
 }
 
@@ -66,6 +68,27 @@ export async function requireAdmin(request?: NextRequest): Promise<AuthResult> {
   if (result.denied) return result;
   if (!canManageStock(result.user.role)) return { user: null, denied: forbidden() };
   return result;
+}
+
+/**
+ * เพดานอัตราต่อ endpoint — คืน response ที่ต้องส่งกลับ หรือ null เมื่อยังไม่ชนเพดาน
+ *
+ *   const denied = await quotaDenied((tx) => consumeUploadQuota(tx, user.userId), "อัปโหลดถี่เกินไป…");
+ *   if (denied) return denied;
+ *
+ * ตัวนับล่ม = ตอบไม่ได้ว่าเกินเพดานหรือยัง จึงปฏิเสธไว้ก่อน (fail closed) เหมือนที่ค้นหา AI
+ * ทำมาตั้งแต่แรก: endpoint ที่ต้องมีเพดานคือ endpoint ที่การปล่อยผ่านแพงกว่าการปฏิเสธ
+ */
+export async function quotaDenied(
+  consume: (db: Prisma.TransactionClient) => Promise<boolean>,
+  busyMessage: string,
+): Promise<NextResponse | null> {
+  try {
+    const allowed = await prisma.$transaction((tx) => consume(tx));
+    return allowed ? null : error(busyMessage, 429);
+  } catch {
+    return error("ระบบไม่พร้อมใช้งานชั่วคราว ลองใหม่อีกครั้ง", 503);
+  }
 }
 
 export function parseBody<T>(schema: ZodSchema<T>) {

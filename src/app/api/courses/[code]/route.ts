@@ -1,4 +1,5 @@
-import { requireAuth, json, handleError } from "@/lib/api-utils";
+import { requireAuth, json, handleError, quotaDenied } from "@/lib/api-utils";
+import { consumeCourseLookupQuota } from "@/lib/quota";
 import { getCourseName } from "@/lib/courses";
 import { NextRequest } from "next/server";
 
@@ -8,6 +9,12 @@ import { NextRequest } from "next/server";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
+
+  const overQuota = await quotaDenied(
+    (tx) => consumeCourseLookupQuota(tx, auth.user.userId),
+    "ค้นชื่อวิชาถี่เกินไป กรุณารอสักครู่",
+  );
+  if (overQuota) return overQuota;
 
   try {
     const { code } = await params;

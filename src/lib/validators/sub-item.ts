@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { ItemStatus, ItemCondition } from "@/generated/prisma/enums";
+import { isSafeImageSrc } from "@/lib/attachments";
+
+/** เหมือน validators/item.ts — /uploads/ ของเรา หรือ https ภายนอก */
+const imageSrc = z.string().refine(isSafeImageSrc, "ลิงก์รูปไม่ถูกต้อง");
 
 export const subItemCreateSchema = z.object({
   subCode: z.string().min(1, "Sub-code is required").max(50),
@@ -8,8 +12,8 @@ export const subItemCreateSchema = z.object({
   condition: z.nativeEnum(ItemCondition).optional().nullable(),
   serialNumber: z.string().max(100).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
-  images: z.array(z.string()).default([]),
+  imageUrl: imageSrc.optional().nullable(),
+  images: z.array(imageSrc).default([]),
 });
 
 // `status` is deliberately NOT updatable here. The settings PUT writes the row directly with

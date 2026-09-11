@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isUploadUrl, resolveChange, isNoop, isAttachRecordType } from "@/lib/attachments";
+import { isUploadUrl, isSafeImageSrc, resolveChange, isNoop, isAttachRecordType } from "@/lib/attachments";
 import { MAX_EVIDENCE_FILES } from "@/lib/uploads";
 
 const u = (n: number) => `/uploads/00000000-0000-4000-8000-${String(n).padStart(12, "0")}.jpg`;
@@ -16,6 +16,18 @@ test("only urls this app stored are accepted", () => {
   assert.equal(isUploadUrl("/uploads/00000000-0000-4000-8000-000000000001.svg"), false);
   assert.equal(isUploadUrl(""), false);
   assert.equal(isUploadUrl(null), false);
+});
+
+test("รูปพัสดุยอม https ภายนอก แต่ไม่ยอม scheme ที่ execute ได้", () => {
+  assert.equal(isSafeImageSrc(u(1)), true);
+  // picsum/รูปภายนอกที่ seed ไว้ต้องผ่าน ไม่งั้นกดบันทึกพัสดุเดิมไม่ได้เลย
+  assert.equal(isSafeImageSrc("https://picsum.photos/seed/NLU-BAT-001/600/600"), true);
+  assert.equal(isSafeImageSrc("javascript:alert(1)"), false);
+  assert.equal(isSafeImageSrc("data:text/html,<script>alert(1)</script>"), false);
+  // http ธรรมดาและช่องว่าง/อัญประกาศที่แทรก attribute อื่นได้
+  assert.equal(isSafeImageSrc("http://evil.example/x.jpg"), false);
+  assert.equal(isSafeImageSrc('https://evil.example/x.jpg" onerror="alert(1)'), false);
+  assert.equal(isSafeImageSrc(null), false);
 });
 
 test("recordType is an allowlist, not a table name from the client", () => {

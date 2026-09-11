@@ -168,6 +168,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, count: recordIds.length, ids: recordIds }, { status: 201 });
   } catch (err) {
-    return handleError(err, "Dispense failed");
+    return handleError(err, "เบิกไม่สำเร็จ");
   }
 }

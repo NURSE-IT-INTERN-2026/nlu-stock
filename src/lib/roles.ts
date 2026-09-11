@@ -1,8 +1,8 @@
 // Roles live in env, NOT in the database. CMU OAuth says who you are; these lists say what
 // you may do. Not in any list and not a nursing account = no access at all — fail closed.
 //
-// Changing a list needs a redeploy AND a re-login: the role is baked into the JWT
-// at sign-in and the token lives 24h.
+// Changing an env list needs a redeploy. Sessions with changed grants are rejected
+// on their next request; signing in again obtains the new role.
 //
 //   SUPERADMIN_EMAILS=a@nu.ac.th,b@nu.ac.th   # + ตั้งค่า
 //   ADMIN_EMAILS=...                          # everything except ตั้งค่า
@@ -120,6 +120,13 @@ function grantedRole(user: UserRow): Role | null {
   // role name nothing understands.
   if (user.role && (ROLES as readonly string[]).includes(user.role)) return user.role as Role;
   return null;
+}
+
+/** A signed borrower claim lasts only for that session; the DB flag never grants staff access. */
+export function sessionRoleMatches(role: Role, user: UserRow & { isActive: boolean }): boolean {
+  if (!user.isActive) return false;
+  const current = grantedRole(user);
+  return current ? current === role : role === "BORROWER" && user.isBorrower;
 }
 
 /**

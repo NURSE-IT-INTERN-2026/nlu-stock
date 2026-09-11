@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { requireAdmin, json, error } from "@/lib/api-utils";
+import { requireAdmin, json, error, quotaDenied } from "@/lib/api-utils";
+import { consumeUploadQuota } from "@/lib/quota";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
@@ -8,8 +9,16 @@ import { EXT_BY_MIME, MAX_UPLOAD_BYTES, sniff } from "@/lib/uploads";
 const ALLOWED_LABEL = "jpg, png, webp, pdf";
 
 export async function POST(request: NextRequest) {
-  const { denied } = await requireAdmin(request);
+  const { user, denied } = await requireAdmin(request);
   if (denied) return denied;
+
+  // นับก่อนอ่าน body: เพดานที่นับหลังรับไฟล์ 10MB เข้าหน่วยความจำแล้วคือเพดานที่จ่ายค่าโจมตี
+  // ไปเรียบร้อยก่อนปฏิเสธ
+  const overQuota = await quotaDenied(
+    (tx) => consumeUploadQuota(tx, user.userId),
+    "อัปโหลดถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  );
+  if (overQuota) return overQuota;
 
   const formData = await request.formData();
   const file = formData.get("file");

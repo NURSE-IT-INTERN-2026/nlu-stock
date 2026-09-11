@@ -4,12 +4,15 @@ import { locationLabel } from "@/lib/constants";
 import { getItemDistribution, withoutCustodyNames } from "@/lib/distribution";
 import { isSelfBorrower } from "@/lib/roles";
 import { z } from "zod";
+import { isSafeImageSrc } from "@/lib/attachments";
 import { NextRequest } from "next/server";
 
 // ponytail: only the fields this endpoint mutates — no blanket item update (settings PUT owns the rest).
+const imageSrc = z.string().refine(isSafeImageSrc, "ลิงก์รูปไม่ถูกต้อง");
+
 const patchSchema = z.object({
-  imageUrl: z.string().nullable().optional(),
-  images: z.array(z.string()).optional(),
+  imageUrl: imageSrc.nullable().optional(),
+  images: z.array(imageSrc).optional(),
   locationId: z.string().nullable().optional(),
 });
 

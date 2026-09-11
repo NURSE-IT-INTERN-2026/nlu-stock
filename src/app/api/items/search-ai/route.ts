@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
-import { requireAuth, json } from "@/lib/api-utils";
+import { requireAuth, json, forbidden, error, quotaDenied } from "@/lib/api-utils";
 import { similaritySearch, hasEmbedding } from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
+import { consumeSearchQuota } from "@/lib/quota";
 
 /** Simple text search (fallback / no-API-key mode) */
 async function textSearch(q: string, limit: number) {
@@ -31,14 +32,17 @@ async function textSearch(q: string, limit: number) {
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.denied) return auth.denied;
+  if (auth.user.role === "BORROWER") return forbidden();
 
   const q = request.nextUrl.searchParams.get("q");
-  const limit = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get("limit") ?? "5", 10), 1), 20);
+  const requestedLimit = Number(request.nextUrl.searchParams.get("limit") ?? 5);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 20) : 5;
   const excludeId = request.nextUrl.searchParams.get("excludeId") ?? undefined;
 
   if (!q || q.trim().length < 2) {
     return json({ items: [], total: 0 });
   }
+  if (q.length > 500) return error("คำค้นยาวเกิน 500 ตัวอักษร", 400);
 
   // No API key → text search only
   if (!hasEmbedding()) {
@@ -49,6 +53,13 @@ export async function GET(request: NextRequest) {
       return json({ items: [], total: 0, error: "Search failed" }, 500);
     }
   }
+
+  // Outside the fallback catch: missing quota storage must fail closed, never spend anyway.
+  const overQuota = await quotaDenied(
+    (tx) => consumeSearchQuota(tx, auth.user.userId),
+    "ค้นหา AI เกินโควตา กรุณาใช้การค้นหาปกติ",
+  );
+  if (overQuota) return overQuota;
 
   // Try AI search, fallback to text on failure
   try {

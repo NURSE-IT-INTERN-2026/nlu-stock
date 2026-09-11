@@ -40,6 +40,19 @@ const UPLOAD_URL = new RegExp(
 export const isUploadUrl = (url: unknown): url is string =>
   typeof url === "string" && UPLOAD_URL.test(url);
 
+/**
+ * รูปพัสดุ — ผ่อนกว่า isUploadUrl หนึ่งขั้น และตั้งใจให้ผ่อน.
+ *
+ * ค่าพวกนี้ลงไปอยู่ใน <img src> เท่านั้น (ItemThumb, แกลเลอรีในหน้าพัสดุ) ไม่เคยเป็น href —
+ * `javascript:` จึงไม่ทำงาน แต่ก็ไม่มีเหตุผลให้เก็บมันไว้ ส่วน https ภายนอกต้องยอมจริง ๆ
+ * เพราะรูปตั้งต้นของพัสดุเกือบพันตัวชี้ไป picsum อยู่ (scripts/seed-picsum.ts) — บังคับ
+ * /uploads/ ตรงนี้แปลว่าเปิดกล่องแก้ไขพัสดุแล้วกดบันทึกโดยไม่แตะรูปก็ 422.
+ *
+ * ไฟล์ที่อัปโหลดเองยังผ่านทางแรกเสมอ ทางที่สองเป็นของรูปภายนอกล้วน ๆ
+ */
+export const isSafeImageSrc = (url: unknown): url is string =>
+  isUploadUrl(url) || (typeof url === "string" && /^https:\/\/[^\s"'<>\\]+$/.test(url));
+
 export type AttachmentChange = {
   /** Files to append. Must be urls this app stored; anything else is dropped. */
   add?: unknown;

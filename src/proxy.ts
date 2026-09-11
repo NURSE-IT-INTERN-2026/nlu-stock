@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
-import { COOKIE_NAME, getJwtSecret, SESSION_AUD } from "@/lib/auth-config";
-import { ROLES } from "@/lib/roles";
+import { COOKIE_NAME } from "@/lib/auth-config";
+import { validateSessionToken } from "@/lib/auth";
 
 // startsWith match, so "/api/auth/cmu" covers the callback under it too.
 const publicPaths = ["/login", "/api/auth/cmu", "/api/auth/login", "/api/auth/logout", "/api/auth/session"];
@@ -58,7 +57,7 @@ const BORROWER_PAGES = [/^\/items\/[^/]/, /^\/scan$/, /^\/dispense$/, /^\/borrow
 //                          role already makes; the writes next to it are superadmin-only.
 //                          สถานที่ไม่อยู่ในนี้: ตัวกรองอาคาร/ชั้น/ห้องถูกซ่อนสำหรับ BORROWER.
 const BORROWER_READ = [
-  /^\/api\/items\/[^/]/,
+  /^\/api\/items\/(?!search-ai(?:\/|$)|suggest-code(?:\/|$)|quick-create(?:\/|$))[^/]+(?:\/(?:history|open-repairs|sub-items\/[^/]+))?$/,
   /^\/api\/courses(\/|$)/,
   /^\/api\/auth\/session$/,
   /^\/api\/dispense\/items$/,
@@ -105,15 +104,10 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    // `audience` is the guard, not the signature: the OAuth `state` token is signed with this
-    // same secret and reaches the browser in a URL (lib/cmu-oauth signState), so anyone could
-    // otherwise post it back as the session cookie.
-    const { payload } = await jwtVerify(token, getJwtSecret(), { audience: SESSION_AUD });
-    // Belt to that brace. Both default-deny blocks below key off `role`, so an undefined role
-    // would skip BOTH and let every unlisted path fall through to next(). Unknown role = not a
-    // session: fall into the catch, which bounces to /login and clears the cookie.
-    const role = payload.role as string;
-    if (!(ROLES as readonly string[]).includes(role)) throw new Error("token carries no known role");
+    // Validate signature/audience and the current account grant before applying route policy.
+    const payload = await validateSessionToken(token);
+    if (!payload) throw new Error("Session is no longer authorized");
+    const role = payload.role;
 
     // Executives are read-only apart from เบิก/ยืม. Blanket guard so a route added
     // later is denied by default rather than silently writable.
