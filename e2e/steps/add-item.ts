@@ -105,10 +105,10 @@ Then("รายการใหม่ต้องมีเลขชิ้นย�
 
 Then("รายการใหม่ต้องมียอดคงเหลือเท่าจำนวนที่ตั้งไว้", async ({ page, bdd }) => {
   await openNewItem(page, bdd.newItem.name);
-  // การ์ดสต็อกพิมพ์ "คงเหลือ / รวม หน่วย" — ยันฝั่งรวม ซึ่งเป็นจำนวนที่กรอกไว้ตอนสร้าง
-  await expect(
-    page.getByText(new RegExp(String.raw`^/\s*${bdd.newItem.qty}\s`)).first()
-  ).toBeVisible({ timeout: 15_000 });
+  // ยันตัวเลขใหญ่ (คงเหลือ) ไม่ใช่ "/ รวม" — ของสิ้นเปลืองไม่พิมพ์ยอดรวมแล้ว; ของใหม่ยังไม่มีใครเบิก
+  // คงเหลือจึงต้องเท่าจำนวนที่กรอกไว้ตอนสร้างทั้งสองแบบ
+  const card = page.getByText("สต็อกคงเหลือ", { exact: true }).locator("xpath=../..");
+  await expect(card.locator(".tabular-nums").first()).toHaveText(String(bdd.newItem.qty), { timeout: 15_000 });
 });
 
 Then("รายการใหม่ต้องผูกกับที่จัดเก็บที่เลือกไว้ ไม่ใช่ค้างเป็นไม่ระบุ", async ({ bdd }) => {
