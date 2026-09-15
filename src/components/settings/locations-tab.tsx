@@ -33,6 +33,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Location {
   id: string;
@@ -220,7 +221,7 @@ function LocationPeek({ locationId, label }: { locationId: string; label: string
                 {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
               </div>
             ) : items.length === 0 ? (
-              <p className="px-6 py-12 text-center text-sm text-muted-foreground">ไม่มีรายการในตำแหน่งนี้</p>
+              <EmptyState title="ไม่มีรายการในตำแหน่งนี้" description="ย้ายพัสดุมาที่นี่แล้วจะเห็นรายการ" />
             ) : items.map((it) => (
               <div key={it.id} className="flex items-center justify-between gap-3 px-6 py-3">
                 <div className="min-w-0">
@@ -409,16 +410,13 @@ export function LocationsTab() {
 
       <div className="rounded-2xl border bg-card shadow-sm">
         {sortedLocations.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
-              <MapPin className="h-8 w-8 text-muted-foreground/40" />
-              <div>
-                <p className="text-sm font-medium text-foreground">ยังไม่มีสถานที่</p>
-                <p className="text-xs text-muted-foreground mt-0.5">เพิ่มสถานที่จัดเก็บเพื่อติดตามตำแหน่งพัสดุ</p>
-              </div>
-              <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มสถานที่</Button>
-            </div>
+            <EmptyState
+              title="ยังไม่มีสถานที่"
+              description="เพิ่มสถานที่จัดเก็บเพื่อติดตามตำแหน่งพัสดุ"
+              action={<Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มสถานที่</Button>}
+            />
         ) : visibleLocations.length === 0 ? (
-          <p className="px-4 py-12 text-center text-sm text-muted-foreground">ไม่พบสถานที่ที่ตรงกับตัวกรอง</p>
+          <EmptyState title="ไม่พบสถานที่ที่ตรงกับตัวกรอง" description="ลองเปลี่ยนคำค้นหรือล้างตัวกรอง" />
         ) : (
           <LocationTree rows={buildLocationTree(visibleLocations)} onEdit={openEdit} onDelete={handleDelete} forceOpen={!!q || hasLocFilter} />
         )}

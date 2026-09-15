@@ -4,11 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package,
-  RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight, Tag, Pencil,
-  ListFilter, CircleDot, CalendarDays, FilterX, Search, ArrowLeft, X,
-} from "lucide-react";
+import { ShoppingCart, ArrowDownToLine, ArrowUpFromLine, Undo2, Package, RefreshCw, Wrench, MapPin, MonitorCog, Flag, ChevronRight, Tag, Pencil, ListFilter, CircleDot, CalendarDays, FilterX, Search, ArrowLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getItemHistory } from "@/lib/api";
 import { Pagination } from "@/components/shared/pagination";
@@ -26,6 +22,7 @@ import { CaseDetailPane } from "@/components/cases/case-workspace";
 import { ExportButtons } from "@/components/reports/export-buttons";
 import type { AttachRecordType } from "@/lib/attachments";
 import { caseRangeOptions } from "@/lib/case-types";
+import { EmptyState } from "@/components/shared/empty-state";
 interface TimelineEvent {
   id: string;
   type: TimelineEventType;
@@ -292,9 +289,11 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
         </div>
       ) : events.length === 0 ? (
-        <p className="py-16 text-center text-sm text-muted-foreground">
-          {dirty ? "ไม่มีรายการที่ตรงกับตัวกรอง" : "ยังไม่มีประวัติของพัสดุนี้"}
-        </p>
+        <EmptyState
+          title={dirty ? "ไม่มีรายการที่ตรงกับตัวกรอง" : "ยังไม่มีประวัติของพัสดุนี้"}
+          description={dirty ? "ลองล้างตัวกรองเพื่อดูทั้งหมด" : "การเบิก รับคืน และซ่อมบำรุงจะถูกบันทึกที่นี่"}
+          className="py-16"
+        />
       ) : (
         <ol className="p-4 sm:p-5">
           {events.map((u, i) => {

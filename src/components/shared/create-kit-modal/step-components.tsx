@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Search, Package, Plus, Minus, X, Boxes } from "lucide-react";
+import { Search, Package, Plus, Minus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NumericInput } from "@/components/shared/numeric-input";
@@ -15,6 +15,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useCategories, useLocations } from "@/hooks/use-lookup-data";
 import { CategoryPicker, LocationPicker, formatLocation, type LocationFilter } from "@/components/shared/filter-pickers";
 import type { ComponentRow } from "./types";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface SearchResult {
   id: string;
@@ -186,11 +187,7 @@ export function StepComponents({ components, onAdd, onRemove, onQtyChange }: Ste
           })}
         </div>
       ) : components.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-10 text-center">
-          <Boxes className="h-8 w-8 text-muted-foreground/50" />
-          <p className="mt-2 text-sm text-muted-foreground">ยังไม่มีส่วนประกอบในชุด</p>
-          <p className="text-xs text-muted-foreground/70">ค้นหาแล้วกดเพิ่มจากด้านบน</p>
-        </div>
+        <EmptyState className="rounded-xl border border-dashed border-border bg-card/50" title="ยังไม่มีส่วนประกอบในชุด" description="ค้นหาแล้วกดเพิ่มจากด้านบน" />
       ) : null}
 
       {/* Added components list */}

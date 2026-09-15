@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Trash2, Search, Package, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2 } from "lucide-react";
+import { Trash2, Search, PackagePlus, ClipboardList, Plus, ArrowDownToLine, PackageCheck, Undo2 } from "lucide-react";
 import { motion } from "motion/react";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,7 @@ import { AddItemModal } from "@/components/shared/add-item-modal";
 import { ReturnPanel } from "@/components/receive/return-panel";
 import { InUsePanel } from "@/components/receive/in-use-panel";
 import { usePageHeader } from "@/components/layout/page-header-context";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface SearchItem {
   id: string;
@@ -437,19 +438,13 @@ function ReceiveContent() {
             {suggestedLoading ? (
               ListSkeleton
             ) : suggested.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-16 text-center">
-                <Package className="h-9 w-9 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">ยังไม่มีพัสดุในระบบ</p>
-              </div>
+              <EmptyState title="ยังไม่มีพัสดุในระบบ" description="เพิ่มพัสดุใหม่เพื่อเริ่มรับเข้า" />
             ) : (
               <div className="divide-y">{suggested.map(renderItemRow)}</div>
             )}
           </>
         ) : searchResults.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-center">
-            <Package className="h-9 w-9 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">ไม่พบ &ldquo;{searchQ}&rdquo; ในระบบ</p>
-          </div>
+          <EmptyState title={`ไม่พบ “${searchQ}” ในระบบ`} description="ลองเปลี่ยนคำค้น หรือเพิ่มพัสดุใหม่" />
         ) : (
           <div className="divide-y">{searchResults.map(renderItemRow)}</div>
         )}

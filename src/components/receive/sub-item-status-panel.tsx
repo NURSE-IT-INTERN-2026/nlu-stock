@@ -34,6 +34,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { useSession } from "@/components/layout/auth-guard";
 import { useClientPage } from "@/hooks/use-client-page";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 const fmtDay = (iso: string) => fmtDate(iso, TH_DATE);
@@ -319,12 +320,7 @@ export function SubItemStatusPanel({
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-          {status === "DAMAGED" ? <Send className="h-6 w-6 text-muted-foreground" /> : <Wrench className="h-6 w-6 text-muted-foreground" />}
-        </div>
-        <p className="text-sm text-muted-foreground">{emptyText}</p>
-      </div>
+      <EmptyState className="h-full" title={emptyText} description={status === "DAMAGED" ? "ของที่แจ้งชำรุดจะมารอส่งซ่อมที่นี่" : "ของที่ส่งซ่อมแล้วจะมารอรับคืนที่นี่"} />
     );
   }
 
@@ -353,7 +349,7 @@ export function SubItemStatusPanel({
         <Separator className="shrink-0" />
 
         {visible.length === 0 ? (
-          <p className="flex-1 text-center text-sm text-muted-foreground py-10">ไม่พบรายการที่ค้นหา</p>
+          <EmptyState title="ไม่พบรายการที่ค้นหา" description="ลองเปลี่ยนคำค้นหรือล้างตัวกรอง" className="flex-1" />
         ) : (
           <>
             {/* Desktop: the queue is read by comparing rows — how long has this been out, how

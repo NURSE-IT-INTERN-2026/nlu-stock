@@ -27,6 +27,7 @@ import { QrScanner } from "@/components/shared/qr-scanner";
 import { Pagination } from "@/components/shared/pagination";
 import { CategoryPicker, LocationPicker, type LocationFilter } from "@/components/shared/filter-pickers";
 import type { ProfileOption } from "@/lib/api";
+import { EmptyState } from "@/components/shared/empty-state";
 
 
 interface SearchItem {
@@ -271,9 +272,10 @@ return (
       <div className="relative flex-1 min-h-0 flex flex-col gap-3 p-3">
         <div ref={gridRef} className="flex-1 overflow-y-auto pb-1">
         {items.length === 0 && !loading ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            {query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
-          </p>
+          <EmptyState
+            title={query ? "ไม่พบพัสดุที่ค้นหา" : "พิมพ์ชื่อหรือรหัสเพื่อค้นหา"}
+            description={query ? "ลองเปลี่ยนคำค้นหรือล้างตัวกรอง" : "หรือสแกน QR เพื่อเพิ่มลงตะกร้าได้เลย"}
+          />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {items.map((item) => {

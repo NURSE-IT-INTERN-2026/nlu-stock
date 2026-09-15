@@ -1,12 +1,13 @@
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { CalendarRange } from "lucide-react";
+
 import { useThemeColor } from "@/lib/resolve-color";
 import { ChartContainer } from "@/components/dashboard/chart-container";
 import { Panel } from "@/components/dashboard/primitives";
 import { monthLabel, monthLabelShort } from "@/lib/format";
 import { USAGE_GROUP_LABELS, type UsageMonth } from "@/lib/usage-groups";
+import { EmptyState } from "@/components/shared/empty-state";
 
 /**
  * ยอดการใช้งานรายเดือน ซ้อนตามกลุ่มการใช้งาน.
@@ -114,15 +115,7 @@ export function UsageByMonthChart({
       }
     >
       {data.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
-          <span className="grid size-12 place-items-center rounded-full bg-secondary">
-            <CalendarRange className="size-5 text-muted-foreground" />
-          </span>
-          <div className="text-center">
-            <p className="text-[13px] font-medium text-foreground">ยังไม่มีข้อมูลการใช้งาน</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">กราฟจะแสดงยอดรายเดือนเมื่อมีการเบิก</p>
-          </div>
-        </div>
+        <EmptyState title="ยังไม่มีข้อมูลการใช้งาน" description="กราฟจะแสดงยอดรายเดือนเมื่อมีการเบิก" className="flex-1 py-10" />
       ) : (
         <div
           style={{ height: 280 }}

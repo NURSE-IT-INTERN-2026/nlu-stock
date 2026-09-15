@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { getSubItems, createSubItem, updateSubItem, deleteSubItem } from "@/lib/api";
 import { formatSubCode, STATUS_LABELS, CONDITION_LABELS, labelFor } from "@/lib/constants";
 import { ageFromReceipt } from "@/lib/format";
+import { EmptyState } from "@/components/shared/empty-state";
 
 // Sentinel for the "no condition" Select option. Base UI Select needs a concrete
 // value (not "") to match a SelectItem, so null condition ↔ "__NONE__".
@@ -159,7 +160,7 @@ export function SubCodesManager({ itemId, itemCode }: SubCodesManagerProps) {
           </TableHeader>
           <TableBody>
             {subItems.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4 text-sm">ยังไม่มีรหัสย่อย</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="py-4"><EmptyState className="py-0" title="ยังไม่มีรหัสย่อย" description="เพิ่มรหัสย่อยเพื่อแยกชิ้นของพัสดุนี้" /></TableCell></TableRow>
             ) : subItems.map((sub) => (
               <TableRow key={sub.id}>
                 <TableCell className="font-mono text-xs px-2"><span className="block truncate">{formatSubCode(itemCode, sub.subCode)}</span></TableCell>

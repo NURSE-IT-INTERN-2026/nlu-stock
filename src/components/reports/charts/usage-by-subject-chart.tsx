@@ -1,11 +1,12 @@
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
-import { PieChart } from "lucide-react";
+
 import { useThemeColor } from "@/lib/resolve-color";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { ChartContainer } from "@/components/dashboard/chart-container";
 import { Panel } from "@/components/dashboard/primitives";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface UsageByTypeData {
   usageType: string | null;
@@ -83,15 +84,7 @@ export function UsageBySubjectChart<T extends UsageByTypeData>({
   return (
     <Panel title={title} hint={[hint, note].filter(Boolean).join(" · ")}>
       {chartData.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
-          <span className="grid size-12 place-items-center rounded-full bg-secondary">
-            <PieChart className="size-5 text-muted-foreground" />
-          </span>
-          <div className="text-center">
-            <p className="text-[13px] font-medium text-foreground">ยังไม่มีข้อมูลการใช้งาน</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">กราฟจะแสดงสัดส่วนเมื่อมีการเบิก</p>
-          </div>
-        </div>
+        <EmptyState title="ยังไม่มีข้อมูลการใช้งาน" description="กราฟจะแสดงสัดส่วนเมื่อมีการเบิก" className="flex-1 py-10" />
       ) : (
         <div
           style={{ height }}

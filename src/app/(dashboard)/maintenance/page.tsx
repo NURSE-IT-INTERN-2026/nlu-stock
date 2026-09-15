@@ -33,6 +33,7 @@ import { toast } from "sonner";
 
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { CaseWorkspace } from "@/components/cases/case-workspace";
+import { EmptyState } from "@/components/shared/empty-state";
 // ── Types ──
 
 interface Summary {
@@ -619,7 +620,7 @@ function MaintenanceShell() {
                   <div key={i} className="px-4 py-2.5"><Skeleton className="h-10 w-full" /></div>
                 ))
               ) : filteredSchedule.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">ไม่พบรายการตามตัวกรอง</div>
+                <EmptyState title="ไม่พบรายการตามตัวกรอง" description="ลองเปลี่ยนคำค้นหรือล้างตัวกรอง" />
               ) : pagedSchedule.map((row) => {
                 const days = daysUntil(row.nextMaintenanceDate);
                 const meta = statusMeta(row.maintenanceStatus);
@@ -698,9 +699,7 @@ function MaintenanceShell() {
               ))}
             </div>
           ) : outRows.length === 0 ? (
-            <div className="border-t px-4 py-10 text-center text-sm text-muted-foreground">
-              ไม่มีพัสดุที่ส่งบำรุงรักษาภายนอกค้างอยู่
-            </div>
+            <EmptyState className="border-t" title="ไม่มีพัสดุที่ส่งบำรุงรักษาภายนอกค้างอยู่" description="ส่งบำรุงรักษาภายนอกแล้วรายการจะมารอรับคืนที่นี่" />
           ) : (
             <>
               <div className="m-4 overflow-hidden rounded-xl border">

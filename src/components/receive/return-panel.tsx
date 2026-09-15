@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, RotateCcw, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Pagination } from "@/components/shared/pagination";
 import { useClientPage } from "@/hooks/use-client-page";
@@ -16,6 +16,7 @@ import { getOpenBorrows, type OpenBorrow } from "@/lib/api";
 import { ReturnLoanDetail, type LoanGroup } from "@/components/receive/return-loan-detail";
 import { fmtDate as fmt, TH_DATE } from "@/lib/format";
 import { recipientLabel, USAGE_TYPE_LABELS, USAGE_TYPE_OPTIONS } from "@/lib/constants";
+import { EmptyState } from "@/components/shared/empty-state";
 
 const fmtDate = (iso: string | null) => (iso ? fmt(iso, TH_DATE) : null);
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -175,12 +176,7 @@ export function ReturnPanel({ initialChip, initialQuery }: {
 
   if (groups.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-          <RotateCcw className="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p className="text-sm text-muted-foreground">ไม่มีรายการที่อยู่ระหว่างยืม</p>
-      </div>
+      <EmptyState className="h-full" title="ไม่มีรายการที่อยู่ระหว่างยืม" description="ของที่ยืมออกไปจะมารอรับคืนที่นี่" />
     );
   }
 
@@ -253,7 +249,7 @@ export function ReturnPanel({ initialChip, initialQuery }: {
         )}
         <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-1 pr-1 sm:gap-1.5">
           {filteredGroups.length === 0 ? (
-            <div className="text-center py-10 text-sm text-muted-foreground">ไม่พบ &ldquo;{query}&rdquo;</div>
+            <EmptyState title={`ไม่พบ “${query}”`} description="ลองเปลี่ยนคำค้น" />
           ) : pagedGroups.map((g) => {
           const head = g.records[0];
           const total = g.records.reduce((s, r) => s + r.quantity, 0);

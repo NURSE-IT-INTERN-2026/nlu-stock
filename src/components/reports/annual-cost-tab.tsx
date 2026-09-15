@@ -266,6 +266,7 @@ export function AnnualCostTab() {
               loading={loading}
               pageSize={10}
               emptyMessage="ไม่มีการเบิกใช้ของสิ้นเปลืองในปีนี้"
+              emptyDescription="ลองเลือกปีอื่น"
               token="issue"
             />
           </CardContent>
@@ -287,6 +288,7 @@ export function AnnualCostTab() {
               loading={loading}
               pageSize={10}
               emptyMessage="ไม่มีรายการซ่อมที่ระบุค่าใช้จ่ายในปีนี้"
+              emptyDescription="ลองเลือกปีอื่น"
               token="repair"
             />
           </CardContent>

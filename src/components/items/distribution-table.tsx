@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/lib/constants";
 import { fmtDate, TH_DAY } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/shared/empty-state";
 
 export interface DistributionRow {
   kind: "location" | "borrower";
@@ -69,7 +70,7 @@ export const distributionTotal = (rows: DistributionRow[]) => rows.reduce((sum, 
  */
 export function DistributionTable({ rows, unit }: { rows: DistributionRow[]; unit: string }) {
   if (rows.length === 0) {
-    return <p className="px-4 sm:px-5 py-4 text-sm text-muted-foreground">ไม่มีข้อมูลที่ตั้ง</p>;
+    return <EmptyState title="ไม่มีข้อมูลที่ตั้ง" description="ระบุที่จัดเก็บให้พัสดุแล้วจะเห็นการกระจาย" />;
   }
 
   return (

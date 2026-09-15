@@ -23,6 +23,7 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@
 import { ReportDataTable, type Column } from "@/components/reports/report-data-table";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { EmptyState } from "@/components/shared/empty-state";
 
 // หน้านี้ตอบคำถามเดียว: "งานนี้เกิดอะไรขึ้นบ้าง". ไม่ใช่ feed ของ log — log ทุกบรรทัดอยู่ใต้เคสที่มันเกิด
 // เสมอ จึงไม่มีคำถามว่า "บรรทัดนี้ของเคสไหน" ให้ต้องเดา. ที่มาของเคสอยู่ใน src/lib/cases.ts
@@ -205,6 +206,7 @@ export function CaseWorkspace({ itemId, subItemId, lockType, todo, initialCaseId
             loading={loading}
             pageSize={PAGE_SIZE.DEFAULT}
             emptyMessage="ไม่มีเคสตามตัวกรองนี้"
+            emptyDescription="ลองเปลี่ยนช่วงเวลาหรือประเภทเคส"
             onRowClick={(c) => setSelected(c.id)}
             // total > 0: แถบนี้ค้างอยู่ตอนกำลังโหลดและตอนหน้าที่เปิดอยู่คืนศูนย์แถว — นั่นคือทางกลับ
             // หน้า 1 ที่ตารางว่างไม่มีให้ แต่ตัวกรองที่ไม่เจอเคสสักใบทั้งชุดไม่มีหน้าให้กลับไป
@@ -479,7 +481,7 @@ export function CaseDetailPane({ caseId, onOpenCase, canEdit, bare }: {
   if (!data) {
     return (
       <section className={cn("grid place-items-center py-24", shell)}>
-        <p className="text-sm text-muted-foreground">ไม่พบเคสนี้</p>
+        <EmptyState title="ไม่พบเคสนี้" description="เคสอาจถูกลบ หรือลิงก์ไม่ถูกต้อง" />
       </section>
     );
   }
@@ -816,7 +818,7 @@ function DocumentBlock({ doc, currentId, onOpenCase }: {
 
 function FilesTab({ data, attach }: { data: CaseDetailJson; attach: AttachProps }) {
   const groups = data.attachments.filter((a) => (attach.edited[attachKey(a)] ?? a.urls).length > 0);
-  if (!groups.length) return <p className="py-10 text-center text-sm text-muted-foreground">ยังไม่มีเอกสารหรือรูปภาพในเคสนี้</p>;
+  if (!groups.length) return <EmptyState title="ยังไม่มีเอกสารหรือรูปภาพในเคสนี้" description="ไฟล์ที่แนบตอนบันทึกจะมาอยู่ที่นี่" />;
   return (
     <div className="space-y-4">
       {groups.map((g) => {
@@ -839,7 +841,7 @@ function FilesTab({ data, attach }: { data: CaseDetailJson; attach: AttachProps 
 
 function RelatedTab({ data, onOpenCase }: { data: CaseDetailJson; onOpenCase: (id: string) => void }) {
   if (!data.related.length) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">ไม่มีเคสอื่นที่เกี่ยวข้อง</p>;
+    return <EmptyState title="ไม่มีเคสอื่นที่เกี่ยวข้อง" description="เคสที่อ้างถึงกันจะมาแสดงที่นี่" />;
   }
   return (
     <ul className="space-y-2">

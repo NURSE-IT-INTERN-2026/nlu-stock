@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, Minus, X, ClipboardList } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Minus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +28,7 @@ import {
 import { Pagination } from "@/components/shared/pagination";
 import { useClientPage } from "@/hooks/use-client-page";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface EditorLine {
   itemId: string;
@@ -171,10 +172,7 @@ export function TemplatesTab() {
           {[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
         </div>
       ) : templates.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <ClipboardList className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">ยังไม่มีเทมเพลต — สร้างที่นี่ หรือบันทึกจากตะกร้า</p>
-        </div>
+        <EmptyState title="ยังไม่มีเทมเพลต" description="สร้างที่นี่ หรือบันทึกจากตะกร้า" />
       ) : (
         <div className="rounded-lg border border-border bg-card overflow-x-auto">
           <Table grid zebra>
@@ -266,7 +264,7 @@ export function TemplatesTab() {
           {/* lines */}
           <div className={DIALOG_BODY}>
             {lines.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีรายการ — ค้นหาด้านบนเพื่อเพิ่ม</p>
+              <EmptyState title="ยังไม่มีรายการ" description="ค้นหาด้านบนเพื่อเพิ่มพัสดุเข้าเทมเพลต" />
             ) : (
               <div className="space-y-1">
                 {lines.map((l) => (

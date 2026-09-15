@@ -4,6 +4,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { ChartContainer } from "@/components/dashboard/chart-container";
 import { useThemeColor } from "@/lib/resolve-color";
+import { EmptyState } from "@/components/shared/empty-state";
 
 /**
  * ยอดคงเหลือราย **ประเภท** ไม่ใช่รายหมวดหมู่.
@@ -87,7 +88,7 @@ export function StockSummaryChart({
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">ไม่มีข้อมูล</p>
+          <EmptyState title="ยังไม่มีข้อมูล" description="กราฟจะแสดงเมื่อมีพัสดุตามตัวกรองนี้" />
         ) : (
           <div
             className="h-[280px] w-full"

@@ -126,6 +126,7 @@ interface ReportTableProps<T extends { id: string }> {
   /** summary numbers → cards; runs on whatever shape the route returns */
   statsFor: (s: Record<string, number>, values: FilterValues) => SummaryStat[];
   emptyMessage: string;
+  emptyDescription?: string;
   token: Token;
   /** แถวบนสุดของการ์ดตัวกรอง — sub-tab chip ของหน้านี้ */
   leading?: ReactNode;
@@ -142,6 +143,7 @@ function ReportTable<T extends { id: string }>({
   extraParams,
   statsFor,
   emptyMessage,
+  emptyDescription,
   token,
   leading,
   onRowClick,
@@ -193,6 +195,7 @@ function ReportTable<T extends { id: string }>({
         onRowClick={onRowClick ? (row) => onRowClick(row, refetch) : undefined}
         pageSize={isMobile ? Math.max(1, data.length) : perPage}
         emptyMessage={emptyMessage}
+        emptyDescription={emptyDescription}
         token={token}
         // total > 0 ครอบทั้งก้อน — ดู stock-out-tab: แถบแบ่งหน้าค้างผ่านสถานะกำลังโหลดและหน้าที่
         // คืนศูนย์แถวโดยตั้งใจ แต่ชุดผลลัพธ์ที่ว่างทั้งชุดไม่มีหน้าให้กลับไป
@@ -434,6 +437,7 @@ function ReceiveLogTable({ token, leading }: { token: Token; leading?: ReactNode
       filterConfig={COMMON_FILTERS}
       exportType="receive-history"
       emptyMessage="ไม่มีการนำเข้าคลังในช่วงนี้"
+      emptyDescription="ลองขยายช่วงเวลาหรือล้างตัวกรอง"
       statsFor={(s, v) => [
         { label: "ครั้งที่นำเข้า", value: s.records.toLocaleString(), hint: periodLabel(v), token: "stockin" },
         { label: "จำนวนหน่วยรวม", value: s.units.toLocaleString(), hint: "รวมทุกล็อตในช่วงนี้", token: "stockin" },
@@ -499,6 +503,7 @@ function StatusLogTable({ from, to, noun, token, leading }: { from: string; to?:
       extraParams={extraParams}
       exportFilters={exportFilters}
       emptyMessage={`ไม่มีการ${noun}ในช่วงนี้`}
+      emptyDescription="ลองขยายช่วงเวลาหรือล้างตัวกรอง"
       statsFor={(s, v) => [
         { label: `ครั้งที่${noun}`, value: s.records.toLocaleString(), hint: periodLabel(v), token },
         { label: "รายการพัสดุ", value: s.items.toLocaleString(), hint: "นับพัสดุที่ต่างกัน ไม่ใช่จำนวนครั้ง", token },

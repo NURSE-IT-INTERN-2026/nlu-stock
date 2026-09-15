@@ -28,6 +28,7 @@ import { USAGE_TYPE_OPTIONS, locationLabel, effectiveCode } from "@/lib/constant
 import { createDispense, getDispenseTemplates, getDispenseTemplate, createDispenseTemplate, getCourses, getCourseName, type TemplateSummary, type CourseOption } from "@/lib/api";
 import type { CartItem } from "@/lib/validators/dispense";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/shared/empty-state";
 
 export default function ConfirmDispensePage() {
   const { items, clearCart, addItem } = useCart();
@@ -256,7 +257,7 @@ export default function ConfirmDispensePage() {
             <DialogDescription>เติมพัสดุลงตะกร้า · lot/ชิ้นเลือกจากสต็อกปัจจุบัน</DialogDescription>
           </DialogHeader>
           {templates.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">ยังไม่มีเทมเพลต</p>
+            <EmptyState title="ยังไม่มีเทมเพลต" description="บันทึกตะกร้าเป็นเทมเพลตไว้ใช้ครั้งหน้าได้" />
           ) : (
             <div className={cn(DIALOG_BODY, "space-y-1")}>
               {templates.map((t) => (

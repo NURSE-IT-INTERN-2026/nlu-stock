@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { FLOW, SectionTitle, type FlowTone } from "./primitives";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty-state";
 
 export interface MoveRow {
   id: string;
@@ -82,7 +83,7 @@ export function MoveTable({
       </div>
 
       {rows.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">{emptyText}</p>
+        <EmptyState title={emptyText} />
       ) : (
         <div ref={bodyRef} className="flex flex-1 flex-col">
           {/* mobile: stacked rows, no horizontal scroll */}

@@ -329,6 +329,7 @@ export function StockOutTab() {
         // แบ่งหน้าจริงอยู่ที่ server แล้ว — ปิด client paging ในตารางไม่ให้ตัดซ้ำ
         pageSize={Math.max(events.length, 1)}
         emptyMessage={filters.status ? "ไม่มีรายการค้างอยู่ในช่วงนี้" : spec.emptyMessage}
+        emptyDescription="ลองขยายช่วงเวลาหรือล้างตัวกรอง"
         onRowClick={setOpenEvent}
         token={spec.token}
         // total > 0 ครอบทั้งก้อน ไม่ใช่แค่ฝั่ง mobile: แถบแบ่งหน้าอยู่ค้างผ่านสถานะกำลังโหลดและ

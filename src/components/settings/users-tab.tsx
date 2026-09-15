@@ -39,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { EmptyState } from "@/components/shared/empty-state";
 
 type GrantableRole = (typeof GRANTABLE_ROLES)[number];
 type Preview = Awaited<ReturnType<typeof lookupSettingsUser>>;
@@ -388,20 +389,14 @@ export function UsersTab() {
           <TableBody>
             {users.length === 0 ? (
               <TableRow><TableCell colSpan={4} className="py-12">
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <Users className="h-8 w-8 text-muted-foreground/40" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {debounced || roleFilter !== "ALL" ? "ไม่พบผู้ใช้งานตามที่ค้นหา" : "ยังไม่มีผู้ใช้งาน"}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {debounced || roleFilter !== "ALL" ? "ลองเปลี่ยนคำค้นหรือบทบาท" : "เพิ่มผู้ใช้งานเพื่อให้เข้าถึงระบบได้"}
-                    </p>
-                  </div>
-                  {!debounced && roleFilter === "ALL" && (
+                <EmptyState
+                  className="py-0"
+                  title={debounced || roleFilter !== "ALL" ? "ไม่พบผู้ใช้งานตามที่ค้นหา" : "ยังไม่มีผู้ใช้งาน"}
+                  description={debounced || roleFilter !== "ALL" ? "ลองเปลี่ยนคำค้นหรือบทบาท" : "เพิ่มผู้ใช้งานเพื่อให้เข้าถึงระบบได้"}
+                  action={!debounced && roleFilter === "ALL" ? (
                     <Button size="sm" variant="outline" onClick={openCreate}><Plus className="h-3.5 w-3.5 mr-1" />เพิ่มผู้ใช้งาน</Button>
-                  )}
-                </div>
+                  ) : undefined}
+                />
               </TableCell></TableRow>
             ) : users.map((user) => (
               <TableRow key={user.id} className={`${!user.isActive ? "opacity-50" : ""}`}>

@@ -717,6 +717,10 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   isKit?: boolean;
 }) {
   const isCount = dispenseType === "COUNT";
+  // ของสิ้นเปลืองเบิกแล้วหายไปเลย ไม่มีคืน — totalQty ของมันคือ "เคยรับเข้ามาทั้งหมด" ไม่ใช่กองที่ยัง
+  // ถืออยู่ ฉะนั้น 40/67 กับ "คงเหลือ 60%" อ่านแล้วเหมือนมี 27 ชิ้นค้างอยู่ที่ไหนสักแห่ง ซึ่งไม่จริง.
+  // การ์ดนี้เลยบอกแค่จำนวนคงเหลือ; ยอดสะสมไปอ่านที่รายงาน ซึ่งมีบริบทของช่วงเวลากำกับ.
+  const isConsumable = dispenseType === "CONSUMABLE";
   const neverBuilt = !!isKit && total === 0;
 
   // Low-stock alert only (zero stock gets its own banner).
@@ -753,7 +757,7 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   const pct = (n: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0);
   // The จำนวนขั้นต่ำ marker rides the same bar. It measures stock level against minThreshold —
   // a different question from the status split, which is why consumables get a bar too.
-  const showMinMarker = minThreshold > 0 && total > 0 && minThreshold < total;
+  const showMinMarker = !isConsumable && minThreshold > 0 && total > 0 && minThreshold < total;
   // Nothing available, but the pieces still exist somewhere. For ยืม-คืน that is usually a
   // loan — usually is not always, so the banner reports the count and skips the reason.
   const stillOut = isCount && total > 0;
@@ -772,10 +776,10 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
       <div className="mt-3 flex items-end justify-between gap-2">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="text-5xl sm:text-6xl font-semibold leading-none tabular-nums">{available}</span>
-          <span className="text-sm text-muted-foreground truncate">/ {total} {unit}</span>
+          <span className="text-sm text-muted-foreground truncate">{isConsumable ? unit : `/ ${total} ${unit}`}</span>
         </div>
         {/* 0 จาก 0 ไม่ใช่ 0% — a percentage of nothing is a number the card should not print. */}
-        {total > 0 && <span className="text-xs text-muted-foreground shrink-0 pb-1">คงเหลือ {Math.round(pct(available))}%</span>}
+        {!isConsumable && total > 0 && <span className="text-xs text-muted-foreground shrink-0 pb-1">คงเหลือ {Math.round(pct(available))}%</span>}
       </div>
 
       {/* Zero available is the one state a number alone doesn't shout loud enough. For
@@ -804,16 +808,20 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
         )
       )}
 
-      <div className="mt-4 relative h-4 rounded-full bg-muted overflow-hidden">
-        <div className="flex h-full">
-          {isCount
-            ? segments.map((s) => (<div key={s.key} className={cn("h-full", s.dot)} style={{ width: `${pct(s.count)}%` }} title={`${s.label}: ${s.count}`} />))
-            : <div className="h-full bg-success" style={{ width: `${pct(available)}%` }} title={`คงเหลือ ${available}`} />}
+      {/* แถบนี้วัดเทียบกับ totalQty — ของสิ้นเปลืองเลยไม่มีแถบ เพราะตัวหารมันคือยอดที่เคยรับเข้ามา */}
+      {!isConsumable && (
+        <div className="mt-4 relative h-4 rounded-full bg-muted overflow-hidden">
+          <div className="flex h-full">
+            {isCount
+              ? segments.map((s) => (<div key={s.key} className={cn("h-full", s.dot)} style={{ width: `${pct(s.count)}%` }} title={`${s.label}: ${s.count}`} />))
+              : <div className="h-full bg-success" style={{ width: `${pct(available)}%` }} title={`คงเหลือ ${available}`} />}
+          </div>
+          {showMinMarker && <span className="absolute inset-y-0 w-0.5 bg-destructive" style={{ left: `${pct(minThreshold)}%` }} title={`จำนวนขั้นต่ำ ${minThreshold} ${unit}`} />}
         </div>
-        {showMinMarker && <span className="absolute inset-y-0 w-0.5 bg-destructive" style={{ left: `${pct(minThreshold)}%` }} title={`จำนวนขั้นต่ำ ${minThreshold} ${unit}`} />}
-      </div>
-      {showMinMarker && (
-        <div className="mt-1.5 text-[11px] text-muted-foreground">จำนวนขั้นต่ำ <span className="text-destructive font-medium tabular-nums">{minThreshold} {unit}</span></div>
+      )}
+      {/* ขั้นต่ำยังต้องบอก แม้ไม่มีแถบให้ปัก — มันคือเส้นที่บอกว่าควรสั่งเพิ่มได้แล้ว */}
+      {(showMinMarker || (isConsumable && minThreshold > 0)) && (
+        <div className={cn("text-[11px] text-muted-foreground", isConsumable ? "mt-3" : "mt-1.5")}>จำนวนขั้นต่ำ <span className="text-destructive font-medium tabular-nums">{minThreshold} {unit}</span></div>
       )}
 
       {/* Two columns, so five or six states stay visible at half the height and the hero

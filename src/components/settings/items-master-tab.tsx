@@ -2,10 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import {
-  Plus, Pencil, Trash2,
-  QrCode, Package, Layers, AlertTriangle,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, QrCode, Layers, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { EmptyState } from "@/components/shared/empty-state";
 
 
 interface ItemRecord {
@@ -239,13 +237,7 @@ export function ItemsMasterTab() {
                 ))
               ) : items.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="py-12">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <Package className="h-8 w-8 text-muted-foreground/40" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">ไม่พบรายการพัสดุ</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</p>
-                    </div>
-                  </div>
+                  <EmptyState title="ไม่พบรายการพัสดุ" description="ลองปรับตัวกรองหรือเพิ่มรายการใหม่" className="py-0" />
                 </TableCell></TableRow>
               ) : items.map((item) => (
                 <React.Fragment key={item.id}>
@@ -329,13 +321,7 @@ export function ItemsMasterTab() {
                 <div key={i} className="px-4 py-3"><Skeleton className="h-12 w-full" /></div>
               ))
             ) : items.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-12 text-center">
-                <Package className="h-8 w-8 text-muted-foreground/40" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">ไม่พบรายการพัสดุ</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">ลองปรับตัวกรองหรือเพิ่มรายการใหม่</p>
-                </div>
-              </div>
+              <EmptyState title="ไม่พบรายการพัสดุ" description="ลองปรับตัวกรองหรือเพิ่มรายการใหม่" />
             ) : items.map((item) => {
               const canExpand = item.trackIndividually && item._count.subItems > 1;
               return (

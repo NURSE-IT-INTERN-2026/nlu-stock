@@ -318,6 +318,7 @@ export function UsageBySubjectTab() {
         data={data}
         loading={loading}
         emptyMessage={spec.empty}
+        emptyDescription="ลองขยายช่วงเวลาหรือล้างตัวกรอง"
         token={spec.token}
         onRowClick={(r) => setOpenRow(r.key)}
       />

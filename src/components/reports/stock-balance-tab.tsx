@@ -376,6 +376,7 @@ export function StockBalanceTab() {
         data={data}
         loading={loading}
         emptyMessage={spec.empty}
+        emptyDescription="ลองล้างตัวกรอง"
         token={spec.token}
       />
 

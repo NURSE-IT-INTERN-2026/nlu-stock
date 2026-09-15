@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Boxes, Check, ClipboardList, Plus, RefreshCw, ShoppingCart, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Check, ClipboardList, Plus, RefreshCw, ShoppingCart, Trash2, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import type { ComponentRow } from "@/components/shared/create-kit-modal/types";
 import { withBase } from "@/lib/base-path";
 import { STATUS_LABELS, effectiveCode, type ItemStatus } from "@/lib/constants";
 import { useCart, buildCartItem, toDispenseableItem, type DispenseSearchItem } from "@/components/dispense/cart-context";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   assembleKit, cancelKitSet, fetchKit, fetchKitSet, resyncKitSet, updateKitBom,
   type KitComponent, type KitDetail, type KitSetContents, type SetDrift,
@@ -168,10 +169,7 @@ export function KitSetsPanel({ itemId, canAct, onChanged }: { itemId: string; ca
           </p>
         </div>
         {liveSets.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-10 text-center">
-            <Boxes className="size-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">ยังไม่เคยประกอบชุดนี้</p>
-          </div>
+          <EmptyState className="rounded-xl border border-dashed" title="ยังไม่เคยประกอบชุดนี้" description="ประกอบชุดแล้วจะเห็นชุดที่มีอยู่จริงที่นี่" />
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card">
             <Table grid zebra className="hidden table-fixed md:table">
@@ -916,7 +914,7 @@ export function KitSetContentsCard({
  * name — two ถ้วย of different codes are two different things at the shelf.
  */
 function ContentRows({ rows }: { rows: { key: string; code: string; label: string; sub: string }[] }) {
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">ไม่มีรายการ</p>;
+  if (rows.length === 0) return <EmptyState className="py-6" title="ไม่มีรายการ" />;
   return (
     <div className="divide-y rounded-lg border bg-card">
       {rows.map((r) => (

@@ -15,6 +15,7 @@ import { ReturnToStoreDialog } from "@/components/receive/return-to-store-dialog
 import { Pagination } from "@/components/shared/pagination";
 import { useClientPage } from "@/hooks/use-client-page";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
+import { EmptyState } from "@/components/shared/empty-state";
 
 /**
  * The คืนเข้าคลัง tab: everything currently นำไปใช้งาน, whatever its dispense type.
@@ -72,12 +73,7 @@ export function InUsePanel({ initialQuery }: {
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-        <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-          <RotateCcw className="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p className="text-sm text-muted-foreground">ไม่มีรายการที่อยู่ระหว่างนำไปใช้งาน</p>
-      </div>
+      <EmptyState className="h-full" title="ไม่มีรายการที่อยู่ระหว่างนำไปใช้งาน" description="ของที่ตั้งใช้ในห้องจะมาแสดงที่นี่จนกว่าจะปิดงาน" />
     );
   }
 
@@ -101,7 +97,7 @@ export function InUsePanel({ initialQuery }: {
         </div>
         <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pb-2">
           {filtered.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-10">ไม่พบ &ldquo;{query}&rdquo;</p>
+            <EmptyState title={`ไม่พบ “${query}”`} description="ลองเปลี่ยนคำค้น" />
           ) : (
             paged.map((r) => <InUseRow key={r.id} row={r} onResolved={load} />)
           )}

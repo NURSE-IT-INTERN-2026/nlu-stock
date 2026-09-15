@@ -6,6 +6,7 @@ import { profileIcon } from "@/lib/profile-icons";
 import { getDashboardProfileSummary } from "@/lib/api";
 import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
 import { Dot, SegmentBar, SectionTitle } from "./primitives";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Row {
   profileId: string;
@@ -59,7 +60,7 @@ export function ProfileSummaryWidget() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">ไม่มีข้อมูล</p>
+        <EmptyState title="ยังไม่มีข้อมูล" description="ตัวเลขจะขึ้นเมื่อมีพัสดุในระบบ" />
       ) : (
         <div className="divide-y">
           {rows.map((r, i) => {

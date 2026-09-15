@@ -9,6 +9,7 @@ import { getDashboardAssetStatus } from "@/lib/api";
 import { useAsync, useDashboardRefreshNonce } from "@/hooks/use-async";
 import { useDashboardScope } from "@/hooks/use-dashboard-scope";
 import { scopeKey } from "@/lib/dashboard-scope";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Row {
   status: string;
@@ -77,7 +78,7 @@ export function AssetStatusChart() {
           </Button>
         </div>
       ) : total === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">ยังไม่มีครุภัณฑ์แบบติดตามรายชิ้น</p>
+        <EmptyState title="ยังไม่มีครุภัณฑ์แบบติดตามรายชิ้น" description="เปิดติดตามรายชิ้นให้พัสดุแล้วกราฟจะแสดงสถานะ" />
       ) : (
         <div className="grid flex-1 gap-5 sm:grid-cols-[220px_minmax(0,1fr)]">
           <div className="relative mx-auto w-[220px] self-center">

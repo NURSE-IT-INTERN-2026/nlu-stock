@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { ChartContainer } from "@/components/dashboard/chart-container";
 import { useThemeColor } from "@/lib/resolve-color";
+import { EmptyState } from "@/components/shared/empty-state";
 
 export interface AnnualCostMonth {
   month: string;
@@ -82,9 +83,7 @@ export function AnnualCostChart({ data, year }: { data: AnnualCostMonth[]; year:
       <CardContent>
         {active.length === 0 ? (
           // 12 แท่งศูนย์อ่านว่า "ปีนี้ไม่ได้ใช้เงินเลย" ทั้งที่แปลว่ายังไม่มีใครกรอกราคา
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            ยังไม่มีรายการที่ระบุราคาในปีนี้
-          </p>
+          <EmptyState title="ยังไม่มีรายการที่ระบุราคาในปีนี้" description="กรอกราคาตอนรับเข้าแล้วกราฟจะแสดงค่าใช้จ่าย" />
         ) : (
           <div
             className="h-[280px] w-full"

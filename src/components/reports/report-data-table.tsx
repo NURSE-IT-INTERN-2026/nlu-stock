@@ -14,6 +14,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { PAGE_SIZE } from "@/lib/pagination-constants";
 import { cn } from "@/lib/utils";
 import { tokenTint, type Token } from "./report-kit";
+import { EmptyState } from "@/components/shared/empty-state";
 
 // TableCell เป็น whitespace-nowrap ทั้งแอป ซึ่งถูกกับคอลัมน์ที่ขาดกลางคำไม่ได้ — วันที่, รหัส,
 // ตัวเลข — แต่ชื่อพัสดุจริงในคลังยาวถึง 65 ตัวอักษร ("อุปกรณ์ให้ออกซิเจนสำหรับผู้ใหญ่ชนิดมีชุดพ่นยา
@@ -36,6 +37,8 @@ interface ReportDataTableProps<T> {
   loading?: boolean;
   pageSize?: number;
   emptyMessage?: string;
+  /** บรรทัดรองใต้ emptyMessage — ใส่เมื่อมีอะไรให้ผู้ใช้ทำต่อจริงๆ */
+  emptyDescription?: string;
   /** Optional — makes each row a button opening a detail view. Desktop + mobile alike. */
   onRowClick?: (row: T) => void;
   /** Tints the header with the section's event colour. Omit for the plain header. */
@@ -54,6 +57,7 @@ export function ReportDataTable<T extends Record<string, any>>({
   loading,
   pageSize = PAGE_SIZE.DEFAULT,
   emptyMessage = "ไม่พบข้อมูล",
+  emptyDescription,
   onRowClick,
   token,
   footer,
@@ -90,9 +94,7 @@ export function ReportDataTable<T extends Record<string, any>>({
       กำลังโหลด…
     </div>
   ) : data.length === 0 ? (
-    <div className="p-8 text-center text-sm text-muted-foreground">
-      {emptyMessage}
-    </div>
+    <EmptyState title={emptyMessage} description={emptyDescription} />
   ) : (
     // One table at every width. The stacked label→value cards this replaced turned a
     // six-column row into six lines, so a phone screen held one row and a half; a table

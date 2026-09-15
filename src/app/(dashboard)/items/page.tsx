@@ -23,6 +23,7 @@ import { getItems, getSubItems } from "@/lib/api";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 import { ItemsFilterBar, type FilterState } from "@/components/items/items-filter-bar";
 import { MoveLocationDialog } from "@/components/items/move-location-dialog";
+import { EmptyState } from "@/components/shared/empty-state";
 
 
 interface UnitType { id: string; name: string }
@@ -66,12 +67,21 @@ export default function ItemsPage() {
   );
 }
 
-// Stock cell — two shapes, because the two kinds of item know different things.
+// Stock cell — three shapes, because the kinds of item know different things.
 // Tracked: ว่าง / ถูกใช้ / ไม่พร้อม, counted off real per-piece statuses.
 // Non-tracked: ว่าง / ทั้งหมด. There is no per-piece status behind a pile, so anything
 // finer than that would be invented — the gap can be a loan, damage, or a kit assembly.
+// ของสิ้นเปลือง: จำนวนเดียว. เบิกแล้วไม่มีคืน ช่องว่างระหว่าง available กับ total จึงไม่ใช่ของที่
+// อยู่ที่ไหนสักแห่ง แต่เป็นของที่ใช้หมดไปแล้ว — ยอดสะสมเป็นเรื่องของรายงาน ไม่ใช่ของแถวในตาราง.
 function StockCell({ item }: { item: ItemRecord }) {
   const sc = item.statusCounts;
+  if (item.category.profile?.dispenseType === "CONSUMABLE") {
+    return (
+      <span title="คงเหลือ">
+        <span className={item.availableQty > 0 ? "font-medium text-success" : "text-muted-foreground/50"}>{item.availableQty}</span>
+      </span>
+    );
+  }
   if (!sc) {
     return (
       <span title="ว่าง / ทั้งหมด">
@@ -267,8 +277,8 @@ function ItemsContent() {
                     ))
                   ) : items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={isMobile ? (isVerySmall ? 2 : 3) : desktopCols} className="text-center text-muted-foreground py-8">
-                        ไม่พบรายการ
+                      <TableCell colSpan={isMobile ? (isVerySmall ? 2 : 3) : desktopCols} className="py-8">
+                        <EmptyState title="ไม่พบรายการพัสดุ" description="ลองเปลี่ยนคำค้นหรือล้างตัวกรอง" className="py-0" />
                       </TableCell>
                     </TableRow>
                   ) : items.map((item, idx) => {
@@ -367,7 +377,7 @@ function ItemsContent() {
                                   <div className="flex justify-between gap-3"><span className="text-muted-foreground">รหัสพัสดุ</span><span className="font-mono text-right truncate">{item.code}</span></div>
                                 )}
                                 <div className="flex justify-between gap-3"><span className="text-muted-foreground">หมวดหมู่</span><span className="text-right truncate">{item.category.name}</span></div>
-                                <div className="flex justify-between gap-3"><span className="text-muted-foreground">{item.statusCounts ? "พร้อม / ใช้ / ไม่พร้อม" : "ว่าง / ทั้งหมด"}</span><span className="tabular-nums"><StockCell item={item} /></span></div>
+                                <div className="flex justify-between gap-3"><span className="text-muted-foreground">{item.statusCounts ? "พร้อม / ใช้ / ไม่พร้อม" : item.category.profile?.dispenseType === "CONSUMABLE" ? "คงเหลือ" : "ว่าง / ทั้งหมด"}</span><span className="tabular-nums"><StockCell item={item} /></span></div>
                                 <div className="flex justify-between gap-3"><span className="text-muted-foreground">สถานที่</span><span className="text-right truncate">{item.location ? locationLabel(item.location) : "-"}</span></div>
                                 <Button size="sm" className="w-full mt-1" onClick={() => router.push(`/items/${item.code}`)}>เปิดรายละเอียด</Button>
                               </div>

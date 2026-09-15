@@ -28,6 +28,7 @@ import { useSession } from "@/components/layout/auth-guard";
 import { canManageStock } from "@/lib/roles";
 import type { CaseTotalsJson } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface UnitType { id: string; name: string }
 
@@ -362,8 +363,8 @@ function AlertsContent() {
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    ไม่มีรายการที่ต้องจัดการ
+                  <TableCell colSpan={5} className="py-8">
+                    <EmptyState title="ไม่มีรายการที่ต้องจัดการ" description="ลองเปลี่ยนตัวกรองเพื่อดูประเภทอื่น" className="py-0" />
                   </TableCell>
                 </TableRow>
               ) : items.map((item) => (
@@ -414,7 +415,9 @@ function AlertsContent() {
               <Skeleton key={i} className="h-20 w-full rounded-2xl" />
             ))
           ) : items.length === 0 ? (
-            <div className="rounded-2xl border border-border/60 bg-card px-4 py-10 text-center text-sm text-muted-foreground">ไม่มีรายการที่ต้องจัดการ</div>
+            <div className="rounded-2xl border border-border/60 bg-card">
+              <EmptyState title="ไม่มีรายการที่ต้องจัดการ" description="ลองเปลี่ยนตัวกรองเพื่อดูประเภทอื่น" />
+            </div>
           ) : items.map((item) => {
             const primary = alertType === "all" ? (item.alertTypes.find((t) => ALERT_ICON[t]) ?? "lowStock") : alertType;
             const meta = ALERT_ICON[primary] ?? ALERT_ICON.lowStock;
