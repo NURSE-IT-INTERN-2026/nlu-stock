@@ -461,7 +461,7 @@ function MaintenanceShell() {
             active={filter === "in-maintenance"}
           />
           <DashboardMetricCard
-            title="กำหนดการซ่อมบำรุงเดือนนี้"
+            title="บำรุงรักษาเสร็จเดือนนี้"
             value={summary.completedThisMonth}
             subtitle="รายการ"
             iconName="CheckCircle2"

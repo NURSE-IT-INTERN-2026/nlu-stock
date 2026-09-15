@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       where: { nextMaintenanceDate: { not: null }, status: OUT, isActive: true, trackIndividually: false },
     }),
     prisma.maintenanceRecord.count({
-      where: { performedAt: { gte: monthStart, lt: monthEnd } },
+      where: { type: "PREVENTIVE", performedAt: { gte: monthStart, lt: monthEnd } },
     }),
   ]);
 
