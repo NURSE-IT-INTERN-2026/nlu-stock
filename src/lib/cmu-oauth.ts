@@ -207,20 +207,6 @@ export async function fetchProfile(tokens: TokenResponse): Promise<OAuthProfile 
   }
   if (!claims) return null;
 
-  // CMU_DEBUG=true ชั่วคราว: ยังไม่เคยเห็น organization_code ของบุคลากร (นศ. = รหัสคณะตรงๆ แต่
-  // บุคลากรลงลึกถึงภาควิชา) — ให้ นศ./อาจารย์/คนจบแล้ว login คนละครั้ง แล้วเอาค่าที่ได้ไปรัด
-  // BORROWER_ORG_PREFIXES ให้แคบลง จากนั้นปิด flag นี้.
-  // Keys only plus the three claims the gate reads — never the name, email or student_id,
-  // which would put a real person's identity into the server log for the sake of a lookup.
-  if (process.env.CMU_DEBUG === "true") {
-    console.log("[cmu] userinfo keys:", Object.keys(claims).join(", "));
-    console.log("[cmu] gate claims:", JSON.stringify({
-      organization_code: claims.organization_code,
-      organization_name_TH: claims.organization_name_TH,
-      itaccounttype_EN: claims.itaccounttype_EN,
-    }));
-  }
-
   const email = pickEmail(claims);
   if (!email) return null;
   return {
