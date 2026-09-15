@@ -162,9 +162,9 @@ function StatCard({ label, value, icon: Icon, tone = "primary" }: {
 }) {
   const toneClass = {
     primary: "bg-primary/5 text-primary border-primary/10",
-    success: "bg-success/10 text-success-700 border-success/20",
-    warning: "bg-warning/10 text-warning-700 border-warning/20",
-    destructive: "bg-destructive/10 text-destructive border-destructive/20",
+    success: "bg-success/10 text-success-700 dark:text-success-200 border-success/20",
+    warning: "bg-warning/10 text-warning-700 dark:text-warning-200 border-warning/20",
+    destructive: "bg-destructive/10 text-destructive dark:text-danger-400 border-destructive/20",
   }[tone];
   return (
     <div className="rounded-xl border border-border bg-muted/20 p-4 grid grid-cols-[auto_1fr] items-center gap-3">

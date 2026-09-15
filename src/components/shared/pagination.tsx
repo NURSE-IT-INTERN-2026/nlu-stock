@@ -77,7 +77,7 @@ export function Pagination(props: PaginationProps) {
   return (
     <nav
       className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3"
-      aria-label="Pagination"
+      aria-label="เลขหน้า"
     >
       <span className="text-sm text-muted-foreground tabular-nums">
         รายการทั้งหมด {total.toLocaleString("th-TH")} {unit}
@@ -93,7 +93,7 @@ export function Pagination(props: PaginationProps) {
           className={NAV_BTN}
           disabled={page === 1 || busy}
           onClick={() => onChange(page - 1)}
-          aria-label="Previous page"
+          aria-label="หน้าก่อนหน้า"
         >
           <ChevronLeft className="size-4" />
           <span className="hidden sm:inline">ก่อนหน้า</span>
@@ -131,7 +131,7 @@ export function Pagination(props: PaginationProps) {
           className={NAV_BTN}
           disabled={page === totalPages || busy}
           onClick={() => onChange(page + 1)}
-          aria-label="Next page"
+          aria-label="หน้าถัดไป"
         >
           <span className="hidden sm:inline">ถัดไป</span>
           <ChevronRight className="size-4" />

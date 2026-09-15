@@ -22,7 +22,7 @@ export default function ScanPage() {
         <QrCode className="size-10" />
       </div>
       <div className="space-y-1">
-        <h1 className="text-lg font-semibold">สแกน QR บนพัสดุ</h1>
+        <h2 className="text-lg font-semibold">สแกน QR บนพัสดุ</h2>
         <p className="text-sm text-muted-foreground">
           สแกนป้ายบนพัสดุเพื่อดูรายละเอียดและกดยืม
         </p>

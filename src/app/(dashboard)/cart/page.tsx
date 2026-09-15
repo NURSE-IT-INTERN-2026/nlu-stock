@@ -366,10 +366,10 @@ export default function ConfirmDispensePage() {
           <p className="text-sm text-muted-foreground mt-1">เพิ่มพัสดุจากหน้าเบิก-ยืมพัสดุก่อน</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="lg" className="bg-white" onClick={() => router.push("/dispense")}>
+          <Button variant="outline" size="lg" onClick={() => router.push("/dispense")}>
             เพิ่มรายการ
           </Button>
-          <Button variant="outline" size="lg" className="bg-white" onClick={() => setLoadDialogOpen(true)}>
+          <Button variant="outline" size="lg" onClick={() => setLoadDialogOpen(true)}>
             <FolderOpen className="mr-1 h-4 w-4" />
             โหลดเทมเพลต
           </Button>
@@ -449,7 +449,7 @@ export default function ConfirmDispensePage() {
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {item.dispenseType === "CONSUMABLE" ? (
-                            <span className="inline-flex items-center rounded-full bg-orange-500/15 px-2 py-0.5 text-xs font-medium text-orange-700">เบิก</span>
+                            <span className="inline-flex items-center rounded-full bg-orange-500/15 px-2 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-300">เบิก</span>
                           ) : (
                             <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">ยืม</span>
                           )}

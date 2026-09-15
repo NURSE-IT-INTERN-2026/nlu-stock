@@ -313,7 +313,7 @@ function ItemsContent() {
                                 {item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}
                               </span>
                               {hasSubItems && (
-                                <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200">
+                                <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30">
                                   <Layers className="size-2.5" />{matched ? `${matched.length}/${item._count.subItems}` : item._count.subItems}
                                 </Badge>
                               )}

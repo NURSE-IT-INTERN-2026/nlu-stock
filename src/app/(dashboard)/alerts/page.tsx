@@ -63,10 +63,10 @@ interface ItemRecord {
 type AlertTypeKey = "all" | "lowStock" | "nearExpiry" | "dueCount" | "todo";
 
 const ALERT_BADGE: Record<string, string> = {
-  lowStock: "bg-orange-500/15 text-orange-700 border-orange-500/30",
+  lowStock: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
   nearExpiry: "bg-warning/15 text-warning-foreground border-warning/30",
   overdueMaint: "bg-destructive/15 text-destructive border-destructive/30",
-  dueCount: "bg-sky-500/15 text-sky-700 border-sky-500/30",
+  dueCount: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
 };
 
 const ALERT_LABEL: Record<string, string> = {
@@ -78,10 +78,10 @@ const ALERT_LABEL: Record<string, string> = {
 
 // Mobile row icon by alert type (desktop table keeps text badges only).
 const ALERT_ICON: Record<string, { icon: typeof Package; cls: string }> = {
-  lowStock: { icon: Package, cls: "bg-orange-500/10 text-orange-700 ring-orange-500/20" },
-  nearExpiry: { icon: Clock, cls: "bg-warning/10 text-warning-700 ring-warning/20" },
-  overdueMaint: { icon: Wrench, cls: "bg-destructive/10 text-destructive ring-destructive/20" },
-  dueCount: { icon: ClipboardCheck, cls: "bg-sky-500/10 text-sky-700 ring-sky-500/20" },
+  lowStock: { icon: Package, cls: "bg-orange-500/10 text-orange-700 dark:text-orange-300 ring-orange-500/20" },
+  nearExpiry: { icon: Clock, cls: "bg-warning/10 text-warning-700 dark:text-warning-200 ring-warning/20" },
+  overdueMaint: { icon: Wrench, cls: "bg-destructive/10 text-destructive dark:text-danger-400 ring-destructive/20" },
+  dueCount: { icon: ClipboardCheck, cls: "bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-sky-500/20" },
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;

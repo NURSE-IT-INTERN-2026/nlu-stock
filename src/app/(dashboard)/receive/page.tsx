@@ -424,7 +424,7 @@ function ReceiveContent() {
           placeholder="ค้นหาพัสดุ (รหัส / ชื่อ)..."
           value={searchQ}
           onChange={(e) => handleSearchChange(e.target.value)}
-          className="h-11 pl-11 text-base text-gray-900 bg-background border-input focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="h-11 pl-11 text-base text-foreground bg-background border-input focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           autoFocus
         />
       </div>
@@ -520,7 +520,7 @@ function ReceiveContent() {
                         min={1}
                         value={row.quantity}
                         onChange={(e) => updateRow(row.id, { quantity: parseInt(e.target.value) || 0 })}
-                        className="text-gray-900 h-8 text-sm"
+                        className="text-foreground h-8 text-sm"
                       />
                       {row.item.trackIndividually && (
                         <p className="text-[11px] text-muted-foreground font-mono break-all">
@@ -538,7 +538,7 @@ function ReceiveContent() {
                         value={row.lotNumber}
                         onChange={(e) => updateRow(row.id, { lotNumber: e.target.value })}
                         aria-invalid={!!clash}
-                        className="text-gray-900 h-8 text-sm"
+                        className="text-foreground h-8 text-sm"
                       />
                       {clash && (
                         <p role="alert" className="text-[11px] text-destructive">
@@ -574,7 +574,7 @@ function ReceiveContent() {
                           placeholder="-"
                           value={row.unitCost}
                           onChange={(e) => updateRow(row.id, { unitCost: e.target.value })}
-                          className="text-gray-900 h-8 text-sm"
+                          className="text-foreground h-8 text-sm"
                         />
                       </div>
                     </div>
@@ -591,7 +591,7 @@ function ReceiveContent() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
-                  className="text-gray-900 text-sm"
+                  className="text-foreground text-sm"
                 />
               </div>
             )}

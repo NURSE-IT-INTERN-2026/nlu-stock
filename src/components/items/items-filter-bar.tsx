@@ -192,7 +192,7 @@ function ActiveChip({ label, onRemove, icon, tone = "default" }: { label: string
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 rounded-full text-xs font-medium border",
-      tone === "alert" ? "bg-orange-500/15 text-orange-700 border-orange-500/30" : "bg-primary/10 text-foreground border-primary/20",
+      tone === "alert" ? "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30" : "bg-primary/10 text-foreground border-primary/20",
     )}>
       {icon}
       {label}

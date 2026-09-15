@@ -59,17 +59,19 @@ function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
   // Final segment: prefer page-supplied detail (e.g. item code, active tab) over generic title
   const last = detail ?? title;
 
-  // If no trail, just show the last label
+  // The last label is the page's one <h1> — every dashboard page gets its heading from here.
   if (trail.length === 0) {
     return (
-      <nav className="text-base min-w-0">
-        <span className="font-medium truncate">{last}</span>
+      <nav aria-label="breadcrumb" className="text-base min-w-0">
+        <h1 className="font-medium truncate">{last}</h1>
       </nav>
     );
   }
 
   return (
-    <nav className="flex items-center gap-1 text-base min-w-0">
+    <nav aria-label="breadcrumb" className="text-base min-w-0">
+      {/* Whole trail inside the <h1>: the last label alone is often just a tab ("ทั้งหมด"). */}
+      <h1 className="flex items-center gap-1 min-w-0">
       {trail.map((crumb, i) => (
         <span key={crumb.href} className="flex items-center gap-1">
           {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/50" />}
@@ -80,6 +82,7 @@ function Breadcrumb({ title, detail }: { title: string; detail?: string }) {
       ))}
       <ChevronRight className="size-3.5 text-muted-foreground/50" />
       <span className="font-medium truncate">{last}</span>
+      </h1>
     </nav>
   );
 }

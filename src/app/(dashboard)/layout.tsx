@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { AlertProvider } from "@/hooks/use-alerts";
 import { CartProvider } from "@/components/dispense/cart-context";
 import { PageHeaderProvider } from "@/components/layout/page-header-context";
+import { MotionConfig } from "motion/react";
 
 // Pages that manage their own height/scroll (app-shell style) — drop main's vertical padding so they fill the viewport.
 const FULL_BLEED = new Set(["/receive", "/items", "/settings", "/alerts"]);
@@ -69,6 +70,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
+    // globals.css already stops CSS animation under prefers-reduced-motion; Motion animates in
+    // JS and ignores that rule, so it needs its own switch.
+    <MotionConfig reducedMotion="user">
     <AlertProvider enabled={!isSelfBorrower(user.role)}>
       <CartProvider userId={user.userId}>
       <PageHeaderProvider>
@@ -96,5 +100,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </PageHeaderProvider>
       </CartProvider>
     </AlertProvider>
+    </MotionConfig>
   );
 }

@@ -274,7 +274,7 @@ export function ItemsMasterTab() {
                     <TableCell className="px-2">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate min-w-0"><span className="font-medium">{item.name}</span>{item.nameEn && <span className="text-muted-foreground ml-1">({item.nameEn})</span>}</span>
-                        {item.trackIndividually && item._count.subItems > 1 && <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-2.5" />{item._count.subItems}</Badge>}
+                        {item.trackIndividually && item._count.subItems > 1 && <Badge variant="outline" className="shrink-0 h-4 gap-0.5 px-1 text-[10px] bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30"><Layers className="size-2.5" />{item._count.subItems}</Badge>}
                         {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="shrink-0 h-4 px-1 text-[10px] bg-amber-50 text-amber-700 border-amber-200">ไม่มี SubItem</Badge>}
                       </div>
                     </TableCell>
@@ -352,7 +352,7 @@ export function ItemsMasterTab() {
                       <div className="mt-0.5 font-medium leading-tight flex flex-wrap items-center gap-1.5">
                         <span className="truncate">{item.name}</span>
                         {item.nameEn && <span className="text-muted-foreground"> ({item.nameEn})</span>}
-                        {canExpand && <Badge variant="outline" className="gap-0.5 px-1.5 py-0 text-[11px] bg-orange-50 text-orange-700 border-orange-200"><Layers className="size-3" />{item._count.subItems}</Badge>}
+                        {canExpand && <Badge variant="outline" className="gap-0.5 px-1.5 py-0 text-[11px] bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30"><Layers className="size-3" />{item._count.subItems}</Badge>}
                         {item.trackIndividually && item._count.subItems === 0 && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-orange-200">ไม่มี SubItem</Badge>}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">

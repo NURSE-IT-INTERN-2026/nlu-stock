@@ -47,10 +47,10 @@ export function DashboardGreeting() {
   return (
     <div className="flex items-start justify-between gap-3 flex-wrap">
       <div className="min-w-0">
-        <h1 className="text-2xl flex items-baseline gap-2 flex-wrap">
+        <h2 className="text-2xl flex items-baseline gap-2 flex-wrap">
           <span className="font-normal text-muted-foreground">{greeting}, </span>
           <span className="font-bold text-foreground">{firstName}</span>
-        </h1>
+        </h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           สถานะพัสดุในคลังล่าสุดประจำวัน
         </p>

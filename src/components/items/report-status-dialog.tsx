@@ -148,7 +148,7 @@ export function ReportStatusDialog({ open, onOpenChange, itemId, itemCode, statu
               <div className="space-y-2">
                 <Label>ชิ้นย่อย{!lockedSub && <span className="text-destructive"> *</span>}</Label>
                 {lockedSub ? (
-                  <div className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-gray-900">
+                  <div className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground">
                     {subLabel(lockedSub)}
                   </div>
                 ) : (

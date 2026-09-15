@@ -88,7 +88,7 @@ export function CodeBuilder({
             value={copyCount}
             onCommit={onCopyCountChange}
             min={1}
-            className="w-20 bg-background text-center text-gray-900"
+            className="w-20 bg-background text-center text-foreground"
           />
         </div>
       </div>

@@ -174,7 +174,7 @@ export function StepCategoryUnits({
                     setQtyInvalid(!v);
                     onQtyValidChange?.(v);
                   }}
-                  className="w-20 bg-background text-center text-gray-900"
+                  className="w-20 bg-background text-center text-foreground"
                 />
               </div>
             </div>

@@ -94,7 +94,7 @@ export function DatePicker({
             aria-invalid={invalid}
             aria-describedby={describedBy}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm text-gray-900 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring",
+              "flex w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm text-foreground outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring",
               disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
               className,
             )}

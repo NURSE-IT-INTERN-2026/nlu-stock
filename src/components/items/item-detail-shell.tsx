@@ -128,10 +128,10 @@ const STATUS_META: Record<string, { icon: typeof CheckCircle2; tone: Tone }> = {
 };
 type Tone = "success" | "primary" | "warning" | "destructive";
 const TONE_CLASS: Record<Tone, string> = {
-  success: "text-success-700 bg-success/10 border-success/20",
+  success: "text-success-700 dark:text-success-200 bg-success/10 border-success/20",
   primary: "text-primary bg-primary/10 border-primary/20",
-  warning: "text-warning-700 bg-warning/10 border-warning/20",
-  destructive: "text-destructive bg-destructive/10 border-destructive/20",
+  warning: "text-warning-700 dark:text-warning-200 bg-warning/10 border-warning/20",
+  destructive: "text-destructive dark:text-danger-400 bg-destructive/10 border-destructive/20",
 };
 const TONE_BAR: Record<Tone, string> = { success: "bg-success", primary: "bg-primary", warning: "bg-warning", destructive: "bg-destructive" };
 
@@ -439,9 +439,9 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
             )}
             {soonLots.length > 0 && (
               <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
-                <AlertTriangle className="size-5 text-warning-700 shrink-0 mt-0.5" />
+                <AlertTriangle className="size-5 text-warning-700 dark:text-warning-200 shrink-0 mt-0.5" />
                 <div className="text-sm min-w-0">
-                  <span className="font-semibold text-warning-700">ใกล้หมดอายุ ({soonLots.length})</span>
+                  <span className="font-semibold text-warning-700 dark:text-warning-200">ใกล้หมดอายุ ({soonLots.length})</span>
                   <span className="text-muted-foreground ml-2">
                     {soonLots.map((l) => `${lotDisplay(l.lotNumber)} · ใน ${l.days} วัน`).join("  ·  ")}
                   </span>
@@ -675,7 +675,7 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
             <span className="text-muted-foreground">·</span>
             <span className="inline-flex items-center gap-1.5"><span className={cn("size-1.5 rounded-full", stockStatus.color)} /><span className="text-muted-foreground">{stockStatus.label}</span></span>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight tracking-tight text-balance break-words">{item.name}</h1>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight tracking-tight text-balance break-words">{item.name}</h2>
           {item.nameEn && <p className="text-muted-foreground mt-2 text-sm italic">{item.nameEn}</p>}
           {item.description && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{item.description}</p>}
         </div>
@@ -716,7 +716,7 @@ function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onRet
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border text-[11px]">spec {sub.item.code} · {siblingCount} ชิ้น</span>
               )}
             </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight tracking-tight text-balance break-words">{sub.name ?? sub.item.name}</h1>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight tracking-tight text-balance break-words">{sub.name ?? sub.item.name}</h2>
             {sub.item.nameEn && <p className="text-muted-foreground mt-2 text-sm italic">{sub.item.nameEn}</p>}
             {sub.notes && <p className="mt-2 text-sm text-muted-foreground max-w-2xl">{sub.notes}</p>}
           </div>
@@ -758,7 +758,7 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
   // Low-stock alert only (zero stock gets its own banner).
   const isLow = minThreshold > 0 && available > 0 && available < minThreshold;
   const stockTag = isLow
-    ? { label: "ต่ำกว่าขั้นต่ำ", dot: "bg-warning", cls: "bg-warning/10 text-warning-700 border-warning/20" }
+    ? { label: "ต่ำกว่าขั้นต่ำ", dot: "bg-warning", cls: "bg-warning/10 text-warning-700 dark:text-warning-200 border-warning/20" }
     : null;
 
   // The breakdown is the DistributionTable's own numbers, summed per state — same source,
@@ -1234,9 +1234,9 @@ function PieceMaintenance({ sub, canAct, onRecord }: { sub: SubItemData; canAct:
 function StatCard({ label, value, icon: Icon, tone = "primary" }: { label: string; value: string; icon: React.ComponentType<{ className?: string }>; tone?: Tone }) {
   const toneClass = {
     primary: "bg-primary/5 text-primary border-primary/10",
-    success: "bg-success/10 text-success-700 border-success/20",
-    warning: "bg-warning/10 text-warning-700 border-warning/20",
-    destructive: "bg-destructive/10 text-destructive border-destructive/20",
+    success: "bg-success/10 text-success-700 dark:text-success-200 border-success/20",
+    warning: "bg-warning/10 text-warning-700 dark:text-warning-200 border-warning/20",
+    destructive: "bg-destructive/10 text-destructive dark:text-danger-400 border-destructive/20",
   }[tone];
   return (
     <div className="rounded-xl border border-border bg-muted/20 p-4 grid grid-cols-[auto_1fr] items-center gap-3">
