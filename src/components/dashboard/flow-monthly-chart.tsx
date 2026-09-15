@@ -41,10 +41,8 @@ function ChartTooltip({
  * ค้างสะสม is a Line, not a third Area: it is a level (how much is out right now) while the
  * other two are flows (how much moved this month), and only the flows are worth shading.
  *
- * All three are ชิ้น. They used to be ครั้ง, which made the ค้าง number un-plottable — a
- * count of loans minus a count of return events is not a quantity of anything, and on real
- * data it printed negative. The route carries the balance forward instead of subtracting
- * the two totals.
+ * All three are ชิ้น, never ครั้ง: loans minus return events is not a quantity of anything and
+ * goes negative. The route carries the balance forward instead of subtracting the two totals.
  */
 export function FlowMonthlyChart({
   title,

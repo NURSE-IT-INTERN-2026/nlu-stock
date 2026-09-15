@@ -11,8 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { CategoryOption, LocationOption, ProfileOption } from "@/lib/api";
 
-// ปุ่มกรองสองตัวนี้เคยอยู่ใน items-filter-bar และถูก /dispense import ข้ามมา. หน้ารายงานเป็น
-// ที่ที่สาม — cascade ตัวเดียวกันทั้งแอป ไม่ใช่ Select แบนที่หน้ารายงานเขียนซ้ำอีกชุด.
+// ปุ่มกรองชุดเดียวที่ /items, /dispense และหน้ารายงานใช้ร่วมกัน — ห้ามเขียน Select แบนซ้ำในหน้าใดหน้าหนึ่ง.
 
 // Map profile.icon string → lucide component. Unknown → Boxes fallback.
 const PROFILE_ICONS: Record<string, LucideIcon> = {

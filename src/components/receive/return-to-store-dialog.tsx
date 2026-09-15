@@ -15,11 +15,10 @@ import { returnInUseRecord, type InUseRecord } from "@/lib/api";
 /**
  * คืนเข้าคลัง for one นำไปใช้งาน record — back to the item's สถานที่จัดเก็บ, shown, not asked.
  *
- * This dialog used to ask for a destination, and any answer but the registered location
- * turned คืน into a move: the record closed and a fresh นำไปใช้งาน one opened there, so the
- * stock never came back ว่าง. Two different acts behind one button. ที่ตั้งหลักคือทะเบียนใน
- * ตั้งค่า — คืนคือกลับบ้าน, and taking it somewhere else is ย้ายที่ตั้ง afterwards, on its own
- * screen. The location is printed here so whoever is holding the thing can see where it goes.
+ * Don't add a destination picker: any other answer turns คืน into a move and the stock never
+ * comes back ว่าง. ที่ตั้งหลักคือทะเบียนใน ตั้งค่า — คืนคือกลับบ้าน; taking it elsewhere is
+ * ย้ายที่ตั้ง afterwards, on its own screen. The location is printed so whoever holds the thing
+ * can see where it goes.
  */
 export function ReturnToStoreDialog({
   open, onOpenChange, record, onSaving, onSuccess,

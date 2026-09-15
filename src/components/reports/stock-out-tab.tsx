@@ -17,9 +17,8 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { DISPENSE_KINDS, DISPENSE_KIND_LABELS, parseDispenseKind, type DispenseKind } from "@/lib/dispense-kind";
 
-// ออกจากคลังคือเหตุการณ์คนละเรื่องสามอย่างในตารางเดียว (lib/dispense-kind) — ก่อนหน้านี้ปนกันหมด
-// ใน list เดียว แถวเบิกใช้ที่ไม่มีวันคืนก็ขึ้น "ยังไม่คืน" ค้างตลอดกาล ส่วนของที่ตั้งไว้ในห้องก็
-// ไม่มีที่ให้บอกว่าอยู่ห้องไหน. หนึ่ง segment = หนึ่งคำถาม จึงมีคอลัมน์ ตัวเลข และตัวกรองของตัวเอง.
+// ออกจากคลังคือเหตุการณ์คนละเรื่องสามอย่างในตารางเดียว (lib/dispense-kind) — ห้ามปนใน list เดียว
+// ไม่งั้นแถวเบิกใช้จะขึ้น "ยังไม่คืน" ตลอดกาล. หนึ่ง segment = หนึ่งคำถาม จึงมีคอลัมน์ ตัวเลข และตัวกรองของตัวเอง.
 export interface StockOutRow {
   id: string;
   itemCode: string;

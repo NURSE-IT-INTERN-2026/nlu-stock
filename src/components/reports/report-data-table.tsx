@@ -70,8 +70,8 @@ export function ReportDataTable<T extends Record<string, any>>({
   const paged = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Rows open a detail view, so they have to answer the keyboard too — a click handler on a
-  // <tr> is invisible to Tab and Enter on its own. The handler that used to come with it,
-  // role="button" on the <tr>, is what a table must not do: a row that calls itself a button
+  // <tr> is invisible to Tab and Enter on its own. Never put role="button" on the <tr>: a row
+  // that calls itself a button
   // stops being a row, and every cell under it stops belonging to a column. Screen readers lose
   // the whole grid. The keyboard gets its answer from a real <button> wrapping the first cell
   // instead (below) — activating it fires a click that bubbles to this handler, so the two paths

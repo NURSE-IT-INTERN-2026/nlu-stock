@@ -215,11 +215,9 @@ export function StockBalanceTab() {
     };
   }, [data]);
 
-  // The สรุปสต็อก tab used to be a second route and a second table answering "ยอดรายหมวด"
-  // off the same items. It is a fold over the rows already on screen, so it is one now —
-  // one fetch, and the chart can never disagree with the table under it.
+  // ยอดรายหมวดพับจากแถวที่อยู่บนจอแล้ว — ห้ามแยก route/fetch ใหม่ ไม่งั้นกราฟกับตารางข้างล่างไม่ตรงกัน.
   //
-  // จัดกลุ่มที่ **ประเภท** ไม่ใช่หมวดหมู่: คลังนี้มีหมวดหมู่หลายสิบหมวด กราฟจึงเคยเป็นแท่งบางๆ
+  // จัดกลุ่มที่ **ประเภท** ไม่ใช่หมวดหมู่: คลังนี้มีหมวดหมู่หลายสิบหมวด กราฟรายหมวดจะเป็นแท่งบางๆ
   // หลายสิบแท่งที่ recharts ซ่อนป้ายทิ้งเกือบหมด. หมวดหมู่ไม่ได้หายไป — มันไปอยู่ในกล่องที่กด
   // แท่งแล้วเปิด (byProfile[].categories) ซึ่งพับจากแถวชุดเดียวกัน จึงบวกกลับได้เท่ากันเสมอ.
   const byProfile = useMemo(() => {

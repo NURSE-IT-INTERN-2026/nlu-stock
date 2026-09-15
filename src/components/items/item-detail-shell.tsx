@@ -631,8 +631,8 @@ function ItemHero({ item, stockStatus }: { item: ItemData; stockStatus: { color:
         <ItemThumb src={coverSrc} alt={item.name} />
         <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
       </div>
-      {/* Top-aligned: the stock card is taller than the title, and justify-between used to
-          park the chips at the bottom with a hole in the middle. */}
+      {/* Top-aligned, not justify-between: the stock card is taller than the title, so
+          justify-between parks the chips at the bottom with a hole in the middle. */}
       <div className="flex flex-col min-w-0 py-1">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs mb-3">
@@ -672,8 +672,7 @@ function PieceHero({ sub, isMulti, siblings, onSelect, canAct, activeLoan, onRet
           <ItemThumb src={cover} alt={sub.name ?? fullCode} />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wider font-semibold bg-background/90 px-2 py-0.5 rounded-full backdrop-blur-sm">Cover</span>
         </div>
-        {/* Top-aligned: the stock card is taller than the title, and justify-between used to
-          park the chips at the bottom with a hole in the middle. */}
+        {/* Top-aligned, not justify-between — see the item header above. */}
       <div className="flex flex-col min-w-0 py-1">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs mb-3">
@@ -731,10 +730,8 @@ function StockSummary({ available, total, unit, minThreshold, dispenseType, dist
 
   // The breakdown is the DistributionTable's own numbers, summed per state — same source,
   // so the card and the table two screens down cannot disagree about one quantity.
-  // It used to mirror the six-row tracked breakdown by pouring the whole totalQty−availableQty
-  // gap into ถูกยืม and hard-coding the other four to 0. That reads as a fact and was not one:
-  // on NLU-DUR-003 it claimed 89 ถูกยืม when 5 were borrowed and 84 were stationed in rooms.
-  // A pile has no per-piece status to count, but the open records do say where the stock went.
+  // Never pour the totalQty−availableQty gap into ถูกยืม: stock stationed in rooms would read as
+  // borrowed. A pile has no per-piece status, but the open records say where the stock went.
   const byState: Record<DistributionRow["state"], number> = {
     AVAILABLE: 0, IN_USE: 0, ON_LOAN: 0, PENDING_MAINTENANCE: 0, UNDER_REPAIR: 0, DAMAGED: 0,
   };
@@ -1099,10 +1096,9 @@ function PieceOverview({ sub, isMulti, canAct, isKitSet, canSelfBorrow, borrowNo
 }
 
 // ── Sub-codes tab (table: status + who/where + return) ──
-// LEGACY READER. StationInRoomDialog used to fold the room into notes as "ห้องที่ตั้ง: X"
-// because locationId could come back null; INUSE now requires a real Location (see
-// validators/dispense.ts) and the dialog no longer writes the note. Kept only so the rows
-// written before that — the ones whose room is a typo like "asad" — still show something.
+// LEGACY READER for older INUSE rows that carry the room in notes as "ห้องที่ตั้ง: X". New rows
+// require a real Location (validators/dispense.ts) and never write it; delete this once no such
+// rows remain.
 const roomFromNotes = (notes: string | null | undefined) => notes?.match(/ห้องที่ตั้ง:\s*([^|]+)/)?.[1].trim() || null;
 
 function SubCodesTable({ rows, itemCode, itemLocation, currentId, canAct, returning, onSelect, onReturn, onUndoDispose }: {

@@ -294,10 +294,8 @@ export default function ConfirmDispensePage() {
           quantity: i.quantity,
         })),
         usageType: usageType || null,
-        // เหตุผล lands in usageNote for every usage type, never in notes. Both columns used to
-        // carry it — รายวิชา in usageNote, กิจกรรม/อื่นๆ in notes — which printed the same text
-        // under two headings on the report and left lib/usage-by-subject unable to tell one
-        // activity from another (they all grouped under a null usageNote).
+        // เหตุผล lands in usageNote for every usage type, never in notes — otherwise the report
+        // prints it under two headings and lib/usage-by-subject lumps activities together.
         //
         // Only the type that shows the field may send it — switching กิจกรรม/อื่นๆ → รายวิชา
         // hides the textarea but leaves its text in state, and posting that would file one

@@ -852,7 +852,6 @@ export function KitSetContentsCard({
   const refresh = () => { load(); onChanged(); };
 
   if (loading) return <Skeleton className="h-40 w-full" />;
-  // A swallowed failure used to leave the skeleton up forever — say so instead.
   if (!contents) return <p className="text-sm text-muted-foreground">โหลดข้อมูลชุดไม่สำเร็จ</p>;
 
   const short = shortOf(contents.drift);

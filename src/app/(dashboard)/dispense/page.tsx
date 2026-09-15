@@ -290,12 +290,10 @@ return (
               const maxAdd = stockCap(item);
               const atMax = !item.trackIndividually && (held || inCart >= maxAdd);
               const outOfStock = maxAdd <= 0 || held;
-              // What is still addable, which is what the badge is asked. Stock already sitting
-              // in the cart is spoken for: the badge used to keep saying "เหลือ 3" next to a +
-              // button that had gone quietly disabled, so the number and the control disagreed.
+              // What is still addable, which is what the badge is asked. Stock already in the
+              // cart is spoken for, or the badge says "เหลือ 3" next to a disabled + button.
               const addable = Math.max(0, maxAdd - inCart);
-              // Tracked items used to hard-code "ชิ้น", which hid the real unit (เครื่อง/ตัว/ชุด).
-              // Both kinds read from issueUnit now — "ชิ้น" only shows when that IS the unit.
+              // Both kinds read the unit from issueUnit — never hard-code "ชิ้น" (เครื่อง/ตัว/ชุด).
               // BORROWER อ่านเพดานต่อครั้ง ไม่ใช่ยอดคงเหลือ: "คงเหลือ 20 ชิ้น" ข้างปุ่มที่กดได้
               // แค่ครั้งละ 1 คือเลขที่ถูกแต่ตอบผิดคำถาม — คนยืมถามว่า "ฉันเอาได้เท่าไหร่".
               const stockLabel = isBorrower

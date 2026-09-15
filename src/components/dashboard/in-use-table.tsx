@@ -14,9 +14,8 @@ import { DashboardSkeleton } from "./dashboard-skeleton";
 // เหตุผล stands in for ผู้ดูแล: นำไปใช้งาน has no borrower to chase, so where it went and what
 // for is the actionable half.
 //
-// Scoped like every other widget on the tab. It used to fetch the whole warehouse, which put
-// a bigger set of rows directly under KPI cards that obeyed the ประเภท/หมวดย่อย filter — two
-// numbers for one thing on one screen is how a reader stops trusting the whole page.
+// Scoped by the ประเภท/หมวดย่อย filter like every other widget on the tab — never the whole
+// warehouse, or it contradicts the KPI cards right above it.
 //
 // Top TAKE only, then a link out. /api/dispense/in-use returns every open record, so paging it
 // five at a time inside a dashboard card produced 52 pages — /receive?tab=in_use is the screen

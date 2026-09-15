@@ -6,9 +6,8 @@ import type { AlertCounts } from "@/lib/alerts";
 // ถึงรอบตรวจนับ (every item that never had a count date) first and bury the four overdue
 // returns.
 //
-// `href` เต็มไม่ใช่ชื่อ query param: สามอันนี้ไม่ได้เปิด /alerts แล้ว — คิวงานที่ต้องลงมือทำย้าย
-// ไปหน้าของตัวเอง (/receive, /repairs, /maintenance) ซึ่งกดคืน/ส่งซ่อมได้จริง ต่างจากแท็บสำเนา
-// แบบอ่านอย่างเดียวที่เคยอยู่บน /alerts. ที่เหลือยังชี้แท็บบน /alerts ตาม `alertChips`.
+// `href` เต็มไม่ใช่ชื่อ query param: สามอันนี้เป็นคิวงานที่ต้องลงมือทำ จึงชี้หน้าที่กดคืน/ส่งซ่อมได้จริง
+// (/receive, /repairs, /maintenance) ไม่ใช่ /alerts. ที่เหลือชี้แท็บบน /alerts ตาม `alertChips`.
 //
 // ponytail: onLoan is deliberately absent. It is a normal state, not an alert — the alert is
 // overdueReturn. The old metric card labelled onLoan "ค้างส่งคืน", which overstated it.

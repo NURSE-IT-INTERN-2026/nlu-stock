@@ -199,9 +199,8 @@ type Action =
 // DAMAGED → UNDER_REPAIR (ส่งซ่อม), UNDER_REPAIR → AVAILABLE (รับคืน, through the maintenance form
 // so ผล and ค่าใช้จ่าย land in maintenance_records).
 //
-// IN_USE used to be handled here too, which is exactly what hid COUNT stock: sub_items has no
-// row for a non-tracked item. คืนเข้าคลัง now uses InUsePanel (records, not statuses) so both
-// kinds show up. Don't add IN_USE back.
+// Don't handle IN_USE here: sub_items has no row for a non-tracked item, so COUNT stock would
+// be invisible. คืนเข้าคลัง uses InUsePanel (records, not statuses) so both kinds show up.
 //
 // The repair lifecycle has the same blind spot, so the panel pulls a second list: the open
 // แจ้งชำรุด bookings of qty stock (/api/repairs), which have no sub_items row to hold a status.

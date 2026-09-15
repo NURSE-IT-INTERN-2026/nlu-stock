@@ -59,8 +59,8 @@ export function ReportSummary({ stats }: { stats: SummaryStat[] }) {
           )}
         >
           {/* Label row owns the icon, then the number, then the caveat — one reading order at
-              every width. The label used to jump to the left of the value on phones, which put
-              the numbers down the middle of the column instead of on a line you can scan.
+              every width — don't move the label beside the value on phones, the numbers stop
+              lining up for scanning.
               No uppercase/tracking from the mock: the labels are Thai, where uppercase is a
               no-op and letter-spacing only breaks up the cluster. */}
           <div className={cn("flex items-center justify-between gap-2", s.token && tokenText[s.token])}>

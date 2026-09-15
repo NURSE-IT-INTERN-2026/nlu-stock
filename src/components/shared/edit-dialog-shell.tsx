@@ -12,8 +12,7 @@ import { cn } from "@/lib/utils";
  * - Header: Pencil icon + title + orange code badge (copy). Toggle "เปิดใช้งาน"
  *   only renders when `isActive` + `onToggleActive` are both provided.
  * - Body: one locked-height scroll area; `children` is a single form split by
- *   <Separator> + heading. It used to support a tab bar — every section reads
- *   better in one scroll, so the tabs went rather than sitting here unused.
+ *   <Separator> + heading. No tabs: every section reads better in one scroll.
  * - Footer: optional `leftIndicator`.
  */
 export function EditDialogShell({

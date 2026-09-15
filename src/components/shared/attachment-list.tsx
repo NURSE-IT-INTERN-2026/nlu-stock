@@ -246,9 +246,8 @@ export function AttachmentList({
 function AttachmentLogPopover({ target, hasFiles }: { target: AttachTarget; hasFiles: boolean }) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<AttachmentLogEntry[] | null>(null);
-  // Distinct from "no entries". A failed fetch used to fall into the same empty state, which
-  // told the reader the evidence had never been touched — the one thing this popover exists to
-  // answer, answered wrongly, in the confident voice.
+  // Distinct from "no entries": a failed fetch must not show the empty state, which would say
+  // the evidence was never touched — the one question this popover exists to answer.
   const [failed, setFailed] = useState(false);
 
   // Fetched on the open, not by an effect watching it: opening is the event, and a stale list
