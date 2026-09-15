@@ -66,8 +66,8 @@ export async function groupUsageBySubject(where: Record<string, unknown>): Promi
   // itemId is in the grouping only so distinct items can be counted per subject; the rows are
   // merged back down to one per subject below.
   const groups = await prisma.dispenseRecord.groupBy({
-    // notes is here for one reason: it is where ACTIVITY/OTHER used to write their line, and
-    // the เหตุผล column on the report still falls back to it (lib/constants recipientLabel).
+    // notes is here for one reason: older ACTIVITY/OTHER rows keep their line there, and the
+    // เหตุผล column on the report falls back to it (lib/constants recipientLabel).
     // Without it those rows would read as a named activity in the table and as one anonymous
     // "กิจกรรม" lump here — the same draw described two ways in two tabs.
     by: ["usageType", "courseCode", "usageNote", "notes", "itemId"],

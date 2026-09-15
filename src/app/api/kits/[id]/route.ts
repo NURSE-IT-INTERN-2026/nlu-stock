@@ -9,9 +9,8 @@ import { z } from "zod";
  * GET  /api/kits/[id] — สูตร + ส่วนประกอบพร้อมสต็อกปัจจุบัน + ชุดที่ประกอบไว้แล้ว
  * PATCH /api/kits/[id] — แก้รายการส่วนประกอบ (BOM)
  *
- * The BOM is never frozen. It used to lock while a set was alive, because returning a set
- * unpacked it against the recipe — but sets are persistent now and no longer end on their own,
- * so that rule would lock every recipe permanently from its first assemble. What still reads
+ * The BOM is never frozen, not even while a set is alive: sets are persistent, so locking on a
+ * live set would lock every recipe permanently from its first assemble. What still reads
  * the BOM against a live set is the ดูของในชุด checklist (advice a human reads with the box open)
  * and ยกเลิกชุด (a rare admin action with a confirm screen listing what goes back), so drift
  * is visible where it matters and costs nothing to accept.

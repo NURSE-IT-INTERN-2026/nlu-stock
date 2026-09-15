@@ -10,10 +10,8 @@
  *   2. dispenseType = CONSUMABLE   → เบิกใช้
  *   3. everything else             → ยืม
  * loanType is NOT NULL: เบิกใช้ writes CONSUME, so no reader has to guess what a missing
- * value meant. It used to be nullable, where NULL stood for both "เบิกใช้" and "row written
- * before the column existed" at once — and every loan query had to spell out
- * `OR [{ loanType: null }, { loanType: "BORROW" }]` because Prisma compiles `not: "INUSE"`
- * into a NULL-unsafe comparison that drops those rows silently.
+ * value meant. Keep it NOT NULL: Prisma compiles `not: "INUSE"` into a NULL-unsafe comparison
+ * that silently drops NULL rows.
  *
  * Every row lands in exactly one kind, so the three segments add up to the whole table —
  * asserted against the database in dispense-kind.test.ts.
@@ -34,10 +32,9 @@ export const DISPENSE_KIND_LABELS: Record<DispenseKind, string> = {
 /**
  * The two loan columns, decided per line at write time (api/dispense).
  *
- * เบิกใช้ gets its own value rather than borrowing BORROW's: a consumable used to file as
- * BORROW with a due date, which reads as an open loan to anyone looking at the row. Nothing
- * broke only because every loan query AND-s a dispenseType filter over it — a guard the next
- * query to be written could easily forget. CONSUME carries no dueAt and never returns.
+ * เบิกใช้ gets its own value rather than borrowing BORROW's: a consumable filed as BORROW with
+ * a due date reads as an open loan, and only a dispenseType filter the next query could forget
+ * would hide it. CONSUME carries no dueAt and never returns.
  */
 export function loanFields(
   dispenseType: string,

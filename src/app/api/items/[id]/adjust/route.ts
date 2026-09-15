@@ -150,9 +150,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const reason = reasonFor(newAvailable - item.availableQty);
 
-    // Damaged stock is parked, not written off — see holdsTotalQty in lib/stock.ts. Dropping
-    // totalQty used to make those units vanish from the item, so "5 รอส่งซ่อม" was a promise
-    // nothing kept. lib/distribution.ts derives the ชำรุด bucket from the open adjustments
+    // Damaged stock is parked, not written off — see holdsTotalQty in lib/stock.ts. Never drop
+    // totalQty for it: the units would vanish and "5 รอส่งซ่อม" would have nothing behind it.
+    // lib/distribution.ts derives the ชำรุด bucket from the open adjustments
     // and the recover route hands them back.
     const nextTotal = holdsTotalQty(reason) ? item.totalQty : newTotal;
 

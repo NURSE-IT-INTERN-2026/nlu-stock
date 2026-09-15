@@ -30,17 +30,16 @@ export interface DistributionRow {
  * instead of per-row — it imports this rather than keeping a parallel copy, so the card and
  * the table cannot drift into calling one quantity two different things.
  *
- * Words come from STATUS_LABELS, never from a literal here: every state below is an
- * ItemStatus the rest of the app already names, and this file used to call AVAILABLE "ว่าง"
- * while the tracked card two divs up called the same DB value "พร้อมใช้งาน". Only the dot
+ * Words come from STATUS_LABELS, never from a literal here, so this table and the card above
+ * cannot name the same DB value two different ways. Only the dot
  * stays local — STATUS_COLORS is hex for charts and STATUS_PILLS is a full pill, neither is
  * a bg-* dot class.
  */
 export const STATE_META: Record<DistributionRow["state"], { label: string; dot: string }> = {
   AVAILABLE: { label: STATUS_LABELS.AVAILABLE, dot: "bg-success" },
   // Stock that is out doing its job — plus, by fallback, any status without a row of its
-  // own (lib/distribution.ts SUB_ITEM_STATE). ส่งซ่อม used to be folded in here too, which
-  // made this row mean "not available, reason unstated"; it has its own row now.
+  // own (lib/distribution.ts SUB_ITEM_STATE). Never fold ส่งซ่อม in — this row would then
+  // mean "not available, reason unstated".
   IN_USE: { label: STATUS_LABELS.IN_USE, dot: "bg-chart-3" },
   ON_LOAN: { label: STATUS_LABELS.ON_LOAN, dot: "bg-primary" },
   // ออกไปบำรุงข้างนอกแล้วยังไม่กลับ — คนละแถวกับส่งซ่อม เพราะของไม่ได้พัง แค่ไม่อยู่.
@@ -53,10 +52,8 @@ export const STATE_META: Record<DistributionRow["state"], { label: string; dot: 
 export const distributionTotal = (rows: DistributionRow[]) => rows.reduce((sum, r) => sum + r.qty, 0);
 
 /**
- * Replaces the single "สถานที่จัดเก็บ" line that used to sit among the spec rows. One line
- * could only ever name the item's registered room, which stops being true the moment any of
- * the stock is stationed elsewhere — and a COUNT item can have most of its stock sitting in
- * classrooms.
+ * Every place the stock is, not just the registered room — a COUNT item can have most of its
+ * stock sitting in classrooms.
  *
  * Every row is an equal citizen: the registered location is listed first for a stable order,
  * not marked as the real one. Which room counts as home is a decision staff make by reading
@@ -93,7 +90,7 @@ export function DistributionTable({ rows, unit }: { rows: DistributionRow[]; uni
               // สถานะ/จำนวน from shifting down on exactly those rows.
               <TableRow key={`${r.kind}-${r.label}-${i}`} className="[&>td]:align-top">
                 <TableCell className="px-3">
-                  {/* The subject of the row — carries the weight the badge used to steal. */}
+                  {/* The subject of the row — it carries the visual weight, not the badge. */}
                   <span className="flex items-center gap-1.5 min-w-0 font-medium">
                     <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{r.label}</span>

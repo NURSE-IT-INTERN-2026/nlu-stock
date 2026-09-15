@@ -5,9 +5,8 @@ import type { DispenseKind } from "@/lib/dispense-kind";
 // query. Separate file because the kind labels are read by a client component and this one
 // pulls in the Prisma runtime.
 
-// Listed explicitly rather than `not: "INUSE"`: the column is NOT NULL now so the trap that
-// used to make that unsafe is gone, but naming the two values keeps this honest when a third
-// one is added — `not: "INUSE"` would quietly sweep it in here.
+// Listed explicitly rather than `not: "INUSE"`: when a third loanType is added,
+// `not: "INUSE"` would quietly sweep it in here.
 const NOT_INUSE: Prisma.DispenseRecordWhereInput = {
   loanType: { in: ["BORROW", "CONSUME"] },
 };

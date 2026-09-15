@@ -183,9 +183,8 @@ export async function itemHistory(id: string, searchParams: URLSearchParams) {
             date: r.dispensedAt,
             delta: -r.quantity,
             qty: r.quantity,
-            // The name of what happened, fixed per event type. It used to be the usageType
-            // ("รายวิชา"), which answers a different question — why the stock left, not what
-            // was done to it — and left the row with no word for the action anywhere.
+            // The name of what happened, fixed per event type — not the usageType ("รายวิชา"),
+            // which says why the stock left, not what was done to it.
             note: type === "BORROW" ? "ยืมออก" : type === "INUSE" ? "ตั้งใช้ในห้อง" : "เบิกออก",
             subtitle: joinNotes(
               // Leads the line: on a ยืม row "ค้าง 5 ชิ้น" is the thing worth scanning, and

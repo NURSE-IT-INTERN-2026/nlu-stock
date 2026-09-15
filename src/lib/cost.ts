@@ -74,8 +74,7 @@ export async function syncLotUnitCost(tx: TxClient, lotId: string) {
  *
  *  ใบรับเข้าของชิ้นนั้นเองมาก่อนเสมอ (ยอดที่จ่ายจริง) แล้วค่อยตกไปที่ราคาเฉลี่ยของรายการ.
  *  `exact` is what the screen and the export column read to say which of the two a number is —
- *  ตัดจำหน่ายกล้อง 3 ตัวที่ซื้อคนละปีคนละราคา used to write off at one averaged figure, and a
- *  ยอดที่จ่ายจริง that is silently an average is worse than one labelled as an estimate. */
+ *  never show an average as ยอดที่จ่ายจริง; one labelled as an estimate is honest. */
 export function writeOffValue(receiptUnitCost: number | null | undefined, itemAvgPrice: number | null | undefined) {
   return receiptUnitCost != null
     ? { value: receiptUnitCost, exact: true }
@@ -94,8 +93,8 @@ export function writeOffValue(receiptUnitCost: number | null | undefined, itemAv
  * ของที่เรียกคืนได้แล้ว (recoveredAt) ไม่นับ — มันกลับมาแล้ว จึงไม่ใช่ของที่เสียไป. เกณฑ์เดียวกับ
  * การ์ดของหายใน /alerts ที่กรองเฉพาะเคสที่ยังเปิด.
  *
- * ที่เดียวสำหรับทั้งกราฟรายเดือนของ มูลค่าคงคลัง และการ์ดรายปีของ ค่าใช้จ่ายรายปี — สองหน้าที่
- * นับคนละ query แล้วให้ตัวเลขไม่ตรงกันคือสิ่งที่หน้ารายงานนี้เคยเป็นมาแล้ว.
+ * ที่เดียวสำหรับทั้งกราฟรายเดือนของ มูลค่าคงคลัง และการ์ดรายปีของ ค่าใช้จ่ายรายปี — ห้ามแยก query
+ * ให้แต่ละหน้า ไม่งั้นตัวเลขสองหน้าจะไม่ตรงกัน.
  */
 export interface LossEvent {
   at: Date;

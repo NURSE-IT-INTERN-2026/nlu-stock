@@ -1,6 +1,6 @@
 /**
- * Derive helpers for CategoryProfile. Single source of truth for all behavior
- * that used to branch on the Category enum.
+ * Derive helpers for CategoryProfile. Single source of truth for per-category
+ * behavior — branch on these, not on the category itself.
  *
  * Used by both server and client. A profile object is passed in (typically from
  * an `include: { profile: true }` query). If null → throws, so a missing

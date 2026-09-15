@@ -5,10 +5,9 @@ import { requireAuth } from "@/lib/api-utils";
 /**
  * Everything currently นำไปใช้งาน — the คืนเข้าคลัง tab.
  *
- * Record-based, not status-based. The tab used to read /api/sub-items?status=IN_USE, which
- * can only ever see tracked pieces: a COUNT item has no SubItem row to carry a status, so
- * 8,481 units of วัสดุคงทน were invisible there and fell through to the loan screen instead.
- * An open INUSE DispenseRecord is the one thing both kinds always have.
+ * Record-based, not status-based. Never read SubItem.status=IN_USE for this: a COUNT item has
+ * no SubItem row, so its stock would be invisible. An open INUSE DispenseRecord is the one
+ * thing both kinds always have.
  *
  * One row per record rather than merged per room: two batches sent to the same room on
  * different days stay apart, which is how ของค้างนาน gets noticed, and a return has to

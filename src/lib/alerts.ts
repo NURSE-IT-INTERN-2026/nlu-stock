@@ -92,9 +92,9 @@ export async function getAlertCounts(): Promise<AlertCounts> {
     }),
     // Reported-damaged, not yet sent to repair — counted as worklist ROWS, matching what the
     // chip's panel renders: one per damaged piece, plus one per open qty แจ้งชำรุด booking
-    // still waiting to be sent (repairSentAt null). The qty half used to be left out because
-    // the panel read sub_items only and could not render it; it now reads /api/repairs too,
-    // so the badge and the list agree again. A booking already at the shop is not pending —
+    // still waiting to be sent (repairSentAt null). Keep both halves: the panel reads sub_items
+    // and /api/repairs, so the badge must count both to match the list. A booking already at
+    // the shop is not pending —
     // it sits on รับคืนจากส่งซ่อม instead.
     Promise.all([
       prisma.subItem.count({ where: { status: "DAMAGED" } }),
@@ -125,8 +125,7 @@ export async function getAlertCounts(): Promise<AlertCounts> {
   // บวก openCases ที่เป็นแท็บ `todo`. overdueReturn กับ damagedPending ไม่อยู่ในนี้ ทั้งที่ยัง
   // คำนวณไว้ให้แถบบนหน้าแรกใช้: แท็บของมันย้ายไป /receive กับ /repairs แล้ว และของสองก้อนนั้น
   // ถูกนับอยู่ใน openCases อยู่ก่อนแล้ว (isTodo รับ BORROW ที่เลยกำหนด, ชิ้น DAMAGED เปิดเป็นเคส
-  // REPAIR) — บวกเข้ามาอีกคือนับสองรอบ. ยอดรวมนี้เคยเป็น 1685 โดยที่ 286 ใบยืมเลยกำหนดถูกนับ
-  // ทั้งใน overdueReturn และใน openCases.
+  // REPAIR) — บวกเข้ามาอีกคือนับสองรอบ.
   //
   // สี่ตัวแรก **ไม่ใช่** เซ็ตเดียวกับที่แท็บ "ทั้งหมด" query (api/items `alerts=true`) แม้จะใช้
   // เกณฑ์ตระกูลเดียวกัน: lowStock/nearExpiry/dueCount ตรงกันจริง แต่ overdueMaint ที่นี่นับ

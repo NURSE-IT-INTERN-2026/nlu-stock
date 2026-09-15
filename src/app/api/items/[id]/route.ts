@@ -35,9 +35,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       location: true,
       issueUnit: true,
       // location + the one open loan per piece so the detail page can render the sub-code
-      // table off this response. Those two used to come from a second call to
-      // /api/settings/items/:id/sub-items, which is requireAdmin — so the table sat empty
-      // and the count read "0 ชิ้น" for every EXECUTIVE and BORROWER who opened a copy.
+      // table off this response. Don't move them to /api/settings/items/:id/sub-items — that
+      // route is requireAdmin, so EXECUTIVE and BORROWER would see an empty table.
       subItems: {
         orderBy: { subCode: "asc" },
         include: {

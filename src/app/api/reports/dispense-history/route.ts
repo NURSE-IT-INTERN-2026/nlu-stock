@@ -21,9 +21,8 @@ import type { UsageType } from "@/generated/prisma/enums";
  * pager and footer count. Rows with no loanGroupId (consumable draws, legacy borrows) are
  * their own group of one, so they page alongside without special-casing.
  *
- * `loanStatus=open|overdue` narrows the same page to loans still owed back — this is what the
- * separate ยืมค้าง tab used to be, folded in here so the two cannot disagree about which loans
- * are outstanding. `summary` is computed over the whole kind, ignoring loanStatus, so the
+ * `loanStatus=open|overdue` narrows the same page to loans still owed back — kept in this route
+ * rather than a separate one so there is one answer to which loans are outstanding. `summary` is computed over the whole kind, ignoring loanStatus, so the
  * counters keep reading the same whichever status is selected.
  *
  * `kind=consume|borrow|inuse` (default consume) picks WHICH of the three events this is a

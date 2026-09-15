@@ -108,10 +108,9 @@ export async function POST(req: NextRequest) {
           // The symptom is editable: the first แจ้งชำรุด is usually written before anyone has
           // looked at the thing properly. Blank leaves what's on record.
           ...(damageNote ? { notes: damageNote } : {}),
-          // No imageEvidenceUrls here. This route used to take the whole array and overwrite it,
-          // which meant an edit that sent only the new files silently destroyed the originals and
-          // an empty array could never clear one. หลักฐาน on an existing record now goes through
-          // POST /api/attachments — one path, appending rather than replacing, and audited.
+          // Never write imageEvidenceUrls here: overwriting the array lets an edit that sends only
+          // new files destroy the originals. หลักฐาน on an existing record goes through
+          // POST /api/attachments — appends, never replaces, and is audited.
           // Stamped once — an edit is still the same trip.
           ...(isEdit ? {} : { repairSentAt: new Date() }),
         },

@@ -163,9 +163,8 @@ export function ItemDetailOverview({ item, userRole, onAdjust, onReportDamage, o
   // Blank cycle = the profile default (3 months for consumables, 12 otherwise).
   const countCycle = countCycleFor(item.category.profile?.dispenseType ?? "COUNT", item.countCycleMonths);
 
-  // สถานที่จัดเก็บ used to be a row here. One line can only name the item's registered
-  // room, which is wrong the moment any of the stock is stationed elsewhere — replaced by
-  // DistributionTable below, which lists every place the stock actually is.
+  // No สถานที่จัดเก็บ row: one line can only name the registered room, which is wrong once
+  // stock is stationed elsewhere. DistributionTable below lists every place it actually is.
   const detailRows: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; mono?: boolean }[] = [
     { icon: Hash, label: "รหัส", value: item.code, mono: true },
     { icon: Tag, label: "ประเภท", value: item.category.profile?.name ?? item.category.name },

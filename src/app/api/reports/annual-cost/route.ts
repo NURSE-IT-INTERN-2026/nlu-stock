@@ -9,12 +9,10 @@ import { kindWhere } from "@/lib/dispense-kind-where";
 /**
  * ค่าใช้จ่ายรายปี — ปีปฏิทิน (ม.ค.–ธ.ค.); the client labels it พ.ศ.
  *
- * Purchases are ReceiveRecord rows, one source for every kind of พัสดุ. This used to read
- * Item.purchasePrice for durables and Lot.unitCost for consumables, which meant a durable
- * bought in three batches counted once, against the year of its single purchaseDate — and
- * anything received before a price existed counted never. A receipt carries the price, the
- * quantity and the date of one actual purchase, so the year it lands in is the year it was
- * bought in.
+ * Purchases are ReceiveRecord rows, one source for every kind of พัสดุ — never
+ * Item.purchasePrice or Lot.unitCost, which count a durable bought in three batches once.
+ * A receipt carries the price, quantity and date of one actual purchase, so the year it lands
+ * in is the year it was bought in.
  *
  * Rows with unitCost null are purchases nobody typed a price for; they are counted, not
  * summed, and surface as unpricedPurchases so a 0 that means "no data" reads apart from a
@@ -153,8 +151,7 @@ export async function GET(request: NextRequest) {
   }));
 
   // **ค่าซ่อมบำรุงเป็นของฝั่งอื่นๆ เสมอ ไม่ว่าพัสดุจะเป็นชนิดไหน.** ของสิ้นเปลืองถูกเบิกออกไปใช้
-  // หรือไม่ก็ตัดจำหน่าย — ไม่มีใครส่งสำลีไปซ่อม และฐานข้อมูลก็ยืนยัน (0 จาก 1,025 ใบผูกกับ
-  // พัสดุสิ้นเปลือง วัดเมื่อ 2026-08-26). แต่ API ไม่ได้ห้ามไว้ การแยกตามชนิดพัสดุจึงเสี่ยงกว่า:
+  // หรือไม่ก็ตัดจำหน่าย — ไม่มีใครส่งสำลีไปซ่อม. แต่ API ไม่ได้ห้ามไว้ การแยกตามชนิดพัสดุจึงเสี่ยงกว่า:
   // ใบที่หลุดมาจะไปโผล่ฝั่งสิ้นเปลืองที่ไม่มีตารางให้มันแสดง กลายเป็นตัวเลขที่บวกอยู่ในยอดรวม
   // โดยไม่มีแถวไหนอธิบายมันได้. โยนมาฝั่งเดียวแล้วมันยังถูกนับครั้งเดียวและมีที่ให้อ่านเสมอ.
   const repairData = repairs.map((r) => ({

@@ -9,9 +9,9 @@ import { AdjustmentReason } from "@/generated/prisma/enums";
 // and stamps `recoveredAt` on the source record so it can't be recovered twice.
 // source ∈ PIECE | ADJUSTMENT.
 //
-// Damaged qty coming home from repair used to run through here too (kind=DAMAGED). It now
-// closes through POST /api/items/:id/maintenance with an `adjustmentId`, so รับคืนจากส่งซ่อม
-// records the result and cost exactly like a tracked piece does. Don't add the branch back.
+// Not for damaged qty coming home from repair — that closes through
+// POST /api/items/:id/maintenance with an `adjustmentId`, so รับคืนจากส่งซ่อม records the
+// result and cost exactly like a tracked piece does. Don't add a DAMAGED branch here.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(req);
   if (auth.denied) return auth.denied;

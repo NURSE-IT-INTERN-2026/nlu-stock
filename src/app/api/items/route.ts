@@ -170,9 +170,8 @@ export async function GET(request: NextRequest) {
     // statusCounts: พร้อมใช้งาน / ถูกใช้งาน (ยืม+ใช้งาน) / ไม่พร้อมใช้งาน (ชำรุด+ส่งซ่อม+บำรุงรักษา).
     // Tracked only — the split is real there because every piece carries its own status.
     // Non-tracked items have no per-piece status to count: Item holds one availableQty/totalQty
-    // pair plus a single status flag, so the third bucket used to be hard-coded 0 and the
-    // whole totalQty−availableQty gap was labelled "ยืม" even when the stock was damaged or
-    // eaten by a kit assembly. Null now; the table falls back to available/total.
+    // pair, and labelling the totalQty−availableQty gap "ยืม" is wrong when the stock is damaged
+    // or inside a kit. So null; the table falls back to available/total.
     let statusCounts: { available: number; inUse: number; unavailable: number } | null = null;
     if (item.trackIndividually) {
       const c = { available: 0, inUse: 0, unavailable: 0 };

@@ -17,8 +17,7 @@ interface ChartContainerProps {
 // NEVER enable series animation (Bar/Area/Pie `isAnimationActive`, `animationDuration`,
 // `animationEasing`) with recharts 3.8.1 on React 19.2 — the entry animation never ticks, the
 // shape stays at height 0, and Rectangle.js bails out at `height === 0` returning null. The
-// axes and legend still render, so the chart looks alive while showing no data at all: every
-// chart in this app was silently empty until 2026-08-09. Every series passes
+// axes and legend still render, so the chart looks alive while showing no data at all. Every series passes
 // isAnimationActive={false}. Re-test with the real charts before touching it.
 //
 // ponytail: replaces recharts ResponsiveContainer, which logs

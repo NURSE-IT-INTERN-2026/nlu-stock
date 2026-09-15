@@ -243,8 +243,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
     }
 
     // One sheet per ชนิดการออกจากคลัง, matching the segment on screen column for column —
-    // an export of เบิกใช้ used to carry a สถานะ column reading "เบิกแล้ว" on every row
-    // forever, and one of นำไปใช้งาน never said which room the stock went to.
+    // each kind gets only the columns that mean something for it (no สถานะ on เบิกใช้, a room on นำไปใช้งาน).
     case "dispense-history": {
       const kind = parseDispenseKind(params.get("kind"));
       const where: Prisma.DispenseRecordWhereInput = { ...kindWhere(kind) };
@@ -700,8 +699,7 @@ async function fetchReportData(type: ReportType, params: URLSearchParams) {
     }
 
     // เคสงาน — ไฟล์ต้องได้ชุดเดียวกับที่หน้าจอกรองอยู่ จึงอ่านผ่าน listCases ตัวเดียวกับ /api/cases
-    // ไม่ใช่ query ของตัวเอง. เคยเป็นสองรายงาน (ชำรุด & ส่งซ่อม, ประวัติบำรุงรักษา) ที่นับคนละทาง
-    // แล้วให้ยอดไม่ตรงกัน.
+    // ไม่ใช่ query ของตัวเอง — สอง query นับคนละทางแล้วยอดไม่ตรงกัน.
     case "cases": {
       // `type` ถูกจองไว้เป็นชนิดรายงานแล้ว ประเภทเคสจึงเดินทางมาในชื่อ caseType
       const type = params.get("caseType");

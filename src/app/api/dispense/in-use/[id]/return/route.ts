@@ -15,11 +15,9 @@ const bodySchema = z.object({
  * คืนเข้าคลัง for one open นำไปใช้งาน record. Stock comes back ว่าง, at its registered
  * สถานที่จัดเก็บ — the one in ตั้งค่า is the item's home, and returning is coming home.
  *
- * This screen used to accept a destination, and picking anything but the registered location
- * closed the record only to open a fresh INUSE one there: the stock never became available,
- * so คืน could silently mean "still out, somewhere else". One act, two outcomes, told apart
- * by a dropdown nobody read. Moving where a thing lives is now its own act (ย้ายที่ตั้ง on
- * the item) — คืนก่อน แล้วค่อยย้าย — and this endpoint has exactly one outcome.
+ * Don't add a destination here: returning elsewhere would re-open an INUSE record, so คืน could
+ * silently mean "still out, somewhere else". Moving where a thing lives is its own act
+ * (ย้ายที่ตั้ง on the item) — คืนก่อน แล้วค่อยย้าย — and this endpoint has exactly one outcome.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(req);
@@ -73,11 +71,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (record.subItemId) {
         // Read the piece instead of assuming IN_USE. แจ้งชำรุด/สูญหาย from the detail page
         // closes the open record on its way through (closeOpenLoan), so a piece reaching here
-        // should still be IN_USE — but this used to hardcode previousStatus: IN_USE and
-        // overwrite status: AVAILABLE regardless, which on a piece that had drifted wrote a
-        // history line that never happened and quietly resurrected สูญหาย stock as available.
-        // Now the record closes either way, and the piece's status only moves when it really
-        // is the one this endpoint is entitled to move.
+        // should still be IN_USE — but never hardcode previousStatus or force AVAILABLE: on a
+        // piece that drifted that writes a history line that never happened and revives สูญหาย
+        // stock. The record closes either way; the status moves only if it is still IN_USE.
         const sub = await tx.subItem.findUnique({
           where: { id: record.subItemId },
           select: { status: true },

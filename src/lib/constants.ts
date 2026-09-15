@@ -111,13 +111,11 @@ export const USAGE_TYPE_OPTIONS = [
  * เหตุผล = สิ่งที่ของถูกเบิกไปทำ. There is no ผู้รับ field, and no ผู้รับ column anywhere in
  * the app any more: staff monitor stock by what it was used for, not by whose name is on it.
  *
- * The cart used to ask "ผู้รับ" on top of the usage block, and the two answers were the same
- * answer twice: a draw for รายวิชา is received by that course, a กิจกรรม by that activity, and
- * อื่นๆ already asks "เอาไปทำอะไร / ใครขอ". So the field is gone from the cart and every
- * เหตุผล label in the app is derived from the usage instead.
+ * Don't add ผู้รับ back to the cart: the usage already answers it (a รายวิชา draw is received
+ * by that course, a กิจกรรม by that activity, อื่นๆ asks "เอาไปทำอะไร / ใครขอ").
  *
- * `recipient` is still read first — the column stays for the rows written before this, where
- * someone deliberately typed a name. New rows leave it null and fall through to the usage.
+ * `recipient` is still read first — older rows may carry a typed name. New rows leave it null
+ * and fall through to the usage.
  */
 export function recipientLabel(r: {
   recipient?: string | null;
@@ -152,12 +150,9 @@ export function courseNamePart(reason: string, courseCode: string): string {
 }
 
 /**
- * นำไปใช้งาน used to fold the destination room into notes as "ห้องที่ตั้ง: X", back when
- * locationId could come back null (see item-detail-shell roomFromNotes, which still reads it
- * to place those rows). The dialog stopped writing it once INUSE required a real Location.
- *
- * Those rows now sit under เหตุผล, one column away from a สถานที่ that says the same room —
- * so the room half is dropped and only a genuine reason ("ยืมเล่นๆ | ห้องที่ตั้ง: …") survives.
+ * Older นำไปใช้งาน rows carry the room in notes as "ห้องที่ตั้ง: X" (item-detail-shell
+ * roomFromNotes still reads it). Under เหตุผล that repeats the สถานที่ column, so the room half
+ * is dropped and only a genuine reason ("ยืมเล่นๆ | ห้องที่ตั้ง: …") survives.
  * A row that was nothing but the room reads "—", which is honest: nobody ever gave a reason.
  */
 export function stripLegacyRoomNote(notes: string | null | undefined): string | null {

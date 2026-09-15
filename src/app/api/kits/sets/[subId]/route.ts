@@ -63,12 +63,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     consumables: components.filter((c) => c.kind === "CONSUMABLE"),
     // Where the box and the current recipe disagree — empty when they match. ปรับชุดตามสูตร
     // works from exactly this list, and the button is hidden while it is empty.
-    //
-    // `missingTracked` used to ride alongside this: the tracked slots the recipe expects that
-    // no piece fills. It was a strict subset — a tracked component's held count comes from
-    // `kitContents` in both, and loadSetHoldings excludes tracked — so every row it produced
-    // was already a drift row, printed with one number instead of two and captioned
-    // "ถูกแจ้งชำรุดหรือย้ายออกไป" even when the recipe had simply been raised.
+    // Don't add a separate "missing tracked slots" list: it is a strict subset of drift
+    // (tracked held counts come from `kitContents` either way), so it would only repeat these rows.
     drift,
   });
 }

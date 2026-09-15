@@ -29,8 +29,8 @@ export type DistributionRow = {
    * The same five buckets USAGE_STATUS_ORDER renders, so the สต็อกคงเหลือ card and the
    * สัดส่วนการใช้งาน card cannot disagree about which states exist.
    *
-   * It used to be four, with ส่งซ่อม folded into ถูกใช้งาน — that made ถูกใช้งาน mean
-   * "not available, reason unstated" and hid the one state staff act on.
+   * Never fold ส่งซ่อม into ถูกใช้งาน — ถูกใช้งาน would then mean "not available, reason
+   * unstated" and hide the one state staff act on.
    */
   state: "AVAILABLE" | "IN_USE" | "ON_LOAN" | "PENDING_MAINTENANCE" | "UNDER_REPAIR" | "DAMAGED";
   /** Loan rows only — when it went out, so ของค้างนาน is visible at a glance. */
