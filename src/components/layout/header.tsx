@@ -4,7 +4,8 @@ import { useTheme } from "next-themes";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Moon, Sun, LogOut, User, Settings, ShoppingBasket, ChevronRight, Bell } from "lucide-react";
+import { useState } from "react";
+import { Moon, Sun, LogOut, ImageUp, ShoppingBasket, ChevronRight, Bell } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -18,6 +19,7 @@ import { isSelfBorrower } from "@/lib/roles";
 import type { SessionUser } from "@/types";
 import { usePageHeader } from "@/components/layout/page-header-context";
 import { withBase } from "@/lib/base-path";
+import { AvatarDialog } from "@/components/layout/avatar-dialog";
 
 interface HeaderProps {
   title: string;
@@ -88,6 +90,8 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
   const { itemCount } = useCart();
   const { detail } = usePageHeader();
   const alerts = useAlerts();
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl);
 
   async function handleLogout() {
     await logout();
@@ -175,9 +179,13 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
                 <p className="text-base font-semibold truncate max-w-[120px] leading-tight">{user.name}</p>
                 <p className="text-xs text-muted-foreground leading-tight">{labelFor(ROLE_LABELS, user.role as Role)}</p>
               </div>
-              <div className="size-9 sm:size-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-bold text-primary-foreground shrink-0">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
+              {avatarUrl ? (
+                <img src={withBase(avatarUrl)} alt="" className="size-9 sm:size-10 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="size-9 sm:size-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-bold text-primary-foreground shrink-0">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
@@ -188,13 +196,9 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
                 <p className="text-xs text-muted-foreground">{user.email}</p>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+            <DropdownMenuItem onClick={() => setAvatarOpen(true)}>
+              <ImageUp className="mr-2 h-4 w-4" />
+              เปลี่ยนรูปโปรไฟล์
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
@@ -203,11 +207,12 @@ export function Header({ title, user, sidebarCollapsed }: HeaderProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
               <LogOut className="mr-2 h-4 w-4" />
-              Log out
+              ออกจากระบบ
             </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        <AvatarDialog open={avatarOpen} onOpenChange={setAvatarOpen} onSaved={setAvatarUrl} />
       </div>
     </header>
   );

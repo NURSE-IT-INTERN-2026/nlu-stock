@@ -30,14 +30,15 @@ const routeRules: RouteRule[] = [
 // Everything else — รับคืน, แจ้งชำรุด, รับเข้า, ปรับยอด — is stock management.
 // Exact match on /api/dispense so /api/dispense/in-use/*/return stays blocked.
 // This is default-deny: a new write route is blocked until it's added here.
-const EXEC_WRITE = [/^\/api\/dispense$/, /^\/api\/dispense-templates(\/|$)/];
+const EXEC_WRITE = [/^\/api\/dispense$/, /^\/api\/dispense-templates(\/|$)/, /^\/api\/profile\/avatar$/];
 
 // BORROWER = นศ./บุคลากรคณะที่สแกน QR เข้ามา. They are not staff: the only page they have any
 // business on is the item they scanned, and the only write they may perform is ยืมเอง.
 // Same default-deny shape as EXEC_WRITE — a new route stays blocked until listed.
 // /api/cart เขียนได้ด้วย แต่เป็น draft ล้วน ไม่ขยับสต็อก — การตัดของจริงยังผ่าน /api/borrow
 // ทางเดียว (route นั้นอ่านสต็อกใต้ row lock)
-const BORROWER_WRITE = [/^\/api\/borrow$/, /^\/api\/cart$/];
+// /api/profile/avatar เปลี่ยนได้แค่รูปโปรไฟล์ของตัวเอง
+const BORROWER_WRITE = [/^\/api\/borrow$/, /^\/api\/cart$/, /^\/api\/profile\/avatar$/];
 
 // One item detail page, the scan screen they land on with no item in hand, and the เบิก-ยืม
 // grid + its ตะกร้า. Note /items/<code> and NOT /items: the staff catalogue lists every row

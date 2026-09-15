@@ -54,8 +54,8 @@ export async function validateSessionToken(token: string) {
   if (!user) return null;
   const row = await prisma.user.findUnique({
     where: { id: user.userId },
-    select: { email: true, name: true, role: true, isActive: true, isBorrower: true },
+    select: { email: true, name: true, role: true, isActive: true, isBorrower: true, avatarUrl: true },
   });
   if (!row || row.email !== user.email || !sessionRoleMatches(user.role, row)) return null;
-  return { ...user, name: row.name };
+  return { ...user, name: row.name, avatarUrl: row.avatarUrl };
 }

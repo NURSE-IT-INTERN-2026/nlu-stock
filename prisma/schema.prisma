@@ -120,6 +120,8 @@ model User {
   // ออกจาก DB. SUPERADMIN ตั้งที่นี่ไม่ได้ (validator กัน) มาจาก env ทางเดียว
   role      String?
   isActive  Boolean  @default(true)
+  // รูปโปรไฟล์ที่ผู้ใช้ครอปแล้วอัปโหลดเอง (/uploads/<uuid>.webp) — null = แสดงตัวอักษรแรกของชื่อ
+  avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

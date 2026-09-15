@@ -1080,6 +1080,23 @@ export function uploadFile(formData: FormData) {
   });
 }
 
+/** รูปโปรไฟล์ของผู้ที่ล็อกอินอยู่ — ทุก role ใช้ได้ ไม่เหมือน uploadFile ที่ต้องเป็น admin */
+export function uploadAvatar(file: Blob) {
+  const formData = new FormData();
+  formData.append("file", file, "avatar.webp");
+  return fetch(withBase("/api/profile/avatar"), {
+    method: "POST",
+    body: formData,
+    headers: { "ngrok-skip-browser-warning": "any" },
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new ApiError(res.status, body?.error || "อัปโหลดไม่สำเร็จ");
+    }
+    return res.json() as Promise<{ url: string }>;
+  });
+}
+
 /** หลักฐานแนบย้อนหลัง — แนบเพิ่ม/ลบ on a record that was written earlier. Returns the array as it
  *  now stands, so the caller renders the server's answer rather than its own optimistic guess. */
 export function changeAttachments(data: {

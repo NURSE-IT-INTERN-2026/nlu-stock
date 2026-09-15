@@ -17,7 +17,8 @@ export async function GET(
 
   if (auth.user.role === "BORROWER") {
     const url = `/uploads/${filename}`;
-    const [item, piece, adjustment, maintenance, status] = await Promise.all([
+    const [own, item, piece, adjustment, maintenance, status] = await Promise.all([
+      prisma.user.findFirst({ where: { id: auth.user.userId, avatarUrl: url }, select: { id: true } }),
       prisma.item.findFirst({ where: { OR: [{ imageUrl: url }, { images: { has: url } }] }, select: { id: true } }),
       prisma.subItem.findFirst({ where: { OR: [{ imageUrl: url }, { images: { has: url } }] }, select: { id: true } }),
       prisma.stockAdjustment.findFirst({ where: { imageEvidenceUrls: { has: url } }, select: { id: true } }),
@@ -25,7 +26,7 @@ export async function GET(
       prisma.itemStatusLog.findFirst({ where: { imageUrls: { has: url } }, select: { id: true } }),
     ]);
     // Evidence takes precedence even if the same URL was also added to an item gallery.
-    if ((!item && !piece) || adjustment || maintenance || status) return forbidden();
+    if (!own && ((!item && !piece) || adjustment || maintenance || status)) return forbidden();
   }
 
   let buffer: Buffer;
