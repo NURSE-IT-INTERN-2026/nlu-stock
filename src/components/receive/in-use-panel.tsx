@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadError } from "@/components/shared/load-error";
+
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,15 +36,17 @@ export function InUsePanel({ initialQuery }: {
 } = {}) {
   const [rows, setRows] = useState<InUseRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [query, setQuery] = useState(initialQuery ?? "");
 
   const load = useCallback(async () => {
+    setError(null);
     setLoading(true);
     try {
       const data = await getInUseRecords();
       setRows(data.records);
-    } catch {
-      setRows([]);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setLoading(false);
     }
@@ -63,6 +67,8 @@ export function InUsePanel({ initialQuery }: {
   const totalOut = filtered.reduce((sum, r) => sum + (r.quantity - r.resolvedQty), 0);
   const { page, setPage, paged, total } = useClientPage(filtered, PAGE_SIZE.DEFAULT, q);
 
+  if (error && rows.length === 0) return <LoadError onRetry={load} />;
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -80,6 +86,7 @@ export function InUsePanel({ initialQuery }: {
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
       <CardContent className="flex flex-col flex-1 min-h-0 gap-3">
+        {error && <LoadError onRetry={load} stale />}
         <div className="shrink-0 space-y-2 sm:space-y-3">
           <p className="text-xs text-muted-foreground">
             {filtered.length} รายการ · {totalOut.toLocaleString("th-TH")} หน่วยอยู่นอกคลัง

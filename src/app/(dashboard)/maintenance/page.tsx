@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
@@ -203,6 +205,8 @@ function MaintenanceShell() {
     return () => setDetail(null);
   }, [activeLabel, setDetail]);
 
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [summary, setSummary] = useState<Summary>({ overdue: 0, dueSoon: 0, inMaintenance: 0, completedThisMonth: 0 });
   const [scheduleItems, setScheduleItems] = useState<ScheduleRow[]>([]);
   // เพดาน perPage=100 ของ paginate() ตัดแถวเงียบๆ — เก็บ total ของฝั่ง server ไว้เทียบ ไม่งั้น
@@ -240,6 +244,7 @@ function MaintenanceShell() {
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    setLoadError(null);
     // ponytail: api-utils paginate() clamps perPage at 100 — เกินนั้นไม่ได้โหลดมา แต่ TruncatedNote
     // บอกด้วย total ของ server ว่าเห็นไม่ครบ. ทำ paging จริงเมื่อการกรองให้แคบลงยังไม่พอ
     const params: Record<string, string> = { perPage: "100" };
@@ -262,14 +267,15 @@ function MaintenanceShell() {
         }) as Promise<PagedSchedule>,
       ]);
       setSummary(sum);
+      setHasLoaded(true);
       // ทั้งตาราง เรียงตามกำหนดบำรุงเก่า→ใหม่ (API sort ให้แล้ว)
       setScheduleItems(sched.items ?? []);
       setScheduleTotal(sched.total ?? sched.items?.length ?? 0);
       setOutRows(out.items ?? []);
       setOutTotal(out.total ?? out.items?.length ?? 0);
       setSchedulePage(1);
-    } catch {
-      if (!silent) toast.error("โหลดข้อมูลบำรุงรักษาไม่สำเร็จ");
+    } catch (e) {
+      setLoadError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -385,6 +391,7 @@ function MaintenanceShell() {
   };
 
   return (
+    <LoadBoundary error={loadError} onRetry={() => void fetchData()} hasData={hasLoaded}>
     <div className="flex flex-col">
       {/* ── Tabs ── */}
       <div className="border-b mb-4 sm:mb-6 -mx-4 px-4 sm:-mx-6 sm:px-6">
@@ -890,6 +897,7 @@ function MaintenanceShell() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </LoadBoundary>
   );
 }
 

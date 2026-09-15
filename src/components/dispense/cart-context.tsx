@@ -8,6 +8,8 @@ import type { CartItem } from "@/lib/validators/dispense";
 
 interface CartState {
   items: CartItem[];
+  loading: boolean;
+  error: Error | null;
   addItem: (item: CartItem) => void;
   removeItem: (itemId: string, lotId?: string | null, subItemId?: string | null) => void;
   updateItem: (itemId: string, updates: Partial<CartItem>, lotId?: string | null, subItemId?: string | null) => void;
@@ -31,6 +33,8 @@ const CartContext = createContext<CartState | null>(null);
 // ใครกดยืนยันก่อนได้ไป — /api/borrow และ /api/dispense ตัดสินใต้ row lock เป็นเจ้าเดียว
 export function CartProvider({ userId, children }: { userId?: string; children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   // คิวเดียว ยิงทีละใบตามลำดับที่ผู้ใช้กด — ไม่ใช่ยิงพร้อมกันแล้วหวังว่าจะถึงตามลำดับ
   // กด + สี่ครั้งรัวๆ คือ PATCH 4 ใบ ถ้าปล่อยขนานกัน เบราว์เซอร์เปิดหลายคอนเนกชันได้ ใบที่ยิง
   // ก่อนอาจถึงทีหลัง แล้ว "จำนวน 4" ถูกทับด้วย "จำนวน 3" ที่มาช้า จอกับ DB จบไม่ตรงกันเงียบๆ
@@ -40,23 +44,31 @@ export function CartProvider({ userId, children }: { userId?: string; children: 
     chain.current = chain.current
       .catch(() => {})
       .then(() => call())
-      .then((d) => setItems(d.items))
+      .then((d) => { setItems(d.items); setError(null); })
       .catch(async (e) => {
         toast.error(e instanceof Error ? e.message : fallbackMsg);
         // ค่าที่จออยู่ตอนนี้เป็นค่าที่เดาไว้ตอน optimistic update — ดึงของจริงมาทับ
-        try { setItems((await getCart()).items); } catch { /* ยังใช้ค่าเดิมต่อได้ */ }
+        try { setItems((await getCart()).items); setError(null); }
+        catch (e) { setError(e instanceof Error ? e : new Error(String(e))); }
       });
     return chain.current;
   }, []);
 
   /** ดึงตะกร้าใหม่จาก server — ต่อท้ายคิวเดียวกัน จะได้ไม่แซงคำสั่งที่ยังค้างอยู่ */
   const refresh = useCallback(async () => {
-    await enqueue(() => getCart(), "โหลดตะกร้าไม่สำเร็จ");
-  }, [enqueue]);
+    setLoading(true);
+    setError(null);
+    // A read failure needs an inline retry, not a mutation toast followed by a hidden retry.
+    chain.current = chain.current.catch(() => {}).then(() => getCart())
+      .then((d) => { setItems(d.items); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e : new Error(String(e))))
+      .finally(() => setLoading(false));
+    await chain.current;
+  }, []);
 
   // โหลดตะกร้าของคนที่ล็อกอินอยู่ และโหลดใหม่เมื่อสลับคน (ล็อกอินคนใหม่ในแท็บเดิม)
   useEffect(() => {
-    if (!userId) { setItems([]); return; }
+    if (!userId) { setItems([]); setLoading(false); setError(null); return; }
     void refresh();
   }, [userId, refresh]);
 
@@ -112,7 +124,7 @@ export function CartProvider({ userId, children }: { userId?: string; children: 
   [items]);
 
   return (
-    <CartContext value={{ items, addItem, removeItem, updateItem, clearCart, itemCount: items.length, getItemQty, refresh }}>
+    <CartContext value={{ items, loading, error, addItem, removeItem, updateItem, clearCart, itemCount: items.length, getItemQty, refresh }}>
       {children}
     </CartContext>
   );

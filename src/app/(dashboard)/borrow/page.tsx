@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadError } from "@/components/shared/load-error";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -29,7 +31,7 @@ import { selfBorrowDueAt } from "@/lib/self-borrow";
 // recipient. The เพดานต่อครั้ง is not re-checked either — the grid caps what can be added and
 // /api/borrow is the enforcer, which refuses the basket as a whole.
 export default function BorrowConfirmPage() {
-  const { items, clearCart } = useCart();
+  const { loading: cartLoading, error: cartError, refresh: refreshCart, items, clearCart } = useCart();
   const router = useRouter();
   const [form, setForm] = useState<SelfBorrowForm>(emptySelfBorrowForm);
   const [showErrors, setShowErrors] = useState(false);
@@ -73,6 +75,7 @@ export default function BorrowConfirmPage() {
 
   // Validate first, then focus what is missing — no silently dead confirm button.
   const handleSubmit = () => {
+    if (cartLoading || cartError) return;
     if (!canConfirm) {
       setShowErrors(true);
       const firstError = Object.keys(errors).find((k) => errors[k]);
@@ -83,6 +86,9 @@ export default function BorrowConfirmPage() {
   };
 
   // Empty state
+  if (cartLoading && items.length === 0) return <p role="status" className="p-6 text-muted-foreground">กำลังโหลดตะกร้า…</p>;
+  if (cartError && items.length === 0) return <LoadError onRetry={refreshCart} />;
+
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4 animate-fade-in">
@@ -102,6 +108,7 @@ export default function BorrowConfirmPage() {
 
   return (
     <div className="relative flex flex-col -mx-4 sm:-mx-6 min-h-0 h-full lg:h-[calc(100vh-5rem)] lg:-mb-6">
+      {cartError && <LoadError onRetry={refreshCart} stale />}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         {/* ── Items list (scrollable) ── */}
         <div className="flex-1 min-w-0 p-6 lg:min-h-0 lg:overflow-y-auto">
@@ -228,10 +235,10 @@ export default function BorrowConfirmPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" disabled={submitting} onClick={() => setClearDialogOpen(true)}>
+            <Button variant="outline" disabled={submitting || cartLoading || !!cartError} onClick={() => setClearDialogOpen(true)}>
               ล้าง
             </Button>
-            <Button type="button" disabled={submitting} onClick={() => { setShowErrors(false); setFormDialogOpen(true); }}>
+            <Button type="button" disabled={submitting || cartLoading || !!cartError} onClick={() => { setShowErrors(false); setFormDialogOpen(true); }}>
               {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               {verb}พัสดุ
             </Button>
@@ -281,7 +288,7 @@ export default function BorrowConfirmPage() {
             }}
           >
             <div className={cn(DIALOG_BODY, "px-1")}>
-              <fieldset disabled={submitting} className="m-0 min-w-0 space-y-4 border-0">
+              <fieldset disabled={submitting || cartLoading || !!cartError} className="m-0 min-w-0 space-y-4 border-0">
                 {showErrors && !canConfirm && (
                   <p role="status" aria-live="polite" className="text-xs text-destructive">
                     กรุณากรอกข้อมูลให้ครบ {Object.values(errors).filter(Boolean).length} ช่อง
@@ -295,12 +302,12 @@ export default function BorrowConfirmPage() {
               </fieldset>
             </div>
             <DialogFooter className="shrink-0">
-              <Button type="button" variant="outline" disabled={submitting} onClick={() => setFormDialogOpen(false)}>
+              <Button type="button" variant="outline" disabled={submitting || cartLoading || !!cartError} onClick={() => setFormDialogOpen(false)}>
                 ยกเลิก
               </Button>
               {/* Not disabled on invalid: a dead button says nothing about which field is
                   missing. Submitting turns the messages on instead. */}
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting || cartLoading || !!cartError}>
                 {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
                 ยืนยันการ{verb}
               </Button>

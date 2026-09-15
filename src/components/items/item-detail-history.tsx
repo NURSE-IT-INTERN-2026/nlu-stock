@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useCallback, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
@@ -194,7 +196,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   );
 
   const {
-    items: events, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
+    error, retry, items: events, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<Unit>({ fetchPage, pageSize: perPage, isMobile });
 
   // แนบเพิ่ม/ลบ answers with the record's array as it now stands. Keeping those answers here —
@@ -283,6 +285,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
   );
 
   const list = (
+    <LoadBoundary error={error} onRetry={retry} hasData={events.length > 0}>
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
       {loading ? (
         <div className="space-y-2 p-4 sm:p-6">
@@ -325,6 +328,7 @@ export function ItemDetailHistory({ itemId, subItemId, canEdit = false }: Props)
         />
       ))}
     </section>
+    </LoadBoundary>
   );
 
   // เคสใช้ CaseDetailPane ตัวเดียวกับหน้ารายการสิ่งที่ต้องทำ; กิจกรรมที่ไม่ใช่เคส (รับเข้า, ปรับสต๊อก,

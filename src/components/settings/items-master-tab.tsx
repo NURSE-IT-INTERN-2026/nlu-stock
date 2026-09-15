@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import React, { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, QrCode, Layers, AlertTriangle } from "lucide-react";
@@ -116,6 +118,7 @@ export function ItemsMasterTab() {
   }, [filter, perPage]);
 
   const {
+    error, retry,
     items, total, page, loading, isLoadingMore, hasNext, loadMore, setPage, refetch,
   } = usePagedList<ItemRecord>({ fetchPage, pageSize: perPage, isMobile });
 
@@ -168,6 +171,7 @@ export function ItemsMasterTab() {
   const delTotal = delBreakdown.reduce((s, b) => s + b.n, 0);
 
   return (
+    <LoadBoundary error={error} onRetry={retry} hasData={items.length > 0}>
     <div className="flex flex-col gap-5">
       {/* Table — hero zone, most visual weight */}
       <div className="rounded-2xl border bg-card shadow-sm flex flex-col md:overflow-clip">
@@ -479,5 +483,6 @@ export function ItemsMasterTab() {
         }}
       />
     </div>
+    </LoadBoundary>
   );
 }

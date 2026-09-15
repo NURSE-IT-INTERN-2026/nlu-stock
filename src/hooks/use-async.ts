@@ -37,6 +37,7 @@ export function useAsync<T>(
     const id = ++reqId.current;
     let cancelled = false;
     setFetching(true);
+    setError(null);
     fn()
       .then((d) => {
         if (cancelled || id !== reqId.current) return;

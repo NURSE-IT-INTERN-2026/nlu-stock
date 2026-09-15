@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
@@ -175,10 +177,12 @@ function ReportTable<T extends { id: string }>({
   }, [filters, perPage, path, extraParams]);
 
   const {
+    error, retry,
     items: data, total, page, loading, isLoadingMore, hasNext, loadMore, setPage, refetch,
   } = usePagedList<T>({ fetchPage, pageSize: perPage, isMobile });
 
   return (
+    <LoadBoundary error={error} onRetry={retry} hasData={data.length > 0}>
     <div className="space-y-4 pb-2">
       <ReportFilters
         leading={leading}
@@ -217,6 +221,7 @@ function ReportTable<T extends { id: string }>({
         }
       />
     </div>
+    </LoadBoundary>
   );
 }
 

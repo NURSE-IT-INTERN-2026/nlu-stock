@@ -24,6 +24,8 @@ export function usePagedList<T>({
   const [loading, setLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [error, setError] = useState<Error | null>(null);
+  const failedRequest = useRef<{ kind: "reset" | "page" | "more"; page?: number }>({ kind: "reset" });
 
   // Concurrency guard: each fetch (reset / goToPage / loadMore) takes a unique id by ++ing the ref.
   // After its await, if reqId.current has moved on (a newer fetch started — e.g. filter changed
@@ -37,6 +39,7 @@ export function usePagedList<T>({
   useEffect(() => {
     const id = ++reqId.current;
     let cancelled = false;
+    setError(null);
     setLoading(true);
     setIsLoadingMore(false);
     (async () => {
@@ -46,6 +49,10 @@ export function usePagedList<T>({
         setItems(data.items);
         setTotal(data.total);
         setPage(1);
+      } catch (e) {
+        if (cancelled || id !== reqId.current) return;
+        failedRequest.current = { kind: "reset" };
+        setError(e instanceof Error ? e : new Error(String(e)));
       } finally {
         if (!cancelled && id === reqId.current) setLoading(false);
       }
@@ -59,6 +66,7 @@ export function usePagedList<T>({
     async (target: number) => {
       if (mode !== "pages") return;
       const id = ++reqId.current;
+      setError(null);
       setLoading(true);
       try {
         let p = target;
@@ -76,6 +84,10 @@ export function usePagedList<T>({
         setItems(data.items);
         setTotal(data.total);
         setPage(p);
+      } catch (e) {
+        if (id !== reqId.current) return;
+        failedRequest.current = { kind: "page", page: target };
+        setError(e instanceof Error ? e : new Error(String(e)));
       } finally {
         if (id === reqId.current) setLoading(false);
       }
@@ -89,6 +101,7 @@ export function usePagedList<T>({
     const next = page + 1;
     if (next > totalPages) return;
     const id = ++reqId.current;
+    setError(null);
     setIsLoadingMore(true);
     try {
       const data = await fetchPage(next);
@@ -96,6 +109,10 @@ export function usePagedList<T>({
       setItems((prev) => [...prev, ...data.items]);
       setTotal(data.total);
       setPage(next);
+    } catch (e) {
+      if (id !== reqId.current) return;
+      failedRequest.current = { kind: "more" };
+      setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       if (id === reqId.current) setIsLoadingMore(false);
     }
@@ -104,6 +121,15 @@ export function usePagedList<T>({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return {
+    error,
+    // Retry the failed operation: a failed page change must not reload the old page,
+    // and a failed append must not discard the pages already on screen.
+    retry: () => {
+      const failed = failedRequest.current;
+      if (failed.kind === "more") void loadMore();
+      else if (failed.kind === "page") void goToPage(failed.page!);
+      else setReloadKey((k) => k + 1);
+    },
     items,
     total,
     page,

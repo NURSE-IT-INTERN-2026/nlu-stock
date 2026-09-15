@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadError } from "@/components/shared/load-error";
+
 import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +85,7 @@ export function ReturnPanel({ initialChip, initialQuery }: {
 }) {
   const [records, setRecords] = useState<OpenBorrow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [query, setQuery] = useState(initialQuery ?? "");
   const [chip, setChip] = useState<"all" | "overdue" | "near">(initialChip ?? "all");
@@ -91,12 +94,13 @@ export function ReturnPanel({ initialChip, initialQuery }: {
   const [usage, setUsage] = useState<string>("all");
 
   const load = useCallback(async () => {
+    setError(null);
     setLoading(true);
     try {
       const data = await getOpenBorrows();
       setRecords(data.records);
-    } catch {
-      setRecords([]);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setLoading(false);
     }
@@ -154,6 +158,8 @@ export function ReturnPanel({ initialChip, initialQuery }: {
     `${q}|${chip}|${usage}`,
   );
 
+  if (error && records.length === 0) return <LoadError onRetry={load} />;
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -166,11 +172,14 @@ export function ReturnPanel({ initialChip, initialQuery }: {
 
   if (selected) {
     return (
+      <>
+      {error && <LoadError onRetry={load} stale />}
       <ReturnLoanDetail
         group={selected}
         onBack={() => setSelectedKey(null)}
         onResolved={load}
       />
+      </>
     );
   }
 
@@ -183,6 +192,7 @@ export function ReturnPanel({ initialChip, initialQuery }: {
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
       <CardContent className="flex flex-col flex-1 min-h-0 gap-2">
+        {error && <LoadError onRetry={load} stale />}
         {/* Two lines on every width, phone included: the count truncates before it pushes the
             chips off, and the usage select rides beside the search instead of claiming a third
             row. A phone screen holds ~4 more loans for it. */}

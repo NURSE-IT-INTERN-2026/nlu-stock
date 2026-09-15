@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -79,8 +81,7 @@ function DispenseContent() {
   const debounced = useDebounce(query, 300);
 
   const fetchPage = useCallback(async (p: number) => {
-    try {
-      const data = await searchDispenseItems({
+    const data = await searchDispenseItems({
         q: debounced,
         perPage: String(PAGE_SIZE.DEFAULT),
         page: String(p),
@@ -92,12 +93,10 @@ function DispenseContent() {
         profileId: filterProfile || undefined,
       });
       return { items: (data.items ?? []) as SearchItem[], total: data.total ?? 0 };
-    } catch {
-      return { items: [], total: 0 };
-    }
   }, [debounced, filterCategory, filterLocation, filterProfile]);
 
   const {
+    error, retry,
     items, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<SearchItem>({ fetchPage, pageSize: PAGE_SIZE.DEFAULT, isMobile });
 
@@ -200,6 +199,7 @@ function DispenseContent() {
 
 
 return (
+    <LoadBoundary error={error} onRetry={retry} hasData={items.length > 0}>
     <div className="flex flex-col h-full">
       <Card className="flex-1 min-h-0 p-0 gap-0 flex flex-col overflow-clip">
       <div className="border-b border-border/60 p-3 sm:p-4 space-y-3 shrink-0">
@@ -437,6 +437,7 @@ return (
         onScan={handleQrScan}
       />
     </div>
+    </LoadBoundary>
   );
 }
 

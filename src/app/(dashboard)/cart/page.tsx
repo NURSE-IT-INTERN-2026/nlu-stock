@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadError } from "@/components/shared/load-error";
+
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { useRouter } from "next/navigation";
@@ -31,7 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EmptyState } from "@/components/shared/empty-state";
 
 export default function ConfirmDispensePage() {
-  const { items, clearCart, addItem } = useCart();
+  const { loading: cartLoading, error: cartError, refresh: refreshCart, items, clearCart, addItem } = useCart();
   const router = useRouter();
   const [usageType, setUsageType] = useState<string>("");
   const [notes, setNotes] = useState("");
@@ -339,6 +341,7 @@ export default function ConfirmDispensePage() {
 
   // Validate first; focus the first invalid field so the user sees what's missing (no silent disable).
   const handleSubmit = () => {
+    if (cartLoading || cartError) return;
     if (!canConfirm) {
       setShowErrors(true);
       const firstErrorKey = Object.keys(errors).find((k) => errors[k]);
@@ -349,6 +352,9 @@ export default function ConfirmDispensePage() {
   };
 
   // Empty state
+  if (cartLoading && items.length === 0) return <p role="status" className="p-6 text-muted-foreground">กำลังโหลดตะกร้า…</p>;
+  if (cartError && items.length === 0) return <LoadError onRetry={refreshCart} />;
+
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4 animate-fade-in">
@@ -375,6 +381,7 @@ export default function ConfirmDispensePage() {
 
   return (
     <div className="relative flex flex-col -mx-4 sm:-mx-6 min-h-0 h-full lg:h-[calc(100vh-5rem)] lg:-mb-6">
+      {cartError && <LoadError onRetry={refreshCart} stale />}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
       {/* ── Items list (scrollable) ── */}
       <div className="flex-1 min-w-0 p-6 lg:min-h-0 lg:overflow-y-auto">
@@ -418,7 +425,7 @@ export default function ConfirmDispensePage() {
                     <TableHead className="min-w-0">รายการ</TableHead>
                     <TableHead className="w-[120px]">ประเภท</TableHead>
                     <TableHead className="w-[90px]">สถานะ</TableHead>
-                    <TableHead className="w-[240px] text-right">{group === "durable" ? "ชิ้น" : ""}</TableHead>
+                    <TableHead className="w-[240px] text-right">{group === "durable" ? "ชิ้น" : "ล็อต"}</TableHead>
                     <TableHead className="w-[150px] text-right">จำนวน</TableHead>
                     <TableHead className="w-14 rounded-tr-lg" />
                   </TableRow>
@@ -448,16 +455,14 @@ export default function ConfirmDispensePage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {group === "durable" && (
-                            hasSelector ? (
+                          {hasSelector ? (
                               <>
                                 <CartLotChip item={item} variant="trigger" />
                                 <CartSubChip item={item} variant="trigger" />
                               </>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
-                            )
-                          )}
+                            )}
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end">
@@ -528,10 +533,10 @@ export default function ConfirmDispensePage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" disabled={submitting} onClick={() => setClearDialogOpen(true)}>
+            <Button variant="outline" disabled={submitting || cartLoading || !!cartError} onClick={() => setClearDialogOpen(true)}>
               ล้าง
             </Button>
-            <Button type="button" disabled={submitting} onClick={() => { setShowErrors(false); setFormDialogOpen(true); }}>
+            <Button type="button" disabled={submitting || cartLoading || !!cartError} onClick={() => { setShowErrors(false); setFormDialogOpen(true); }}>
               {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               เบิก-ยืมพัสดุ
             </Button>
@@ -558,9 +563,8 @@ export default function ConfirmDispensePage() {
       {/* ── Dispense form dialog (form entry + final checkpoint merged) ── */}
       <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
         {/* Fixed height, not fit: usageType swaps whole blocks in and out (รายวิชา,
-            กิจกรรม, กำหนดคืน) while the dialog is open, and it used to have no lock
-            at all — at 700px tall the ยืนยันเบิก button sat off-screen with nothing
-            to scroll. */}
+            กิจกรรม, กำหนดคืน) while the dialog is open — without the lock, a 700px-tall
+            screen pushes ยืนยันเบิก off-screen with nothing to scroll. */}
         <DialogContent showCloseButton={false} className={cn(DIALOG_SHELL, "max-w-[calc(100%-2rem)] sm:max-w-lg")}>
           <DialogHeader className="shrink-0">
             <DialogTitle>ข้อมูลการเบิก-ยืม</DialogTitle>
@@ -585,7 +589,7 @@ export default function ConfirmDispensePage() {
             }}
           >
             <div className={cn(DIALOG_BODY, "px-1")}>
-            <fieldset disabled={submitting} className="m-0 min-w-0 space-y-4 border-0">
+            <fieldset disabled={submitting || cartLoading || !!cartError} className="m-0 min-w-0 space-y-4 border-0">
               {showErrors && !canConfirm && (
                 <p role="status" aria-live="polite" className="text-xs text-destructive">
                   กรุณากรอกข้อมูลให้ครบ {Object.values(errors).filter(Boolean).length} ช่อง
@@ -699,7 +703,7 @@ export default function ConfirmDispensePage() {
             </div>
             <DialogFooter className="shrink-0">
               <Button variant="outline" onClick={() => setFormDialogOpen(false)}>ยกเลิก</Button>
-              <Button type="submit" variant="destructive" disabled={submitting}>
+              <Button type="submit" variant="destructive" disabled={submitting || cartLoading || !!cartError}>
                 {submitting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
                 ยืนยันเบิก
               </Button>

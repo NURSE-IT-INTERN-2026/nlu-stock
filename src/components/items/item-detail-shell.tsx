@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadError } from "@/components/shared/load-error";
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ageFromReceipt, fmtDate, TH_DATE, TH_DATETIME } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -27,7 +29,7 @@ import {
   USAGE_STATUS_ORDER, STATUS_PILLS, recipientLabel,
 } from "@/lib/constants";
 import { canTransition } from "@/lib/status-utils";
-import { getItem, getSubItem, returnItem, updateSubItemFields } from "@/lib/api";
+import { ApiError, getItem, getSubItem, returnItem, updateSubItemFields } from "@/lib/api";
 import { ItemThumb } from "@/components/shared/item-thumb";
 import { STATE_META, type DistributionRow } from "@/components/items/distribution-table";
 import type { OpenDamage } from "@/components/items/item-detail-overview";
@@ -164,6 +166,11 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   const [item, setItem] = useState<ItemData | null>(null);
   const [sub, setSub] = useState<SubItemData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [subLoading, setSubLoading] = useState(false);
+  const [itemError, setItemError] = useState<Error | null>(null);
+  const [subError, setSubError] = useState<Error | null>(null);
+  const [itemRetry, setItemRetry] = useState(0);
+  const [subRetry, setSubRetry] = useState(0);
   // "item" = non-tracked aggregate; "piece" = tracked (a copy); "empty" = tracked with 0 subs.
   const [mode, setMode] = useState<"item" | "piece" | "empty">("item");
 
@@ -186,6 +193,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setItemError(null);
     (async () => {
       try {
         const it = (await getItem(itemId)) as ItemData;
@@ -196,11 +204,15 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
         if (!it.trackIndividually || it.category.profile?.code === "KIT") setMode("item");
         else if (it.subItems.length === 0) setMode("empty");
         else setMode("piece");
-      } catch { if (!cancelled) setItem(null); }
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 404) setItem(null);
+        else setItemError(e instanceof Error ? e : new Error(String(e)));
+      }
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [itemId]);
+  }, [itemId, itemRetry]);
 
   // A KIT set has its own page — that is the whole of ยืม-คืน ตาม Code, and the profile has
   // said ITEM since the seed. Kept out of the fetch effect above on purpose: adding `copy` to
@@ -244,13 +256,22 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
 
   // Fetch the selected piece's detail (tracked only).
   useEffect(() => {
-    if (mode !== "piece" || !selectedSubCode) { setSub(null); return; }
+    if (mode !== "piece" || !selectedSubCode) { setSub(null); setSubError(null); return; }
     let cancelled = false;
+    setSubLoading(true);
+    setSubError(null);
+    setSub(null); // Don't show a previously selected copy under the new copy's URL.
     (async () => {
-      try { const s = (await getSubItem(itemId, selectedSubCode)) as SubItemData; if (!cancelled) setSub(s); } catch { if (!cancelled) setSub(null); }
+      try {
+        const s = (await getSubItem(itemId, selectedSubCode)) as SubItemData;
+        if (!cancelled) setSub(s);
+      } catch (e) {
+        if (!cancelled && !(e instanceof ApiError && e.status === 404))
+          setSubError(e instanceof Error ? e : new Error(String(e)));
+      } finally { if (!cancelled) setSubLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [mode, itemId, selectedSubCode]);
+  }, [mode, itemId, selectedSubCode, subRetry]);
 
   // Refresh handlers (dialog onSuccess).
   // Anything that refetches the page refetches the active-case card with it. แจ้งชำรุด is the
@@ -258,11 +279,13 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // stay empty right after the one moment it exists to report.
   const [dataVersion, setDataVersion] = useState(0);
   const fetchItem = useCallback(async () => {
-    try { setItem((await getItem(itemId)) as ItemData); setDataVersion((v) => v + 1); } catch {}
+    try { setItem((await getItem(itemId)) as ItemData); setItemError(null); setDataVersion((v) => v + 1); }
+    catch (e) { setItemError(e instanceof Error ? e : new Error(String(e))); }
   }, [itemId]);
   const fetchSub = useCallback(async () => {
     if (!selectedSubCode) return;
-    try { setSub((await getSubItem(itemId, selectedSubCode)) as SubItemData); setDataVersion((v) => v + 1); } catch {}
+    try { setSub((await getSubItem(itemId, selectedSubCode)) as SubItemData); setSubError(null); setDataVersion((v) => v + 1); }
+    catch (e) { setSubError(e instanceof Error ? e : new Error(String(e))); }
   }, [itemId, selectedSubCode]);
 
   // Switch copy via query (shallow — item not refetched).
@@ -301,7 +324,13 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
   // ── Piece-mode derived (hooks run before early returns) ──
   const activeDispense = useMemo(() => sub?.dispenseRecords.find((d) => d.returnedAt === null) ?? null, [sub]);
 
-  if (loading) {
+  const retryLoad = () => {
+    if (itemError) setItemRetry((n) => n + 1);
+    if (subError) setSubRetry((n) => n + 1);
+  };
+  if ((itemError && !item) || (subError && !sub)) return <LoadError onRetry={retryLoad} />;
+
+  if (loading || (mode === "piece" && subLoading)) {
     return (
       <div className="space-y-4 p-6">
         <Skeleton className="h-16 w-full" />
@@ -310,9 +339,12 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
     );
   }
 
+  if (!item) return <NotFound label="ไม่พบพัสดุ" onBack={() => router.push("/items")} />;
+
   if (mode === "empty") {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 animate-in fade-in duration-300">
+        {itemError && <LoadError onRetry={retryLoad} stale />}
         <div className="grid place-items-center size-16 rounded-2xl bg-muted text-muted-foreground"><Package className="size-8" /></div>
         <p className="text-muted-foreground font-medium">ยังไม่มีชิ้นย่อย — ตั้งค่า SubItem ก่อน</p>
         <Button variant="outline" onClick={() => router.push("/items")}><ArrowLeft className="h-4 w-4 mr-1" />กลับสู่รายการพัสดุ</Button>
@@ -389,6 +421,7 @@ export function ItemDetailShell({ itemId }: { itemId: string }) {
 
   return (
     <div>
+      {(itemError || subError) && <LoadError onRetry={retryLoad} stale />}
       <div className="max-w-6xl">
         {/* ── Item-mode expiry alerts ── */}
         {mode === "item" && hasExpiryAlert && (

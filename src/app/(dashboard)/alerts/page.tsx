@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { fmtDate, TH_DAY } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -191,6 +193,7 @@ function AlertsContent() {
   }, [filter, perPage, alertType]);
 
   const {
+    error, retry,
     items, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<ItemRecord>({ fetchPage, pageSize: perPage, isMobile });
 
@@ -247,6 +250,7 @@ function AlertsContent() {
     alertType === "all" ? item.alertTypes : item.alertTypes.filter((t) => t === alertType);
 
   return (
+    <LoadBoundary error={error} onRetry={retry} hasData={items.length > 0}>
     <div className="space-y-3 sm:space-y-6">
       {/* Alert-type tabs — underline style, matches /settings. Sits ABOVE the filter
           bar so it reads as primary nav, distinct from the refinement pills below.
@@ -482,6 +486,7 @@ function AlertsContent() {
       </>
       )}
     </div>
+    </LoadBoundary>
   );
 }
 

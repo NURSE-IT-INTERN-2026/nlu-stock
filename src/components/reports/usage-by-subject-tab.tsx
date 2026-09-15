@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useCallback, useMemo } from "react";
 import {
   ReportFilters, defaultDateFilters, periodLabel,
@@ -138,7 +140,7 @@ export function UsageBySubjectTab() {
     };
   }, [filters, kind]);
 
-  const { data: result, isFetching: loading } = useAsync(fetcher, [fetcher]);
+  const { data: result, isFetching: loading, error, refetch } = useAsync(fetcher, [fetcher]);
   const months = useMemo(() => result?.months ?? [], [result]);
   const buildings = useMemo(() => result?.buildings ?? [], [result]);
   const summary = result?.summary ?? null;
@@ -262,6 +264,7 @@ export function UsageBySubjectTab() {
         onChange={setFilters}
         actions={<ExportButtons reportType="usage-by-subject" filters={{ ...filters, kind }} />}
       />
+      <LoadBoundary loading={loading} error={error} onRetry={refetch} hasData={result !== undefined}>
       {/* เดือนเป็นค่าตั้งต้นเพราะเป็นคำถามแรกของรายงาน (ใช้เยอะเดือนไหน) ส่วนรายวิชาตอบว่าใครคือ
           ตัวใหญ่ ซึ่งกราฟรายเดือนกลบไว้ในกอง. นำไปใช้งานไม่มีวิชา ปุ่มสลับจึงหายไปทั้งอัน */}
       {canCourse && (
@@ -328,6 +331,7 @@ export function UsageBySubjectTab() {
         onClose={() => setOpenMonth(null)}
       />
       <UsageDetailDialog detail={rowDetail} token={spec.token} onClose={() => setOpenRow(null)} />
+      </LoadBoundary>
     </div>
   );
 }

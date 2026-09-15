@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useCallback } from "react";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
 import { ReportDataTable, wrapText, type Column } from "./report-data-table";
@@ -213,7 +215,7 @@ export function AnnualCostTab() {
     return (await getReport("annual-cost", params)) as Result;
   }, [filters]);
 
-  const { data: result, isFetching: loading } = useAsync(fetcher, [fetcher]);
+  const { data: result, isFetching: loading, error, refetch } = useAsync(fetcher, [fetcher]);
 
   const payload = result?.sides?.[side] ?? null;
   const bySubject = result?.bySubject ?? [];
@@ -241,6 +243,7 @@ export function AnnualCostTab() {
         onChange={setFilters}
         actions={<ExportButtons reportType="annual-cost" filters={{ ...filters, side }} />}
       />
+      <LoadBoundary loading={loading} error={error} onRetry={refetch} hasData={result !== undefined}>
 
       {payload && <ReportSummary stats={statsFor(side, payload.summary, payload.loss, buddhistYear)} />}
 
@@ -294,6 +297,7 @@ export function AnnualCostTab() {
           </CardContent>
         </Card>
       )}
+      </LoadBoundary>
     </div>
   );
 }

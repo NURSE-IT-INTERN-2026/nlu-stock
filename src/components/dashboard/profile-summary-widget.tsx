@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { profileIcon } from "@/lib/profile-icons";
@@ -29,7 +31,7 @@ const STATUS = [
 
 export function ProfileSummaryWidget() {
   const nonce = useDashboardRefreshNonce();
-  const { data: rows = [], isLoading: loading } = useAsync(
+  const { data: rows = [], isLoading: loading, error, refetch } = useAsync(
     async () => (await getDashboardProfileSummary()) as Row[],
     [nonce],
   );
@@ -47,6 +49,7 @@ export function ProfileSummaryWidget() {
         )}
       </div>
 
+      <LoadBoundary error={error} onRetry={refetch} hasData={rows.length > 0}>
       {loading ? (
         <div className="space-y-4 p-4">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -113,6 +116,7 @@ export function ProfileSummaryWidget() {
           })}
         </div>
       )}
+      </LoadBoundary>
     </section>
   );
 }

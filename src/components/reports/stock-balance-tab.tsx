@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useCallback, useMemo, useRef } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsIndicator } from "@/components/ui/tabs";
 import { ReportFilters, type FilterValues, type FilterConfig } from "./report-filters";
@@ -187,7 +189,7 @@ export function StockBalanceTab() {
     };
   }, [filters]);
 
-  const { data: result, isFetching: loading } = useAsync(fetcher, [fetcher]);
+  const { data: result, isFetching: loading, error, refetch } = useAsync(fetcher, [fetcher]);
   const allRows = useMemo(() => result?.rows ?? [], [result]);
   const byMonth = result?.byMonth?.[side] ?? [];
 
@@ -299,6 +301,7 @@ export function StockBalanceTab() {
         onChange={setFilters}
         actions={<ExportButtons reportType="stock-balance" filters={{ ...filters, side }} />}
       />
+      <LoadBoundary loading={loading} error={error} onRetry={refetch} hasData={result !== undefined}>
       <ReportSummary
         stats={[
           {
@@ -401,6 +404,7 @@ export function StockBalanceTab() {
         columns={categoryColumns}
         data={openProfileRow?.categories ?? []}
       />
+      </LoadBoundary>
     </div>
   );
 }

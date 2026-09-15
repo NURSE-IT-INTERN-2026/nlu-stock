@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadError } from "@/components/shared/load-error";
+
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { fmtDate, TH_DATE } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -225,12 +227,14 @@ export function SubItemStatusPanel({
 }) {
   const [rows, setRows] = useState<WorkRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [query, setQuery] = useState("");
   const [oldestFirst, setOldestFirst] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState<Action>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     setLoading(true);
     // Every row carries the stage it came from — the merged worklist has no other way to tell a
     // piece waiting to be sent from one already at the shop, and the buttons differ.
@@ -246,8 +250,8 @@ export function SubItemStatusPanel({
         }),
       );
       setRows(per.flat());
-    } catch {
-      setRows([]);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
       setLoading(false);
       setSelected(new Set());
@@ -307,6 +311,8 @@ export function SubItemStatusPanel({
       return next;
     });
 
+  if (error && rows.length === 0) return <LoadError onRetry={load} />;
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -326,6 +332,7 @@ export function SubItemStatusPanel({
   return (
     <Card className="flex flex-col max-h-full min-h-0 overflow-hidden">
       <CardContent className="flex flex-col flex-1 min-h-0 gap-3">
+        {error && <LoadError onRetry={load} stale />}
         <div className="shrink-0 flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="relative min-w-56 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

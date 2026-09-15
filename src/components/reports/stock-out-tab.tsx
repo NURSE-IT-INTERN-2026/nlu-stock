@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadBoundary } from "@/components/shared/load-error";
+
 import { useState, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { ReportFilters, defaultDateFilters, periodLabel, type FilterValues, type FilterConfig } from "./report-filters";
@@ -285,12 +287,14 @@ export function StockOutTab() {
   }, [filters, perPage, kind]);
 
   const {
+    error, retry,
     items: data, total, page, loading, isLoadingMore, hasNext, loadMore, setPage,
   } = usePagedList<StockOutRow>({ fetchPage, pageSize: perPage, isMobile });
 
   const events = useMemo(() => groupEvents(data), [data]);
 
   return (
+    <LoadBoundary error={error} onRetry={retry} hasData={data.length > 0}>
     <div className="space-y-4 pb-2">
       <ReportFilters
         leading={
@@ -366,5 +370,6 @@ export function StockOutTab() {
       />
 
     </div>
+    </LoadBoundary>
   );
 }
